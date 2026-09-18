@@ -5,6 +5,8 @@
 *.aab
 
 !libs/*.aar
+# 6165 slothboard build, served from the committed local maven repo.
+!TeamCode/libs/m2/**/*.aar
 
 # Files for the ART/Dalvik VM
 *.dex
@@ -79,3 +81,6 @@ lint/generated/
 lint/outputs/
 lint/tmp/
 # lint/reports/
+
+# Claude Code session artifacts
+.claude/

@@ -1,2 +1,11 @@
-include ':FtcRobotController'
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+        // Sloth Load plugin marker.
+        maven { url = 'https://repo.dairy.foundation/releases' }
+    }
+}
+
 include ':TeamCode'

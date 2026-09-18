@@ -4,26 +4,22 @@
  * It is extraordinarily rare that you will ever need to edit this file.
  */
 
-buildscript {
-    repositories {
-        mavenCentral()
-        google()
-    }
-    dependencies {
-        // Note for FTC Teams: Do not modify this yourself.
-        classpath 'com.android.tools.build:gradle:8.7.0'
-    }
+plugins {
+    id 'com.android.application' version '8.13.2' apply false
+    // Sloth hot-reload deployment tasks (assembleSloth, dexSloth, deploySloth, etc.).
+    id 'dev.frozenmilk.sinister.sloth.load' version '0.3.2' apply false
 }
 
-// This is now required because aapt2 has to be downloaded from the
-// google() repository beginning with version 3.2 of the Android Gradle Plugin
 allprojects {
     repositories {
         mavenCentral()
         google()
+        // Sloth runtime, its Sinister dependency, and slothboard.
+        maven { url = 'https://repo.dairy.foundation/releases' }
+        // 6165's slothboard build (Dairy tag + team PRs), committed under TeamCode/libs/m2.
+        maven {
+            url = "${rootDir}/TeamCode/libs/m2"
+            content { includeGroup 'com.acmerobotics.slothboard' }
+        }
     }
-}
-
-repositories {
-    mavenCentral()
 }

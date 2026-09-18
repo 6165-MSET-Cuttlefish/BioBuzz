@@ -1,0 +1,143 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.acmerobotics.slothboard",
+    "module": "dashboard",
+    "version": "0.3.2+0.6.0-6165.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.1.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "com.acmerobotics.slothboard",
+          "module": "core",
+          "version": {
+            "requires": "0.3.2+0.6.0-6165.2"
+          },
+          "excludes": [
+            {
+              "group": "*",
+              "module": "*"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "dashboard-0.3.2+0.6.0-6165.2.aar",
+          "url": "dashboard-0.3.2+0.6.0-6165.2.aar",
+          "size": 442045,
+          "sha512": "0fbb58d621685b2b58e3ebb0657d2602bfce5ec3b35ee9bde1aadb00b9e24012ff3cedceb5934109c936b503c4508bb83a98c090a18329b97fe821f468d6bce2",
+          "sha256": "43435fb8fddc2928e773cc14deaaa9352db871de997c1e8f7f29f23719419f0e",
+          "sha1": "d50a42e82bd601867337df60d1175ee4b50a746d",
+          "md5": "0d935e47e3214cfa7a4b01b40cfeb752"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "dev.frozenmilk.sinister",
+          "module": "Sloth",
+          "version": {
+            "strictly": "0.3.2",
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.nanohttpd",
+          "module": "nanohttpd-websocket",
+          "version": {
+            "requires": "2.3.1"
+          },
+          "excludes": [
+            {
+              "group": "*",
+              "module": "nanohttpd"
+            }
+          ]
+        },
+        {
+          "group": "com.acmerobotics.slothboard",
+          "module": "core",
+          "version": {
+            "requires": "0.3.2+0.6.0-6165.2"
+          },
+          "excludes": [
+            {
+              "group": "*",
+              "module": "*"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.4.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "dashboard-0.3.2+0.6.0-6165.2.aar",
+          "url": "dashboard-0.3.2+0.6.0-6165.2.aar",
+          "size": 442045,
+          "sha512": "0fbb58d621685b2b58e3ebb0657d2602bfce5ec3b35ee9bde1aadb00b9e24012ff3cedceb5934109c936b503c4508bb83a98c090a18329b97fe821f468d6bce2",
+          "sha256": "43435fb8fddc2928e773cc14deaaa9352db871de997c1e8f7f29f23719419f0e",
+          "sha1": "d50a42e82bd601867337df60d1175ee4b50a746d",
+          "md5": "0d935e47e3214cfa7a4b01b40cfeb752"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "dashboard-0.3.2+0.6.0-6165.2-sources.jar",
+          "url": "dashboard-0.3.2+0.6.0-6165.2-sources.jar",
+          "size": 33873,
+          "sha512": "eb673cfc0f1b0259c64a42722bcd5935e42bd2f45d471ec076383e75df3852c0290c5173fe8214adbd182779c92a7b64692e497184385ce8819392ace3dd8349",
+          "sha256": "090c62d212099696c5ccf6aeb1ccd812f1b3c55b46e832b3014c6dae3335e335",
+          "sha1": "6555a2f6d0ad090a22681d5dbce68f4fcee1d643",
+          "md5": "fc8b922065bf631145a6fc7f05ff74f8"
+        }
+      ]
+    }
+  ]
+}

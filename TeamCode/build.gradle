@@ -1,28 +1,100 @@
-//
-// build.gradle in TeamCode
-//
-// Most of the definitions for building your module reside in a common, shared
-// file 'build.common.gradle'. Being factored in this way makes it easier to
-// integrate updates to the FTC into your code. If you really need to customize
-// the build definitions, you can place those customizations in this file, but
-// please think carefully as to whether such customizations are really necessary
-// before doing so.
+import java.text.SimpleDateFormat
 
-
-// Custom definitions may go here
-
-// Include common definitions from above.
-apply from: '../build.common.gradle'
-apply from: '../build.dependencies.gradle'
+plugins {
+    id 'com.android.application'
+    // Sloth hot-reload deployment tasks (assembleSloth, dexSloth, deploySloth, etc.).
+    id 'dev.frozenmilk.sinister.sloth.load'
+}
 
 android {
-    namespace = 'org.firstinspires.ftc.teamcode'
+    compileSdk 35
+    namespace = 'com.qualcomm.ftcrobotcontroller'
+
+    signingConfigs {
+        release {
+            def apkStoreFile = System.getenv("APK_SIGNING_STORE_FILE")
+            if (apkStoreFile != null) {
+                keyAlias System.getenv("APK_SIGNING_KEY_ALIAS")
+                keyPassword System.getenv("APK_SIGNING_KEY_PASSWORD")
+                storeFile file(System.getenv("APK_SIGNING_STORE_FILE"))
+                storePassword System.getenv("APK_SIGNING_STORE_PASSWORD")
+            } else {
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+                storeFile rootProject.file('libs/ftc.debug.keystore')
+                storePassword 'android'
+            }
+        }
+        debug {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile rootProject.file('libs/ftc.debug.keystore')
+            storePassword 'android'
+        }
+    }
+
+    defaultConfig {
+        signingConfig = signingConfigs.debug
+        applicationId 'com.qualcomm.ftcrobotcontroller'
+        minSdkVersion 24
+        //noinspection ExpiredTargetSdkVersion
+        targetSdkVersion 28
+        versionCode 63
+        versionName "12.0"
+        buildConfigField "String", "APP_BUILD_TIME", '"' + (new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.ROOT).format(new Date())) + '"'
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.release
+            ndk { abiFilters "arm64-v8a" }
+        }
+        debug {
+            debuggable true
+            jniDebuggable true
+            ndk { abiFilters "arm64-v8a" }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     packagingOptions {
-        jniLibs.useLegacyPackaging true
+        pickFirst '**/*.so'
+        jniLibs.useLegacyPackaging = true
     }
+
+    ndkVersion = '21.3.6528147'
+}
+
+configurations.configureEach {
+    exclude group: 'com.acmerobotics.dashboard'
 }
 
 dependencies {
-    implementation project(':FtcRobotController')
+    implementation 'org.firstinspires.ftc:Inspection:12.0.0'
+    implementation 'org.firstinspires.ftc:Blocks:12.0.0'
+    implementation 'org.firstinspires.ftc:RobotCore:12.0.0'
+    implementation 'org.firstinspires.ftc:RobotServer:12.0.0'
+    implementation 'org.firstinspires.ftc:OnBotJava:12.0.0'
+    implementation 'org.firstinspires.ftc:Hardware:12.0.0'
+    implementation 'org.firstinspires.ftc:FtcCommon:12.0.0'
+    implementation 'org.firstinspires.ftc:Vision:12.0.0'
+    implementation 'androidx.appcompat:appcompat:1.2.0'
+
+    implementation 'com.pedropathing:revhub:3.0.0'
+    // AutoTune procedures (pedro/procedures/, vendored) and their web UI on port 10158.
+    implementation 'com.pedropathing:tuning:1.0.0'
+    // Ivy: Pedro's command framework, used for every action and autonomous sequence.
+    implementation 'com.pedropathing.ivy:pedro:1.1.1'
+
+    implementation 'dev.frozenmilk.sinister:Sloth:0.3.2'
+    // Dairy's ftc-dashboard fork. Version is {slothVersion}+{dashboardVersion}.
+    implementation 'com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.2'
 }
