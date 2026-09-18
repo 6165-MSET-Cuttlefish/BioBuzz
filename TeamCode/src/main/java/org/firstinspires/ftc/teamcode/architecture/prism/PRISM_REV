@@ -1,0 +1,6 @@
+repo=https://github.com/goBILDA-Official/FtcRobotController-Add-Prism.git
+ref=Add-Prism
+commit=2141fd7ebb1e181c2e6aadb436bf6d2139f6fe10
+date=2026-01-02
+files=Color.java Direction.java GoBildaPrismDriver.java PrismAnimations.java
+note=package line rewritten from teamcode.Prism to teamcode.architecture.prism; otherwise verbatim
