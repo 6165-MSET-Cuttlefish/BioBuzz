@@ -1,8 +1,5 @@
 package org.firstinspires.ftc.teamcode.OpenCVPipelines.PollenDetectionPipeline;
 
-
-
-
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
@@ -11,157 +8,368 @@ import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
+import org.opencv.core.TermCriteria;
 import org.opencv.imgproc.Imgproc;
 import org.openftc.easyopencv.OpenCvPipeline;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * Detects yellow Pollen balls and reports each ball's GROUND-CONTACT position
- * (where it touches the floor), in inches, in a top-down frame.
+ * ARCHITECTURE NOTE (shape-based detection refactor):
  *
- * Why ground contact and not the ball center: the homography only maps points that
- * lie on the ground plane. A ball's center/top are above the plane, so warping the
- * whole ball smears it outward and the smear-center over-reports distance. Instead we
- * detect each ball in the ORIGINAL (un-warped) image, take the bottom of its silhouette
- * (the floor-contact point, which IS on the ground plane), and map only that point
- * through the homography. The warped view is used for display only.
+ * DETECTION STRATEGY CHANGED from color-blob segmentation to curve/edge-based
+ * circle fitting (Hough Circle Transform). Here's the difference and why it
+ * was made:
+ *
+ * OLD (color-first): threshold HSV for "yellow-ish" pixels -> morphologically
+ * CLOSE that mask aggressively to bridge every hole/glare gap into one solid
+ * blob per ball -> distance-transform + watershed to split touching balls ->
+ * validate the resulting blob's shape (area/circularity/roundness) as a
+ * downstream filter. Every step depends on the color mask being close to a
+ * solid disc FIRST. If a ball's surface is broken up badly enough by holes +
+ * glare + shadow that no amount of closing bridges it into one blob, the ball
+ * is invisible to everything downstream — color segmentation was the
+ * bottleneck, and "is this actually round" was only ever checked AFTER a
+ * blob already existed.
+ *
+ * NEW (shape-first): cv::HoughCircles searches directly for GRADIENT edges
+ * whose curvature is consistent with a circle of some radius, independent of
+ * what color or brightness sits inside that boundary. A hole punched in the
+ * ball has its own strong edge, but that edge's curvature doesn't match the
+ * ball's actual outer radius, so it doesn't vote for the ball's true center.
+ * Glare is similarly irrelevant — it's just interior texture; Hough is
+ * looking at the ball's outer silhouette against the (differently colored)
+ * background, not at what's happening inside that boundary. This means a
+ * ball can be found even when its visible surface is mostly broken up by
+ * holes/glare/shadow, as long as its outer edge against the background is a
+ * clean, mostly-unbroken curve.
+ *
+ * The colour HSV masks are NOT gone — they're now used only as a coarse,
+ * cheap ROI (region-of-interest) filter: find rough clusters of ball-coloured
+ * pixels, pad them out generously, and run HoughCircles ONLY inside those
+ * small regions. This keeps performance reasonable (HoughCircles over a
+ * full 640x480 frame is expensive) while getting the robustness of curve
+ * fitting for the actual circle detection.
+ *
+ * WHAT THIS ELIMINATES: distance transform, watershed, the native
+ * marker-building chain, connected-components labeling, and the separate
+ * post-hoc area/circularity/roundness validation. HoughCircles solves what
+ * all of that machinery existed for — splitting touching balls (each circle
+ * is found independently, so touching balls naturally separate) and
+ * validating "is this actually round" (built into the algorithm, not a
+ * downstream filter) — in one native call per ROI.
+ *
+ * MULTIPLE BALL TYPES: the field carries 2.8 in yellow Pollen and 3.6 in red
+ * and blue Nectar. Each colour runs the whole ROI-then-Hough chain on its own
+ * mask, with its own radius window scaled by the ball's physical diameter, and
+ * a circle is only kept if its interior actually matches the colour whose mask
+ * seeded it. Hough is colour-blind — it fits the ball's outer silhouette — so
+ * the colour mask is what assigns a type, and it is also what stops a red ball
+ * whose specular highlight leaked into the yellow glare band from being
+ * reported as Pollen. Overlap suppression then runs across all three types.
+ *
+ * CONSTANTS: every numeric constant below is a hand-kept mirror of
+ * org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants, the
+ * canonical, on-robot copy consumed by BallDetectionPipeline. EOCV-Sim
+ * compiles this file in the isolated workspace rooted at this folder's
+ * eocvsim_workspace.json and can't resolve an import into the rest of
+ * TeamCode (most of it depends on the FTC SDK, Pedro, or Android, none of
+ * which EOCV-Sim's classpath has), so this can't just import that class —
+ * a change to either copy's numbers needs the same change pasted into the
+ * other. Every number here is additionally live-tunable on the robot —
+ * BallVisionConstants.Detection / PollenHsv / RedNectarHsv / BlueNectarHsv are
+ * each @Config-bound and read fresh every frame by BallDetectionPipeline, no
+ * separate seeding step — with these same values as their defaults; this file
+ * has no dashboard, so tune it by editing the constants here and re-running.
  */
-
 public class PollenDetectionPipeline extends OpenCvPipeline {
 
-    // Set true to skip live calibration and use the hardcoded H_ARRAY below.
-    private static final boolean USE_PREDETERMINED_HOMOGRAPHY = false;
+    // -------------------------------------------------------------------------
+    // MODE SWITCH: set to true to skip live homography calibration and use the
+    // hardcoded H_ARRAY below instead.
+    // -------------------------------------------------------------------------
+    private static final boolean USE_PREDETERMINED_HOMOGRAPHY = true;
 
-    //   MASK    — upscaled detection mask (tune the HSV range against this).
-    //   OVERLAY — top-down warped image with a ground-contact marker per ball.
-    public enum DisplayMode { MASK, OVERLAY }
+    // -------------------------------------------------------------------------
+    // DISPLAY MODE — all modes draw on the ORIGINAL (unwarped) camera frame,
+    // preserving full field of view.
+    //
+    //   MASK    — the coarse ROI masks at full camera resolution, each ball
+    //             type painted in its own colour, with circle/center/contact
+    //             overlays. Useful for tuning HSV thresholds and seeing
+    //             which regions Hough actually searched.
+    //
+    //   OVERLAY — full-color camera image with circle outline + center dot +
+    //             contact dot overlays. Useful for verifying detections
+    //             against the real scene.
+    //
+    //   BOX     — full-color camera image with a clean axis-aligned bounding
+    //             box around each ball and a solid label plate above the box
+    //             showing the ball number and its calculated field
+    //             coordinates. Best for a clean, presentation-style view.
+    // -------------------------------------------------------------------------
+    public enum DisplayMode { MASK, OVERLAY, BOX }
+    private static final DisplayMode DISPLAY_MODE = DisplayMode.MASK; // ← change here
 
-    // Predetermined homography (used when USE_PREDETERMINED_HOMOGRAPHY = true).
+    // -------------------------------------------------------------------------
+    // Homography matrix mapping full-resolution image pixels directly to
+    // field-coordinate inches. See buildCalibrationDstCorners() for how the
+    // calibration destination points are defined.
+    // -------------------------------------------------------------------------
     private static final double[][] H_ARRAY = {
-            { 1.45538818e+00,  4.74651118e-01, -1.39014816e+02 },
-            {-1.91056302e-02,  2.35917771e+00, -1.78695993e+02 },
-            { 1.00860604e-04,  1.45801043e-03,  1.00000000e+00 }
+            { -1.7797474624e-01, -5.3062009235e-02,  6.0413594965e+01 },
+            { -2.0685716542e-02, -3.9378157948e-01,  1.4174826982e+02 },
+            { -2.8668090956e-04, -1.2403394999e-02,  1.0000000000e+00 }
     };
 
-    // Pixel -> inches in the warped (top-down) view. Calibration places inner corners
-    // OUTPUT_SCALE_PX apart and each square is SQUARE_SIZE_INCHES, so 50 px = 1 in.
-    private static final float  OUTPUT_SCALE_PX    = 50.0f;
-    private static final float  SQUARE_SIZE_INCHES = 1.0f;
-    private static final double PIXELS_TO_INCHES   = SQUARE_SIZE_INCHES / OUTPUT_SCALE_PX; // 0.02
+    // -------------------------------------------------------------------------
+    // Detection downscale factor. Still the single biggest performance lever:
+    // ROI-finding (HSV threshold + light morphology) scales with pixel count,
+    // and a smaller frame means smaller (cheaper) Hough search regions too.
+    // Detected points are scaled back to full resolution before being
+    // transformed by the homography, so reported field coordinates are
+    // unaffected by this value.
+    // -------------------------------------------------------------------------
+    private static final double DETECTION_SCALE = 0.5;
 
-    // Detection runs on the ORIGINAL camera image scaled down by this factor (perf).
-    // Contact points are scaled back to full-res before the homography is applied.
-    private static final double DETECTION_SCALE = 0.25;
+    // -------------------------------------------------------------------------
+    // Ball types and their HSV ranges. These are no longer required to produce
+    // one clean solid blob per ball, so they can stay reasonably loose — Hough
+    // does the real shape validation. Their two jobs are "is there probably a
+    // ball somewhere around here" (ROI seeding, so Hough searches a small
+    // region instead of the whole frame) and "which colour is the thing Hough
+    // found" (see MIN_COLOR_FILL_FRACTION).
+    //
+    // Each type lists its colour band(s) first and its glare band(s) last: a
+    // specular highlight washes saturation out and drives value up while
+    // leaving the hue roughly in place. Red straddles the hue origin, so both
+    // of its bands are split in two.
+    //
+    // Diameter scales the radius window Hough searches for that type — a 3.6 in
+    // nectar ball subtends a visibly larger circle than a 2.8 in pollen ball at
+    // the same distance. Sharing one window wide enough for both would mean
+    // each type's search also finds the other type's balls, plus every artifact
+    // sized in between.
+    // -------------------------------------------------------------------------
+    private static final double REFERENCE_BALL_DIAMETER_INCHES = 2.8;
 
-    /**
-     * Live-tunable yellow HSV gate + shape gate (FtcDashboard). Defaults are measured off real
-     * Pollen frames (garage + competition lighting): the ball body spans H≈[12,34], so the hue
-     * band is widened well past the old [20,30] that left fragmented blobs. The saturation floor is
-     * kept low enough to catch dim/competition balls — which means sunlit warm clutter (cardboard,
-     * skin, wood) can also pass the color gate; the roundness gate ({@link #minPeakDist}) and the
-     * field-bounds check downstream reject that, and mounting the camera to look AT the field keeps
-     * it out of frame. Glare (white specular tops) is low-saturation and excluded here, then filled
-     * back in by the morphological close, so each ball still reads as one solid blob.
-     * HSV is OpenCV-scaled: H 0-179, S/V 0-255.
-     */
-    public static class Tuning {
-        // Dashboard dropdown: MASK = raw detection mask (tune HSV against it); OVERLAY = top-down view.
-        public static DisplayMode displayMode = DisplayMode.OVERLAY;
-        public static int hLow = 15, hHigh = 34;
-        public static int sLow = 80, sHigh = 255;
-        public static int vLow = 80, vHigh = 255;
-        // Min inscribed radius (downscaled px) for a blob to count as a ball — the round-shape gate.
-        public static double minPeakDist = 3.0;
+    private static final class HsvRange {
+        final Scalar low, high;
+
+        HsvRange(double h0, double s0, double v0, double h1, double s1, double v1) {
+            low  = new Scalar(h0, s0, v0);
+            high = new Scalar(h1, s1, v1);
+        }
     }
 
-    // Physical ball radius (1.5 in radius = 3 in ball) in warped px, for the display ring.
-    private static final double BALL_RADIUS_PX = (1.5 / PIXELS_TO_INCHES); // 75 px
+    private enum BallType {
+        POLLEN("Pollen", 2.8, new Scalar(255, 255, 0), new Scalar(0, 0, 0),
+                new HsvRange( 15, 100, 100,  34, 255, 255),
+                new HsvRange( 15,   0, 200,  34,  90, 255)),
 
+        NECTAR_RED("Red Nectar", 3.6, new Scalar(255, 40, 40), new Scalar(255, 255, 255),
+                new HsvRange(  0, 110,  80,   8, 255, 255),
+                new HsvRange(168, 110,  80, 179, 255, 255),
+                new HsvRange(  0,   0, 200,   8,  90, 255),
+                new HsvRange(168,   0, 200, 179,  90, 255)),
 
-    // When pinning the ground-contact point on the full-res mask, tolerate vertical gaps up to
-    // this many pixels (wiffle-ball holes); a longer run of non-ball pixels means the floor.
-    private static final int MAX_HOLE_GAP = 30;
+        NECTAR_BLUE("Blue Nectar", 3.6, new Scalar(40, 120, 255), new Scalar(255, 255, 255),
+                new HsvRange( 98, 110,  60, 130, 255, 255),
+                new HsvRange( 98,   0, 190, 130,  90, 255));
 
-    // Temporal smoothing of detections (anti-flicker), in warped pixels / frames.
-    private static final double TRACK_MATCH_PX   = 100.0; // associate a detection to a track within this (~2 in)
-    private static final int    TRACK_MAX_MISSES = 6;     // keep a track alive this many frames after it was last seen
-    private static final int    TRACK_MIN_HITS   = 2;     // show a track only after it's been seen this many frames
-    private static final double TRACK_SMOOTH     = 0.5;   // EMA factor for the smoothed position (higher = snappier)
+        final String label;
+        final Scalar drawColor;
+        final Scalar labelTextColor;
+        final HsvRange[] ranges;
+        final double radiusScale;
 
-    private static final Mat OPEN_KERNEL = Imgproc.getStructuringElement(
-            Imgproc.MORPH_ELLIPSE, new Size(3, 3));
-    // Larger close than before: spans the white specular glare on top of a ball (and the wiffle
-    // holes) so the body fills back into one solid, convex blob instead of a ring with a hole.
-    private static final Mat FILL_KERNEL = Imgproc.getStructuringElement(
-            Imgproc.MORPH_ELLIPSE, new Size(11, 11));
-    private static final Mat PEAK_DILATE_KERNEL = Imgproc.getStructuringElement(
-            Imgproc.MORPH_ELLIPSE, new Size(3, 3));
+        BallType(String label, double diameterInches, Scalar drawColor, Scalar labelTextColor,
+                 HsvRange... ranges) {
+            this.label = label;
+            this.drawColor = drawColor;
+            this.labelTextColor = labelTextColor;
+            this.ranges = ranges;
+            this.radiusScale = diameterInches / REFERENCE_BALL_DIAMETER_INCHES;
+        }
+    }
 
-    // Homography calibration settings — 7x7 inner-corner chessboard (a standard 8x8
-    // checkers/draughts board). Orientation is irrelevant here: we only need the top-down
-    // rectification, and any 90/180/mirror of it is still a valid metric warp.
-    private static final int GRID_COLS = 7;
-    private static final int GRID_ROWS = 7;
-    private static final int EXPECTED_CORNERS = GRID_COLS * GRID_ROWS;
-    private static final int DETECTION_FRAME_INTERVAL = 3;
-    private static final int FRAMES_TO_CONFIRM = 5;
+    // -------------------------------------------------------------------------
+    // ROI-finding morphology. Deliberately LIGHT compared to the old
+    // pipeline's aggressive multi-pass closing — this only needs to merge a
+    // few nearby fragments into a rough cluster, not bridge an entire ball's
+    // hole pattern into one solid disc. Over-closing here just wastes time;
+    // Hough doesn't need (or benefit from) a solid blob.
+    // -------------------------------------------------------------------------
+    private static final Mat ROI_CLOSE_KERNEL = Imgproc.getStructuringElement(
+            Imgproc.MORPH_ELLIPSE, new Size(9, 9));
 
-    // Field shown around the board in the warped view. Larger = wider top-down viewport so
-    // balls that sit far from the board aren't clipped. Warp canvas = board span + 2*MARGIN_PX
-    // (so 500 -> 1450x1300). Raise it further if balls still fall off the edges.
-    private static final float MARGIN_PX = 500.0f;
+    // How much to pad each color-cluster's bounding box (in scaled pixels)
+    // when turning it into a Hough search ROI. Generous padding matters more
+    // here than in the old pipeline, because a ball's outer silhouette often
+    // extends beyond where the color mask itself lit up (e.g. a thin sliver
+    // of colour near the edge, or a mostly-glare-washed near side).
+    private static final int ROI_PAD_PX = 14;
 
-    // Origin = board center in the warped image; reported positions are
-    // (warpedContact - ORIGIN) * PIXELS_TO_INCHES.  +X = right, +Y = toward the bottom of
-    // the (vertically-corrected) top-down view.
-    // Derived from MARGIN_PX/grid so the two can never drift out of sync.
-    private static final double ORIGIN_X = MARGIN_PX + (GRID_COLS - 1) / 2.0 * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX; // 700
-    private static final double ORIGIN_Y = MARGIN_PX + (GRID_ROWS - 1) / 2.0 * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX; // 625
+    // Nearby candidate ROIs (within this many scaled pixels of each other)
+    // are merged into one larger search region before running Hough, so a
+    // single ball whose color mask fragmented into several disconnected
+    // blobs still gets ONE combined ROI instead of several overlapping ones.
+    private static final int ROI_MERGE_DIST_PX = 20;
 
+    // -------------------------------------------------------------------------
+    // Hough Circle Transform parameters. All radius bounds are expressed as a
+    // FRACTION of the frame's shorter dimension, keeping them scale-invariant
+    // with respect to DETECTION_SCALE and camera resolution — the same
+    // scale-invariance philosophy the old pipeline used for area fractions.
+    // -------------------------------------------------------------------------
+
+    // Gaussian blur kernel applied before Hough — circle detection is
+    // sensitive to pixel-level noise, and holes/glare are exactly the kind
+    // of high-frequency noise this needs to smooth over before edge/gradient
+    // analysis runs. Applied per-ROI AFTER the upscale below, not to the whole
+    // small frame: a 5x5 blur erases the entire edge of a 3-5px-radius ball,
+    // which is exactly the size a distant ball occupies at DETECTION_SCALE.
+    private static final Size HOUGH_BLUR_KERNEL = new Size(5, 5);
+
+    // dp: inverse ratio of accumulator resolution to image resolution. 1.0 =
+    // accumulator has the same resolution as the input ROI (most precise,
+    // more compute). Raise toward 1.5–2.0 if Hough becomes a bottleneck.
+    private static final double HOUGH_DP = 1.2;
+
+    // Minimum distance between detected circle centers, in pixels within the
+    // ROI. Prevents multiple overlapping detections of the same ball's edge.
+    // Derived from expected ball radius at runtime (see runDetectionFrame).
+    private static final double HOUGH_MIN_DIST_FRACTION = 0.5; // * expected radius
+
+    // Canny high threshold used internally by Hough for edge detection. The
+    // low threshold is automatically half of this. Lower = more sensitive to
+    // weak edges (catches faint ball outlines against low-contrast
+    // backgrounds) but noisier; higher = only very strong edges vote.
+    private static final double HOUGH_CANNY_THRESHOLD = 80;
+
+    // Floor for the above once it has been divided down for an upscaled ROI
+    // (see ROI_MAX_UPSCALE) — below this, sensor noise starts producing edges.
+    private static final double HOUGH_CANNY_MIN_THRESHOLD = 30;
+
+    // Accumulator vote threshold — how many edge-gradient votes a candidate
+    // circle needs to be reported. LOWER finds more circles (including
+    // false positives on strongly-textured non-ball regions); HIGHER is
+    // stricter. Kept fairly low because ROIs are already color-pre-filtered,
+    // so false positives here mostly cost a little compute, not accuracy.
+    private static final double HOUGH_ACCUMULATOR_THRESHOLD = 22;
+
+    // Upper bound on a searched circle relative to the ROI's own shorter
+    // dimension — a circle can't meaningfully exceed the region it was found
+    // in. This is only ever the tighter half of a min() against the absolute
+    // ceiling below.
+    private static final double HOUGH_MAX_RADIUS_FRACTION = 0.60;
+
+    // Ball radius bounds as a fraction of the FRAME's shorter dimension, for a
+    // ball of REFERENCE_BALL_DIAMETER_INCHES; each type scales these by its own
+    // diameter (BallType.radiusScale).
+    // These are deliberately NOT ROI-relative: ROI size has a hard floor of
+    // 2 * ROI_PAD_PX regardless of how small the ball is, so a ROI-relative
+    // minimum can never shrink below ~5px and silently excludes every distant
+    // ball. Set MIN from the smallest apparent pollen ball at the camera's
+    // furthest useful range, MAX from the largest at its closest.
+    private static final double MIN_BALL_RADIUS_FRAME_FRACTION = 0.02;
+    private static final double MAX_BALL_RADIUS_FRAME_FRACTION = 0.1;
+
+    // A distant ball is only a few pixels across at DETECTION_SCALE, and
+    // Hough's accumulator votes scale with circumference — a 4px-radius circle
+    // has ~25 edge pixels total to clear HOUGH_ACCUMULATOR_THRESHOLD with,
+    // while a near ball clears it trivially. ROIs whose smallest searched
+    // radius falls under this are upscaled before the Hough call so tiny
+    // circles get a proportionate number of votes.
+    private static final double HOUGH_WORKING_MIN_RADIUS_PX = 6.0;
+
+    // Bounds the cost of the above; Hough is O(pixels), so an unbounded
+    // upscale on a large ROI would be the whole frame's budget.
+    private static final double ROI_MAX_UPSCALE = 4.0;
+
+    // Fraction of a detected circle's own area that must be pixels of the mask
+    // that seeded its ROI, for it to count as a ball of that type. ROIs are
+    // padded and merged, so they always contain off-colour margin, and
+    // HOUGH_GRADIENT votes along the gradient normal in BOTH directions — a
+    // real ball's edge therefore also deposits a phantom center about one
+    // radius out into the dark background. Without this check nothing
+    // downstream distinguishes that phantom from the ball. It is also what
+    // assigns the type, since Hough itself is colour-blind: a ball picked up
+    // through another colour's glare band fails that colour's fill test.
+    // Kept low: holes, glare and shadow mean a real ball is never fully masked.
+    private static final double MIN_COLOR_FILL_FRACTION = 0.30;
+
+    // Two kept circles must be separated by at least this fraction of the sum
+    // of their radii. Hough's own minDist can't do this job: it is one value
+    // per call, derived from the SMALLEST searched radius (~3px), so it cannot
+    // suppress a second detection on a ball many times that size — and it does
+    // nothing at all across separate ROI calls. Balls resting against each
+    // other sit at 1.0 (dist == r1 + r2), so this must stay well under that.
+    private static final double MIN_CENTER_SEPARATION_FRACTION = 0.7;
+
+    // -------------------------------------------------------------------------
+    // Homography calibration settings — GRID_COLS=9, GRID_ROWS=6 matches the
+    // physical board (9 inner corners wide, 6 inner corners tall).
+    // -------------------------------------------------------------------------
+    private static final int   GRID_COLS        = 9;
+    private static final int   GRID_ROWS        = 6;
+    private static final int   EXPECTED_CORNERS = GRID_COLS * GRID_ROWS;
+    private static final float SQUARE_SIZE_INCHES = 1.0f; // TODO: verify against your physical board
+    private static final int   DETECTION_FRAME_INTERVAL = 3;
+    private static final int   FRAMES_TO_CONFIRM = 5;
+
+    // -------------------------------------------------------------------------
+    // Pipeline state
+    // -------------------------------------------------------------------------
     private enum Phase { CALIBRATING, DETECTING }
 
-    private Phase phase;
-    private Mat   homography = null;       // full-res original -> top-down warp
-    private final double[] hVals = new double[9]; // cached homography for fast point mapping
+    // volatile: written on the camera thread (processFrame), read on the OpMode thread.
+    private volatile Phase phase;
+    private volatile Mat   homography   = null;
     private int   confirmCount = 0;
     private int   frameCount   = 0;
-    private Size  warpSize;
 
-    // Pre-allocated Mats reused every frame to avoid native-heap churn.
-    private final Mat detSmall     = new Mat(); // downscaled original (detection input)
+    private final Mat gray         = new Mat(); // full-res grayscale, calibration only
+    private final Mat small        = new Mat(); // downscaled color frame
+    private final Mat smallGray    = new Mat(); // downscaled grayscale, unblurred
+    private final Mat roiWork      = new Mat(); // per-ROI upscaled + blurred, fed to Hough
     private final Mat hsv          = new Mat();
-    private final Mat yellowMask   = new Mat();
-    private final Mat cleanMask    = new Mat();
-    private final Mat filledMask   = new Mat();
-    private final Mat distMat      = new Mat(); // distance transform (CV_32F)
-    private final Mat localMax     = new Mat(); // dilated distMat, for local-maxima test
-    private final Mat distFloor    = new Mat(); // absolute distance-floor mask
-    private final Mat peaks        = new Mat(); // ball-center seeds
-    private final Mat hsvFull      = new Mat(); // full-res HSV (contact-point refinement)
-    private final Mat maskFull     = new Mat(); // full-res yellow mask (contact-point refinement)
-    private final Mat contourImage = new Mat(); // returned display frame
+    private final Mat rangeMask    = new Mat(); // one HsvRange, OR-ed into colorMask
+    private final Mat colorMask    = new Mat(); // current type's raw colour mask
+    private final Mat roiMask      = new Mat(); // lightly-closed candidate mask
+    private final Mat displayImage = new Mat();
+    private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
+    // findContours hierarchy output, reused across frames.
     private final Mat contourHierarchy = new Mat();
-    private final List<MatOfPoint> peakContours = new ArrayList<>();
-    private final byte[] maskPixel = new byte[1]; // reused 1-byte buffer for mask column scans
-    private final List<Track> tracks = new ArrayList<>(); // persistent detections (anti-flicker)
 
-    private final Mat          gray         = new Mat();
-    private final MatOfPoint2f imageCorners = new MatOfPoint2f();
     private final MatOfPoint2f dstCorners;
 
     private final Telemetry telemetry;
 
+    private static final Scalar MASK_CANVAS_CLEAR = new Scalar(0, 0, 0);
+
+    private static class BallResult {
+        BallType type;                        // colour whose mask seeded this circle's ROI
+        double centerXSmall, centerYSmall;   // Hough circle center, small-image space
+        double radiusSmall;                   // Hough circle radius, small-image space
+        double fillFraction;                  // of the circle covered by that colour's mask
+        Point fieldPoint;                     // ground-contact point, transformed to inches
+    }
+
+    // =========================================================================
+    // Constructor
+    // =========================================================================
     public PollenDetectionPipeline(Telemetry telemetry) {
         this.telemetry = telemetry;
 
         if (USE_PREDETERMINED_HOMOGRAPHY) {
             homography = buildHomographyFromArray(H_ARRAY);
-            warpSize   = buildWarpSize(); // the board layout the homography targets, NOT camera res
-            cacheHomography();
             phase = Phase.DETECTING;
         } else {
             phase = Phase.CALIBRATING;
@@ -170,10 +378,13 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         dstCorners = buildCalibrationDstCorners();
     }
 
-    public Mat     getHomography() { return homography; }
-    public boolean isCalibrated()  { return phase == Phase.DETECTING; }
+    // =========================================================================
+    // Public accessors
+    // =========================================================================
 
-    /** Returns the homography as a copy-pasteable Java array string. */
+    public Mat getHomography()    { return homography; }
+    public boolean isCalibrated() { return phase == Phase.DETECTING; }
+
     public String getHomographyAsString() {
         if (homography == null || homography.empty()) return "Homography not available";
         StringBuilder sb = new StringBuilder("double[][] H_ARRAY = {\n");
@@ -191,6 +402,9 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         return sb.toString();
     }
 
+    // =========================================================================
+    // Main pipeline entry point
+    // =========================================================================
     @Override
     public Mat processFrame(Mat input) {
         switch (phase) {
@@ -201,7 +415,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     }
 
     // =========================================================================
-    // PHASE 1 — Homography calibration
+    // PHASE 1 — Homography calibration (unchanged from prior version)
     // =========================================================================
 
     private Mat runCalibrationFrame(Mat input) {
@@ -214,7 +428,9 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
             return input;
         }
 
-        if (!detectChessboardCorners(input)) {
+        MatOfPoint2f imageCorners = detectChessboardCorners(input);
+
+        if (imageCorners == null) {
             confirmCount = 0;
             telemetry.addLine("[Calibrating] Chessboard NOT found");
             telemetry.addData("Tip", "Ensure full board is visible and flat");
@@ -225,209 +441,513 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         Mat h = computeHomography(imageCorners, dstCorners);
 
         if (h == null) {
+            imageCorners.release();
             confirmCount = 0;
             telemetry.addLine("[Calibrating] Homography computation failed");
             telemetry.update();
             return input;
         }
 
-        if (homography != null) homography.release(); // free the prior confirm frame's Mat
+        Mat previousHomography = homography;
         homography = h;
+        if (previousHomography != null && previousHomography != h) previousHomography.release();
         confirmCount++;
 
         if (confirmCount >= FRAMES_TO_CONFIRM) {
-            lockCalibration();
+            phase = Phase.DETECTING;
         }
 
         telemetry.addLine(phase == Phase.DETECTING
                 ? "[LOCKED] Switching to detection..."
                 : "[Calibrating] Confirming...");
-        reportHomographyToTelemetry(homography);
+        telemetry.addLine("--- Homography (image px -> field inches) ---");
+        telemetry.addLine(getHomographyAsString());
         telemetry.update();
 
         Calib3d.drawChessboardCorners(input, new Size(GRID_COLS, GRID_ROWS), imageCorners, true);
+        imageCorners.release();
         return input;
     }
 
-    private void lockCalibration() {
-        warpSize = buildWarpSize();
-        cacheHomography();
-        phase = Phase.DETECTING;
-    }
-
     // =========================================================================
-    // PHASE 2 — Pollen detection (raw image) + ground-contact mapping
+    // PHASE 2 — Ball detection via color-filtered ROIs + Hough circle fitting
     // =========================================================================
 
     private Mat runDetectionFrame(Mat input) {
-        Size fullSize = warpSize != null ? warpSize : input.size();
 
-        // 1. Detect on a downscaled copy of the ORIGINAL image — the ground-contact
-        //    point must be measured before the ground-plane warp distorts ball height.
-        Imgproc.resize(input, detSmall,
-                new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE));
-        Scalar yellowLow  = new Scalar(Tuning.hLow,  Tuning.sLow,  Tuning.vLow);
-        Scalar yellowHigh = new Scalar(Tuning.hHigh, Tuning.sHigh, Tuning.vHigh);
-        Imgproc.cvtColor(detSmall, hsv, Imgproc.COLOR_RGB2HSV);
-        Core.inRange(hsv, yellowLow, yellowHigh, yellowMask);
+        Size smallSize = new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE);
+        Imgproc.resize(input, small, smallSize, 0, 0, Imgproc.INTER_AREA);
 
-        // 2. Remove specks (open), then fill the wiffle-ball holes (close).
-        Imgproc.morphologyEx(yellowMask, cleanMask,  Imgproc.MORPH_OPEN,  OPEN_KERNEL);
-        Imgproc.morphologyEx(cleanMask,  filledMask, Imgproc.MORPH_CLOSE, FILL_KERNEL);
+        Imgproc.cvtColor(small, hsv, Imgproc.COLOR_RGB2HSV);
+        // Grayscale once for the whole small frame; every ROI's Hough search
+        // reads out of it, whatever colour seeded that ROI.
+        Imgproc.cvtColor(small, smallGray, Imgproc.COLOR_RGB2GRAY);
 
-        List<float[]> balls = new ArrayList<>(); // each: {warpX, warpY, xIn, yIn}
-
-        if (Core.countNonZero(filledMask) > 0) {
-            // 3. Distance transform; ball centers are LOCAL maxima (size-independent, so
-            //    smaller/farther balls aren't dropped by a single global threshold).
-            Imgproc.distanceTransform(filledMask, distMat, Imgproc.DIST_L2, 3);
-            Imgproc.GaussianBlur(distMat, distMat, new Size(3, 3), 0); // steady peak locations frame-to-frame
-            Imgproc.dilate(distMat, localMax, PEAK_DILATE_KERNEL);
-            Core.compare(distMat, localMax, peaks, Core.CMP_GE); // 255 where pixel == local max
-
-            // Absolute distance floor: drops noise specks AND thin (non-round) objects,
-            // whose inscribed radius never reaches Tuning.minPeakDist.
-            Imgproc.threshold(distMat, distFloor, Tuning.minPeakDist, 255, Imgproc.THRESH_BINARY);
-            distFloor.convertTo(distFloor, CvType.CV_8U);
-            Core.bitwise_and(peaks, distFloor, peaks);
-
-            // Collapse each peak plateau into one blob, then take its centroid.
-            Imgproc.dilate(peaks, peaks, PEAK_DILATE_KERNEL);
-            peakContours.clear();
-            Imgproc.findContours(peaks, peakContours, contourHierarchy,
-                    Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-
-            // Full-resolution yellow mask, used only to pin each ball's ground-contact point
-            // precisely. The 1/4-scale pass above finds and separates balls, but its contact Y
-            // is quantized to ~4 full-res px, which the homography magnifies for distant balls.
-            Imgproc.cvtColor(input, hsvFull, Imgproc.COLOR_RGB2HSV);
-            Core.inRange(hsvFull, yellowLow, yellowHigh, maskFull);
-
-            double[] warpPt = new double[2];
-            for (MatOfPoint pc : peakContours) {
-                org.opencv.imgproc.Moments m = Imgproc.moments(pc);
-                if (m.m00 == 0) continue;
-
-                // Ball center from the 1/4-scale pass, lifted to full-res original pixels.
-                int cxF = (int) Math.min(Math.max(m.m10 / m.m00 / DETECTION_SCALE, 0), maskFull.cols() - 1);
-                int cyF = (int) Math.min(Math.max(m.m01 / m.m00 / DETECTION_SCALE, 0), maskFull.rows() - 1);
-
-                // Ground contact = the lowest yellow pixel directly below the center in the
-                // full-res mask. Tolerate short gaps (wiffle holes); stop at the floor, i.e.
-                // once more than MAX_HOLE_GAP consecutive non-ball pixels have passed.
-                int bottomYF = cyF, gap = 0;
-                for (int y = cyF; y < maskFull.rows(); y++) {
-                    maskFull.get(y, cxF, maskPixel);
-                    if (maskPixel[0] != 0) { bottomYF = y; gap = 0; }
-                    else if (++gap > MAX_HOLE_GAP) break;
-                }
-
-                // Map only that ground-plane contact point through the homography.
-                if (!mapToWarp(cxF, bottomYF, warpPt)) continue;
-                // Background (people, clutter above the wall) isn't on the ground plane, so its
-                // contact projects off the top-down field canvas — drop anything outside it.
-                if (warpPt[0] < 0 || warpPt[1] < 0
-                        || warpPt[0] >= fullSize.width || warpPt[1] >= fullSize.height) continue;
-                double xIn = (warpPt[0] - ORIGIN_X) * PIXELS_TO_INCHES;
-                double yIn = (warpPt[1] - ORIGIN_Y) * PIXELS_TO_INCHES;
-                balls.add(new float[]{ (float) warpPt[0], (float) warpPt[1], (float) xIn, (float) yIn });
-            }
-            for (MatOfPoint pc : peakContours) pc.release(); // free per-frame native contour Mats
-        }
-
-        // Temporal smoothing: fold this frame's raw detections into persistent tracks so a
-        // briefly-missed ball (or a 1-frame false positive) doesn't flicker on/off, and the
-        // shown positions are EMA-smoothed. `stable` is the debounced output used below.
-        updateTracks(balls);
-        List<float[]> stable = confirmedTracks();
-
-        // 4. Display.
-        if (Tuning.displayMode == DisplayMode.MASK) {
-            // Detection mask (original space), upscaled — for tuning the HSV range. Ball markers
-            // are in warped coords, so they're omitted here (they wouldn't line up with this view).
-            Imgproc.resize(filledMask, yellowMask, fullSize, 0, 0, Imgproc.INTER_NEAREST);
-            Imgproc.cvtColor(yellowMask, contourImage, Imgproc.COLOR_GRAY2RGB);
+        if (DISPLAY_MODE == DisplayMode.MASK) {
+            maskCanvas.create(small.size(), CvType.CV_8UC3);
+            maskCanvas.setTo(MASK_CANVAS_CLEAR);
         } else {
-            // Top-down warped image — shown every frame, including when no Pollen is present.
-            Imgproc.warpPerspective(input, contourImage, homography, fullSize);
-            for (float[] ball : stable) {
-                Point contact = new Point(ball[0], ball[1]);
-                Imgproc.circle(contourImage, contact, (int) BALL_RADIUS_PX, new Scalar(0, 255, 0), 2); // green ball-size ring (RGB)
-                Imgproc.circle(contourImage, contact, 5, new Scalar(255, 0, 0), -1);                    // red ground-contact dot (RGB)
-            }
-            drawOrigin(contourImage);
+            input.copyTo(displayImage);
         }
 
-        // 5. Telemetry.
-        telemetry.addLine("[Detecting Pollen]");
-        telemetry.addData("Pollen Detected", stable.size());
-        for (int i = 0; i < stable.size(); i++) {
-            float[] ball = stable.get(i);
-            telemetry.addLine("--- Pollen " + i + " ---");
-            telemetry.addData("  Ground X (in)", String.format("%.2f", ball[2]));
-            telemetry.addData("  Ground Y (in)", String.format("%.2f", ball[3]));
+        double frameShortSide = Math.min(small.cols(), small.rows());
+
+        List<BallResult> candidates = new ArrayList<>();
+        int rejectedCount = 0;
+        int roiCount = 0;
+
+        for (BallType type : BallType.values()) {
+
+            // --- Step 1: coarse colour-based ROI candidates for this type ------
+            buildColorMask(type, colorMask);
+
+            // Light closing only — just enough to merge nearby fragments of the
+            // SAME ball into one rough cluster. Not trying to produce a solid disc.
+            Imgproc.morphologyEx(colorMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
+
+            if (DISPLAY_MODE == DisplayMode.MASK) maskCanvas.setTo(type.drawColor, roiMask);
+
+            // --- Step 2: build merged ROI rectangles from colour clusters -------
+            List<Rect> rois = findMergedRois(roiMask);
+            roiCount += rois.size();
+
+            double minBallRadiusSmall = minBallRadius(frameShortSide, type);
+            double maxBallRadiusSmall = maxBallRadius(frameShortSide, type);
+
+            // --- Step 3: run HoughCircles within each candidate ROI -------------
+            for (Rect roi : rois) {
+                int shortSide = Math.min(roi.width, roi.height);
+                if (shortSide < 4) continue; // too small to meaningfully search
+
+                double maxRadius = Math.min(shortSide * HOUGH_MAX_RADIUS_FRACTION, maxBallRadiusSmall);
+                double minRadius = Math.min(minBallRadiusSmall, maxRadius * 0.5);
+                double minDist   = Math.max(4.0, minRadius * HOUGH_MIN_DIST_FRACTION * 2.0);
+
+                double roiScale = Math.min(ROI_MAX_UPSCALE,
+                        Math.max(1.0, HOUGH_WORKING_MIN_RADIUS_PX / minRadius));
+
+                // Interpolation spreads the same intensity step across roiScale
+                // pixels, so per-pixel gradient magnitude drops by roughly that
+                // factor — a fixed Canny threshold would reject the very edges the
+                // upscale exists to recover.
+                double cannyThreshold = Math.max(HOUGH_CANNY_MIN_THRESHOLD,
+                        HOUGH_CANNY_THRESHOLD / roiScale);
+
+                Mat roiGray = smallGray.submat(roi);
+                Mat circles = new Mat();
+                try {
+                    if (roiScale > 1.0) {
+                        Imgproc.resize(roiGray, roiWork,
+                                new Size(Math.round(roi.width * roiScale),
+                                        Math.round(roi.height * roiScale)),
+                                0, 0, Imgproc.INTER_LINEAR);
+                    } else {
+                        roiGray.copyTo(roiWork); // submat is a view; don't blur smallGray in place
+                    }
+                    Imgproc.GaussianBlur(roiWork, roiWork, HOUGH_BLUR_KERNEL, 0);
+
+                    Imgproc.HoughCircles(roiWork, circles, Imgproc.HOUGH_GRADIENT,
+                            HOUGH_DP, minDist * roiScale,
+                            cannyThreshold, HOUGH_ACCUMULATOR_THRESHOLD,
+                            (int) (minRadius * roiScale), (int) (maxRadius * roiScale));
+
+                    int cols = circles.cols();
+                    for (int i = 0; i < cols; i++) {
+                        double[] c = circles.get(0, i);
+                        // c = { centerX, centerY, radius }, upscaled-ROI-local coordinates
+                        BallResult result = new BallResult();
+                        result.type = type;
+                        result.centerXSmall = c[0] / roiScale + roi.x;
+                        result.centerYSmall = c[1] / roiScale + roi.y;
+                        result.radiusSmall  = c[2] / roiScale;
+                        result.fillFraction = colorFillFraction(colorMask, result);
+
+                        if (result.fillFraction < MIN_COLOR_FILL_FRACTION) {
+                            rejectedCount++;
+                            continue;
+                        }
+
+                        candidates.add(result);
+                    }
+                } finally {
+                    circles.release();
+                    roiGray.release();
+                }
+            }
+        }
+
+        // --- Step 4: drop overlapping detections, then map survivors to field ---
+        List<BallResult> results = suppressOverlaps(candidates);
+        int overlapCount = candidates.size() - results.size();
+
+        for (BallResult result : results) {
+            // Ground-contact point: analytically the lowest point on the
+            // circle, (cx, cy + r) — exact, since Hough gives us a true
+            // circle equation rather than a noisy pixel contour to hunt
+            // through for the "lowest point" the way the old pipeline did.
+            double contactXSmall = result.centerXSmall;
+            double contactYSmall = result.centerYSmall + result.radiusSmall;
+
+            double fullResX = contactXSmall / DETECTION_SCALE;
+            double fullResY = contactYSmall / DETECTION_SCALE;
+            result.fieldPoint = transformPointToField(fullResX, fullResY);
+        }
+
+        // --- Step 5: display ----------------------------------------------------
+        if (DISPLAY_MODE == DisplayMode.MASK) {
+            Imgproc.resize(maskCanvas, displayImage, input.size(), 0, 0, Imgproc.INTER_NEAREST);
+        }
+
+        if (DISPLAY_MODE == DisplayMode.BOX) {
+            for (int i = 0; i < results.size(); i++) {
+                drawBallBox(displayImage, results.get(i), i);
+            }
+        } else {
+            for (BallResult r : results) {
+                drawBallOverlay(displayImage, r);
+            }
+        }
+
+        drawOriginCrosshair(displayImage);
+
+        // --- Step 6: telemetry ---------------------------------------------------
+        telemetry.addLine("[Detecting Balls — Hough circle fit]");
+        telemetry.addData("ROIs searched", roiCount);
+        telemetry.addData("Balls Detected", results.size());
+        for (BallType type : BallType.values()) {
+            telemetry.addData("  " + type.label, String.format("%d  (r %.1f - %.1f px)",
+                    countOfType(results, type),
+                    minBallRadius(frameShortSide, type),
+                    maxBallRadius(frameShortSide, type)));
+        }
+        telemetry.addData("Rejected (colour fill)", rejectedCount);
+        telemetry.addData("Rejected (overlap)", overlapCount);
+        for (int i = 0; i < results.size(); i++) {
+            BallResult r = results.get(i);
+            telemetry.addLine("--- Ball " + i + ": " + r.type.label + " ---");
+            telemetry.addData("  Field X (in)", String.format("%.2f", r.fieldPoint.x));
+            telemetry.addData("  Field Y (in)", String.format("%.2f", r.fieldPoint.y));
+            telemetry.addData("  Radius (px)", String.format("%.1f", r.radiusSmall));
+            telemetry.addData("  Colour fill", String.format("%.0f%%", r.fillFraction * 100.0));
         }
         telemetry.update();
 
-        return contourImage;
+        return displayImage;
+    }
+
+    /**
+     * ORs every HSV band of one ball type into a single mask. The first band
+     * writes {@code out} directly so the mask is cleared of the previous type's
+     * pixels without a separate zeroing pass.
+     */
+    private void buildColorMask(BallType type, Mat out) {
+        for (int i = 0; i < type.ranges.length; i++) {
+            HsvRange range = type.ranges[i];
+            if (i == 0) {
+                Core.inRange(hsv, range.low, range.high, out);
+            } else {
+                Core.inRange(hsv, range.low, range.high, rangeMask);
+                Core.bitwise_or(out, rangeMask, out);
+            }
+        }
+    }
+
+    private static double minBallRadius(double frameShortSide, BallType type) {
+        return frameShortSide * MIN_BALL_RADIUS_FRAME_FRACTION * type.radiusScale;
+    }
+
+    private static double maxBallRadius(double frameShortSide, BallType type) {
+        return frameShortSide * MAX_BALL_RADIUS_FRAME_FRACTION * type.radiusScale;
+    }
+
+    private static int countOfType(List<BallResult> results, BallType type) {
+        int n = 0;
+        for (BallResult r : results) if (r.type == type) n++;
+        return n;
+    }
+
+    /**
+     * Greedy non-maximum suppression over every circle found this frame,
+     * largest first. A hole, a glare ring or a shadow inside a ball fits a
+     * circle smaller than the ball's own outline, so preferring the larger
+     * radius keeps the ball and drops the artifact.
+     *
+     * This runs over all ball types at once, not per type: the types' glare
+     * bands cover overlapping near-white pixels, so one ball can seed a ROI
+     * under more than one colour and be found twice. Colour fill breaks the
+     * tie, which is only reached when two circles are the same size — i.e.
+     * when they really are the same ball.
+     */
+    private static List<BallResult> suppressOverlaps(List<BallResult> candidates) {
+        Collections.sort(candidates, new Comparator<BallResult>() {
+            @Override public int compare(BallResult a, BallResult b) {
+                int byRadius = Double.compare(b.radiusSmall, a.radiusSmall);
+                return byRadius != 0 ? byRadius : Double.compare(b.fillFraction, a.fillFraction);
+            }
+        });
+
+        List<BallResult> kept = new ArrayList<>(candidates.size());
+        for (BallResult c : candidates) {
+            boolean overlaps = false;
+            for (BallResult k : kept) {
+                double dx = c.centerXSmall - k.centerXSmall;
+                double dy = c.centerYSmall - k.centerYSmall;
+                double dist = Math.sqrt(dx * dx + dy * dy);
+
+                // Second test catches an artifact sitting near a ball's rim,
+                // whose centre is outside the kept circle but which is far too
+                // close to be a separate ball.
+                if (dist <= k.radiusSmall
+                        || dist < MIN_CENTER_SEPARATION_FRACTION * (k.radiusSmall + c.radiusSmall)) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (!overlaps) kept.add(c);
+        }
+        return kept;
+    }
+
+    /**
+     * How much of a Hough circle's interior is actually the colour that seeded
+     * its ROI. Counts mask hits in the circle's bounding box against the area a
+     * circle would occupy in that box (pi/4 of it), so a ball clipped by the
+     * frame edge is judged on its visible part rather than being penalised for
+     * the missing half.
+     */
+    private double colorFillFraction(Mat mask, BallResult r) {
+        int x0 = (int) Math.max(0, Math.round(r.centerXSmall - r.radiusSmall));
+        int y0 = (int) Math.max(0, Math.round(r.centerYSmall - r.radiusSmall));
+        int x1 = (int) Math.min(mask.cols(), Math.round(r.centerXSmall + r.radiusSmall));
+        int y1 = (int) Math.min(mask.rows(), Math.round(r.centerYSmall + r.radiusSmall));
+        if (x1 - x0 < 1 || y1 - y0 < 1) return 0.0;
+
+        Mat box = mask.submat(new Rect(x0, y0, x1 - x0, y1 - y0));
+        try {
+            double circleArea = (Math.PI / 4.0) * box.cols() * box.rows();
+            return Core.countNonZero(box) / circleArea;
+        } finally {
+            box.release();
+        }
+    }
+
+    /**
+     * Finds coarse candidate regions from one type's (loosely closed) colour mask,
+     * pads each one out, and merges any that are close together into a
+     * single combined ROI. This is intentionally forgiving — its only job is
+     * to hand Hough a small region that PROBABLY contains a ball; Hough does
+     * the actual shape validation.
+     */
+    private List<Rect> findMergedRois(Mat mask) {
+        List<MatOfPoint> contours = new ArrayList<>();
+        Imgproc.findContours(mask, contours, contourHierarchy,
+                Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+
+        List<Rect> padded = new ArrayList<>(contours.size());
+        for (MatOfPoint c : contours) {
+            Rect r = Imgproc.boundingRect(c);
+            c.release();
+            int x = Math.max(0, r.x - ROI_PAD_PX);
+            int y = Math.max(0, r.y - ROI_PAD_PX);
+            int w = Math.min(mask.cols() - x, r.width  + ROI_PAD_PX * 2);
+            int h = Math.min(mask.rows() - y, r.height + ROI_PAD_PX * 2);
+            if (w > 0 && h > 0) padded.add(new Rect(x, y, w, h));
+        }
+
+        // Merge ROIs that are close together (fragments of the same ball).
+        List<Rect> merged = new ArrayList<>();
+        boolean[] consumed = new boolean[padded.size()];
+        for (int i = 0; i < padded.size(); i++) {
+            if (consumed[i]) continue;
+            Rect current = padded.get(i);
+            consumed[i] = true;
+            boolean growing = true;
+            while (growing) {
+                growing = false;
+                for (int j = 0; j < padded.size(); j++) {
+                    if (consumed[j]) continue;
+                    if (rectsNear(current, padded.get(j), ROI_MERGE_DIST_PX)) {
+                        current = union(current, padded.get(j));
+                        consumed[j] = true;
+                        growing = true;
+                    }
+                }
+            }
+            merged.add(current);
+        }
+        return merged;
+    }
+
+    private static boolean rectsNear(Rect a, Rect b, int dist) {
+        Rect expandedA = new Rect(a.x - dist, a.y - dist, a.width + dist * 2, a.height + dist * 2);
+        return expandedA.x < b.x + b.width && expandedA.x + expandedA.width > b.x
+                && expandedA.y < b.y + b.height && expandedA.y + expandedA.height > b.y;
+    }
+
+    private static Rect union(Rect a, Rect b) {
+        int x1 = Math.min(a.x, b.x);
+        int y1 = Math.min(a.y, b.y);
+        int x2 = Math.max(a.x + a.width,  b.x + b.width);
+        int y2 = Math.max(a.y + a.height, b.y + b.height);
+        return new Rect(x1, y1, x2 - x1, y2 - y1);
+    }
+
+    private void drawBallOverlay(Mat displayImage, BallResult r) {
+        double scaleUp = 1.0 / DETECTION_SCALE;
+
+        Point centerFull = new Point(r.centerXSmall * scaleUp, r.centerYSmall * scaleUp);
+        int radiusFull = (int) (r.radiusSmall * scaleUp);
+
+        Imgproc.circle(displayImage, centerFull, radiusFull, r.type.drawColor, 2);
+        Imgproc.circle(displayImage, centerFull, 4, new Scalar(255, 255, 255), -1); // center
+
+        Point contactFull = new Point(centerFull.x, centerFull.y + radiusFull);
+        Imgproc.circle(displayImage, contactFull, 5, new Scalar(0, 0, 255), -1);  // ground contact
+
+        String label = String.format("%s (%.1f, %.1f)in",
+                r.type.label, r.fieldPoint.x, r.fieldPoint.y);
+        Imgproc.putText(displayImage, label,
+                new Point(contactFull.x + 8, contactFull.y),
+                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 255, 255), 1);
+    }
+
+    /**
+     * BOX display mode: draws a clean axis-aligned bounding rectangle around
+     * the Hough-detected circle plus a solid label plate showing the ball's
+     * index and its calculated field coordinates.
+     */
+    private void drawBallBox(Mat displayImage, BallResult r, int ballIndex) {
+        double scaleUp = 1.0 / DETECTION_SCALE;
+
+        double cxFull = r.centerXSmall * scaleUp;
+        double cyFull = r.centerYSmall * scaleUp;
+        double radiusFull = r.radiusSmall * scaleUp;
+
+        Rect box = new Rect(
+                (int) (cxFull - radiusFull), (int) (cyFull - radiusFull),
+                (int) (radiusFull * 2), (int) (radiusFull * 2));
+
+        Scalar boxColor  = r.type.drawColor;
+        Scalar textColor = r.type.labelTextColor;
+
+        Imgproc.rectangle(displayImage,
+                new Point(box.x, box.y),
+                new Point(box.x + box.width, box.y + box.height),
+                boxColor, 2);
+
+        String label = String.format("#%d %s (%.1f, %.1f)in",
+                ballIndex, r.type.label, r.fieldPoint.x, r.fieldPoint.y);
+
+        int fontFace = Imgproc.FONT_HERSHEY_SIMPLEX;
+        double fontScale = 0.5;
+        int thickness = 1;
+        int[] baseline = new int[1];
+        Size textSize = Imgproc.getTextSize(label, fontFace, fontScale, thickness, baseline);
+
+        int padding = 4;
+        int plateWidth  = (int) textSize.width  + padding * 2;
+        int plateHeight = (int) textSize.height + baseline[0] + padding * 2;
+
+        int plateDrawWidth = Math.max(plateWidth, box.width);
+        int plateX = box.x;
+        int plateY = box.y - plateHeight;
+
+        if (plateY < 0) plateY = box.y + box.height + 2;
+        if (plateX + plateDrawWidth > displayImage.cols()) {
+            plateX = displayImage.cols() - plateDrawWidth;
+        }
+        if (plateX < 0) plateX = 0;
+
+        Imgproc.rectangle(displayImage,
+                new Point(plateX, plateY),
+                new Point(plateX + plateDrawWidth, plateY + plateHeight),
+                boxColor, -1);
+
+        Point textOrigin = new Point(
+                plateX + padding,
+                plateY + plateHeight - padding - baseline[0]);
+        Imgproc.putText(displayImage, label, textOrigin,
+                fontFace, fontScale, textColor, thickness);
+    }
+
+    private Point transformPointToField(double x, double y) {
+        MatOfPoint2f src = new MatOfPoint2f(new Point(x, y));
+        MatOfPoint2f dst = new MatOfPoint2f();
+        Core.perspectiveTransform(src, dst, homography);
+        return dst.toArray()[0];
+    }
+
+    private Point transformFieldToPoint(double fieldX, double fieldY) {
+        Mat inverseHomography = homography.inv();
+        MatOfPoint2f src = new MatOfPoint2f(new Point(fieldX, fieldY));
+        MatOfPoint2f dst = new MatOfPoint2f();
+        Core.perspectiveTransform(src, dst, inverseHomography);
+        inverseHomography.release();
+        return dst.toArray()[0];
+    }
+
+    private void drawOriginCrosshair(Mat displayImage) {
+        if (homography == null || homography.empty()) return;
+
+        Point originPixel = transformFieldToPoint(0.0, 0.0);
+
+        int size = 10;
+        Scalar color = new Scalar(255, 0, 255);
+
+        Imgproc.line(displayImage,
+                new Point(originPixel.x - size, originPixel.y),
+                new Point(originPixel.x + size, originPixel.y),
+                color, 2);
+        Imgproc.line(displayImage,
+                new Point(originPixel.x, originPixel.y - size),
+                new Point(originPixel.x, originPixel.y + size),
+                color, 2);
+        Imgproc.circle(displayImage, originPixel, 3, color, -1);
+        Imgproc.putText(displayImage, "(0,0)",
+                new Point(originPixel.x + size + 4, originPixel.y),
+                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
     }
 
     // =========================================================================
-    // Helpers
+    // Homography calibration helper methods
     // =========================================================================
 
-    /** Marks the coordinate origin (ORIGIN_X, ORIGIN_Y) on a warped frame. Magenta reads
-     *  the same in RGB or BGR and stands out from the green/red ball markers. */
-    private void drawOrigin(Mat img) {
-        Point  o       = new Point(ORIGIN_X, ORIGIN_Y);
-        Scalar magenta = new Scalar(255, 0, 255);
-        Imgproc.line(img, new Point(o.x - 14, o.y), new Point(o.x + 14, o.y), magenta, 2);
-        Imgproc.line(img, new Point(o.x, o.y - 14), new Point(o.x, o.y + 14), magenta, 2);
-        Imgproc.circle(img, o, 5, magenta, 2);
-        Imgproc.putText(img, "(0,0)", new Point(o.x + 8, o.y + 20),
-                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, magenta, 1);
-    }
-
-    /** Detects inner chessboard corners into the reused imageCorners field (sub-pixel
-     *  refined). Returns false if detection fails or the corner count is wrong. */
-    private boolean detectChessboardCorners(Mat input) {
+    private MatOfPoint2f detectChessboardCorners(Mat input) {
         Imgproc.cvtColor(input, gray, Imgproc.COLOR_RGB2GRAY);
 
-        // Sector-based detector (OpenCV 4): far more robust to blur, glare, and the steep
-        // floor-level perspective than the legacy findChessboardCorners, and it returns
-        // sub-pixel corners directly (no cornerSubPix pass needed). EXHAUSTIVE trades speed
-        // for hit-rate — the right call for a one-time calibration.
-        boolean found = Calib3d.findChessboardCornersSB(
+        MatOfPoint2f imageCorners = new MatOfPoint2f();
+        boolean found = Calib3d.findChessboardCorners(
                 gray,
                 new Size(GRID_COLS, GRID_ROWS),
                 imageCorners,
-                Calib3d.CALIB_CB_NORMALIZE_IMAGE |
-                        Calib3d.CALIB_CB_EXHAUSTIVE |
-                        Calib3d.CALIB_CB_ACCURACY
+                Calib3d.CALIB_CB_ADAPTIVE_THRESH |
+                        Calib3d.CALIB_CB_NORMALIZE_IMAGE |
+                        Calib3d.CALIB_CB_FAST_CHECK
         );
 
-        return found && imageCorners.rows() == EXPECTED_CORNERS;
+        if (!found || imageCorners.rows() != EXPECTED_CORNERS) return null;
+
+        Imgproc.cornerSubPix(
+                gray, imageCorners,
+                new Size(5, 5), new Size(-1, -1),
+                new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 0.01)
+        );
+
+        return imageCorners;
     }
 
-    /** Computes a RANSAC homography mapping srcCorners -> dstCorners; null if empty. */
     private static Mat computeHomography(MatOfPoint2f srcCorners, MatOfPoint2f dstCorners) {
         Mat h = Calib3d.findHomography(srcCorners, dstCorners, Calib3d.RANSAC, 5.0);
-        if (h == null || h.empty()) {
-            if (h != null) h.release();
-            return null;
-        }
-        return h;
+        return (h == null || h.empty()) ? null : h;
     }
 
-    /** Destination inner-corner grid (inner corners only, OUTPUT_SCALE_PX apart). */
     private static MatOfPoint2f buildCalibrationDstCorners() {
         List<Point> dstList = new ArrayList<>();
         for (int row = 0; row < GRID_ROWS; row++) {
             for (int col = 0; col < GRID_COLS; col++) {
                 dstList.add(new Point(
-                        MARGIN_PX + col * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX,
-                        // Row order flipped (GRID_ROWS-1-row) so the top-down warp isn't upside down.
-                        MARGIN_PX + (GRID_ROWS - 1 - row) * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX
+                        col * SQUARE_SIZE_INCHES,
+                        row * SQUARE_SIZE_INCHES
                 ));
             }
         }
@@ -436,113 +956,11 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         return dst;
     }
 
-    /** Warp output size = board layout + 2*MARGIN_PX (1450x1300 with MARGIN_PX=500). */
-    private static Size buildWarpSize() {
-        int width  = (int)(GRID_COLS * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX + 2 * MARGIN_PX);
-        int height = (int)(GRID_ROWS * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX + 2 * MARGIN_PX);
-        return new Size(width, height);
-    }
-
-    /** Builds a 3x3 CV_64F Mat from a raw 3x3 double array (loads H_ARRAY). */
     private static Mat buildHomographyFromArray(double[][] arr) {
         Mat h = new Mat(3, 3, CvType.CV_64F);
         for (int r = 0; r < 3; r++)
             for (int c = 0; c < 3; c++)
                 h.put(r, c, arr[r][c]);
         return h;
-    }
-
-    /** Snapshots the homography into hVals so per-point mapping is pure-Java (no JNI gets). */
-    private void cacheHomography() {
-        if (homography == null) return;
-        for (int r = 0; r < 3; r++)
-            for (int c = 0; c < 3; c++)
-                hVals[r * 3 + c] = homography.get(r, c)[0];
-    }
-
-    /** Maps an original-image point through the cached homography into warped pixels.
-     *  Returns false (leaving out untouched) for points on/behind the homography horizon,
-     *  where w -> 0 would produce NaN/Inf. */
-    private boolean mapToWarp(double x, double y, double[] out) {
-        double wx = hVals[0] * x + hVals[1] * y + hVals[2];
-        double wy = hVals[3] * x + hVals[4] * y + hVals[5];
-        double w  = hVals[6] * x + hVals[7] * y + hVals[8];
-        if (Math.abs(w) < 1e-9) return false;
-        out[0] = wx / w;
-        out[1] = wy / w;
-        return true;
-    }
-
-    private void reportHomographyToTelemetry(Mat h) {
-        telemetry.addLine("--- Homography Matrix ---");
-        for (int r = 0; r < 3; r++) {
-            telemetry.addData("Row " + r,
-                    String.format("{ %.6e, %.6e, %.6e }",
-                            h.get(r, 0)[0],
-                            h.get(r, 1)[0],
-                            h.get(r, 2)[0]));
-        }
-        telemetry.addLine("Copy-paste string:");
-        telemetry.addLine(getHomographyAsString());
-    }
-
-    // =========================================================================
-    // Temporal smoothing (anti-flicker)
-    // =========================================================================
-
-    private static final class Track {
-        double warpX, warpY; // EMA-smoothed warped position
-        int hits;            // frames matched (capped at TRACK_MIN_HITS)
-        int sinceSeen;       // frames since last matched
-    }
-
-    /** Folds this frame's raw detections into the persistent track list (greedy nearest match). */
-    private void updateTracks(List<float[]> detections) {
-        boolean[] matched = new boolean[tracks.size()];
-        List<Track> fresh = new ArrayList<>();
-        for (float[] d : detections) {
-            int best = -1;
-            double bestDist = TRACK_MATCH_PX * TRACK_MATCH_PX;
-            for (int i = 0; i < tracks.size(); i++) {
-                if (matched[i]) continue;
-                Track t = tracks.get(i);
-                double dx = t.warpX - d[0], dy = t.warpY - d[1];
-                double dd = dx * dx + dy * dy;
-                if (dd < bestDist) { bestDist = dd; best = i; }
-            }
-            if (best >= 0) {
-                Track t = tracks.get(best);
-                t.warpX += (d[0] - t.warpX) * TRACK_SMOOTH;
-                t.warpY += (d[1] - t.warpY) * TRACK_SMOOTH;
-                if (t.hits < TRACK_MIN_HITS) t.hits++;
-                t.sinceSeen = 0;
-                matched[best] = true;
-            } else {
-                Track t = new Track();
-                t.warpX = d[0];
-                t.warpY = d[1];
-                t.hits = 1;
-                t.sinceSeen = 0;
-                fresh.add(t);
-            }
-        }
-        // Age unmatched tracks; drop the stale ones.
-        for (int i = tracks.size() - 1; i >= 0; i--) {
-            if (matched[i]) continue;
-            if (++tracks.get(i).sinceSeen > TRACK_MAX_MISSES) tracks.remove(i);
-        }
-        tracks.addAll(fresh);
-    }
-
-    /** Confirmed, smoothed detections {warpX, warpY, xIn, yIn} — tracks seen >= TRACK_MIN_HITS. */
-    private List<float[]> confirmedTracks() {
-        List<float[]> out = new ArrayList<>();
-        for (Track t : tracks) {
-            if (t.hits < TRACK_MIN_HITS) continue;
-            double xIn = (t.warpX - ORIGIN_X) * PIXELS_TO_INCHES;
-            double yIn = (t.warpY - ORIGIN_Y) * PIXELS_TO_INCHES;
-            out.add(new float[]{ (float) t.warpX, (float) t.warpY, (float) xIn, (float) yIn });
-        }
-        return out;
     }
 }

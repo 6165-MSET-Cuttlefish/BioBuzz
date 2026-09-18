@@ -2,6 +2,11 @@ package org.firstinspires.ftc.teamcode.modules.vision;
 
 import com.acmerobotics.dashboard.config.Config;
 
+import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.BallType;
+import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.BlueNectarHsv;
+import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.Detection;
+import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.PollenHsv;
+import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.RedNectarHsv;
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
@@ -22,24 +27,31 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Finds yellow balls on the floor and reports where they are — and how they are moving — in field
- * inches. Runs on the camera thread; results are published as an immutable {@link Frame} snapshot
- * that the OpMode thread reads via {@link #latest()}.
+ * Finds Pollen (2.8in yellow) and Nectar (3.6in red/blue) balls on the floor and reports where they
+ * are — and how they are moving — in field inches. Runs on the camera thread; results are published
+ * as an immutable {@link Frame} snapshot that the OpMode thread reads via {@link #latest()}.
  *
- * <p>Detection is shape-first: the HSV yellow gate is only a cheap region-of-interest finder, and
+ * <p>Detection is shape-first: each type's HSV gate is only a cheap region-of-interest finder, and
  * {@code HoughCircles} does the real work of deciding what is a ball. Hough votes on gradient
  * curvature, so a ball whose surface is broken up by wiffle holes, glare and shadow is still found
  * from its outer silhouette alone, and two touching balls are found as two independent circles —
  * both things a color-blob segmentation has to bolt on afterwards with watershed splitting and
- * circularity filters.
+ * circularity filters. Hough is colour-blind, though — it fits a silhouette regardless of what type
+ * it belongs to — so the colour mask that seeded a circle's search region is also what assigns its
+ * type (see {@link #colorFillFraction}).
  *
  * <p>Every detected ball is then fed to a {@link BallTracker}, which is what turns a stream of
- * unlabelled per-frame points into balls with identity and velocity.
+ * unlabelled per-frame points into balls with identity and velocity; a track only ever matches
+ * detections of its own {@link BallType}.
+ *
+ * <p>Every shared detection-recipe number lives in {@link BallVisionConstants}, the canonical copy
+ * that {@code OpenCVPipelines/PollenDetectionPipeline/PollenDetectionPipeline.java} mirrors by hand
+ * for EOCV-Sim (see that file's javadoc for why it can't just import this package).
  */
 public class BallDetectionPipeline extends OpenCvPipeline {
 
     public enum DisplayMode {
-        /** Candidate ROI mask, for tuning the HSV gate. */
+        /** Candidate ROI masks, one colour per ball type, for tuning the HSV gates. */
         MASK,
         /** Camera image with circle, center and ground-contact overlays. */
         OVERLAY,
@@ -47,98 +59,48 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         BOX
     }
 
+    /**
+     * Display/behaviour toggles only — every actual detection-recipe number ({@link
+     * BallVisionConstants.Detection} and the per-type HSV classes) lives on {@link
+     * BallVisionConstants} itself and is read fresh every frame, so it needs no seeding here.
+     */
     @Config("BallVision")
     public static class Tuning {
         public static DisplayMode displayMode = DisplayMode.BOX;
         public static boolean drawVelocity = true;
         /** Lookahead of the drawn velocity arrow, seconds. */
         public static double velocityArrowSeconds = 0.5;
-
-        /** OpenCV HSV: H 0-179, S/V 0-255. Loose on purpose — Hough is the real shape gate. */
-        public static int hLow = 15, hHigh = 34;
-        public static int sLow = 100, sHigh = 255;
-        public static int vLow = 100, vHigh = 255;
-        /** Specular highlights on a ball's top: same hue, washed-out saturation, near-max value. */
-        public static int glareSHigh = 90, glareVLow = 200;
-
-        public static double houghDp = 1.2;
-        /** Canny high threshold; lower catches faint outlines but votes for more noise. */
-        public static double houghCanny = 80;
-        /** Accumulator votes needed to report a circle. */
-        public static double houghAccumulator = 22;
-        /** Ball radius bounds as a fraction of the frame's shorter side. */
-        public static double minRadiusFrameFraction = 0.02;
-        public static double maxRadiusFrameFraction = 0.10;
-        /** Fraction of a circle's own area that must be yellow-mask pixels to count as a ball. */
-        public static double minYellowFill = 0.30;
-        /** Min center separation as a fraction of the two radii summed. */
-        public static double minCenterSeparation = 0.7;
     }
 
-    /** Skips live chessboard calibration and uses {@link #H_ARRAY} instead. */
+    /** Skips live chessboard calibration and uses {@link BallVisionConstants#H_ARRAY} instead. */
     private static final boolean USE_PREDETERMINED_HOMOGRAPHY = true;
 
-    /** Full-resolution image pixels to field inches. */
-    private static final double[][] H_ARRAY = {
-            { -1.7797474624e-01, -5.3062009235e-02,  6.0413594965e+01 },
-            { -2.0685716542e-02, -3.9378157948e-01,  1.4174826982e+02 },
-            { -2.8668090956e-04, -1.2403394999e-02,  1.0000000000e+00 }
-    };
+    private static final double DETECTION_SCALE = BallVisionConstants.DETECTION_SCALE;
 
-    /**
-     * Detection runs on a downscaled copy — the single biggest performance lever, since both the
-     * HSV pass and the Hough search scale with pixel count. Points are scaled back up before the
-     * homography is applied, so field coordinates are unaffected by this value.
-     */
-    private static final double DETECTION_SCALE = 0.5;
+    private static final Mat ROI_CLOSE_KERNEL = Imgproc.getStructuringElement(
+            Imgproc.MORPH_ELLIPSE, BallVisionConstants.ROI_CLOSE_KERNEL_SIZE);
 
-    /**
-     * Light close, unlike a color-first pipeline's aggressive multi-pass fill: this only has to
-     * merge nearby fragments into a rough cluster, not rebuild a solid disc.
-     */
-    private static final Mat ROI_CLOSE_KERNEL =
-            Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(9, 9));
+    private static final int ROI_PAD_PX = BallVisionConstants.ROI_PAD_PX;
+    private static final int ROI_MERGE_DIST_PX = BallVisionConstants.ROI_MERGE_DIST_PX;
 
-    /** A ball's silhouette routinely extends past where its color mask lit up, so pad generously. */
-    private static final int ROI_PAD_PX = 14;
-    /** Fragments of one ball that survived as separate blobs get merged into a single search box. */
-    private static final int ROI_MERGE_DIST_PX = 20;
+    private static final Size HOUGH_BLUR_KERNEL = BallVisionConstants.HOUGH_BLUR_KERNEL;
+    private static final double HOUGH_MIN_DIST_FRACTION = BallVisionConstants.HOUGH_MIN_DIST_FRACTION;
+    private static final double HOUGH_CANNY_MIN_THRESHOLD = BallVisionConstants.HOUGH_CANNY_MIN_THRESHOLD;
+    private static final double HOUGH_MAX_RADIUS_FRACTION = BallVisionConstants.HOUGH_MAX_RADIUS_FRACTION;
+    private static final double HOUGH_WORKING_MIN_RADIUS_PX = BallVisionConstants.HOUGH_WORKING_MIN_RADIUS_PX;
+    private static final double ROI_MAX_UPSCALE = BallVisionConstants.ROI_MAX_UPSCALE;
 
-    /**
-     * Blur before Hough — holes and glare are exactly the high-frequency noise that wrecks gradient
-     * analysis. Applied per-ROI after the upscale below, because a 5x5 blur applied to the small
-     * frame erases the entire edge of a 3-5px-radius ball.
-     */
-    private static final Size HOUGH_BLUR_KERNEL = new Size(5, 5);
-    private static final double HOUGH_MIN_DIST_FRACTION = 0.5;
-    private static final double HOUGH_CANNY_MIN_THRESHOLD = 30;
-    private static final double HOUGH_MAX_RADIUS_FRACTION = 0.60;
-
-    /**
-     * Hough's votes scale with circumference, so a distant 4px-radius ball has ~25 edge pixels to
-     * clear the accumulator threshold with while a near ball clears it trivially. ROIs searching
-     * below this radius are upscaled first so small circles get a proportionate vote count.
-     */
-    private static final double HOUGH_WORKING_MIN_RADIUS_PX = 6.0;
-    /** Bounds the cost of that upscale; Hough is O(pixels). */
-    private static final double ROI_MAX_UPSCALE = 4.0;
-
-    private static final int   GRID_COLS = 9;
-    private static final int   GRID_ROWS = 6;
-    private static final int   EXPECTED_CORNERS = GRID_COLS * GRID_ROWS;
-    private static final float SQUARE_SIZE_INCHES = 1.0f;
-    private static final int   CALIBRATION_FRAME_INTERVAL = 3;
-    private static final int   FRAMES_TO_CONFIRM = 5;
+    private static final int GRID_COLS = BallVisionConstants.GRID_COLS;
+    private static final int GRID_ROWS = BallVisionConstants.GRID_ROWS;
+    private static final int EXPECTED_CORNERS = BallVisionConstants.EXPECTED_CORNERS;
+    private static final float SQUARE_SIZE_INCHES = BallVisionConstants.SQUARE_SIZE_INCHES;
+    private static final int CALIBRATION_FRAME_INTERVAL = BallVisionConstants.CALIBRATION_FRAME_INTERVAL;
+    private static final int FRAMES_TO_CONFIRM = BallVisionConstants.FRAMES_TO_CONFIRM;
 
     private static final double FPS_SMOOTHING = 0.1;
     private static final double NANOS_TO_SECONDS = 1e-9;
 
-    private static final Scalar COLOR_CIRCLE   = new Scalar(0, 255, 0);
-    private static final Scalar COLOR_CENTER   = new Scalar(255, 255, 0);
-    private static final Scalar COLOR_CONTACT  = new Scalar(0, 0, 255);
-    private static final Scalar COLOR_LABEL    = new Scalar(255, 255, 255);
-    private static final Scalar COLOR_VELOCITY = new Scalar(255, 128, 0);
-    private static final Scalar COLOR_ORIGIN   = new Scalar(255, 0, 255);
+    private static final Scalar MASK_CANVAS_CLEAR = new Scalar(0, 0, 0);
 
     private enum Phase { CALIBRATING, DETECTING }
 
@@ -183,12 +145,12 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private final Mat small        = new Mat();
     private final Mat smallGray    = new Mat();
     private final Mat hsv          = new Mat();
-    private final Mat yellowMask   = new Mat();
-    private final Mat glareMask    = new Mat();
-    private final Mat roiMask      = new Mat();
+    private final Mat rangeMask    = new Mat(); // one HsvRange, OR-ed into colorMask
+    private final Mat colorMask    = new Mat(); // current type's raw colour mask
+    private final Mat roiMask      = new Mat(); // lightly-closed candidate mask
     private final Mat roiWork      = new Mat();
-    private final Mat upscaledMask = new Mat();
     private final Mat display      = new Mat();
+    private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
     private final Mat contourHierarchy = new Mat();
 
     private int confirmCount = 0;
@@ -200,7 +162,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     public BallDetectionPipeline() {
         if (USE_PREDETERMINED_HOMOGRAPHY) {
-            setHomography(buildHomographyFromArray(H_ARRAY));
+            setHomography(buildHomographyFromArray(BallVisionConstants.H_ARRAY));
             phase = Phase.DETECTING;
         } else {
             phase = Phase.CALIBRATING;
@@ -228,10 +190,26 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         }
 
         prepareWorkingFrames(input);
-        buildColorMask();
 
-        List<Rect> searchRegions = buildSearchRegions();
-        List<Candidate> candidates = findCircles(searchRegions);
+        List<Rect> searchRegions = new ArrayList<>();
+        List<Candidate> candidates = new ArrayList<>();
+
+        if (Tuning.displayMode == DisplayMode.MASK) {
+            maskCanvas.create(small.size(), CvType.CV_8UC3);
+            maskCanvas.setTo(MASK_CANVAS_CLEAR);
+        }
+
+        for (BallType type : BallType.values()) {
+            buildColorMask(type, colorMask);
+            Imgproc.morphologyEx(colorMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
+
+            if (Tuning.displayMode == DisplayMode.MASK) maskCanvas.setTo(type.drawColor, roiMask);
+
+            List<Rect> regions = buildSearchRegions();
+            searchRegions.addAll(regions);
+            candidates.addAll(findCircles(type, regions));
+        }
+
         List<Candidate> circles = suppressOverlaps(candidates);
         rejectedOverlapCount = candidates.size() - circles.size();
 
@@ -256,15 +234,55 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         Imgproc.cvtColor(small, smallGray, Imgproc.COLOR_RGB2GRAY);
     }
 
-    private void buildColorMask() {
-        Core.inRange(hsv,
-                new Scalar(Tuning.hLow, Tuning.sLow, Tuning.vLow),
-                new Scalar(Tuning.hHigh, Tuning.sHigh, Tuning.vHigh), yellowMask);
-        Core.inRange(hsv,
-                new Scalar(Tuning.hLow, 0, Tuning.glareVLow),
-                new Scalar(Tuning.hHigh, Tuning.glareSHigh, 255), glareMask);
-        Core.bitwise_or(yellowMask, glareMask, yellowMask);
-        Imgproc.morphologyEx(yellowMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
+    /**
+     * ORs every live-tunable HSV band of one ball type into {@code out}. The first band writes
+     * {@code out} directly so the mask is cleared of the previous type's pixels without a separate
+     * zeroing pass.
+     */
+    private void buildColorMask(BallType type, Mat out) {
+        switch (type) {
+            case POLLEN:
+                applyRange(out, true,
+                        PollenHsv.hLow, PollenHsv.sLow, PollenHsv.vLow,
+                        PollenHsv.hHigh, PollenHsv.sHigh, PollenHsv.vHigh);
+                applyRange(out, false,
+                        PollenHsv.hLow, 0, PollenHsv.glareVLow,
+                        PollenHsv.hHigh, PollenHsv.glareSHigh, 255);
+                return;
+            case NECTAR_RED:
+                applyRange(out, true,
+                        RedNectarHsv.hLow1, RedNectarHsv.sLow, RedNectarHsv.vLow,
+                        RedNectarHsv.hHigh1, RedNectarHsv.sHigh, RedNectarHsv.vHigh);
+                applyRange(out, false,
+                        RedNectarHsv.hLow2, RedNectarHsv.sLow, RedNectarHsv.vLow,
+                        RedNectarHsv.hHigh2, RedNectarHsv.sHigh, RedNectarHsv.vHigh);
+                applyRange(out, false,
+                        RedNectarHsv.hLow1, 0, RedNectarHsv.glareVLow,
+                        RedNectarHsv.hHigh1, RedNectarHsv.glareSHigh, 255);
+                applyRange(out, false,
+                        RedNectarHsv.hLow2, 0, RedNectarHsv.glareVLow,
+                        RedNectarHsv.hHigh2, RedNectarHsv.glareSHigh, 255);
+                return;
+            case NECTAR_BLUE:
+                applyRange(out, true,
+                        BlueNectarHsv.hLow, BlueNectarHsv.sLow, BlueNectarHsv.vLow,
+                        BlueNectarHsv.hHigh, BlueNectarHsv.sHigh, BlueNectarHsv.vHigh);
+                applyRange(out, false,
+                        BlueNectarHsv.hLow, 0, BlueNectarHsv.glareVLow,
+                        BlueNectarHsv.hHigh, BlueNectarHsv.glareSHigh, 255);
+                return;
+        }
+        throw new IllegalStateException("Unhandled ball type: " + type);
+    }
+
+    private void applyRange(Mat out, boolean first,
+                             double h0, double s0, double v0, double h1, double s1, double v1) {
+        if (first) {
+            Core.inRange(hsv, new Scalar(h0, s0, v0), new Scalar(h1, s1, v1), out);
+        } else {
+            Core.inRange(hsv, new Scalar(h0, s0, v0), new Scalar(h1, s1, v1), rangeMask);
+            Core.bitwise_or(out, rangeMask, out);
+        }
     }
 
     private List<Rect> buildSearchRegions() {
@@ -285,10 +303,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return mergeNearbyRects(padded);
     }
 
-    private List<Candidate> findCircles(List<Rect> searchRegions) {
+    private List<Candidate> findCircles(BallType type, List<Rect> searchRegions) {
         double frameShortSide = Math.min(small.cols(), small.rows());
-        double minBallRadius = frameShortSide * Tuning.minRadiusFrameFraction;
-        double maxBallRadius = frameShortSide * Tuning.maxRadiusFrameFraction;
+        double minBallRadius = frameShortSide * Detection.minRadiusFrameFraction * type.radiusScale;
+        double maxBallRadius = frameShortSide * Detection.maxRadiusFrameFraction * type.radiusScale;
 
         List<Candidate> candidates = new ArrayList<>();
         for (Rect region : searchRegions) {
@@ -304,7 +322,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             // Interpolation spreads the same intensity step over `upscale` pixels, so per-pixel
             // gradient magnitude drops by about that factor — a fixed Canny threshold would reject
             // the very edges the upscale exists to recover.
-            double canny = Math.max(HOUGH_CANNY_MIN_THRESHOLD, Tuning.houghCanny / upscale);
+            double canny = Math.max(HOUGH_CANNY_MIN_THRESHOLD, Detection.houghCanny / upscale);
 
             Mat regionGray = smallGray.submat(region);
             Mat circles = new Mat();
@@ -320,17 +338,18 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 Imgproc.GaussianBlur(roiWork, roiWork, HOUGH_BLUR_KERNEL, 0);
 
                 Imgproc.HoughCircles(roiWork, circles, Imgproc.HOUGH_GRADIENT,
-                        Tuning.houghDp, minDist * upscale,
-                        canny, Tuning.houghAccumulator,
+                        Detection.houghDp, minDist * upscale,
+                        canny, Detection.houghAccumulator,
                         (int) (minRadius * upscale), (int) (maxRadius * upscale));
 
                 for (int i = 0; i < circles.cols(); i++) {
                     double[] circle = circles.get(0, i);
-                    Candidate candidate = new Candidate(
+                    Candidate candidate = new Candidate(type,
                             circle[0] / upscale + region.x,
                             circle[1] / upscale + region.y,
                             circle[2] / upscale);
-                    if (hasYellowInterior(candidate)) candidates.add(candidate);
+                    candidate.fillFraction = colorFillFraction(colorMask, candidate);
+                    if (candidate.fillFraction >= Detection.minColorFill) candidates.add(candidate);
                     else rejectedColorCount++;
                 }
             } finally {
@@ -342,23 +361,27 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     /**
-     * Rejects circles that don't sit on yellow pixels. ROIs are padded and merged so they always
-     * contain non-ball margin, and HOUGH_GRADIENT votes along the gradient normal in both
-     * directions — a real ball's edge therefore also deposits a phantom center about one radius out
-     * into the background, and nothing else downstream tells that phantom from the ball. Counted
-     * over the bounding box so a frame-clipped ball is judged on its visible part.
+     * How much of a Hough circle's interior is actually the colour that seeded its ROI. Counted
+     * over the circle's bounding box against the area a circle would occupy in that box (pi/4 of
+     * it), so a frame-clipped ball is judged on its visible part rather than penalised for the
+     * missing half. ROIs are padded and merged so they always contain off-colour margin, and
+     * HOUGH_GRADIENT votes along the gradient normal in both directions — a real ball's edge
+     * therefore also deposits a phantom center about one radius out into the background, and
+     * nothing else downstream tells that phantom from the ball. This is also what assigns the
+     * type, since Hough itself is colour-blind: a ball picked up through another colour's glare
+     * band fails that colour's fill test.
      */
-    private boolean hasYellowInterior(Candidate candidate) {
+    private double colorFillFraction(Mat mask, Candidate candidate) {
         int x0 = (int) Math.max(0, Math.round(candidate.x - candidate.radius));
         int y0 = (int) Math.max(0, Math.round(candidate.y - candidate.radius));
-        int x1 = (int) Math.min(yellowMask.cols(), Math.round(candidate.x + candidate.radius));
-        int y1 = (int) Math.min(yellowMask.rows(), Math.round(candidate.y + candidate.radius));
-        if (x1 - x0 < 1 || y1 - y0 < 1) return false;
+        int x1 = (int) Math.min(mask.cols(), Math.round(candidate.x + candidate.radius));
+        int y1 = (int) Math.min(mask.rows(), Math.round(candidate.y + candidate.radius));
+        if (x1 - x0 < 1 || y1 - y0 < 1) return 0.0;
 
-        Mat box = yellowMask.submat(new Rect(x0, y0, x1 - x0, y1 - y0));
+        Mat box = mask.submat(new Rect(x0, y0, x1 - x0, y1 - y0));
         try {
             double circleArea = (Math.PI / 4.0) * box.cols() * box.rows();
-            return Core.countNonZero(box) >= Tuning.minYellowFill * circleArea;
+            return Core.countNonZero(box) / circleArea;
         } finally {
             box.release();
         }
@@ -369,11 +392,17 @@ public class BallDetectionPipeline extends OpenCvPipeline {
      * fits a circle smaller than the ball's own outline, so preferring the larger radius keeps the
      * ball and drops the artifact. Hough's own minDist can't do this — it is one value per call,
      * derived from the smallest searched radius, and does nothing across separate ROI calls.
+     *
+     * <p>Runs over every type at once, not per type: the types' glare bands cover overlapping
+     * near-white pixels, so one ball can seed a ROI under more than one colour and be found twice.
+     * Colour fill breaks the tie, which is only reached when two circles are the same size — i.e.
+     * when they really are the same ball.
      */
     private static List<Candidate> suppressOverlaps(List<Candidate> candidates) {
         Collections.sort(candidates, new Comparator<Candidate>() {
             @Override public int compare(Candidate a, Candidate b) {
-                return Double.compare(b.radius, a.radius);
+                int byRadius = Double.compare(b.radius, a.radius);
+                return byRadius != 0 ? byRadius : Double.compare(b.fillFraction, a.fillFraction);
             }
         });
 
@@ -386,7 +415,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 // circle but which is far too close to be a separate ball. Balls resting against
                 // each other sit at 1.0, so the fraction must stay well under that.
                 if (distance <= k.radius
-                        || distance < Tuning.minCenterSeparation * (k.radius + candidate.radius)) {
+                        || distance < Detection.minCenterSeparation * (k.radius + candidate.radius)) {
                     overlaps = true;
                     break;
                 }
@@ -415,7 +444,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         List<BallDetection> detections = new ArrayList<>(circles.size());
         for (int i = 0; i < circles.size(); i++) {
             Candidate c = circles.get(i);
-            detections.add(new BallDetection(field.get(i).x, field.get(i).y, c.x, c.y, c.radius));
+            detections.add(new BallDetection(c.type, field.get(i).x, field.get(i).y, c.x, c.y, c.radius));
         }
         return detections;
     }
@@ -428,8 +457,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         DisplayMode mode = Tuning.displayMode;
 
         if (mode == DisplayMode.MASK) {
-            Imgproc.resize(roiMask, upscaledMask, input.size(), 0, 0, Imgproc.INTER_NEAREST);
-            Imgproc.cvtColor(upscaledMask, display, Imgproc.COLOR_GRAY2RGB);
+            Imgproc.resize(maskCanvas, display, input.size(), 0, 0, Imgproc.INTER_NEAREST);
         } else {
             input.copyTo(display);
         }
@@ -449,14 +477,15 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         Point center = new Point(ball.imageX * scaleUp, ball.imageY * scaleUp);
         int radius = (int) (ball.imageRadius * scaleUp);
 
-        Imgproc.circle(display, center, radius, COLOR_CIRCLE, 2);
-        Imgproc.circle(display, center, 4, COLOR_CENTER, -1);
+        Imgproc.circle(display, center, radius, ball.type.drawColor, 2);
+        Imgproc.circle(display, center, 4, BallVisionConstants.COLOR_CENTER, -1);
 
         Point contact = new Point(center.x, center.y + radius);
-        Imgproc.circle(display, contact, 5, COLOR_CONTACT, -1);
-        Imgproc.putText(display, String.format("(%.1f, %.1f)in", ball.fieldX, ball.fieldY),
+        Imgproc.circle(display, contact, 5, BallVisionConstants.COLOR_CONTACT, -1);
+        Imgproc.putText(display,
+                String.format("%s (%.1f, %.1f)in", ball.type.label, ball.fieldX, ball.fieldY),
                 new Point(contact.x + 8, contact.y),
-                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_LABEL, 1);
+                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, ball.type.labelTextColor, 1);
     }
 
     private void drawBallBox(BallDetection ball, int index) {
@@ -468,12 +497,13 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         Rect box = new Rect((int) (cx - radius), (int) (cy - radius),
                 (int) (radius * 2), (int) (radius * 2));
         Imgproc.rectangle(display, new Point(box.x, box.y),
-                new Point(box.x + box.width, box.y + box.height), COLOR_CIRCLE, 2);
+                new Point(box.x + box.width, box.y + box.height), ball.type.drawColor, 2);
 
-        drawLabelPlate(String.format("#%d (%.1f, %.1f)in", index, ball.fieldX, ball.fieldY), box);
+        drawLabelPlate(String.format("#%d %s (%.1f, %.1f)in",
+                index, ball.type.label, ball.fieldX, ball.fieldY), box, ball.type);
     }
 
-    private void drawLabelPlate(String label, Rect box) {
+    private void drawLabelPlate(String label, Rect box, BallType type) {
         int fontFace = Imgproc.FONT_HERSHEY_SIMPLEX;
         double fontScale = 0.5;
         int thickness = 1;
@@ -489,10 +519,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         if (plateY < 0) plateY = box.y + box.height + 2;
 
         Imgproc.rectangle(display, new Point(plateX, plateY),
-                new Point(plateX + plateWidth, plateY + plateHeight), COLOR_CIRCLE, -1);
+                new Point(plateX + plateWidth, plateY + plateHeight), type.drawColor, -1);
         Imgproc.putText(display, label,
                 new Point(plateX + padding, plateY + plateHeight - padding - baseline[0]),
-                fontFace, fontScale, COLOR_LABEL, thickness);
+                fontFace, fontScale, type.labelTextColor, thickness);
     }
 
     private void drawVelocities(List<TrackedBall> balls) {
@@ -513,10 +543,11 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         for (int i = 0; i < moving.size(); i++) {
             Point from = pixels.get(i * 2);
             Point to = pixels.get(i * 2 + 1);
-            Imgproc.arrowedLine(display, from, to, COLOR_VELOCITY, 2);
+            Imgproc.arrowedLine(display, from, to, BallVisionConstants.COLOR_VELOCITY, 2);
             Imgproc.putText(display,
                     String.format("#%d %.0fin/s", moving.get(i).id, moving.get(i).speed()),
-                    new Point(to.x + 6, to.y), Imgproc.FONT_HERSHEY_SIMPLEX, 0.4, COLOR_VELOCITY, 1);
+                    new Point(to.x + 6, to.y), Imgproc.FONT_HERSHEY_SIMPLEX, 0.4,
+                    BallVisionConstants.COLOR_VELOCITY, 1);
         }
     }
 
@@ -527,14 +558,15 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         Point origin = perspectiveTransform(
                 Collections.singletonList(new Point(0, 0)), inverse).get(0);
         int size = 10;
+        Scalar color = BallVisionConstants.COLOR_ORIGIN;
 
         Imgproc.line(display, new Point(origin.x - size, origin.y),
-                new Point(origin.x + size, origin.y), COLOR_ORIGIN, 2);
+                new Point(origin.x + size, origin.y), color, 2);
         Imgproc.line(display, new Point(origin.x, origin.y - size),
-                new Point(origin.x, origin.y + size), COLOR_ORIGIN, 2);
-        Imgproc.circle(display, origin, 3, COLOR_ORIGIN, -1);
+                new Point(origin.x, origin.y + size), color, 2);
+        Imgproc.circle(display, origin, 3, color, -1);
         Imgproc.putText(display, "(0,0)", new Point(origin.x + size + 4, origin.y),
-                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, COLOR_ORIGIN, 1);
+                Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
     }
 
     // =========================================================================
@@ -713,9 +745,12 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     private static final class Candidate {
+        final BallType type;
         final double x, y, radius;
+        double fillFraction;
 
-        Candidate(double x, double y, double radius) {
+        Candidate(BallType type, double x, double y, double radius) {
+            this.type = type;
             this.x = x;
             this.y = y;
             this.radius = radius;

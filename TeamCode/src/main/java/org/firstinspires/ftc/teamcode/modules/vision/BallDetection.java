@@ -5,14 +5,16 @@ import org.opencv.core.Point;
 /** One ball found in a single frame, before any frame-to-frame association. */
 public final class BallDetection {
 
+    public final BallVisionConstants.BallType type;
     public final double fieldX;
     public final double fieldY;
     public final double imageX;
     public final double imageY;
     public final double imageRadius;
 
-    public BallDetection(double fieldX, double fieldY,
+    public BallDetection(BallVisionConstants.BallType type, double fieldX, double fieldY,
                          double imageX, double imageY, double imageRadius) {
+        this.type = type;
         this.fieldX = fieldX;
         this.fieldY = fieldY;
         this.imageX = imageX;

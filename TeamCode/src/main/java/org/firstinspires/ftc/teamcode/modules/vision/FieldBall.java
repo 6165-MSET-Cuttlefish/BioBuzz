@@ -12,6 +12,7 @@ import com.pedropathing.math.Pose;
 public final class FieldBall {
 
     public final int id;
+    public final BallVisionConstants.BallType type;
     public final double x;
     public final double y;
     public final double vx;
@@ -19,8 +20,10 @@ public final class FieldBall {
     /** The camera-relative track this was derived from. */
     public final TrackedBall source;
 
-    FieldBall(int id, double x, double y, double vx, double vy, TrackedBall source) {
+    FieldBall(int id, BallVisionConstants.BallType type, double x, double y, double vx, double vy,
+              TrackedBall source) {
         this.id = id;
+        this.type = type;
         this.x = x;
         this.y = y;
         this.vx = vx;
@@ -62,6 +65,7 @@ public final class FieldBall {
 
     @Override
     public String toString() {
-        return String.format("#%d (%.1f, %.1f)in %.1fin/s @%.0fdeg", id, x, y, speed(), headingDeg());
+        return String.format("#%d %s (%.1f, %.1f)in %.1fin/s @%.0fdeg",
+                id, type.label, x, y, speed(), headingDeg());
     }
 }

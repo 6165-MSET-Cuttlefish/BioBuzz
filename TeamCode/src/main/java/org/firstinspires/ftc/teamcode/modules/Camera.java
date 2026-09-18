@@ -354,14 +354,14 @@ public class Camera extends Module {
         if (ballTelemetry) {
             if (hasRobotState()) {
                 for (FieldBall ball : fieldBalls) {
-                    logDashboard("Ball " + ball.id, "field (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
-                            ball.x, ball.y, ball.speed(), ball.headingDeg(),
+                    logDashboard("Ball " + ball.id, "%s field (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
+                            ball.type.label, ball.x, ball.y, ball.speed(), ball.headingDeg(),
                             ball.visible() ? "" : " [coasting]");
                 }
             } else {
                 for (TrackedBall ball : frame.balls) {
-                    logDashboard("Ball " + ball.id, "cam (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
-                            ball.x, ball.y, ball.speed(), ball.headingDeg(),
+                    logDashboard("Ball " + ball.id, "%s cam (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
+                            ball.type.label, ball.x, ball.y, ball.speed(), ball.headingDeg(),
                             ball.visible ? "" : " [coasting]");
                 }
             }

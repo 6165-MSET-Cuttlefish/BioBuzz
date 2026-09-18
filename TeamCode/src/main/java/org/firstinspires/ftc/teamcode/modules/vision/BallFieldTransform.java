@@ -68,7 +68,7 @@ public final class BallFieldTransform {
             vy += robot.vy + robot.omega * offset[0];
         }
 
-        return new FieldBall(ball.id, robot.x + offset[0], robot.y + offset[1], vx, vy, ball);
+        return new FieldBall(ball.id, ball.type, robot.x + offset[0], robot.y + offset[1], vx, vy, ball);
     }
 
     /** Field-frame position of an arbitrary camera-frame point, in inches. */

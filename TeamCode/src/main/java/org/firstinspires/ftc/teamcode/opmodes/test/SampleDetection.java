@@ -4,7 +4,7 @@ import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.OpenCVPipelines.SampleDetectionPipeline.SampleDetectionPipeline;
+import org.firstinspires.ftc.teamcode.OpenCVPipelines.PollenDetectionPipeline.PollenDetectionPipeline;
 import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamControls;
 import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamSession;
 
@@ -24,7 +24,7 @@ public class SampleDetection extends LinearOpMode {
     @Override
     public void runOpMode() {
         session = new WebcamSession(hardwareMap, telemetry, WEBCAM_NAME,
-                new SampleDetectionPipeline(telemetry));
+                new PollenDetectionPipeline(telemetry));
 
         // Pipeline drives telemetry from the camera thread; here we only pump camera controls.
         while (opModeInInit()) pump();

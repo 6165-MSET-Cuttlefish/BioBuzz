@@ -76,12 +76,18 @@ public final class BallTracker {
         lastUpdateSeconds = Double.NaN;
     }
 
+    /**
+     * Never pairs a track with a detection of a different {@link BallVisionConstants.BallType} —
+     * without this, a red Nectar ball settling near a yellow Pollen ball could steal its track and
+     * hand it a false one-frame teleport in both position and colour.
+     */
     private List<Pairing> buildPairings(List<BallDetection> detections, double dt) {
         List<Pairing> pairings = new ArrayList<>();
         for (int t = 0; t < tracks.size(); t++) {
             Track track = tracks.get(t);
             for (int d = 0; d < detections.size(); d++) {
                 BallDetection detection = detections.get(d);
+                if (detection.type != track.type) continue;
                 double distance = detection.distanceTo(track.predictedX(dt), track.predictedY(dt));
                 if (distance <= Tuning.matchRadiusIn) pairings.add(new Pairing(t, d, distance));
             }
@@ -116,6 +122,7 @@ public final class BallTracker {
 
     private static final class Track {
         final int id;
+        final BallVisionConstants.BallType type;
         final double firstSeenSeconds;
         double x, y, vx, vy, radiusPx;
         int hits = 1;
@@ -124,6 +131,7 @@ public final class BallTracker {
 
         Track(int id, BallDetection seed, double timestampSeconds) {
             this.id = id;
+            this.type = seed.type;
             this.firstSeenSeconds = timestampSeconds;
             this.x = seed.fieldX;
             this.y = seed.fieldY;
@@ -162,7 +170,7 @@ public final class BallTracker {
         }
 
         TrackedBall snapshot(double timestampSeconds) {
-            return new TrackedBall(id, x, y, vx, vy, radiusPx, hits, misses,
+            return new TrackedBall(id, type, x, y, vx, vy, radiusPx, hits, misses,
                     timestampSeconds - firstSeenSeconds, visible);
         }
     }
