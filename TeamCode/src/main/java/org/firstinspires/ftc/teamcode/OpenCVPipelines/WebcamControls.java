@@ -38,7 +38,7 @@ public class WebcamControls {
     // tuned warm for one specific venue's fluorescent lighting and reads noticeably red-shifted
     // under cooler LED/daylight; 5500 (daylight-ish) is a more neutral default across venues. Live
     // on FtcDashboard — nudge it to match whatever room you're actually in, no redeploy needed.
-    public static int whiteBalanceK = 5500;
+    public static int whiteBalanceK = 3250;
 
     private final OpenCvWebcam webcam;
 
