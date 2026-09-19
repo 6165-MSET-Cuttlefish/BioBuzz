@@ -26,15 +26,15 @@ public class Tuning {
     @Tuner(name = "Foresight Tuner")
     public static Procedure foresight() {
         return new ForesightTuner(
-                hw -> new PinpointLocalizer(hw, Constants.localizerConfig),
-                hw -> new Mecanum(hw, Constants.drivetrainConfig));
+                hw -> new PinpointLocalizer(hw, BettaConstants.localizerConfig),
+                hw -> new Mecanum(hw, BettaConstants.drivetrainConfig));
     }
 
     @Tuner(name = "Tests")
     public static Procedure tests() {
         return new Tests(
-                hw -> new Mecanum(hw, Constants.drivetrainConfig),
-                hw -> new PinpointLocalizer(hw, Constants.localizerConfig),
-                () -> new Foresight(Constants.foresightConfig));
+                hw -> new Mecanum(hw, BettaConstants.drivetrainConfig),
+                hw -> new PinpointLocalizer(hw, BettaConstants.localizerConfig),
+                () -> new Foresight(BettaConstants.foresightConfig));
     }
 }
