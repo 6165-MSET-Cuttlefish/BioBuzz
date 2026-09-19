@@ -6,7 +6,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.Constants;
+import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 public class BioBuzzRobot extends Robot {
     public Drivetrain drivetrain;
@@ -17,7 +17,7 @@ public class BioBuzzRobot extends Robot {
 
     @Override
     protected Follower createFollower(HardwareMap hardwareMap) {
-        return Constants.create(hardwareMap);
+        return BettaConstants.create(hardwareMap);
     }
 
     @Override
