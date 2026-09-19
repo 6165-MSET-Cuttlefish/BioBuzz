@@ -2,6 +2,8 @@ package org.firstinspires.ftc.teamcode.OpenCVPipelines.HomographyCalculationPipe
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.opencv.calib3d.Calib3d;
+import org.opencv.core.Core;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
@@ -16,13 +18,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Finds the chessboard, locks a homography, and prints it as {@code double[][] H_ARRAY} — paste
+ * that straight into {@code BallVisionConstants.H_ARRAY} (or a pipeline's own {@code H_ARRAY}
+ * before that constant existed). The homography this locks maps full-resolution image pixels
+ * directly to field inches, the exact convention {@code BallDetectionPipeline}'s own live
+ * calibration uses ({@code col * SQUARE_SIZE_INCHES, row * SQUARE_SIZE_INCHES} destination
+ * corners) — it used to instead target the scaled, margin-offset pixel space of this file's own
+ * warped preview canvas, which happened to make a nice picture but meant the printed matrix was
+ * off by {@code OUTPUT_SCALE_PX} and {@code MARGIN_PX} in both axes if pasted anywhere else. The
+ * preview canvas still needs those pixels, so {@link #PREVIEW_SCALE} composes them on top of the
+ * inches homography ({@code previewHomography = PREVIEW_SCALE * h}) only for the warp shown here;
+ * the exported string is always the plain inches homography.
+ */
 public class HomographyCalculationPipeline extends OpenCvPipeline {
 
-    // Chessboard settings
+    // Chessboard settings. GRID_COLS/GRID_ROWS/SQUARE_SIZE_INCHES must match
+    // BallVisionConstants' own copies (this file can't import that class —
+    // see the class javadoc for why — so they're hand-kept in sync).
     private static final int   GRID_COLS          = 9;
     private static final int   GRID_ROWS          = 6;
     private static final int   EXPECTED_CORNERS   = GRID_COLS * GRID_ROWS;
-    private static final float SQUARE_SIZE_INCHES = 1.0f;
+    private static final float SQUARE_SIZE_INCHES = 1.0f; // TODO: verify against your physical board
     private static final float OUTPUT_SCALE_PX    = 50.0f;
     private static final float MARGIN_PX          = 250.0f;
     private static final int   FRAMES_TO_CONFIRM  = 5;
@@ -69,11 +86,26 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
             (int) (2 * MARGIN_PX + (GRID_ROWS - 1) * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX);
     private static final Size WARP_SIZE = new Size(OUTPUT_WIDTH_PX, OUTPUT_HEIGHT_PX);
 
+    // Inches → preview-canvas pixels: scale by OUTPUT_SCALE_PX, then shift by MARGIN_PX so the
+    // board doesn't sit flush against the edge. Composed onto the (exported) inches homography
+    // to get a warp target for the on-screen preview only — see the class javadoc.
+    private static final Mat PREVIEW_SCALE = buildPreviewScale();
+
+    private static Mat buildPreviewScale() {
+        Mat m = Mat.eye(3, 3, CvType.CV_64F);
+        m.put(0, 0, (double) OUTPUT_SCALE_PX);
+        m.put(1, 1, (double) OUTPUT_SCALE_PX);
+        m.put(0, 2, (double) MARGIN_PX);
+        m.put(1, 2, (double) MARGIN_PX);
+        return m;
+    }
+
     // ── Thread-safe state ────────────────────────────────────────────────────
-    private final AtomicBoolean        homographyLocked    = new AtomicBoolean(false);
-    private final AtomicReference<Mat> lockedHomography    = new AtomicReference<>(null);
-    private final AtomicInteger        confirmCount        = new AtomicInteger(0);
-    private final AtomicReference<Mat> candidateHomography = new AtomicReference<>(null);
+    private final AtomicBoolean        homographyLocked        = new AtomicBoolean(false);
+    private final AtomicReference<Mat> lockedHomography        = new AtomicReference<>(null);
+    private final AtomicReference<Mat> lockedPreviewHomography = new AtomicReference<>(null);
+    private final AtomicInteger        confirmCount            = new AtomicInteger(0);
+    private final AtomicReference<Mat> candidateHomography     = new AtomicReference<>(null);
 
     private final AtomicReference<Mat> pendingFrame     = new AtomicReference<>(null);
     private final AtomicBoolean        detectionRunning  = new AtomicBoolean(false);
@@ -108,8 +140,10 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     public Mat processFrame(Mat input) {
 
         if (homographyLocked.get()) {
-            // Warp into the fixed-size canvas defined by OUTPUT_WIDTH_PX / OUTPUT_HEIGHT_PX
-            Imgproc.warpPerspective(input, warped, lockedHomography.get(), WARP_SIZE);
+            // Warp into the fixed-size canvas defined by OUTPUT_WIDTH_PX / OUTPUT_HEIGHT_PX. Uses
+            // the PREVIEW homography (inches homography with PREVIEW_SCALE composed on top), not
+            // the exported one — lockedHomography stays a pure pixels-to-inches map.
+            Imgproc.warpPerspective(input, warped, lockedPreviewHomography.get(), WARP_SIZE);
 
             // Stretch the warped result back to the original camera resolution (reused buffer).
             Imgproc.resize(warped, output,
@@ -187,27 +221,36 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
                 new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 0.01)
         );
 
-        // 4. Compute homography: image corners → flat grid (dstCorners)
+        // 4. Compute homography: image corners → flat grid in FIELD INCHES (dstCorners), the same
+        //    convention BallDetectionPipeline's own live calibration targets. This is the
+        //    homography that gets exported — see the class javadoc.
         Mat h = Calib3d.findHomography(corners, dstCorners, Calib3d.RANSAC, RANSAC_REPROJ_THRESHOLD_PX);
         if (h == null || h.empty()) {
             statusLine = "Homography failed (RANSAC) — retrying...";
             return;
         }
 
-        // Release the previous candidate we're superseding so it doesn't leak each frame before lock.
-        Mat oldCandidate = candidateHomography.getAndSet(h);
-        if (oldCandidate != null) oldCandidate.release();
+        // Deliberately NOT releasing the candidate this supersedes: getHomography() /
+        // getHomographyAsString() can be called from another thread at any time, and releasing a
+        // Mat one of them is mid-read on is a use-after-free on native memory. These are 3x3
+        // matrices — at most FRAMES_TO_CONFIRM of them ever exist before this loop exits at lock,
+        // so leaving the odd one for the GC to reclaim costs nothing worth trading correctness for.
+        candidateHomography.set(h);
         statusLine = "Board found — confirming...";
 
         if (confirmCount.incrementAndGet() >= FRAMES_TO_CONFIRM) {
 
             // No bounding-box fitting / translation correction here — the
-            // homography maps straight into the fixed WARP_SIZE canvas
+            // preview warp maps straight into the fixed WARP_SIZE canvas
             // (defined by OUTPUT_WIDTH_PX / OUTPUT_HEIGHT_PX above). If the
             // board ends up off-canvas or clipped, tune MARGIN_PX,
             // OUTPUT_SCALE_PX, or the OUTPUT_WIDTH_PX/HEIGHT_PX constants
             // directly rather than relying on auto-sizing.
+            Mat previewHomography = new Mat();
+            Core.gemm(PREVIEW_SCALE, h, 1.0, new Mat(), 0.0, previewHomography);
+
             lockedHomography.set(h);
+            lockedPreviewHomography.set(previewHomography);
             homographyStr = buildHomographyString(h);
             homographyLocked.set(true); // must be last
         }
@@ -217,13 +260,16 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     //  Helpers
     // ────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Field inches, not preview pixels — {@code col * SQUARE_SIZE_INCHES, row * SQUARE_SIZE_INCHES},
+     * matching {@code BallDetectionPipeline}'s own calibration exactly, so the homography this
+     * locks is directly the one to paste into {@code H_ARRAY}.
+     */
     private static MatOfPoint2f buildCalibrationDstCorners() {
         List<Point> points = new ArrayList<>(GRID_COLS * GRID_ROWS);
         for (int row = 0; row < GRID_ROWS; row++)
             for (int col = 0; col < GRID_COLS; col++)
-                points.add(new Point(
-                        MARGIN_PX + col * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX,
-                        MARGIN_PX + row * SQUARE_SIZE_INCHES * OUTPUT_SCALE_PX));
+                points.add(new Point(col * SQUARE_SIZE_INCHES, row * SQUARE_SIZE_INCHES));
         MatOfPoint2f dst = new MatOfPoint2f();
         dst.fromList(points);
         return dst;

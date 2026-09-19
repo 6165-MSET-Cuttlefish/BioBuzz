@@ -7,7 +7,6 @@ import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.BlueNec
 import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.Detection;
 import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.PollenHsv;
 import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.RedNectarHsv;
-import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
@@ -17,7 +16,6 @@ import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.core.TermCriteria;
 import org.opencv.imgproc.Imgproc;
 import org.openftc.easyopencv.OpenCvPipeline;
 
@@ -47,6 +45,11 @@ import java.util.List;
  * <p>Every shared detection-recipe number lives in {@link BallVisionConstants}, the canonical copy
  * that {@code OpenCVPipelines/PollenDetectionPipeline/PollenDetectionPipeline.java} mirrors by hand
  * for EOCV-Sim (see that file's javadoc for why it can't just import this package).
+ *
+ * <p>The homography is fixed at construction from {@link BallVisionConstants#H_ARRAY} — there is no
+ * live chessboard calibration here. Produce {@code H_ARRAY} with
+ * {@code OpenCVPipelines/HomographyCalculationPipeline}, which locks a homography from a chessboard
+ * and prints it paste-ready, and paste the result into {@code BallVisionConstants}.
  */
 public class BallDetectionPipeline extends OpenCvPipeline {
 
@@ -63,17 +66,21 @@ public class BallDetectionPipeline extends OpenCvPipeline {
      * Display/behaviour toggles only — every actual detection-recipe number ({@link
      * BallVisionConstants.Detection} and the per-type HSV classes) lives on {@link
      * BallVisionConstants} itself and is read fresh every frame, so it needs no seeding here.
+     *
+     * <p>Named {@code BallVisionDisplay} rather than the old bare {@code BallVision}: this class used
+     * to hold every detection knob before they moved to {@link BallVisionConstants}, and a dashboard
+     * that had that wider {@code BallVision} category pinned or laid out from before the split can
+     * keep reapplying its old snapshot over new edits. If a slider here still won't hold a value,
+     * unpin/remove any saved {@code BallVision} layout on the dashboard and re-add the fields fresh
+     * under this name.
      */
-    @Config("BallVision")
+    @Config("BallVisionDisplay")
     public static class Tuning {
         public static DisplayMode displayMode = DisplayMode.BOX;
         public static boolean drawVelocity = true;
         /** Lookahead of the drawn velocity arrow, seconds. */
         public static double velocityArrowSeconds = 0.5;
     }
-
-    /** Skips live chessboard calibration and uses {@link BallVisionConstants#H_ARRAY} instead. */
-    private static final boolean USE_PREDETERMINED_HOMOGRAPHY = true;
 
     private static final double DETECTION_SCALE = BallVisionConstants.DETECTION_SCALE;
 
@@ -90,19 +97,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private static final double HOUGH_WORKING_MIN_RADIUS_PX = BallVisionConstants.HOUGH_WORKING_MIN_RADIUS_PX;
     private static final double ROI_MAX_UPSCALE = BallVisionConstants.ROI_MAX_UPSCALE;
 
-    private static final int GRID_COLS = BallVisionConstants.GRID_COLS;
-    private static final int GRID_ROWS = BallVisionConstants.GRID_ROWS;
-    private static final int EXPECTED_CORNERS = BallVisionConstants.EXPECTED_CORNERS;
-    private static final float SQUARE_SIZE_INCHES = BallVisionConstants.SQUARE_SIZE_INCHES;
-    private static final int CALIBRATION_FRAME_INTERVAL = BallVisionConstants.CALIBRATION_FRAME_INTERVAL;
-    private static final int FRAMES_TO_CONFIRM = BallVisionConstants.FRAMES_TO_CONFIRM;
-
     private static final double FPS_SMOOTHING = 0.1;
     private static final double NANOS_TO_SECONDS = 1e-9;
 
     private static final Scalar MASK_CANVAS_CLEAR = new Scalar(0, 0, 0);
-
-    private enum Phase { CALIBRATING, DETECTING }
 
     /** One frame's worth of results, handed from the camera thread to the OpMode thread. */
     public static final class Frame {
@@ -132,16 +130,13 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     // Written on the camera thread, read on the OpMode thread.
     private volatile Frame latest = Frame.EMPTY;
-    private volatile Phase phase;
     private volatile Mat homography;
     private volatile Mat inverseHomography;
     private volatile boolean detectionEnabled = true;
     private volatile boolean trackerResetRequested = false;
 
     private final BallTracker tracker = new BallTracker();
-    private final MatOfPoint2f calibrationDstCorners = buildCalibrationDstCorners();
 
-    private final Mat gray         = new Mat();
     private final Mat small        = new Mat();
     private final Mat smallGray    = new Mat();
     private final Mat hsv          = new Mat();
@@ -153,20 +148,13 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
     private final Mat contourHierarchy = new Mat();
 
-    private int confirmCount = 0;
-    private int calibrationFrameCount = 0;
     private int rejectedColorCount = 0;
     private int rejectedOverlapCount = 0;
     private double fps = 0;
     private double lastFrameSeconds = Double.NaN;
 
     public BallDetectionPipeline() {
-        if (USE_PREDETERMINED_HOMOGRAPHY) {
-            setHomography(buildHomographyFromArray(BallVisionConstants.H_ARRAY));
-            phase = Phase.DETECTING;
-        } else {
-            phase = Phase.CALIBRATING;
-        }
+        setHomography(buildHomographyFromArray(BallVisionConstants.H_ARRAY));
     }
 
     // =========================================================================
@@ -176,7 +164,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     @Override
     public Mat processFrame(Mat input) {
         if (!detectionEnabled) return input;
-        return phase == Phase.CALIBRATING ? runCalibration(input) : runDetection(input);
+        return runDetection(input);
     }
 
     private Mat runDetection(Mat input) {
@@ -570,63 +558,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     // =========================================================================
-    // Homography calibration
+    // Homography
     // =========================================================================
-
-    private Mat runCalibration(Mat input) {
-        calibrationFrameCount++;
-        if (calibrationFrameCount % CALIBRATION_FRAME_INTERVAL != 0) return input;
-
-        MatOfPoint2f imageCorners = detectChessboardCorners(input);
-        if (imageCorners == null) {
-            confirmCount = 0;
-            return input;
-        }
-
-        Mat h = Calib3d.findHomography(imageCorners, calibrationDstCorners, Calib3d.RANSAC, 5.0);
-        if (h == null || h.empty()) {
-            imageCorners.release();
-            confirmCount = 0;
-            return input;
-        }
-
-        setHomography(h);
-        if (++confirmCount >= FRAMES_TO_CONFIRM) phase = Phase.DETECTING;
-
-        Calib3d.drawChessboardCorners(input, new Size(GRID_COLS, GRID_ROWS), imageCorners, true);
-        imageCorners.release();
-        return input;
-    }
-
-    private MatOfPoint2f detectChessboardCorners(Mat input) {
-        Imgproc.cvtColor(input, gray, Imgproc.COLOR_RGB2GRAY);
-
-        MatOfPoint2f corners = new MatOfPoint2f();
-        boolean found = Calib3d.findChessboardCorners(gray, new Size(GRID_COLS, GRID_ROWS), corners,
-                Calib3d.CALIB_CB_ADAPTIVE_THRESH
-                        | Calib3d.CALIB_CB_NORMALIZE_IMAGE
-                        | Calib3d.CALIB_CB_FAST_CHECK);
-        if (!found || corners.rows() != EXPECTED_CORNERS) {
-            corners.release();
-            return null;
-        }
-
-        Imgproc.cornerSubPix(gray, corners, new Size(5, 5), new Size(-1, -1),
-                new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 0.01));
-        return corners;
-    }
-
-    private static MatOfPoint2f buildCalibrationDstCorners() {
-        List<Point> corners = new ArrayList<>(EXPECTED_CORNERS);
-        for (int row = 0; row < GRID_ROWS; row++) {
-            for (int col = 0; col < GRID_COLS; col++) {
-                corners.add(new Point(col * SQUARE_SIZE_INCHES, row * SQUARE_SIZE_INCHES));
-            }
-        }
-        MatOfPoint2f dst = new MatOfPoint2f();
-        dst.fromList(corners);
-        return dst;
-    }
 
     private static Mat buildHomographyFromArray(double[][] values) {
         Mat h = new Mat(3, 3, CvType.CV_64F);
@@ -643,7 +576,12 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     /** Latest published results. Never null; {@link Frame#EMPTY} until the first frame lands. */
     public Frame latest() { return latest; }
 
-    public boolean isCalibrated() { return phase == Phase.DETECTING; }
+    /**
+     * Always true once constructed — the homography is fixed from {@link
+     * BallVisionConstants#H_ARRAY}, not calibrated live. Kept for callers written when this could
+     * be false during live calibration.
+     */
+    public boolean isCalibrated() { return homography != null && !homography.empty(); }
 
     /** False makes {@link #processFrame} a passthrough, freeing the CPU it would have spent. */
     public void setDetectionEnabled(boolean enabled) {
@@ -660,6 +598,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     /** Drops every track; the next frame starts identities and velocities from scratch. */
     public void resetTracking() { trackerResetRequested = true; }
 
+    /** Diagnostic round-trip of {@link BallVisionConstants#H_ARRAY} — confirms what's actually
+     * loaded, not a live calibration result. */
     public String getHomographyAsString() {
         Mat h = homography;
         if (h == null || h.empty()) return "Homography not available";

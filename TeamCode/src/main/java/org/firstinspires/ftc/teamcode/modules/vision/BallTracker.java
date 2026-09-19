@@ -13,7 +13,12 @@ import java.util.List;
  *
  * <p>Association is greedy nearest-neighbour against each track's <em>predicted</em> position, which
  * is what lets a fast-moving ball stay matched: gating on the last seen position instead would need
- * a radius large enough to also swallow neighbouring balls.
+ * a radius large enough to also swallow neighbouring balls. That tight pass runs first; anything left
+ * unmatched — a detection, a track, or both — gets a second, looser pass gated on the track's last
+ * <em>known</em> position instead of its extrapolation (see {@link Tuning#reacquireRadiusIn}), so a
+ * detection that jitters or drops out for a frame reacquires its existing track's identity instead of
+ * forking a brand-new one that sits right next to it until the original ages out — the visible symptom
+ * of that is what looks like the same ball being "detected" over and over as separate objects.
  *
  * <p>Single-threaded — {@link BallDetectionPipeline} owns one instance and only ever calls it from
  * the camera thread.
@@ -22,12 +27,20 @@ public final class BallTracker {
 
     @Config("BallTracking")
     public static class Tuning {
-        /** Max field-inches between a prediction and a detection for them to be the same ball. */
+        /** Max field-inches between a track's predicted position and a detection to keep matching it. */
         public static double matchRadiusIn = 8.0;
+        /**
+         * Second-chance radius, checked against a track's last known (not extrapolated) position for
+         * whatever's still unmatched after the tight pass above. Wider on purpose — it exists to catch
+         * noisy/intermittent detections reacquiring their own track rather than forking a duplicate —
+         * but the wider this is, the more likely two distinct same-type balls that happen to be close
+         * together get conflated into one track. Set equal to matchRadiusIn to disable it.
+         */
+        public static double reacquireRadiusIn = 16.0;
         /** Frames a track survives unseen before it is dropped. */
         public static int maxMisses = 8;
         /** Frames a track must be seen before it is published. */
-        public static int minHits = 2;
+        public static int minHits = 3;
         /** Position EMA toward the measurement, 0-1; higher is snappier and noisier. */
         public static double positionSmoothing = 0.6;
         /** Velocity EMA toward the frame-to-frame difference, 0-1. */
@@ -52,12 +65,14 @@ public final class BallTracker {
         boolean[] detectionUsed = new boolean[detections.size()];
         boolean[] trackUsed = new boolean[tracks.size()];
 
-        for (Pairing p : buildPairings(detections, dt)) {
-            if (trackUsed[p.trackIndex] || detectionUsed[p.detectionIndex]) continue;
-            trackUsed[p.trackIndex] = true;
-            detectionUsed[p.detectionIndex] = true;
-            tracks.get(p.trackIndex).hit(detections.get(p.detectionIndex), dt);
-        }
+        applyPairings(buildPairings(detections, detectionUsed, trackUsed, dt,
+                Tuning.matchRadiusIn, false), detections, detectionUsed, trackUsed, dt);
+
+        // Second, looser pass over whatever the tight pass above left unmatched: gates on each
+        // track's last KNOWN position (already coasted forward through every miss() so far) rather
+        // than a fresh velocity extrapolation, and allows a wider radius — see Tuning.reacquireRadiusIn.
+        applyPairings(buildPairings(detections, detectionUsed, trackUsed, dt,
+                Tuning.reacquireRadiusIn, true), detections, detectionUsed, trackUsed, dt);
 
         for (int i = tracks.size() - 1; i >= 0; i--) {
             if (trackUsed[i]) continue;
@@ -76,20 +91,38 @@ public final class BallTracker {
         lastUpdateSeconds = Double.NaN;
     }
 
+    private void applyPairings(List<Pairing> pairings, List<BallDetection> detections,
+                                boolean[] detectionUsed, boolean[] trackUsed, double dt) {
+        for (Pairing p : pairings) {
+            if (trackUsed[p.trackIndex] || detectionUsed[p.detectionIndex]) continue;
+            trackUsed[p.trackIndex] = true;
+            detectionUsed[p.detectionIndex] = true;
+            tracks.get(p.trackIndex).hit(detections.get(p.detectionIndex), dt);
+        }
+    }
+
     /**
      * Never pairs a track with a detection of a different {@link BallVisionConstants.BallType} —
      * without this, a red Nectar ball settling near a yellow Pollen ball could steal its track and
-     * hand it a false one-frame teleport in both position and colour.
+     * hand it a false one-frame teleport in both position and colour. Only considers tracks/detections
+     * not already flagged used, so the two passes in {@link #update} compose without needing to know
+     * about each other.
      */
-    private List<Pairing> buildPairings(List<BallDetection> detections, double dt) {
+    private List<Pairing> buildPairings(List<BallDetection> detections, boolean[] detectionUsed,
+                                         boolean[] trackUsed, double dt, double radiusIn,
+                                         boolean useLastKnownPosition) {
         List<Pairing> pairings = new ArrayList<>();
         for (int t = 0; t < tracks.size(); t++) {
+            if (trackUsed[t]) continue;
             Track track = tracks.get(t);
+            double px = useLastKnownPosition ? track.x : track.predictedX(dt);
+            double py = useLastKnownPosition ? track.y : track.predictedY(dt);
             for (int d = 0; d < detections.size(); d++) {
+                if (detectionUsed[d]) continue;
                 BallDetection detection = detections.get(d);
                 if (detection.type != track.type) continue;
-                double distance = detection.distanceTo(track.predictedX(dt), track.predictedY(dt));
-                if (distance <= Tuning.matchRadiusIn) pairings.add(new Pairing(t, d, distance));
+                double distance = detection.distanceTo(px, py);
+                if (distance <= radiusIn) pairings.add(new Pairing(t, d, distance));
             }
         }
         Collections.sort(pairings, new Comparator<Pairing>() {

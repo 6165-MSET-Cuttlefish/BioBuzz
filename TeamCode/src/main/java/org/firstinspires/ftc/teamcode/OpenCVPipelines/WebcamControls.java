@@ -34,10 +34,10 @@ public class WebcamControls {
     // White-balance color temperature in Kelvin (clamped to range). This is what the camera
     // assumes the room's light source is, so it can cancel that tint back out — set it LOWER than
     // the room's actual temperature and everything reads too warm/red (the camera under-corrects);
-    // set it too high and the compensation over-corrects the other way (too cool/blue). 4300 was
-    // tuned warm for one specific venue's fluorescent lighting and reads noticeably red-shifted
-    // under cooler LED/daylight; 5500 (daylight-ish) is a more neutral default across venues. Live
-    // on FtcDashboard — nudge it to match whatever room you're actually in, no redeploy needed.
+    // set it too high and the compensation over-corrects the other way (too cool/blue). 5500
+    // (daylight) is the neutral, venue-independent default — checking in a venue-specific number
+    // here just means the next venue starts from someone else's room. Live on FtcDashboard — nudge
+    // it to match whatever room you're actually in, no redeploy needed.
     public static int whiteBalanceK = 3250;
 
     private final OpenCvWebcam webcam;
