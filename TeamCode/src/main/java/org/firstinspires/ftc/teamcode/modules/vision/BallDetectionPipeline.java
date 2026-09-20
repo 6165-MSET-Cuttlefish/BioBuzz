@@ -102,6 +102,9 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     private static final Scalar MASK_CANVAS_CLEAR = new Scalar(0, 0, 0);
 
+    // Enum.values() defensively copies its backing array on every call; this loop runs 3x/frame.
+    private static final BallType[] BALL_TYPES = BallType.values();
+
     /** One frame's worth of results, handed from the camera thread to the OpMode thread. */
     public static final class Frame {
         public static final Frame EMPTY = new Frame(
@@ -144,9 +147,19 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private final Mat colorMask    = new Mat(); // current type's raw colour mask
     private final Mat roiMask      = new Mat(); // lightly-closed candidate mask
     private final Mat roiWork      = new Mat();
-    private final Mat display      = new Mat();
+    private final Mat houghCircles = new Mat(); // reused across every Hough call, all regions/types
     private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
     private final Mat contourHierarchy = new Mat();
+    // Draws in place onto that frame's input Mat rather than a separate copy — see render().
+    private Mat display;
+
+    // Mutated in place by applyRange() instead of allocating a new Scalar per HSV band per frame.
+    private final Scalar rangeLow  = new Scalar(0, 0, 0);
+    private final Scalar rangeHigh = new Scalar(0, 0, 0);
+
+    // Camera resolution is fixed for the pipeline's lifetime, so this is computed once, not
+    // reallocated every frame.
+    private Size smallSize;
 
     private int rejectedColorCount = 0;
     private int rejectedOverlapCount = 0;
@@ -187,7 +200,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             maskCanvas.setTo(MASK_CANVAS_CLEAR);
         }
 
-        for (BallType type : BallType.values()) {
+        for (BallType type : BALL_TYPES) {
             buildColorMask(type, colorMask);
             Imgproc.morphologyEx(colorMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
 
@@ -215,9 +228,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     // =========================================================================
 
     private void prepareWorkingFrames(Mat input) {
-        Imgproc.resize(input, small,
-                new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE),
-                0, 0, Imgproc.INTER_AREA);
+        if (smallSize == null) {
+            smallSize = new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE);
+        }
+        Imgproc.resize(input, small, smallSize, 0, 0, Imgproc.INTER_AREA);
         Imgproc.cvtColor(small, hsv, Imgproc.COLOR_RGB2HSV);
         Imgproc.cvtColor(small, smallGray, Imgproc.COLOR_RGB2GRAY);
     }
@@ -265,10 +279,12 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     private void applyRange(Mat out, boolean first,
                              double h0, double s0, double v0, double h1, double s1, double v1) {
+        rangeLow.val[0] = h0;  rangeLow.val[1] = s0;  rangeLow.val[2] = v0;
+        rangeHigh.val[0] = h1; rangeHigh.val[1] = s1; rangeHigh.val[2] = v1;
         if (first) {
-            Core.inRange(hsv, new Scalar(h0, s0, v0), new Scalar(h1, s1, v1), out);
+            Core.inRange(hsv, rangeLow, rangeHigh, out);
         } else {
-            Core.inRange(hsv, new Scalar(h0, s0, v0), new Scalar(h1, s1, v1), rangeMask);
+            Core.inRange(hsv, rangeLow, rangeHigh, rangeMask);
             Core.bitwise_or(out, rangeMask, out);
         }
     }
@@ -313,7 +329,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             double canny = Math.max(HOUGH_CANNY_MIN_THRESHOLD, Detection.houghCanny / upscale);
 
             Mat regionGray = smallGray.submat(region);
-            Mat circles = new Mat();
             try {
                 if (upscale > 1.0) {
                     Imgproc.resize(regionGray, roiWork,
@@ -325,13 +340,15 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 }
                 Imgproc.GaussianBlur(roiWork, roiWork, HOUGH_BLUR_KERNEL, 0);
 
-                Imgproc.HoughCircles(roiWork, circles, Imgproc.HOUGH_GRADIENT,
+                // houghCircles is a reused instance field, not allocated per region/type/frame —
+                // HoughCircles resizes its own backing buffer as needed, same as any other Mat output.
+                Imgproc.HoughCircles(roiWork, houghCircles, Imgproc.HOUGH_GRADIENT,
                         Detection.houghDp, minDist * upscale,
                         canny, Detection.houghAccumulator,
                         (int) (minRadius * upscale), (int) (maxRadius * upscale));
 
-                for (int i = 0; i < circles.cols(); i++) {
-                    double[] circle = circles.get(0, i);
+                for (int i = 0; i < houghCircles.cols(); i++) {
+                    double[] circle = houghCircles.get(0, i);
                     Candidate candidate = new Candidate(type,
                             circle[0] / upscale + region.x,
                             circle[1] / upscale + region.y,
@@ -341,7 +358,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                     else rejectedColorCount++;
                 }
             } finally {
-                circles.release();
                 regionGray.release();
             }
         }
@@ -444,10 +460,12 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private Mat render(Mat input, List<BallDetection> detections, List<TrackedBall> balls) {
         DisplayMode mode = Tuning.displayMode;
 
+        // Draw straight onto input instead of a copy: nothing reads input as data past this point
+        // (detection already ran on small/hsv/smallGray), and EasyOpenCV is fine getting back the
+        // same Mat it handed us. Saves a full-resolution frame copy every loop in OVERLAY/BOX mode.
+        display = input;
         if (mode == DisplayMode.MASK) {
             Imgproc.resize(maskCanvas, display, input.size(), 0, 0, Imgproc.INTER_NEAREST);
-        } else {
-            input.copyTo(display);
         }
 
         for (int i = 0; i < detections.size(); i++) {

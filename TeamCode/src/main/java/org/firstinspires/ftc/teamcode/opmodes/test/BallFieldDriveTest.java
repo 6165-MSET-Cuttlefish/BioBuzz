@@ -16,8 +16,10 @@ import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamSession;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
 import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -67,6 +69,11 @@ public class BallFieldDriveTest extends LinearOpMode {
     private WebcamSession session;
     private BallDetectionPipeline pipeline;
     private final RobotStateHistory robotHistory = new RobotStateHistory();
+    private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
+    // Loop runs faster than the camera; skip redoing the transform + persistence match on a loop
+    // that sees the same camera frame as the last one (see Camera.updateFieldBalls for the same guard).
+    private double lastFieldBallFrameTimestamp = -1;
+    private List<FieldBall> fieldBalls = Collections.emptyList();
 
     @Override
     public void runOpMode() {
@@ -108,8 +115,12 @@ public class BallFieldDriveTest extends LinearOpMode {
         if (drive) driveFromGamepad();
 
         BallDetectionPipeline.Frame frame = pipeline.latest();
-        RobotStateHistory.Sample captureState = robotHistory.sampleAt(frame.timestampSeconds);
-        List<FieldBall> fieldBalls = BallFieldTransform.toField(frame.balls, captureState);
+        if (frame.timestampSeconds != lastFieldBallFrameTimestamp) {
+            lastFieldBallFrameTimestamp = frame.timestampSeconds;
+            RobotStateHistory.Sample captureState = robotHistory.sampleAt(frame.timestampSeconds);
+            List<FieldBall> fresh = BallFieldTransform.toField(frame.balls, captureState);
+            fieldBalls = fieldBallTracker.update(fresh, System.nanoTime() * 1e-9);
+        }
 
         telemetry.addData("Pinpoint status", pinpoint.getDeviceStatus());
         RobotStateHistory.Sample now = robotHistory.newest();

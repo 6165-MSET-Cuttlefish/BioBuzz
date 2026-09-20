@@ -12,6 +12,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.BallDetection;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
 import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
 import org.firstinspires.ftc.teamcode.modules.vision.RobotStateSource;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
@@ -57,12 +58,18 @@ public class Camera extends Module {
     private final String webcamName;
     private final BallDetectionPipeline pipeline = new BallDetectionPipeline();
     private final RobotStateHistory robotHistory = new RobotStateHistory();
+    private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
 
     private WebcamSession session;
     private RobotStateSource robotStateSource;
     private BallDetectionPipeline.Frame frame = BallDetectionPipeline.Frame.EMPTY;
     private List<FieldBall> fieldBalls = Collections.emptyList();
     private RobotStateHistory.Sample captureState;
+    // Guards against redoing the field transform + persistence match every OpMode loop when the
+    // camera hasn't actually produced a new frame since the last one (the loop can easily outrun
+    // the camera's own frame rate) — frame.timestampSeconds is already used this way by
+    // isFrameStale() below, so a real new frame is guaranteed to change it.
+    private double lastFieldBallFrameTimestamp = -1;
 
     public Camera(HardwareMap hardwareMap) {
         this(hardwareMap, DEFAULT_WEBCAM_NAME);
@@ -82,6 +89,7 @@ public class Camera extends Module {
     public Camera withRobotState(RobotStateSource source) {
         this.robotStateSource = source;
         robotHistory.clear();
+        fieldBallTracker.reset();
         return this;
     }
 
@@ -113,10 +121,14 @@ public class Camera extends Module {
             return;
         }
         robotHistory.record(robotStateSource.sample(nowSeconds()));
+        if (frame.timestampSeconds == lastFieldBallFrameTimestamp) return; // no new camera frame yet
+        lastFieldBallFrameTimestamp = frame.timestampSeconds;
+
         // The frame is already tens of milliseconds old, so transform it with where the robot was
         // when the shutter fired, not where it is now.
         captureState = robotHistory.sampleAt(frame.timestampSeconds);
-        fieldBalls = BallFieldTransform.toField(frame.balls, captureState);
+        List<FieldBall> freshFieldBalls = BallFieldTransform.toField(frame.balls, captureState);
+        fieldBalls = fieldBallTracker.update(freshFieldBalls, nowSeconds());
     }
 
     @Override

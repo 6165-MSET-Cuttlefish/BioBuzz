@@ -19,9 +19,10 @@ public final class FieldBall {
     public final double vy;
     /** The camera-relative track this was derived from. */
     public final TrackedBall source;
+    private final boolean visible;
 
     FieldBall(int id, BallVisionConstants.BallType type, double x, double y, double vx, double vy,
-              TrackedBall source) {
+              TrackedBall source, boolean visible) {
         this.id = id;
         this.type = type;
         this.x = x;
@@ -29,6 +30,7 @@ public final class FieldBall {
         this.vx = vx;
         this.vy = vy;
         this.source = source;
+        this.visible = visible;
     }
 
     /** Inches per second over the ground. */
@@ -41,7 +43,7 @@ public final class FieldBall {
 
     public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIn; }
 
-    public boolean visible() { return source.visible; }
+    public boolean visible() { return visible; }
 
     public Pose pose() { return new Pose(x, y); }
 
