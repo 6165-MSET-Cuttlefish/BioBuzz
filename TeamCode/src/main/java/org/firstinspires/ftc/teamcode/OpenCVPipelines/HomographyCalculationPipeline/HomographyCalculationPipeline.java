@@ -8,7 +8,6 @@ import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Size;
-import org.opencv.core.TermCriteria;
 import org.opencv.imgproc.Imgproc;
 import org.openftc.easyopencv.OpenCvPipeline;
 
@@ -44,26 +43,27 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     private static final float MARGIN_PX          = 250.0f;
     private static final int   FRAMES_TO_CONFIRM  = 5;
 
-    // Detection sensitivity flags for findChessboardCorners. EXHAUSTIVE makes
-    // the search much more thorough (slower per-frame, but detection already
-    // runs on a background thread) — this is what mainly helps at distance /
-    // steep angle, where squares are small and foreshortened and the default
-    // search gives up on them too early. FILTER_QUADS rejects bad quad
-    // candidates before the grid-matching step, which helps signal-to-noise
-    // when squares are tiny.
+    // findChessboardCornersSB (the "sector based" detector, OpenCV 4.x) rather than the classic
+    // findChessboardCorners + cornerSubPix pair this used to call. The classic detector links
+    // detected quads into the board's full grid topology before it accepts anything, which is
+    // exactly what a steep/low camera angle breaks: squares near the far edge of the board are
+    // foreshortened down to a handful of pixels and the quad linking gives up on them, so the
+    // whole board reads as "not found" even though the near squares are fine. SB instead matches
+    // each corner independently against a local symmetric template, so a run of foreshortened
+    // squares degrades detection gradually instead of failing all-or-nothing, and it returns
+    // sub-pixel positions natively (OpenCV's own docs say more accurately than cornerSubPix), so
+    // that separate refinement pass is gone too. EXHAUSTIVE and ACCURACY both trade detection time
+    // for hit rate, which is the right trade for a tool that only ever runs this once per
+    // calibration. NORMALIZE_IMAGE is shared with the classic detector's old flag set.
+    //
+    // Physical requirement: SB needs a plain white border around the whole board roughly as wide
+    // as one square — without it, SB can detect worse than the classic detector did, not better.
+    // If detection still fails at a steep angle after this change, check the printed board's
+    // border before reaching for anything else.
     private static final int CHESSBOARD_FLAGS =
-            Calib3d.CALIB_CB_ADAPTIVE_THRESH
-                    | Calib3d.CALIB_CB_NORMALIZE_IMAGE
-                    | Calib3d.CALIB_CB_FILTER_QUADS
-                    | Calib3d.CALIB_CB_EXHAUSTIVE;
-
-    // cornerSubPix search window (half-size, in pixels — actual window is
-    // (2*N+1) x (2*N+1)). At distance, squares are small in pixel terms, so a
-    // window that's too large can wander onto a neighboring corner. Shrink
-    // this if subpixel refinement looks unstable on far-away boards; grow it
-    // if corners are noisy up close. Must stay smaller than half the
-    // smallest expected square size in pixels.
-    private static final int SUBPIX_WINDOW_PX = 4;
+            Calib3d.CALIB_CB_NORMALIZE_IMAGE
+                    | Calib3d.CALIB_CB_EXHAUSTIVE
+                    | Calib3d.CALIB_CB_ACCURACY;
 
     // RANSAC reprojection error threshold (px) for findHomography. At steep
     // angles / distance, corner localization noise in pixel terms is
@@ -200,8 +200,9 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         // 1. Grayscale
         Imgproc.cvtColor(frame, gray, Imgproc.COLOR_RGB2GRAY);
 
-        // 2. Detect chessboard corners on the full-res frame
-        boolean found = Calib3d.findChessboardCorners(
+        // 2. Detect chessboard corners on the full-res frame — already sub-pixel accurate, no
+        //    separate refinement pass needed (see CHESSBOARD_FLAGS above for why SB over classic).
+        boolean found = Calib3d.findChessboardCornersSB(
                 gray,
                 new Size(GRID_COLS, GRID_ROWS),
                 corners,
@@ -214,14 +215,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
             return;
         }
 
-        // 3. Sub-pixel refinement
-        Imgproc.cornerSubPix(
-                gray, corners,
-                new Size(SUBPIX_WINDOW_PX, SUBPIX_WINDOW_PX), new Size(-1, -1),
-                new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 0.01)
-        );
-
-        // 4. Compute homography: image corners → flat grid in FIELD INCHES (dstCorners), the same
+        // 3. Compute homography: image corners → flat grid in FIELD INCHES (dstCorners), the same
         //    convention BallDetectionPipeline's own live calibration targets. This is the
         //    homography that gets exported — see the class javadoc.
         Mat h = Calib3d.findHomography(corners, dstCorners, Calib3d.RANSAC, RANSAC_REPROJ_THRESHOLD_PX);

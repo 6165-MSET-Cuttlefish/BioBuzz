@@ -66,11 +66,10 @@ public final class BallVisionConstants {
     @Config("BallVision_Pollen")
     public static final class PollenHsv {
         private PollenHsv() {}
-        public static int hLow = 15, hHigh = 34;
-        public static int sLow = 100, sHigh = 255;
-        public static int vLow = 100, vHigh = 255;
-        /** Specular highlight on a ball's top: same hue, washed-out saturation, near-max value. */
-        public static int glareSHigh = 90, glareVLow = 200;
+        public static int hLow = 16, hHigh = 30;
+        public static int sLow = 115, sHigh = 255;
+        public static int vLow = 150, vHigh = 255;
+        public static int glareSHigh = 60, glareVLow = 220;
     }
 
     /** Red straddles the hue origin, so its colour band is split into two (hLow1..hHigh2). */
@@ -78,19 +77,19 @@ public final class BallVisionConstants {
     public static final class RedNectarHsv {
         private RedNectarHsv() {}
         public static int hLow1 = 0, hHigh1 = 8;
-        public static int hLow2 = 168, hHigh2 = 179;
-        public static int sLow = 110, sHigh = 255;
-        public static int vLow = 80, vHigh = 255;
-        public static int glareSHigh = 90, glareVLow = 200;
+        public static int hLow2 = 166, hHigh2 = 179;
+        public static int sLow = 145, sHigh = 255;
+        public static int vLow = 130, vHigh = 255;
+        public static int glareSHigh = 95, glareVLow = 210;
     }
 
     @Config("BallVision_BlueNectar")
     public static final class BlueNectarHsv {
         private BlueNectarHsv() {}
-        public static int hLow = 98, hHigh = 130;
-        public static int sLow = 110, sHigh = 255;
-        public static int vLow = 60, vHigh = 255;
-        public static int glareSHigh = 90, glareVLow = 190;
+        public static int hLow = 105, hHigh = 123;
+        public static int sLow = 140, sHigh = 255;
+        public static int vLow = 115, vHigh = 255;
+        public static int glareSHigh = 100, glareVLow = 200;
     }
 
     public static final class HsvRange {
@@ -148,9 +147,9 @@ public final class BallVisionConstants {
     // shared between them, not per-pipeline tuning.
     // -------------------------------------------------------------------------
     public static final double[][] H_ARRAY = {
-            { -1.7797474624e-01, -5.3062009235e-02,  6.0413594965e+01 },
-            { -2.0685716542e-02, -3.9378157948e-01,  1.4174826982e+02 },
-            { -2.8668090956e-04, -1.2403394999e-02,  1.0000000000e+00 }
+            { -6.8658673540e-02, -1.4582606197e-02, 2.5633211718e+01 },
+            { -8.0700352292e-04, -2.1452449123e-01, 6.3092382406e+01 },
+            { -1.8726593163e-04, -7.7392061899e-03, 1.0000000000e+00 }
     };
 
     /**

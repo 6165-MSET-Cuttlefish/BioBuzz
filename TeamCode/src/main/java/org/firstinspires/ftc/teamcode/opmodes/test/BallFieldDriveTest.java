@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.opmodes.test;
 
 import com.acmerobotics.dashboard.FtcDashboard;
+import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
@@ -37,6 +38,17 @@ import java.util.List;
  */
 @TeleOp(name = "Ball Field Drive", group = "test")
 public class BallFieldDriveTest extends LinearOpMode {
+
+    @Config("BallFieldDrive")
+    public static class Tuning {
+        /**
+         * Turn off to stop streaming the pipeline's output to FtcDashboard's camera view. Rendering
+         * that stream happens inline in the same per-frame call as the pipeline itself (see {@link
+         * WebcamSession}'s javadoc), so it's real cost on the loop, not just a nice-to-have picture —
+         * flip this off and compare {@code Overhead (ms)} below to see how much of it was the stream.
+         */
+        public static boolean cameraStreamEnabled = true;
+    }
 
     // Must match res/xml/camera.xml and pedro/Constants.localizerConfig's pod offsets/directions.
     private static final String WEBCAM_NAME = "nerdDetector";
@@ -92,6 +104,7 @@ public class BallFieldDriveTest extends LinearOpMode {
         pinpoint.update();
         recordRobotState();
         session.update();
+        session.setCameraStreamEnabled(Tuning.cameraStreamEnabled);
         if (drive) driveFromGamepad();
 
         BallDetectionPipeline.Frame frame = pipeline.latest();
@@ -104,7 +117,14 @@ public class BallFieldDriveTest extends LinearOpMode {
             telemetry.addData("Robot (in, deg)", "(%.1f, %.1f) @ %.0f",
                     now.x, now.y, Math.toDegrees(now.heading));
         }
-        telemetry.addData("FPS", "%.1f", frame.fps);
+        telemetry.addData("FPS (pipeline's own count)", "%.1f", frame.fps);
+        // EasyOpenCV's own per-frame breakdown, independent of frame.fps above: Pipeline is time
+        // inside processFrame() alone; Overhead is everything else per frame (dashboard/DS stream
+        // rendering included); Total is the two summed, i.e. what actually gates the loop rate.
+        telemetry.addData("Pipeline (ms)", session.webcam().getPipelineTimeMs());
+        telemetry.addData("Overhead (ms)", session.webcam().getOverheadTimeMs());
+        telemetry.addData("Total frame (ms)", session.webcam().getTotalFrameTimeMs());
+        telemetry.addData("Camera stream", Tuning.cameraStreamEnabled ? "ON" : "OFF");
         telemetry.addData("Balls", fieldBalls.size());
         int shown = 0;
         for (FieldBall ball : fieldBalls) {
