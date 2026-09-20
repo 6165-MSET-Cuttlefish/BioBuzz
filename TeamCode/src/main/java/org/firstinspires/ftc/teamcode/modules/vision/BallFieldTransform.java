@@ -30,8 +30,8 @@ public final class BallFieldTransform {
     @Config("CameraMount")
     public static class Mount {
         /** Robot-frame position of the camera frame's origin, inches. +X forward, +Y left. */
-        public static double xIn = 0;
-        public static double yIn = 0;
+        public static double xIn = 29;
+        public static double yIn = 1;
         /** Rotation from robot axes to camera-frame axes, degrees CCW. */
         public static double headingDeg = 0;
         /**

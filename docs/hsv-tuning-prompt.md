@@ -53,9 +53,14 @@ Sample the glare band from the bright/blown-out patch on the ball's surface spec
 from the main colour band — don't average them together into one sample set, or you'll get numbers
 that describe neither region well.
 
-**Red only**: red's hue wraps around the 0/179 boundary in OpenCV, so red needs its colour band
-split into two ranges (`hLow1/hHigh1` near 0, `hLow2/hHigh2` near 179) that together cover the wrap.
-Blue and Yellow don't need this — just one `hLow/hHigh`.
+**Note on red's hue**: OpenCV hue wraps at the 0/179 seam, and red's true hue sits right next to it —
+but `RedNectarHsv` only has one `hLow/hHigh` band, the same shape as Pollen and Blue. If your sampled
+red pixels cluster near just one end (e.g., all near 179, or all near 0), report that single band the
+same way as the others. If they genuinely span **both** ends — some pixels near 0, some near 179,
+meaning the colour truly straddles the wrap and one band can't cover it — say so explicitly rather
+than reporting only whichever end has more samples: the current code has no second band for red, so
+covering a real two-sided spread needs a field added back to `RedNectarHsv` (and its `BallType.NECTAR_RED`
+entry gaining a second `HsvRange`) before the fix is usable, not just new numbers.
 
 ### 3. How to sample pixels from the photos
 
@@ -91,8 +96,6 @@ sensor noise spike) will blow a bound out needlessly. Instead:
    correct, for these bounds to stay loose rather than tight. Erring wide costs a little extra
    compute; erring narrow costs missed balls.
 3. Clamp everything into legal ranges: H ∈ [0,179], S/V ∈ [0,255].
-4. For red's two-band split, make sure `hHigh1 < hLow2` isn't required — they're independent bands,
-   it's fine if there's a gap of non-red hues between them (there almost always will be).
 
 ### 5. Output format — match this exactly
 
@@ -109,12 +112,14 @@ public static int glareSHigh = <>, glareVLow = <>;
 
 ```java
 // Red Nectar
-public static int hLow1 = <>, hHigh1 = <>;
-public static int hLow2 = <>, hHigh2 = <>;
+public static int hLow = <>, hHigh = <>;
 public static int sLow = <>, sHigh = <>;
 public static int vLow = <>, vHigh = <>;
 public static int glareSHigh = <>, glareVLow = <>;
 ```
+
+(Only if your samples genuinely span both ends of the hue wrap — see the note in section 2 — report
+that separately as a flagged limitation instead of squeezing it into the block above.)
 
 ```java
 // Blue Nectar

@@ -146,10 +146,9 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     // region instead of the whole frame) and "which colour is the thing Hough
     // found" (see MIN_COLOR_FILL_FRACTION).
     //
-    // Each type lists its colour band(s) first and its glare band(s) last: a
+    // Each type lists its colour band first and its glare band last: a
     // specular highlight washes saturation out and drives value up while
-    // leaving the hue roughly in place. Red straddles the hue origin, so both
-    // of its bands are split in two.
+    // leaving the hue roughly in place.
     //
     // Diameter scales the radius window Hough searches for that type — a 3.6 in
     // nectar ball subtends a visibly larger circle than a 2.8 in pollen ball at
@@ -174,10 +173,8 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                 new HsvRange( 15,   0, 200,  34,  90, 255)),
 
         NECTAR_RED("Red Nectar", 3.6, new Scalar(255, 40, 40), new Scalar(255, 255, 255),
-                new HsvRange(  0, 110,  80,   8, 255, 255),
-                new HsvRange(168, 110,  80, 179, 255, 255),
-                new HsvRange(  0,   0, 200,   8,  90, 255),
-                new HsvRange(168,   0, 200, 179,  90, 255)),
+                new HsvRange(166, 145, 130, 179, 255, 255),
+                new HsvRange(166,   0, 210, 179,  95, 255)),
 
         NECTAR_BLUE("Blue Nectar", 3.6, new Scalar(40, 120, 255), new Scalar(255, 255, 255),
                 new HsvRange( 98, 110,  60, 130, 255, 255),

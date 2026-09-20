@@ -76,7 +76,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
      */
     @Config("BallVisionDisplay")
     public static class Tuning {
-        public static DisplayMode displayMode = DisplayMode.BOX;
+        public static DisplayMode displayMode = DisplayMode.MASK;
         public static boolean drawVelocity = true;
         /** Lookahead of the drawn velocity arrow, seconds. */
         public static double velocityArrowSeconds = 0.5;
@@ -149,8 +149,15 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private final Mat roiWork      = new Mat();
     private final Mat houghCircles = new Mat(); // reused across every Hough call, all regions/types
     private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
+    // Dedicated full-res output buffer for MASK mode. Deliberately NOT input: input is EasyOpenCV's
+    // own persistent decode buffer (OpenCvWebcamImpl's rgbaMat — allocated once as 4-channel and
+    // written into directly by the native MJPEG decoder on every later frame, never reallocated by
+    // EasyOpenCV itself), and resizing maskCanvas (3-channel) into it would retype/reallocate that
+    // shared buffer to 3-channel in place, corrupting every frame decoded after it.
+    private final Mat maskDisplay  = new Mat();
     private final Mat contourHierarchy = new Mat();
-    // Draws in place onto that frame's input Mat rather than a separate copy — see render().
+    // OVERLAY/BOX draw in place onto that frame's input Mat rather than a separate copy; MASK mode
+    // uses maskDisplay instead, for the reason above — see render().
     private Mat display;
 
     // Mutated in place by applyRange() instead of allocating a new Scalar per HSV band per frame.
@@ -253,17 +260,11 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 return;
             case NECTAR_RED:
                 applyRange(out, true,
-                        RedNectarHsv.hLow1, RedNectarHsv.sLow, RedNectarHsv.vLow,
-                        RedNectarHsv.hHigh1, RedNectarHsv.sHigh, RedNectarHsv.vHigh);
+                        RedNectarHsv.hLow, RedNectarHsv.sLow, RedNectarHsv.vLow,
+                        RedNectarHsv.hHigh, RedNectarHsv.sHigh, RedNectarHsv.vHigh);
                 applyRange(out, false,
-                        RedNectarHsv.hLow2, RedNectarHsv.sLow, RedNectarHsv.vLow,
-                        RedNectarHsv.hHigh2, RedNectarHsv.sHigh, RedNectarHsv.vHigh);
-                applyRange(out, false,
-                        RedNectarHsv.hLow1, 0, RedNectarHsv.glareVLow,
-                        RedNectarHsv.hHigh1, RedNectarHsv.glareSHigh, 255);
-                applyRange(out, false,
-                        RedNectarHsv.hLow2, 0, RedNectarHsv.glareVLow,
-                        RedNectarHsv.hHigh2, RedNectarHsv.glareSHigh, 255);
+                        RedNectarHsv.hLow, 0, RedNectarHsv.glareVLow,
+                        RedNectarHsv.hHigh, RedNectarHsv.glareSHigh, 255);
                 return;
             case NECTAR_BLUE:
                 applyRange(out, true,
@@ -460,12 +461,15 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private Mat render(Mat input, List<BallDetection> detections, List<TrackedBall> balls) {
         DisplayMode mode = Tuning.displayMode;
 
-        // Draw straight onto input instead of a copy: nothing reads input as data past this point
-        // (detection already ran on small/hsv/smallGray), and EasyOpenCV is fine getting back the
-        // same Mat it handed us. Saves a full-resolution frame copy every loop in OVERLAY/BOX mode.
-        display = input;
         if (mode == DisplayMode.MASK) {
-            Imgproc.resize(maskCanvas, display, input.size(), 0, 0, Imgproc.INTER_NEAREST);
+            // maskDisplay, not input — see the field's own comment for why input can't be resized into.
+            Imgproc.resize(maskCanvas, maskDisplay, input.size(), 0, 0, Imgproc.INTER_NEAREST);
+            display = maskDisplay;
+        } else {
+            // Draw straight onto input instead of a copy: nothing reads input as data past this
+            // point (detection already ran on small/hsv/smallGray), and EasyOpenCV is fine getting
+            // back the same Mat it handed us. Saves a full-resolution frame copy every loop.
+            display = input;
         }
 
         for (int i = 0; i < detections.size(); i++) {

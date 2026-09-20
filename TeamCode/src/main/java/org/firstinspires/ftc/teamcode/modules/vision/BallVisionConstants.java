@@ -51,33 +51,33 @@ public final class BallVisionConstants {
     // display colour; Hough itself is colour-blind, so the mask that seeded a
     // circle's ROI is also what assigns its type (see Detection.minColorFill).
     //
-    // Each *Hsv class below lists its colour band(s) first and its glare
-    // band(s) last: a specular highlight washes saturation out and drives value
-    // up while leaving hue roughly in place. Red straddles the hue origin, so
-    // both of its bands are split in two (hLow1/hHigh1, hLow2/hHigh2). These are
-    // the live @Config fields BallDetectionPipeline's mask-building reads every
-    // frame; BallType.defaultRanges below is a frozen snapshot of them taken at
-    // class-load time, wrapped as Scalars for the sim copy and anything else
-    // that just wants "the ball-type recipe" without per-field dashboard tuning.
+    // Each *Hsv class below lists its colour band first and its glare band
+    // last: a specular highlight washes saturation out and drives value up
+    // while leaving hue roughly in place. These are the live @Config fields
+    // BallDetectionPipeline's mask-building reads every frame; BallType.
+    // defaultRanges below is a frozen snapshot of them taken at class-load
+    // time, wrapped as Scalars for the sim copy and anything else that just
+    // wants "the ball-type recipe" without per-field dashboard tuning.
     // -------------------------------------------------------------------------
     public static final double REFERENCE_BALL_DIAMETER_INCHES = 2.8;
 
-    /** OpenCV HSV: H 0-179, S/V 0-255. Loose on purpose — Hough is the real shape gate. */
     @Config("BallVision_Pollen")
     public static final class PollenHsv {
         private PollenHsv() {}
-        public static int hLow = 16, hHigh = 30;
-        public static int sLow = 115, sHigh = 255;
+        public static int hLow = 0, hHigh = 30;
+        public static int sLow = 50, sHigh = 255;
         public static int vLow = 150, vHigh = 255;
         public static int glareSHigh = 60, glareVLow = 220;
     }
 
-    /** Red straddles the hue origin, so its colour band is split into two (hLow1..hHigh2). */
+    /**
+     * Red's actual hue in this HSV space sits near the wraparound at 179 (not down near 0, where
+     * it'd straddle the origin and need a second band) — a single band covers it.
+     */
     @Config("BallVision_RedNectar")
     public static final class RedNectarHsv {
         private RedNectarHsv() {}
-        public static int hLow1 = 0, hHigh1 = 8;
-        public static int hLow2 = 166, hHigh2 = 179;
+        public static int hLow = 166, hHigh = 179;
         public static int sLow = 145, sHigh = 255;
         public static int vLow = 130, vHigh = 255;
         public static int glareSHigh = 95, glareVLow = 210;
@@ -109,14 +109,10 @@ public final class BallVisionConstants {
                         PollenHsv.hHigh, PollenHsv.glareSHigh, 255)),
 
         NECTAR_RED("Red Nectar", 3.6, new Scalar(255, 40, 40), new Scalar(255, 255, 255),
-                new HsvRange(RedNectarHsv.hLow1, RedNectarHsv.sLow, RedNectarHsv.vLow,
-                        RedNectarHsv.hHigh1, RedNectarHsv.sHigh, RedNectarHsv.vHigh),
-                new HsvRange(RedNectarHsv.hLow2, RedNectarHsv.sLow, RedNectarHsv.vLow,
-                        RedNectarHsv.hHigh2, RedNectarHsv.sHigh, RedNectarHsv.vHigh),
-                new HsvRange(RedNectarHsv.hLow1, 0, RedNectarHsv.glareVLow,
-                        RedNectarHsv.hHigh1, RedNectarHsv.glareSHigh, 255),
-                new HsvRange(RedNectarHsv.hLow2, 0, RedNectarHsv.glareVLow,
-                        RedNectarHsv.hHigh2, RedNectarHsv.glareSHigh, 255)),
+                new HsvRange(RedNectarHsv.hLow, RedNectarHsv.sLow, RedNectarHsv.vLow,
+                        RedNectarHsv.hHigh, RedNectarHsv.sHigh, RedNectarHsv.vHigh),
+                new HsvRange(RedNectarHsv.hLow, 0, RedNectarHsv.glareVLow,
+                        RedNectarHsv.hHigh, RedNectarHsv.glareSHigh, 255)),
 
         NECTAR_BLUE("Blue Nectar", 3.6, new Scalar(40, 120, 255), new Scalar(255, 255, 255),
                 new HsvRange(BlueNectarHsv.hLow, BlueNectarHsv.sLow, BlueNectarHsv.vLow,
