@@ -6,7 +6,6 @@ import com.pedropathing.ivy.Scheduler;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.PathCommands;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
 
@@ -24,7 +23,6 @@ public class CellTipTest extends BioBuzzOpMode {
     @Config("Cell Tip Test")
     public static class Tuning {
         public static LimelightCamera.Cell cell = LimelightCamera.Cell.RED_1;
-        public static int commandTimeoutMs = 15000;
     }
 
     private final ElapsedTime sinceStart = new ElapsedTime();
@@ -33,7 +31,7 @@ public class CellTipTest extends BioBuzzOpMode {
 
     @Override
     protected void initialize() {
-        watch = PathCommands.timeout(robot.actions.checkTip(Tuning.cell), Tuning.commandTimeoutMs);
+        watch = robot.actions.checkTip(Tuning.cell);
     }
 
     @Override
@@ -64,7 +62,9 @@ public class CellTipTest extends BioBuzzOpMode {
         telemetry.addData("Tags visible", robot.limelight.getVisibleCount() + "/4");
         telemetry.addData("Hidden for", "%.2fs", robot.limelight.getHiddenSeconds());
         telemetry.addData("Tags in frame", robot.limelight.getDetectedTagCount());
-        telemetry.addData("Command", Scheduler.isRunning(watch) ? "watching" : "finished");
+        telemetry.addData("Command", Scheduler.isRunning(watch)
+                ? "watching"
+                : (tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip"));
         telemetry.addData("First tip at", tippedAtSeconds < 0 ? "—" : String.format("%.2fs", tippedAtSeconds));
     }
 }

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!-- Minimal camera-only config for the "Camera Tune" OpMode (no drivetrain/mechanisms).
-     Webcam name matches Camera.DEFAULT_WEBCAM_NAME and CameraTune.WEBCAM_NAME. -->
+     Webcam name matches Camera.DEFAULT_WEBCAM_NAME and CameraTune.WEBCAM_NAME;
+     limelight matches LimelightCamera.DEFAULT_NAME. -->
 <Robot type="FirstInspires-FTC">
     <LynxUsbDevice name="Control Hub Portal" parentModuleAddress="173" serialNumber="(embedded)">
         <LynxModule name="Control Hub" port="173" />
     </LynxUsbDevice>
     <Webcam name="nerdDetector" serialNumber="UC852" /> <!-- Arducam UC-852 (OV9782) -->
+    <EthernetDevice name="limelight" serialNumber="EthernetOverUsb:eth0:172.29.0.22" port="0" ipAddress="172.29.0.1" />
 </Robot>
