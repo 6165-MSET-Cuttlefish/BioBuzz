@@ -38,6 +38,12 @@ import java.util.List;
  * it belongs to — so the colour mask that seeded a circle's search region is also what assigns its
  * type (see {@link #colorFillFraction}).
  *
+ * <p>With one exception: Hough's accumulator is a hard threshold, so a ball whose edge sits near it
+ * blinks in and out between frames even when its mask is perfectly steady. When a mask blob is
+ * round enough to be a ball on its own and Hough finds nothing inside it, that blob's own enclosing
+ * circle stands in (see {@link #addMaskCircle}) — the colour gate does get to produce a detection
+ * there, precisely because it is the steadier of the two signals in that situation.
+ *
  * <p>Every detected ball is then fed to a {@link BallTracker}, which is what turns a stream of
  * unlabelled per-frame points into balls with identity and velocity; a track only ever matches
  * detections of its own {@link BallType}.
@@ -56,9 +62,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     public enum DisplayMode {
         /** Candidate ROI masks, one colour per ball type, for tuning the HSV gates. */
         MASK,
-        /** Camera image with circle, center and ground-contact overlays. */
+        /** This frame's raw detections, circle plus center and ground-contact dots — what Hough
+         * actually found, jitter and all, which is what you want when checking detection itself. */
         OVERLAY,
-        /** Camera image with a bounding box and a field-coordinate label plate per ball. */
+        /** The tracked balls, smoothed and with stable ids — what robot code consumes. */
         BOX
     }
 
@@ -164,6 +171,11 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private final Scalar rangeLow  = new Scalar(0, 0, 0);
     private final Scalar rangeHigh = new Scalar(0, 0, 0);
 
+    // Reused by addMaskCircle(), which runs once per mask blob per type per frame.
+    private final MatOfPoint2f contourAsFloat = new MatOfPoint2f();
+    private final Point maskCircleCenter = new Point();
+    private final float[] maskCircleRadius = new float[1];
+
     // Camera resolution is fixed for the pipeline's lifetime, so this is computed once, not
     // reallocated every frame.
     private Size smallSize;
@@ -207,15 +219,25 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             maskCanvas.setTo(MASK_CANVAS_CLEAR);
         }
 
+        double frameShortSide = Math.min(small.cols(), small.rows());
+
         for (BallType type : BALL_TYPES) {
             buildColorMask(type, colorMask);
             Imgproc.morphologyEx(colorMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
 
             if (Tuning.displayMode == DisplayMode.MASK) maskCanvas.setTo(type.drawColor, roiMask);
 
-            List<Rect> regions = buildSearchRegions();
+            double minBallRadius = frameShortSide * Detection.minRadiusFrameFraction * type.radiusScale;
+            double maxBallRadius = frameShortSide * Detection.maxRadiusFrameFraction * type.radiusScale;
+
+            List<Candidate> maskCircles = new ArrayList<>();
+            List<Rect> regions =
+                    buildSearchRegions(type, minBallRadius, maxBallRadius, maskCircles);
             searchRegions.addAll(regions);
-            candidates.addAll(findCircles(type, regions));
+
+            List<Candidate> found = findCircles(type, regions, minBallRadius, maxBallRadius);
+            candidates.addAll(found);
+            candidates.addAll(unclaimedMaskCircles(maskCircles, found));
         }
 
         List<Candidate> circles = suppressOverlaps(candidates);
@@ -290,7 +312,13 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         }
     }
 
-    private List<Rect> buildSearchRegions() {
+    /**
+     * Also collects, into {@code maskCircles}, the enclosing circle of every mask blob round enough
+     * to be a ball on its own — see {@link #addMaskCircle}. Free to do here: the contour is already
+     * in hand for the bounding box.
+     */
+    private List<Rect> buildSearchRegions(BallType type, double minBallRadius, double maxBallRadius,
+                                          List<Candidate> maskCircles) {
         List<MatOfPoint> contours = new ArrayList<>();
         Imgproc.findContours(roiMask, contours, contourHierarchy,
                 Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
@@ -298,6 +326,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         List<Rect> padded = new ArrayList<>(contours.size());
         for (MatOfPoint contour : contours) {
             Rect bounds = Imgproc.boundingRect(contour);
+            addMaskCircle(type, contour, minBallRadius, maxBallRadius, maskCircles);
             contour.release();
             int x = Math.max(0, bounds.x - ROI_PAD_PX);
             int y = Math.max(0, bounds.y - ROI_PAD_PX);
@@ -308,26 +337,78 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return mergeNearbyRects(padded);
     }
 
-    private List<Candidate> findCircles(BallType type, List<Rect> searchRegions) {
-        double frameShortSide = Math.min(small.cols(), small.rows());
-        double minBallRadius = frameShortSide * Detection.minRadiusFrameFraction * type.radiusScale;
-        double maxBallRadius = frameShortSide * Detection.maxRadiusFrameFraction * type.radiusScale;
+    /**
+     * A mask blob that actually fills its own enclosing circle is already a usable circle estimate,
+     * so keep it as a fallback for frames where Hough comes up empty on that ball. Hough runs on
+     * gradients in the grayscale image, not on the mask, and its accumulator is a hard threshold —
+     * a ball whose edge lands near {@link Detection#houghAccumulator} flickers in and out as sensor
+     * and MJPEG noise shift which edge pixels survive Canny, even with a completely steady mask.
+     * The roundness gate ({@link Detection#maskCircleMinFill}) is what keeps a smear or two merged
+     * balls from being promoted into a detection.
+     */
+    private void addMaskCircle(BallType type, MatOfPoint contour,
+                               double minBallRadius, double maxBallRadius, List<Candidate> out) {
+        contour.convertTo(contourAsFloat, CvType.CV_32F);
+        Imgproc.minEnclosingCircle(contourAsFloat, maskCircleCenter, maskCircleRadius);
+
+        double radius = maskCircleRadius[0];
+        if (radius < minBallRadius || radius > maxBallRadius) return;
+        if (Imgproc.contourArea(contour) < Detection.maskCircleMinFill * Math.PI * radius * radius) {
+            return;
+        }
+
+        Candidate candidate = new Candidate(type, maskCircleCenter.x, maskCircleCenter.y, radius);
+        candidate.fillFraction = colorFillFraction(colorMask, candidate);
+        if (candidate.fillFraction >= Detection.minColorFill) out.add(candidate);
+    }
+
+    /**
+     * Drops mask circles that Hough already found a circle inside — when Hough fires, its gradient
+     * fit is the better estimate, and the fallback is only meant to cover the frames it misses.
+     */
+    private static List<Candidate> unclaimedMaskCircles(List<Candidate> maskCircles,
+                                                        List<Candidate> hough) {
+        if (maskCircles.isEmpty() || hough.isEmpty()) return maskCircles;
+
+        List<Candidate> kept = new ArrayList<>(maskCircles.size());
+        for (Candidate mask : maskCircles) {
+            boolean covered = false;
+            for (Candidate found : hough) {
+                if (Math.hypot(mask.x - found.x, mask.y - found.y) <= mask.radius) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (!covered) kept.add(mask);
+        }
+        return kept;
+    }
+
+    private List<Candidate> findCircles(BallType type, List<Rect> searchRegions,
+                                        double minBallRadius, double maxBallRadius) {
+        // Derived from the frame and ball type only, never from a region's own size, so they are
+        // identical on every frame: tying them to the ROI would let a mask bounding box that
+        // wanders a pixel or two change the upscale factor and Canny threshold from frame to
+        // frame, which is its own source of detections blinking on and off.
+        double minRadius = minBallRadius;
+        double minDist = Math.max(4.0, minRadius * HOUGH_MIN_DIST_FRACTION * 2.0);
+        double upscale = Math.min(ROI_MAX_UPSCALE,
+                Math.max(1.0, HOUGH_WORKING_MIN_RADIUS_PX / minRadius));
+
+        // Interpolation spreads the same intensity step over `upscale` pixels, so per-pixel
+        // gradient magnitude drops by about that factor — a fixed Canny threshold would reject
+        // the very edges the upscale exists to recover.
+        double canny = Math.max(HOUGH_CANNY_MIN_THRESHOLD, Detection.houghCanny / upscale);
 
         List<Candidate> candidates = new ArrayList<>();
         for (Rect region : searchRegions) {
             int shortSide = Math.min(region.width, region.height);
             if (shortSide < 4) continue;
 
+            // Still capped by the region — a circle can't meaningfully exceed the area it was
+            // found in — but only the ceiling moves with it, never the parameters above.
             double maxRadius = Math.min(shortSide * HOUGH_MAX_RADIUS_FRACTION, maxBallRadius);
-            double minRadius = Math.min(minBallRadius, maxRadius * 0.5);
-            double minDist = Math.max(4.0, minRadius * HOUGH_MIN_DIST_FRACTION * 2.0);
-            double upscale = Math.min(ROI_MAX_UPSCALE,
-                    Math.max(1.0, HOUGH_WORKING_MIN_RADIUS_PX / minRadius));
-
-            // Interpolation spreads the same intensity step over `upscale` pixels, so per-pixel
-            // gradient magnitude drops by about that factor — a fixed Canny threshold would reject
-            // the very edges the upscale exists to recover.
-            double canny = Math.max(HOUGH_CANNY_MIN_THRESHOLD, Detection.houghCanny / upscale);
+            if (maxRadius <= minRadius) continue;
 
             Mat regionGray = smallGray.submat(region);
             try {
@@ -406,7 +487,13 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private static List<Candidate> suppressOverlaps(List<Candidate> candidates) {
         Collections.sort(candidates, new Comparator<Candidate>() {
             @Override public int compare(Candidate a, Candidate b) {
-                int byRadius = Double.compare(b.radius, a.radius);
+                // Rounded to whole pixels before comparing: Hough's radius estimate for one ball
+                // moves by a fraction of a pixel between frames, and ordering on the raw doubles
+                // lets that noise decide which of two all-but-identical candidates survives, so the
+                // kept circle jumps between them. Rounding makes those a tie that colour fill —
+                // far steadier, since it comes off the mask — settles instead. Integer compare
+                // keeps the ordering transitive, which a tolerance-based one wouldn't.
+                int byRadius = Integer.compare((int) Math.round(b.radius), (int) Math.round(a.radius));
                 return byRadius != 0 ? byRadius : Double.compare(b.fillFraction, a.fillFraction);
             }
         });
@@ -472,9 +559,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             display = input;
         }
 
-        for (int i = 0; i < detections.size(); i++) {
-            if (mode == DisplayMode.BOX) drawBallBox(detections.get(i), i);
-            else drawBallOverlay(detections.get(i));
+        if (mode == DisplayMode.BOX) {
+            drawTrackedBoxes(balls);
+        } else {
+            for (int i = 0; i < detections.size(); i++) drawBallOverlay(detections.get(i));
         }
 
         if (Tuning.drawVelocity) drawVelocities(balls);
@@ -498,19 +586,38 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, ball.type.labelTextColor, 1);
     }
 
-    private void drawBallBox(BallDetection ball, int index) {
+    /**
+     * Draws the tracked balls rather than this frame's raw detections, so what's on screen is the
+     * smoothed, identity-stable output robot code actually consumes — a raw Hough circle moves by a
+     * pixel or two every frame even on a motionless ball, and watching that is most of what makes
+     * detection "look" jittery. The label carries the track's real id, not a per-frame list index,
+     * so it stays put across frames. OVERLAY still shows raw detections, for checking what Hough
+     * itself found.
+     */
+    private void drawTrackedBoxes(List<TrackedBall> balls) {
+        Mat inverse = inverseHomography;
+        if (inverse == null || balls.isEmpty()) return;
+
+        List<Point> contacts = new ArrayList<>(balls.size());
+        for (TrackedBall ball : balls) contacts.add(ball.position());
+        List<Point> pixels = perspectiveTransform(contacts, inverse);
+
         double scaleUp = 1.0 / DETECTION_SCALE;
-        double cx = ball.imageX * scaleUp;
-        double cy = ball.imageY * scaleUp;
-        double radius = ball.imageRadius * scaleUp;
+        for (int i = 0; i < balls.size(); i++) {
+            TrackedBall ball = balls.get(i);
+            Point contact = pixels.get(i);
+            double radius = ball.radiusPx * scaleUp;
 
-        Rect box = new Rect((int) (cx - radius), (int) (cy - radius),
-                (int) (radius * 2), (int) (radius * 2));
-        Imgproc.rectangle(display, new Point(box.x, box.y),
-                new Point(box.x + box.width, box.y + box.height), ball.type.drawColor, 2);
+            // The track's position is the ground-contact point, so the box sits on top of it.
+            Rect box = new Rect((int) (contact.x - radius), (int) (contact.y - radius * 2),
+                    (int) (radius * 2), (int) (radius * 2));
+            Imgproc.rectangle(display, new Point(box.x, box.y),
+                    new Point(box.x + box.width, box.y + box.height), ball.type.drawColor, 2);
 
-        drawLabelPlate(String.format("#%d %s (%.1f, %.1f)in",
-                index, ball.type.label, ball.fieldX, ball.fieldY), box, ball.type);
+            drawLabelPlate(String.format("#%d %s (%.1f, %.1f)in%s",
+                    ball.id, ball.type.label, ball.x, ball.y,
+                    ball.visible ? "" : " [coasting]"), box, ball.type);
+        }
     }
 
     private void drawLabelPlate(String label, Rect box, BallType type) {

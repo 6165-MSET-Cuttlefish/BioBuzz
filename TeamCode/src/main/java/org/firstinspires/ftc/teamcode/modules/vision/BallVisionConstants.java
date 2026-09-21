@@ -43,6 +43,16 @@ public final class BallVisionConstants {
         public static double minColorFill = 0.30;
         /** Min center separation as a fraction of the two radii summed. */
         public static double minCenterSeparation = 0.7;
+        /**
+         * How much of its own minimum enclosing circle a mask blob has to fill before that circle
+         * is allowed to stand in for a Hough detection on frames where Hough finds nothing there.
+         * Hough is a hard-thresholded vote, so a ball sitting near {@link #houghAccumulator} drops
+         * in and out frame to frame even when its mask is rock steady; this is what stops that from
+         * becoming a flickering detection. Raise it if ragged blobs or two merged balls start
+         * getting promoted into one bogus circle; 1.0 would demand a perfect disc and effectively
+         * disable the fallback.
+         */
+        public static double maskCircleMinFill = 0.60;
     }
 
     // -------------------------------------------------------------------------
