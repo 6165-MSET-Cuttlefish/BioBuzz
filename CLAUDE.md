@@ -201,3 +201,4 @@ A `@Tuner` method in `Tuning.java` must be static, take no arguments, and be dec
 - **Fail fast.** Let exceptions propagate; no try/catch to keep a loop alive. Numeric guards and try/finally are fine. Exception: `OpenCVPipelines/WebcamControls.java` deliberately ignores unsupported UVC control calls.
 - OpMode `group` is `"Test"` for test OpModes and `"A"` for the competition teleop; the DS treats group names as case-sensitive.
 - Commit messages are a single imperative subject line, no body, no trailer. Ask before pushing.
+- **Commits are authored as the person running the session**, never as Claude. Set `user.name`/`user.email` to that person's own git identity (on a fresh container `git config --global user.name`/`user.email` start out as Claude) and check `git log -1 --format='%an <%ae>'` before the first commit of a session.
