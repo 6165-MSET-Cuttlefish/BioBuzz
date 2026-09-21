@@ -133,15 +133,6 @@ public class LimelightCamera extends Module {
 
     @Override
     protected void read() {
-        update();
-    }
-
-    /**
-     * Pulls the latest verdict and pushes the current request. The framework calls this from
-     * {@link #read()}; a bare {@code LinearOpMode} that skips the framework calls it itself, once
-     * per loop, after {@link #init()}.
-     */
-    public void update() {
         if (limelight == null) return;
         selectPipeline();
         parse(limelight.getLatestResult());
@@ -270,7 +261,7 @@ public class LimelightCamera extends Module {
             for (int i = 0; i < cell.tagIds.length; i++) inputs[IN_TAG_0 + i] = cell.tagIds[i];
         }
         inputs[IN_HOLD_SECONDS] = hiddenHoldSeconds;
-        inputs[IN_ENABLED] = cell != null && !isInAny(VisionState.DISABLED) ? 1 : 0;
+        inputs[IN_ENABLED] = cell != null && isInAny(VisionState.ENABLED) ? 1 : 0;
         inputs[IN_MIN_TAG_AREA] = minTagAreaPx;
         inputs[IN_REQUIRE_SEEN] = requireSeenBeforeTip ? 1 : 0;
 
