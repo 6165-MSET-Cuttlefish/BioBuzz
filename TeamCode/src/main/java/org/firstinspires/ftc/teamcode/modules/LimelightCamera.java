@@ -42,7 +42,7 @@ public class LimelightCamera extends Module {
     /** Require the watched cell's tags to have been seen at least once before a tip can be reported. */
     public static boolean requireSeenBeforeTip = false;
     /** How long {@code RobotActions.checkTip} waits for a tip before giving up. */
-    public static double checkTipTimeoutMs = 5000;
+    public static double checkTipTimeoutMs = 10000;
     /** {@code llrobot} is resent this often even when unchanged, so a Limelight reboot re-arms itself. */
     public static int resendInputsEveryNLoops = 25;
 
