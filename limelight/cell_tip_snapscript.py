@@ -1,6 +1,8 @@
 """BIOBUZZ HIVE-cell SnapScript for the Limelight 3A — template.
 
-Decides, on the camera, whether one alliance's HIVE cell is scorable. The verdict is visibility:
+Decides, on the camera, whether one alliance's HIVE cell is scorable, and which of its two cells
+(scoring side or audience side) is in view — which in turn says which half of the field the robot is
+on, since each cell faces its own side. The verdict is visibility:
 a cell that is up shows its AprilTag cluster to the camera, and a cell that has tipped down points
 its cluster away, so it drops out of frame entirely. MIN_VISIBLE_TAGS of the alliance's eight ids in
 frame means scorable; none for HOLD_SECONDS means tipped. Roll is measured and reported either way,
@@ -35,7 +37,7 @@ llpython (here -> hub), 8 doubles, read by LimelightCamera.parse():
     1     scorable: enough of this alliance's cluster is in frame (and upright, if gated), 1 or 0
     2     roll of the cluster in view, degrees (ROLL_NONE = 999 when neither is in view)
     3     how many of that cluster's four tags are visible
-    4     which cluster: 0 = lower id run, 1 = upper, -1 = neither
+    4     which cell: 0 = scoring side, 1 = audience side, -1 = neither
     5     how many of the OTHER cluster's tags are visible
     6     checksum (sum) of this alliance's eight ids — identifies which pipeline answered
     7     frame counter, wrapping at 10000
@@ -51,7 +53,9 @@ import numpy as np
 
 ALLIANCE = "RED"  # generated per pipeline
 PIPELINE_INDEX = 1  # generated per pipeline
-CLUSTERS = ((30, 31, 32, 33), (34, 35, 36, 37))  # generated per pipeline; (lower ids, upper ids)
+# Always (scoring-side cell, audience-side cell) in that order, so the cluster code in llpython[4]
+# means the same thing for both alliances even though their id runs are ordered differently.
+CLUSTERS = (("SCORING", (30, 31, 32, 33)), ("AUDIENCE", (34, 35, 36, 37)))  # generated per pipeline
 
 HOLD_SECONDS = 0.25
 MIN_TAG_AREA_PX = 120.0
@@ -70,7 +74,7 @@ REQUIRE_SEEN = False
 ROLL_NONE = 999.0
 DRAW_OVERLAY = True
 
-ALL_IDS = CLUSTERS[0] + CLUSTERS[1]
+ALL_IDS = CLUSTERS[0][1] + CLUSTERS[1][1]
 CHECKSUM = float(sum(ALL_IDS))
 NO_CONTOUR = np.array([[]])
 
@@ -149,16 +153,16 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
     y = 18
     _label(image, "%s  pipeline %d" % (ALLIANCE, PIPELINE_INDEX), (8, y), WHITE)
 
-    for c, ids in enumerate(CLUSTERS):
+    for c, (label, ids) in enumerate(CLUSTERS):
         y += 20
         tags = found_by_cluster[c]
         roll = rolls[c]
         if not tags:
-            _label(image, "cluster %d  %d-%d  0/4  --" % (c, ids[0], ids[-1]), (8, y), GREY)
+            _label(image, "%-8s %d-%d  0/4  --" % (label, ids[0], ids[-1]), (8, y), GREY)
             continue
         upright = not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
-        _label(image, "cluster %d  %d-%d  %d/4  roll %+.1f  %s%s"
-               % (c, ids[0], ids[-1], len(tags), roll,
+        _label(image, "%-8s %d-%d  %d/4  roll %+.1f  %s%s"
+               % (label, ids[0], ids[-1], len(tags), roll,
                   "UP" if upright else "DOWN", "  <-- target" if c == target else ""),
                (8, y), GREEN if upright else RED)
 
@@ -203,7 +207,7 @@ def runPipeline(image, llrobot):
             if abs(cv2.contourArea(pts)) < MIN_TAG_AREA_PX:
                 continue
             tag_id = int(tag_id)
-            for c, ids in enumerate(CLUSTERS):
+            for c, (_, ids) in enumerate(CLUSTERS):
                 if tag_id in ids:
                     found_by_cluster[c].append((pts, tag_id))
                     break

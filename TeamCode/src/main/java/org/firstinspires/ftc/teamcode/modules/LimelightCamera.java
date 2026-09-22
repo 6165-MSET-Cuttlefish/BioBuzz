@@ -37,9 +37,9 @@ public class LimelightCamera extends Module {
 
     public static boolean limelightTelemetry = true;
 
-    /** Limelight pipeline holding the RED SnapScript (tags 30-37). */
+    /** Limelight pipeline holding the RED SnapScript (tags 30-37: 30-33 scoring side, 34-37 audience). */
     public static int redPipeline = 1;
-    /** Limelight pipeline holding the BLUE SnapScript (tags 38-45). */
+    /** Limelight pipeline holding the BLUE SnapScript (tags 38-45: 38-41 audience side, 42-45 scoring). */
     public static int bluePipeline = 2;
 
     /** A result older than this is ignored — the Limelight has stalled, rebooted or lost its link. */
@@ -52,8 +52,17 @@ public class LimelightCamera extends Module {
     /** The scripts send this in place of a roll when no cluster is in view; NaN is not valid JSON. */
     private static final double ROLL_NONE = 999.0;
 
-    private static final int RED_CHECKSUM = 30 + 31 + 32 + 33 + 34 + 35 + 36 + 37;
-    private static final int BLUE_CHECKSUM = 38 + 39 + 40 + 41 + 42 + 43 + 44 + 45;
+    // The two HIVE cells per alliance, by which side of the field they sit on. The runs are not in
+    // the same order for both alliances — RED's low run is the scoring-side cell, BLUE's is the
+    // audience-side one — which is why the cluster code on the wire is the side, not the position.
+    // scripts/generate-limelight-pipelines.py reads these to build the pipelines.
+    private static final int[] RED_SCORING_IDS = {30, 31, 32, 33};
+    private static final int[] RED_AUDIENCE_IDS = {34, 35, 36, 37};
+    private static final int[] BLUE_AUDIENCE_IDS = {38, 39, 40, 41};
+    private static final int[] BLUE_SCORING_IDS = {42, 43, 44, 45};
+
+    private static final int RED_CHECKSUM = sum(RED_SCORING_IDS) + sum(RED_AUDIENCE_IDS);
+    private static final int BLUE_CHECKSUM = sum(BLUE_AUDIENCE_IDS) + sum(BLUE_SCORING_IDS);
 
     // llpython (Limelight → hub), 8 doubles. Mirrored in every limelight/pipelines/ script.
     private static final int OUT_TIPPED = 0;
@@ -66,13 +75,18 @@ public class LimelightCamera extends Module {
     private static final int OUT_FRAME_COUNTER = 7;
     private static final int OUT_LENGTH = 8;
 
-    /** Which of the alliance's two clusters is in view; {@code NONE} when neither is. */
+    /**
+     * Which of the alliance's two HIVE cells is in view; {@code NONE} when neither is.
+     *
+     * <p>Which one the robot is looking at also says which half of the field it is on, since each
+     * cell faces its own side.
+     */
     public enum Cluster {
         NONE(-1),
-        /** The lower of the alliance's two id runs — 30-33 for RED, 38-41 for BLUE. */
-        LOW_IDS(0),
-        /** The upper run — 34-37 for RED, 42-45 for BLUE. */
-        HIGH_IDS(1);
+        /** The cell on the scoring-table side — RED 30-33, BLUE 42-45. */
+        SCORING(0),
+        /** The cell on the audience side — RED 34-37, BLUE 38-41. */
+        AUDIENCE(1);
 
         public final int index;
 
@@ -201,7 +215,7 @@ public class LimelightCamera extends Module {
         return fresh ? visibleCount : 0;
     }
 
-    /** How many tags of this alliance's <em>other</em> cluster are in the current frame. */
+    /** How many tags of this alliance's <em>other</em> cell are in the current frame. */
     public int getOtherVisibleCount() {
         return fresh ? otherVisibleCount : 0;
     }
@@ -216,6 +230,12 @@ public class LimelightCamera extends Module {
                     + "add the Limelight 3A to the hub config before using cell tip detection.");
         }
         return this;
+    }
+
+    private static int sum(int[] ids) {
+        int total = 0;
+        for (int id : ids) total += id;
+        return total;
     }
 
     private static int pipelineFor(AllianceColor alliance) {

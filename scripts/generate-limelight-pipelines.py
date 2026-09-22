@@ -16,7 +16,7 @@ OUT_DIR = ROOT / "limelight" / "pipelines"
 MODULE = ROOT / "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/modules/LimelightCamera.java"
 
 PIPELINE_RE = r"public static int %sPipeline = (\d+);"
-CHECKSUM_RE = r"private static final int %s_CHECKSUM = ([0-9 +]+);"
+IDS_RE = r"private static final int\[\] %s_%s_IDS = \{([0-9, ]+)\};"
 
 ALLIANCE_RE = re.compile(r"^ALLIANCE = .*$", re.M)
 INDEX_RE = re.compile(r"^PIPELINE_INDEX = .*$", re.M)
@@ -24,17 +24,27 @@ CLUSTERS_RE = re.compile(r"^CLUSTERS = .*$", re.M)
 
 
 def alliances():
+    """(ALLIANCE, pipeline index, ((\"SCORING\", ids), (\"AUDIENCE\", ids))) straight out of the module.
+
+    Scoring first for both alliances, so llpython's cluster code means the same thing either way —
+    the id runs themselves are not in the same order per alliance.
+    """
     java = MODULE.read_text()
     out = []
     for name in ("red", "blue"):
         pipeline = re.search(PIPELINE_RE % name, java)
-        checksum = re.search(CHECKSUM_RE % name.upper(), java)
-        if not pipeline or not checksum:
-            sys.exit("Could not find %s's pipeline index and ids in %s" % (name, MODULE))
-        ids = [int(t.strip()) for t in checksum.group(1).split("+")]
-        if len(ids) != 8:
-            sys.exit("%s should have 8 tag ids, found %d" % (name, len(ids)))
-        out.append((name.upper(), int(pipeline.group(1)), (tuple(ids[:4]), tuple(ids[4:]))))
+        if not pipeline:
+            sys.exit("Could not find %sPipeline in %s" % (name, MODULE))
+        clusters = []
+        for side in ("SCORING", "AUDIENCE"):
+            found = re.search(IDS_RE % (name.upper(), side), java)
+            if not found:
+                sys.exit("Could not find %s_%s_IDS in %s" % (name.upper(), side, MODULE))
+            ids = tuple(int(t) for t in found.group(1).split(","))
+            if len(ids) != 4:
+                sys.exit("%s_%s_IDS should have 4 ids, found %d" % (name.upper(), side, len(ids)))
+            clusters.append((side, ids))
+        out.append((name.upper(), int(pipeline.group(1)), tuple(clusters)))
     return out
 
 
@@ -52,7 +62,9 @@ def main():
     for name, pipeline, clusters in alliances():
         body = ALLIANCE_RE.sub('ALLIANCE = "%s"' % name, template, count=1)
         body = INDEX_RE.sub("PIPELINE_INDEX = %d" % pipeline, body, count=1)
-        body = CLUSTERS_RE.sub("CLUSTERS = (%s, %s)" % clusters, body, count=1)
+        body = CLUSTERS_RE.sub(
+            "CLUSTERS = (%s)" % ", ".join('("%s", %s)' % (side, ids) for side, ids in clusters),
+            body, count=1)
         body = body.replace("— template.\n", "— pipeline %d, %s.\n" % (pipeline, name), 1)
         body = body.replace(
             "This file is the source of truth. It is NOT what gets uploaded: `scripts/generate-limelight-\n"
@@ -63,7 +75,8 @@ def main():
             1)
         out = OUT_DIR / ("pipeline%d_%s.py" % (pipeline, name.lower()))
         out.write_text(body)
-        print("wrote %s  clusters %s" % (out.relative_to(ROOT), list(clusters)))
+        print("wrote %s  %s" % (out.relative_to(ROOT),
+                                 "  ".join("%s %d-%d" % (s, i[0], i[-1]) for s, i in clusters)))
 
 
 if __name__ == "__main__":
