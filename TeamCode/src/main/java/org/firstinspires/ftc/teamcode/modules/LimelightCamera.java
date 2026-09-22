@@ -248,8 +248,13 @@ public class LimelightCamera extends Module {
     }
 
     private void parse(LLResult result) {
-        double[] out = result == null ? null : result.getPythonOutput();
-        stalenessMs = result == null ? Double.NaN : result.getStaleness();
+        applyVerdict(result == null ? null : result.getPythonOutput(),
+                result == null ? Double.NaN : result.getStaleness());
+    }
+
+    /** Package-private so the verdict contract can be exercised without a Limelight attached. */
+    void applyVerdict(double[] out, double stalenessMs) {
+        this.stalenessMs = stalenessMs;
 
         fresh = alliance != null
                 && out != null

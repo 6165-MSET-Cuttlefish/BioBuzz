@@ -39,6 +39,7 @@ public class CellTipTest extends EnhancedOpMode {
 
     private BioBuzzRobot bot;
     private Command watch;
+    private boolean started;
     private double tippedAtSeconds = -1;
 
     @Override
@@ -56,6 +57,7 @@ public class CellTipTest extends EnhancedOpMode {
     @Override
     protected void onStart() {
         sinceStart.reset();
+        started = true;
         Scheduler.schedule(watch);
     }
 
@@ -79,9 +81,11 @@ public class CellTipTest extends EnhancedOpMode {
                 limelight.getCluster(), limelight.getVisibleCount(), limelight.getOtherVisibleCount());
         telemetry.addData("Roll", Double.isNaN(limelight.getRollDeg())
                 ? "—" : String.format("%.1fdeg", limelight.getRollDeg()));
-        telemetry.addData("Command", Scheduler.isRunning(watch)
-                ? "watching"
-                : (tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip"));
+        telemetry.addData("Command", !started
+                ? "not started"
+                : Scheduler.isRunning(watch)
+                        ? "watching"
+                        : (tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip"));
         telemetry.addData("First tip at", tippedAtSeconds < 0 ? "—" : String.format("%.2fs", tippedAtSeconds));
     }
 }
