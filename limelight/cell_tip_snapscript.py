@@ -1,0 +1,273 @@
+"""BIOBUZZ HIVE-cell SnapScript for the Limelight 3A — template.
+
+Decides, on the camera, whether one alliance's HIVE cell is scorable, and which of its two cells
+(scoring side or audience side) is in view — which in turn says which half of the field the robot is
+on, since each cell faces its own side.
+
+THE VERDICT IS ORIENTATION, per the manual: a scorable cell shows its AprilTag cluster right-side
+up, and an unscorable one shows it upside-down, so the test is |roll| < 90. A cluster in frame and
+right-side up is scorable; a cluster that is upside-down for HOLD_SECONDS is tipped, and so is no
+cluster in frame at all for that long, since a cell can also turn its tags away entirely.
+
+Everything is baked in here, so the Control Hub sends nothing at all — it selects this pipeline once
+at init and then only reads llpython.
+
+Two pipelines, one per alliance. The manual's first targeting condition (only target clusters of
+your own alliance) is structural rather than a check: this script only knows its own alliance's
+eight ids, so the other alliance's tags land in `strangers` and are drawn but never considered.
+
+ROLL. The Control Hub SDK's AprilTagDetection exposes ftcPose.roll from a full 6-DOF solve. A
+SnapScript has no camera intrinsics and no tag size, so there is no pose to solve — but roll is
+rotation about the camera's own viewing axis, which is exactly the tag's apparent rotation in the
+image, and that comes straight from the corner order aruco already returns. c0->c1 is the tag's top
+edge: it points right (roll ~0) for an upright tag and left (roll ~180) for an upside-down one.
+So the number below is not the SDK's field, but it measures the same angle and the same |roll| < 90
+test applies. A cluster's roll is the circular mean over its visible tags, so one badly-decoded
+corner cannot flip the verdict on its own.
+
+This file is the source of truth. It is NOT what gets uploaded: `scripts/generate-limelight-
+pipelines.py` stamps it out once per alliance into limelight/pipelines/, each copy differing only in
+the alliance block. Edit this file, re-run the generator, re-upload both.
+
+Upload: Limelight web UI (http://limelight.local:5801) -> pick the pipeline index -> Input tab ->
+pipeline type "Python" -> paste the matching limelight/pipelines/ file -> Save. The index each
+alliance expects is LimelightCamera.redPipeline / .bluePipeline, and the two have to agree; a
+mismatch is caught at run time by the checksum in llpython[6].
+
+llpython (here -> hub), 8 doubles, read by LimelightCamera.parse():
+    0     tipped: not scorable for HOLD_SECONDS straight — upside-down, or absent, 1 or 0
+    1     scorable: this alliance's cluster is in frame AND right-side up, 1 or 0
+    2     roll of the cluster in view, degrees (ROLL_NONE = 999 when neither is in view)
+    3     how many of that cluster's four tags are visible
+    4     which cell: 0 = scoring side, 1 = audience side, -1 = neither
+    5     how many of the OTHER cluster's tags are visible
+    6     checksum (sum) of this alliance's eight ids — identifies which pipeline answered
+    7     frame counter, wrapping at 10000
+
+llrobot is ignored.
+"""
+
+import math
+import time
+
+import cv2
+import numpy as np
+
+ALLIANCE = "RED"  # generated per pipeline
+PIPELINE_INDEX = 1  # generated per pipeline
+# Always (scoring-side cell, audience-side cell) in that order, so the cluster code in llpython[4]
+# means the same thing for both alliances even though their id runs are ordered differently.
+CLUSTERS = (("SCORING", (30, 31, 32, 33)), ("AUDIENCE", (34, 35, 36, 37)))  # generated per pipeline
+
+HOLD_SECONDS = 0.25
+MIN_TAG_AREA_PX = 120.0
+# How many of this alliance's tags have to be in frame to measure the cluster's orientation.
+MIN_VISIBLE_TAGS = 1
+# The manual's test: a cluster whose roll is inside +/- this is right-side up and the cell can be
+# scored. Outside it the cluster is upside-down and the cell is not scorable.
+UPRIGHT_MAX_ROLL_DEG = 90.0
+# Off means an empty frame reports tipped once the hold elapses, so a camera pointed at a wall reads
+# the same as a tipped cell. On withholds that until the cluster has been seen at least once.
+REQUIRE_SEEN = False
+# Sent in place of a roll when no cluster is in view. NaN is not valid JSON, and llpython goes out
+# through the Limelight's results JSON, so a bare NaN can cost the hub the whole payload.
+ROLL_NONE = 999.0
+DRAW_OVERLAY = True
+
+ALL_IDS = CLUSTERS[0][1] + CLUSTERS[1][1]
+CHECKSUM = float(sum(ALL_IDS))
+NO_CONTOUR = np.array([[]])
+
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+GREEN = (0, 255, 0)
+RED = (0, 0, 255)
+AMBER = (0, 190, 255)
+GREY = (150, 150, 150)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+
+def _make_detector():
+    """Returns detect(gray) -> (corners, ids), across both the old and new cv2.aruco APIs."""
+    aruco = cv2.aruco
+    if hasattr(aruco, "getPredefinedDictionary"):
+        dictionary = aruco.getPredefinedDictionary(aruco.DICT_APRILTAG_36h11)
+    else:
+        dictionary = aruco.Dictionary_get(aruco.DICT_APRILTAG_36h11)
+
+    if hasattr(aruco, "ArucoDetector"):
+        detector = aruco.ArucoDetector(dictionary, aruco.DetectorParameters())
+        return lambda gray: detector.detectMarkers(gray)[:2]
+
+    params = aruco.DetectorParameters_create()
+    return lambda gray: aruco.detectMarkers(gray, dictionary, parameters=params)[:2]
+
+
+_detect = _make_detector()
+
+# Module scope, so it survives between frames — this is where the hold window lives.
+_last_good = None
+_seen_since_start = False
+_frames = 0
+
+
+def _tag_roll_deg(pts):
+    """In-image rotation of one tag, from its top edge: ~0 upright, ~180 upside-down."""
+    dx = pts[1][0] - pts[0][0]
+    dy = pts[1][1] - pts[0][1]
+    return math.degrees(math.atan2(dy, dx))
+
+
+def _circular_mean_deg(angles):
+    """Mean of angles that wrap, so 179 and -179 average to 180 rather than 0."""
+    x = sum(math.cos(math.radians(a)) for a in angles)
+    y = sum(math.sin(math.radians(a)) for a in angles)
+    if x == 0.0 and y == 0.0:
+        return float("nan")
+    return math.degrees(math.atan2(y, x))
+
+
+def _label(image, text, origin, color, scale=0.5, thickness=1):
+    """Text on a filled black plate, so it stays readable over a bright field."""
+    (w, h), base = cv2.getTextSize(text, FONT, scale, thickness)
+    x, y = origin
+    cv2.rectangle(image, (x - 2, y - h - 2), (x + w + 2, y + base), BLACK, -1)
+    cv2.putText(image, text, (x, y), FONT, scale, color, thickness, cv2.LINE_AA)
+
+
+def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, scorable):
+    """Everything the hub knows, drawn on the frame the Limelight web UI streams."""
+    for pts, tag_id in strangers:
+        cv2.polylines(image, [pts.astype(np.int32)], True, GREY, 1)
+        cx, cy = pts.mean(axis=0)
+        _label(image, "%d" % tag_id, (int(cx) - 10, int(cy)), GREY)
+
+    for c, tags in enumerate(found_by_cluster):
+        upright = not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG
+        color = GREEN if upright else RED
+        for pts, tag_id in tags:
+            cv2.polylines(image, [pts.astype(np.int32)], True, color, 2)
+            cx, cy = pts.mean(axis=0)
+            _label(image, "%d" % tag_id, (int(cx) - 10, int(cy)), color)
+
+    y = 18
+    _label(image, "%s  pipeline %d" % (ALLIANCE, PIPELINE_INDEX), (8, y), WHITE)
+
+    for c, (label, ids) in enumerate(CLUSTERS):
+        y += 20
+        tags = found_by_cluster[c]
+        roll = rolls[c]
+        if not tags:
+            _label(image, "%-8s %d-%d  0/4  --" % (label, ids[0], ids[-1]), (8, y), GREY)
+            continue
+        upright = not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
+        _label(image, "%-8s %d-%d  %d/4  roll %+.1f  %s%s"
+               % (label, ids[0], ids[-1], len(tags), roll,
+                  "UP" if upright else "DOWN", "  <-- target" if c == target else ""),
+               (8, y), GREEN if upright else RED)
+
+    y += 8
+    if tipped:
+        (w, h), _ = cv2.getTextSize("TIPPED", FONT, 1.1, 3)
+        cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), RED, -1)
+        cv2.putText(image, "TIPPED", (8, y + 14 + h), FONT, 1.1, WHITE, 3, cv2.LINE_AA)
+        y += 28 + h
+    elif scorable:
+        (w, h), _ = cv2.getTextSize("SCORABLE", FONT, 1.1, 3)
+        cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), GREEN, -1)
+        cv2.putText(image, "SCORABLE", (8, y + 14 + h), FONT, 1.1, BLACK, 3, cv2.LINE_AA)
+        y += 28 + h
+    else:
+        y += 20
+        _label(image, "NOT SCORABLE, waiting out the hold", (8, y), AMBER, 0.6, 2)
+
+    y += 20
+    away = 0.0 if _last_good is None else time.monotonic() - _last_good
+    _label(image, "not scorable for %.2fs / %.2fs   need %d tag%s + |roll| < %.0f   seen %s   frame %d"
+           % (away, HOLD_SECONDS, MIN_VISIBLE_TAGS, "" if MIN_VISIBLE_TAGS == 1 else "s",
+              UPRIGHT_MAX_ROLL_DEG, "yes" if _seen_since_start else "no", _frames),
+           (8, y), WHITE, 0.45)
+
+
+def runPipeline(image, llrobot):
+    global _last_good, _seen_since_start, _frames
+
+    now = time.monotonic()
+    _frames = (_frames + 1) % 10000
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    corners, found = _detect(gray)
+
+    found_by_cluster = [[], []]
+    strangers = []
+
+    if found is not None and len(found) > 0:
+        for quad, tag_id in zip(corners, found.flatten()):
+            pts = quad.reshape(-1, 2).astype(np.float32)
+            if abs(cv2.contourArea(pts)) < MIN_TAG_AREA_PX:
+                continue
+            tag_id = int(tag_id)
+            for c, (_, ids) in enumerate(CLUSTERS):
+                if tag_id in ids:
+                    found_by_cluster[c].append((pts, tag_id))
+                    break
+            else:
+                strangers.append((pts, tag_id))
+
+    rolls = [_circular_mean_deg([_tag_roll_deg(pts) for pts, _ in tags]) if tags else float("nan")
+             for tags in found_by_cluster]
+
+    # The cluster in view is the one with more tags; an upright one wins a tie, since an upright
+    # cluster is the one the robot can act on.
+    target = -1
+    best = (-1, -1)  # (upright, visible count)
+    for c, tags in enumerate(found_by_cluster):
+        if not tags:
+            continue
+        upright = 1 if (not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG) else 0
+        if (upright, len(tags)) > best:
+            best = (upright, len(tags))
+            target = c
+
+    if target < 0:
+        roll = float("nan")
+        visible = 0
+        other_visible = 0
+    else:
+        roll = rolls[target]
+        visible = len(found_by_cluster[target])
+        other_visible = len(found_by_cluster[1 - target])
+
+    # The cell is scorable when enough of its cluster is in frame to read AND that cluster is
+    # right-side up. Long enough not-scorable — inverted, or not in frame at all — means tipped.
+    upright = target >= 0 and not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
+    scorable = visible >= MIN_VISIBLE_TAGS and upright
+    if scorable:
+        _last_good = now
+        _seen_since_start = True
+    elif _last_good is None:
+        _last_good = now
+
+    away_s = now - _last_good
+    tipped = not scorable and away_s >= HOLD_SECONDS and (_seen_since_start or not REQUIRE_SEEN)
+
+    if DRAW_OVERLAY:
+        _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, scorable)
+
+    llpython = [
+        1.0 if tipped else 0.0,
+        1.0 if scorable else 0.0,
+        ROLL_NONE if math.isnan(roll) else float(roll),
+        float(visible),
+        float(target),
+        float(other_visible),
+        CHECKSUM,
+        float(_frames),
+    ]
+
+    # A contour is returned only so tx/ty/ta and result.isValid() track the targeted cluster when
+    # one is in view; the verdict itself rides entirely in llpython.
+    if target < 0:
+        return NO_CONTOUR, image, llpython
+    biggest = max(found_by_cluster[target], key=lambda t: abs(cv2.contourArea(t[0])))[0]
+    return biggest.reshape(-1, 1, 2).astype(np.int32), image, llpython
