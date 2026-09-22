@@ -6,32 +6,38 @@ import com.qualcomm.hardware.limelightvision.LLStatus;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
-import java.util.Arrays;
-
 /**
- * Limelight 3A AprilTag subsystem: watches the four tags under one cell and reports whether that
- * cell has tipped over onto them.
+ * Limelight 3A AprilTag subsystem: reports which of this alliance's two HIVE cells is scorable.
  *
- * <p>Nothing here detects anything and nothing here is configured at run time. Each cell has its
- * own Limelight pipeline holding its own copy of the SnapScript with that cell's four tag ids baked
- * in ({@code limelight/pipelines/}), so the hub's whole job is to select the pipeline named by
- * {@link Context#cell} once at {@link #init()} and then read the verdict. The link carries no
- * {@code llrobot} traffic at all — one array read per loop, nothing written.
+ * <p>A cell's AprilTag cluster reads right-side up when the cell is up and accepting scoring
+ * elements, and upside-down when it has tipped down and cannot be scored. The camera decides which
+ * is which from the cluster's roll — its rotation about the camera's own viewing axis — and the
+ * |roll| &lt; 90 test the game manual describes.
  *
- * <p>Because the cell is fixed at init, {@link Context#cell} has to be set before the OpMode
- * initializes (in {@code createRobot()}, like the alliance colour); changing it later is ignored.
- * The script echoes the checksum of the tag set it was built with, and a verdict whose checksum
- * doesn't match {@link Context#cell} is discarded — that is what catches a pipeline index pointing
- * at the wrong script.
+ * <p>There is one Limelight pipeline per alliance, holding its own copy of the SnapScript with that
+ * alliance's eight tag ids (both clusters) and the roll test baked in, so the hub writes nothing
+ * over the link: it selects the pipeline for {@link Context#allianceColor} once at {@link #init()}
+ * and then only reads {@code llpython}. The alliance-colour check the manual asks for is structural
+ * — a pipeline only knows its own alliance's ids, so the other alliance's clusters can never be
+ * targeted.
+ *
+ * <p>Because the pipeline is chosen at init, {@link Context#allianceColor} has to be set before the
+ * OpMode initializes (in {@code createRobot()}); changing it later is ignored.
  */
 @Config
 public class LimelightCamera extends Module {
 
     public static boolean limelightTelemetry = true;
+
+    /** Limelight pipeline holding the RED SnapScript (tags 30-37). */
+    public static int redPipeline = 1;
+    /** Limelight pipeline holding the BLUE SnapScript (tags 38-45). */
+    public static int bluePipeline = 2;
 
     /** A result older than this is ignored — the Limelight has stalled, rebooted or lost its link. */
     public static long maxStalenessMs = 250;
@@ -40,16 +46,42 @@ public class LimelightCamera extends Module {
 
     private static final String DEFAULT_NAME = "limelight";
 
+    /** The scripts send this in place of a roll when no cluster is in view; NaN is not valid JSON. */
+    private static final double ROLL_NONE = 999.0;
+
+    private static final int RED_CHECKSUM = 30 + 31 + 32 + 33 + 34 + 35 + 36 + 37;
+    private static final int BLUE_CHECKSUM = 38 + 39 + 40 + 41 + 42 + 43 + 44 + 45;
+
     // llpython (Limelight → hub), 8 doubles. Mirrored in every limelight/pipelines/ script.
     private static final int OUT_TIPPED = 0;
-    private static final int OUT_VISIBLE_COUNT = 1;
-    private static final int OUT_VISIBLE_MASK = 2;
-    private static final int OUT_HIDDEN_SECONDS = 3;
-    private static final int OUT_SEEN = 4;
-    private static final int OUT_TAG_CHECKSUM = 5;
-    private static final int OUT_DETECTED_COUNT = 6;
+    private static final int OUT_SCORABLE = 1;
+    private static final int OUT_ROLL_DEG = 2;
+    private static final int OUT_VISIBLE_COUNT = 3;
+    private static final int OUT_CLUSTER = 4;
+    private static final int OUT_OTHER_VISIBLE_COUNT = 5;
+    private static final int OUT_ALLIANCE_CHECKSUM = 6;
     private static final int OUT_FRAME_COUNTER = 7;
     private static final int OUT_LENGTH = 8;
+
+    /** Which of the alliance's two clusters is in view; {@code NONE} when neither is. */
+    public enum Cluster {
+        NONE(-1),
+        /** The lower of the alliance's two id runs — 30-33 for RED, 38-41 for BLUE. */
+        LOW_IDS(0),
+        /** The upper run — 34-37 for RED, 42-45 for BLUE. */
+        HIGH_IDS(1);
+
+        public final int index;
+
+        Cluster(int index) {
+            this.index = index;
+        }
+
+        static Cluster of(int index) {
+            for (Cluster c : values()) if (c.index == index) return c;
+            return NONE;
+        }
+    }
 
     public enum VisionState implements State {
         ENABLED,
@@ -59,16 +91,16 @@ public class LimelightCamera extends Module {
     private final Limelight3A limelight;
     private final String name;
 
-    private Context.Cell cell;
+    private AllianceColor alliance;
     private boolean polling;
 
     private boolean fresh;
     private boolean tipped;
-    private boolean seenSinceArm;
+    private boolean scorable;
+    private double rollDeg;
     private int visibleCount;
-    private int visibleMask;
-    private double hiddenSeconds;
-    private int detectedTagCount;
+    private Cluster cluster = Cluster.NONE;
+    private int otherVisibleCount;
     private double stalenessMs;
 
     public LimelightCamera(HardwareMap hardwareMap) {
@@ -88,9 +120,9 @@ public class LimelightCamera extends Module {
 
     @Override
     public void init() {
-        cell = Context.cell;
+        alliance = Context.allianceColor;
         if (limelight == null) return;
-        limelight.pipelineSwitch(cell.pipeline);
+        limelight.pipelineSwitch(pipelineFor(alliance));
         limelight.start();
         polling = true;
     }
@@ -119,15 +151,15 @@ public class LimelightCamera extends Module {
         if (limelight != null) limelight.stop();
     }
 
-    /** The cell this OpMode is watching, fixed at init from {@link Context#cell}. */
-    public Context.Cell getCell() {
-        return cell;
+    /** The alliance this OpMode is targeting, fixed at init from {@link Context#allianceColor}. */
+    public AllianceColor getAlliance() {
+        return alliance;
     }
 
     /**
-     * Whether the cell has tipped — false while any of its four tags is in view, true once all four
-     * have been out of view for the hold time baked into the pipeline's script. Also false whenever
-     * the answer isn't current or isn't about {@link Context#cell}.
+     * Whether the cell in view has tipped down — its cluster has read upside-down
+     * ({@code |roll| >= 90}) continuously for the hold time baked into the pipeline's script. False
+     * whenever the answer isn't current or isn't about this alliance.
      */
     public boolean isTipped() {
         return fresh && tipped;
@@ -138,34 +170,34 @@ public class LimelightCamera extends Module {
         return isTipped();
     }
 
+    /** Whether a right-side-up cluster of this alliance is in view, i.e. a cell that can be scored. */
+    public boolean isScorable() {
+        return fresh && scorable;
+    }
+
     /** True once a current verdict is in hand — false means "don't know yet". */
     public boolean hasVerdict() {
         return fresh;
     }
 
-    /** Whether any of the cell's tags has been seen since the pipeline started. */
-    public boolean hasSeenCell() {
-        return fresh && seenSinceArm;
+    /** Which of the alliance's clusters the verdict is about. */
+    public Cluster getCluster() {
+        return fresh ? cluster : Cluster.NONE;
     }
 
-    /** How many of the cell's four tags are in the current frame. */
+    /** Roll of the cluster in view, in degrees; {@code |roll| < 90} is right-side up. NaN if none. */
+    public double getRollDeg() {
+        return fresh && rollDeg != ROLL_NONE ? rollDeg : Double.NaN;
+    }
+
+    /** How many of the in-view cluster's four tags are in the current frame. */
     public int getVisibleCount() {
         return fresh ? visibleCount : 0;
     }
 
-    /** Bit {@code i} set ⇒ {@code getCell().tagIds[i]} is in the current frame. */
-    public int getVisibleMask() {
-        return fresh ? visibleMask : 0;
-    }
-
-    /** Seconds since any of the cell's tags was last seen; 0 while one is visible. */
-    public double getHiddenSeconds() {
-        return fresh ? hiddenSeconds : 0;
-    }
-
-    /** AprilTags of any id in the current frame — a sanity check that the pipeline sees the field at all. */
-    public int getDetectedTagCount() {
-        return fresh ? detectedTagCount : 0;
+    /** How many tags of this alliance's <em>other</em> cluster are in the current frame. */
+    public int getOtherVisibleCount() {
+        return fresh ? otherVisibleCount : 0;
     }
 
     public boolean isPresent() {
@@ -180,42 +212,44 @@ public class LimelightCamera extends Module {
         return this;
     }
 
+    private static int pipelineFor(AllianceColor alliance) {
+        return alliance == AllianceColor.BLUE ? bluePipeline : redPipeline;
+    }
+
+    private static int checksumFor(AllianceColor alliance) {
+        return alliance == AllianceColor.BLUE ? BLUE_CHECKSUM : RED_CHECKSUM;
+    }
+
     private void parse(LLResult result) {
         double[] out = result == null ? null : result.getPythonOutput();
         stalenessMs = result == null ? Double.NaN : result.getStaleness();
 
-        fresh = cell != null
+        fresh = alliance != null
                 && out != null
                 && out.length >= OUT_LENGTH
                 && stalenessMs <= maxStalenessMs
-                && (int) Math.round(out[OUT_TAG_CHECKSUM]) == cell.checksum;
+                && (int) Math.round(out[OUT_ALLIANCE_CHECKSUM]) == checksumFor(alliance);
         if (!fresh) {
             clearVerdict();
             return;
         }
 
         tipped = out[OUT_TIPPED] != 0;
+        scorable = out[OUT_SCORABLE] != 0;
+        rollDeg = out[OUT_ROLL_DEG];
         visibleCount = (int) Math.round(out[OUT_VISIBLE_COUNT]);
-        visibleMask = (int) Math.round(out[OUT_VISIBLE_MASK]);
-        hiddenSeconds = out[OUT_HIDDEN_SECONDS];
-        seenSinceArm = out[OUT_SEEN] != 0;
-        detectedTagCount = (int) Math.round(out[OUT_DETECTED_COUNT]);
+        cluster = Cluster.of((int) Math.round(out[OUT_CLUSTER]));
+        otherVisibleCount = (int) Math.round(out[OUT_OTHER_VISIBLE_COUNT]);
     }
 
     private void clearVerdict() {
         fresh = false;
         tipped = false;
-        seenSinceArm = false;
+        scorable = false;
+        rollDeg = Double.NaN;
         visibleCount = 0;
-        visibleMask = 0;
-        hiddenSeconds = 0;
-        detectedTagCount = 0;
-    }
-
-    private String maskString() {
-        char[] flags = new char[4];
-        for (int i = 0; i < flags.length; i++) flags[i] = ((visibleMask >> i) & 1) == 1 ? 'X' : '.';
-        return new String(flags);
+        cluster = Cluster.NONE;
+        otherVisibleCount = 0;
     }
 
     @Override
@@ -225,17 +259,16 @@ public class LimelightCamera extends Module {
             log("Limelight", "NOT CONFIGURED (\"%s\")", name);
             return;
         }
-        logDashboard("Cell", "%s pipeline %d %s", cell, cell.pipeline, Arrays.toString(cell.tagIds));
+        logDashboard("Alliance", "%s pipeline %d", alliance, pipelineFor(alliance));
         if (!fresh) {
             LLStatus status = limelight.getStatus();
-            log("Tip", "NO VERDICT (pipeline %d, %.0ffps, staleness %.0fms)",
+            log("Cell", "NO VERDICT (pipeline %d, %.0ffps, staleness %.0fms)",
                     status.getPipelineIndex(), status.getFps(), stalenessMs);
             return;
         }
-        logDashboard("Tip", tipped ? "TIPPED" : "upright");
-        logDashboard("Tags visible", "%d/4 %s", visibleCount, maskString());
-        logDashboard("Hidden", "%.2fs", hiddenSeconds);
-        log("Tags in frame", detectedTagCount);
-        if (!seenSinceArm) log("Tip", "cell never seen since the pipeline started");
+        logDashboard("Cell", tipped ? "TIPPED" : (scorable ? "SCORABLE" : "unknown"));
+        logDashboard("Cluster", "%s %d/4 visible", cluster, visibleCount);
+        logDashboard("Roll", cluster == Cluster.NONE ? "--" : String.format("%.1fdeg", rollDeg));
+        log("Other cluster", otherVisibleCount + "/4 visible");
     }
 }

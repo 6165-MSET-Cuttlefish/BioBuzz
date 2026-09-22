@@ -24,13 +24,13 @@ public class RobotActions {
     }
 
     /**
-     * Finishes once {@link Context#cell} has tipped onto its four AprilTags — that is, once all four
-     * have been out of the Limelight's view for the hold time baked into that cell's pipeline. Any
-     * one of them coming back into view restarts the window, so this does not finish on a single
-     * dropped frame.
+     * Finishes once the HIVE cell in view has tipped down — its AprilTag cluster has read
+     * upside-down ({@code |roll| >= 90}) for the hold time baked into the pipeline's script. A
+     * right-side-up sighting clears the window immediately, so this does not finish on one noisy
+     * frame near the 90° boundary, and losing sight of the cluster does not advance it either.
      *
-     * <p>Which cell that is was fixed when the OpMode initialized and the pipeline was selected;
-     * this command cannot retarget it.
+     * <p>Only clusters of {@link Context#allianceColor} count, and which alliance that is was fixed
+     * when the OpMode initialized and the pipeline was selected; this command cannot retarget it.
      *
      * <p>It gives up after {@code timeoutMs} either way, so it cannot stall an auto on a cell that
      * never tips or a Limelight that never answers. Finishing therefore does <em>not</em> mean the

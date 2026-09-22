@@ -13,28 +13,25 @@ import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzRobot;
 import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
 
-import java.util.Arrays;
-
 /**
- * Bench check for the Limelight cell-tip pipelines: shows the selected pipeline's live verdict and
- * runs {@code RobotActions.checkTip} against it, so the command path and its timeout are exercised
- * too. Run it on {@code res/xml/biobuzz.xml} — going through the framework means the drivetrain and
- * Pinpoint must be in the config even though nothing here drives.
+ * Bench check for the Limelight HIVE-cell pipelines: shows the selected alliance pipeline's live
+ * verdict and runs {@code RobotActions.checkTip} against it, so the command path and its timeout are
+ * exercised too. Run it on {@code res/xml/biobuzz.xml} — going through the framework means the
+ * drivetrain and Pinpoint must be in the config even though nothing here drives.
  *
- * <p>{@code Cell Tip Test → cell} picks which cell to watch, and is applied to {@link Context} at
- * {@code createRobot()}. It only takes effect on the next init, because that is when the Limelight
- * pipeline is selected — change it on FtcDashboard, then re-init.
+ * <p>{@code Cell Tip Test → alliance} writes {@link Context#allianceColor} at {@code createRobot()},
+ * and only takes effect on the next init, because that is when the pipeline is selected.
  *
- * <p>Cover the cell's tags and the verdict should flip a quarter second later; uncover any one of
- * them and it should clear immediately. A permanent "NO VERDICT" with the Limelight connected means
- * the pipeline at that index isn't the script for this cell.
+ * <p>Point the camera at a cell of your alliance: right-side up should read SCORABLE, and turning
+ * the cluster past 90° should read TIPPED a quarter second later. A permanent "NO VERDICT" with the
+ * Limelight connected means the wrong script is on that pipeline index.
  */
 @TeleOp(name = "Cell Tip Test", group = "test")
 public class CellTipTest extends EnhancedOpMode {
 
     @Config("Cell Tip Test")
     public static class Tuning {
-        public static Context.Cell cell = Context.Cell.RED_1;
+        public static AllianceColor alliance = AllianceColor.RED;
     }
 
     private final ElapsedTime sinceStart = new ElapsedTime();
@@ -45,8 +42,7 @@ public class CellTipTest extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() throws InterruptedException {
-        Context.allianceColor = AllianceColor.RED;
-        Context.cell = Tuning.cell;
+        Context.allianceColor = Tuning.alliance;
         bot = new BioBuzzRobot(this);
         return bot;
     }
@@ -70,17 +66,18 @@ public class CellTipTest extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         LimelightCamera limelight = bot.limelight;
-        Context.Cell cell = limelight.getCell();
-        telemetry.addData("Watching", "%s pipeline %d %s", cell, cell.pipeline, Arrays.toString(cell.tagIds));
-        if (Tuning.cell != cell) telemetry.addData("Note", "%s selected — re-init to apply", Tuning.cell);
+        telemetry.addData("Alliance", limelight.getAlliance());
+        if (Tuning.alliance != limelight.getAlliance()) {
+            telemetry.addData("Note", "%s selected — re-init to apply", Tuning.alliance);
+        }
         telemetry.addData("Limelight", limelight.isPresent() ? "connected" : "NOT CONFIGURED");
         telemetry.addData("Verdict", !limelight.hasVerdict()
-                ? "none — is the right SnapScript on pipeline " + cell.pipeline + "?"
-                : (limelight.isTipped() ? "TIPPED" : "upright"));
-        telemetry.addData("Tags visible", limelight.getVisibleCount() + "/4");
-        telemetry.addData("Hidden for", "%.2fs", limelight.getHiddenSeconds());
-        telemetry.addData("Tags in frame", limelight.getDetectedTagCount());
-        telemetry.addData("Seen since start", limelight.hasSeenCell());
+                ? "none — is the right SnapScript on this alliance's pipeline?"
+                : (limelight.isTipped() ? "TIPPED" : (limelight.isScorable() ? "SCORABLE" : "down, within hold")));
+        telemetry.addData("Cluster", "%s  %d/4 visible  (other %d/4)",
+                limelight.getCluster(), limelight.getVisibleCount(), limelight.getOtherVisibleCount());
+        telemetry.addData("Roll", Double.isNaN(limelight.getRollDeg())
+                ? "—" : String.format("%.1fdeg", limelight.getRollDeg()));
         telemetry.addData("Command", Scheduler.isRunning(watch)
                 ? "watching"
                 : (tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip"));
