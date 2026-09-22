@@ -24,10 +24,10 @@ public class RobotActions {
     }
 
     /**
-     * Finishes once the HIVE cell in view has tipped down — its AprilTag cluster has read
-     * upside-down ({@code |roll| >= 90}) for the hold time baked into the pipeline's script. A
-     * right-side-up sighting clears the window immediately, so this does not finish on one noisy
-     * frame near the 90° boundary, and losing sight of the cluster does not advance it either.
+     * Finishes once the HIVE cell has tipped down — none of this alliance's cluster has been
+     * scorable for the hold time baked into the pipeline's script, a tipped cell having turned its
+     * tags away from the camera. One tag coming back into view clears the window, so this does not
+     * finish on a single dropped frame.
      *
      * <p>Only clusters of {@link Context#allianceColor} count, and which alliance that is was fixed
      * when the OpMode initialized and the pipeline was selected; this command cannot retarget it.

@@ -22,9 +22,10 @@ import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
  * <p>{@code Cell Tip Test → alliance} writes {@link Context#allianceColor} at {@code createRobot()},
  * and only takes effect on the next init, because that is when the pipeline is selected.
  *
- * <p>Point the camera at a cell of your alliance: right-side up should read SCORABLE, and turning
- * the cluster past 90° should read TIPPED a quarter second later. A permanent "NO VERDICT" with the
- * Limelight connected means the wrong script is on that pipeline index.
+ * <p>Point the camera at a cell of your alliance: its tags in frame should read SCORABLE, and
+ * taking them out of frame should read TIPPED a quarter second later. Roll is reported alongside but
+ * does not gate the verdict unless the script's {@code REQUIRE_UPRIGHT} is on. A permanent
+ * "NO VERDICT" with the Limelight connected means the wrong script is on that pipeline index.
  */
 @TeleOp(name = "Cell Tip Test", group = "test")
 public class CellTipTest extends EnhancedOpMode {
@@ -73,7 +74,7 @@ public class CellTipTest extends EnhancedOpMode {
         telemetry.addData("Limelight", limelight.isPresent() ? "connected" : "NOT CONFIGURED");
         telemetry.addData("Verdict", !limelight.hasVerdict()
                 ? "none — is the right SnapScript on this alliance's pipeline?"
-                : (limelight.isTipped() ? "TIPPED" : (limelight.isScorable() ? "SCORABLE" : "down, within hold")));
+                : (limelight.isTipped() ? "TIPPED" : (limelight.isScorable() ? "SCORABLE" : "not scorable, within hold")));
         telemetry.addData("Cluster", "%s  %d/4 visible  (other %d/4)",
                 limelight.getCluster(), limelight.getVisibleCount(), limelight.getOtherVisibleCount());
         telemetry.addData("Roll", Double.isNaN(limelight.getRollDeg())

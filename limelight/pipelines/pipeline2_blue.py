@@ -1,10 +1,12 @@
 """BIOBUZZ HIVE-cell SnapScript for the Limelight 3A — pipeline 2, BLUE.
 
-Decides, on the camera, which of one alliance's two HIVE cells is scorable. A cell's AprilTag
-cluster reads right-side up while the cell is up and accepting scoring elements, and upside-down
-once the cell has tipped down; the manual's test is |roll| < 90 degrees. Everything is baked in
-here, so the Control Hub sends nothing at all — it selects this pipeline once at init and then only
-reads llpython.
+Decides, on the camera, whether one alliance's HIVE cell is scorable. The verdict is visibility:
+a cell that is up shows its AprilTag cluster to the camera, and a cell that has tipped down points
+its cluster away, so it drops out of frame entirely. MIN_VISIBLE_TAGS of the alliance's eight ids in
+frame means scorable; none for HOLD_SECONDS means tipped. Roll is measured and reported either way,
+and REQUIRE_UPRIGHT additionally applies the manual's |roll| < 90 test — useful when a tipped
+cluster stays readable rather than vanishing. Everything is baked in here, so the Control Hub sends
+nothing at all — it selects this pipeline once at init and then only reads llpython.
 
 Two pipelines, one per alliance. The manual's first targeting condition (only target clusters of
 your own alliance) is structural rather than a check: this script only knows its own alliance's
@@ -28,8 +30,8 @@ alliance expects is LimelightCamera.redPipeline / .bluePipeline, and the two hav
 mismatch is caught at run time by the checksum in llpython[6].
 
 llpython (here -> hub), 8 doubles, read by LimelightCamera.parse():
-    0     tipped: the cluster in view has been upside-down for HOLD_SECONDS, 1 or 0
-    1     scorable: a right-side-up cluster of this alliance is in view, 1 or 0
+    0     tipped: not scorable for HOLD_SECONDS straight, 1 or 0
+    1     scorable: enough of this alliance's cluster is in frame (and upright, if gated), 1 or 0
     2     roll of the cluster in view, degrees (ROLL_NONE = 999 when neither is in view)
     3     how many of that cluster's four tags are visible
     4     which cluster: 0 = lower id run, 1 = upper, -1 = neither
@@ -52,7 +54,16 @@ CLUSTERS = ((38, 39, 40, 41), (42, 43, 44, 45))
 
 HOLD_SECONDS = 0.25
 MIN_TAG_AREA_PX = 120.0
+# How many of this alliance's tags have to be in frame to call a cell present at all.
+MIN_VISIBLE_TAGS = 1
+# Roll is always measured and reported; this decides whether it also gates the verdict. Off means
+# the verdict is pure visible/not-visible, which is what a tipped cell actually looks like most of
+# the time — its cluster points away and is not in frame at all, never inverted-but-readable.
+REQUIRE_UPRIGHT = False
 UPRIGHT_MAX_ROLL_DEG = 90.0
+# Off means an empty frame reports tipped once the hold elapses, so a camera pointed at a wall reads
+# the same as a tipped cell. On withholds that until the cluster has been seen at least once.
+REQUIRE_SEEN = False
 # Sent in place of a roll when no cluster is in view. NaN is not valid JSON, and llpython goes out
 # through the Limelight's results JSON, so a bare NaN can cost the hub the whole payload.
 ROLL_NONE = 999.0
@@ -90,8 +101,8 @@ def _make_detector():
 _detect = _make_detector()
 
 # Module scope, so it survives between frames — this is where the hold window lives.
-_upside_down_since = None
-_tipped = False
+_last_good = None
+_seen_since_start = False
 _frames = 0
 
 
@@ -128,7 +139,7 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
 
     for c, tags in enumerate(found_by_cluster):
         upright = not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG
-        color = GREEN if upright else RED
+        color = GREEN if upright or not REQUIRE_UPRIGHT else RED
         for pts, tag_id in tags:
             cv2.polylines(image, [pts.astype(np.int32)], True, color, 2)
             cx, cy = pts.mean(axis=0)
@@ -151,10 +162,7 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
                (8, y), GREEN if upright else RED)
 
     y += 8
-    if target < 0:
-        y += 20
-        _label(image, "NO CLUSTER IN VIEW", (8, y), AMBER, 0.6, 2)
-    elif tipped:
+    if tipped:
         (w, h), _ = cv2.getTextSize("TIPPED", FONT, 1.1, 3)
         cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), RED, -1)
         cv2.putText(image, "TIPPED", (8, y + 14 + h), FONT, 1.1, WHITE, 3, cv2.LINE_AA)
@@ -166,16 +174,18 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
         y += 28 + h
     else:
         y += 20
-        _label(image, "DOWN, waiting out the hold", (8, y), AMBER, 0.6, 2)
+        _label(image, "NOT SCORABLE, waiting out the hold", (8, y), AMBER, 0.6, 2)
 
     y += 20
-    held = 0.0 if _upside_down_since is None else time.monotonic() - _upside_down_since
-    _label(image, "down for %.2fs / %.2fs   upright if |roll| < %.0f   frame %d"
-           % (held, HOLD_SECONDS, UPRIGHT_MAX_ROLL_DEG, _frames), (8, y), WHITE, 0.45)
+    away = 0.0 if _last_good is None else time.monotonic() - _last_good
+    _label(image, "not scorable for %.2fs / %.2fs   need %d tag%s%s   seen %s   frame %d"
+           % (away, HOLD_SECONDS, MIN_VISIBLE_TAGS, "" if MIN_VISIBLE_TAGS == 1 else "s",
+              " + |roll| < %.0f" % UPRIGHT_MAX_ROLL_DEG if REQUIRE_UPRIGHT else "",
+              "yes" if _seen_since_start else "no", _frames), (8, y), WHITE, 0.45)
 
 
 def runPipeline(image, llrobot):
-    global _upside_down_since, _tipped, _frames
+    global _last_good, _seen_since_start, _frames
 
     now = time.monotonic()
     _frames = (_frames + 1) % 10000
@@ -215,29 +225,26 @@ def runPipeline(image, llrobot):
             target = c
 
     if target < 0:
-        # Nothing of ours in view says nothing about orientation, so the hold does not advance.
-        _upside_down_since = None
         roll = float("nan")
         visible = 0
         other_visible = 0
-        scorable = False
     else:
         roll = rolls[target]
         visible = len(found_by_cluster[target])
         other_visible = len(found_by_cluster[1 - target])
-        scorable = abs(roll) < UPRIGHT_MAX_ROLL_DEG
-        if scorable:
-            _upside_down_since = None
-            _tipped = False
-        elif _upside_down_since is None:
-            _upside_down_since = now
 
-    if _upside_down_since is not None and now - _upside_down_since >= HOLD_SECONDS:
-        _tipped = True
-    elif target < 0 or scorable:
-        _tipped = False
+    # One timer covers both criteria: the cell is "good" when enough of its cluster is in frame and,
+    # if REQUIRE_UPRIGHT is on, reading right-side up. Long enough not-good means tipped.
+    upright_ok = not REQUIRE_UPRIGHT or (target >= 0 and abs(roll) < UPRIGHT_MAX_ROLL_DEG)
+    scorable = visible >= MIN_VISIBLE_TAGS and upright_ok
+    if scorable:
+        _last_good = now
+        _seen_since_start = True
+    elif _last_good is None:
+        _last_good = now
 
-    tipped = _tipped and target >= 0
+    away_s = now - _last_good
+    tipped = not scorable and away_s >= HOLD_SECONDS and (_seen_since_start or not REQUIRE_SEEN)
 
     if DRAW_OVERLAY:
         _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, scorable)
