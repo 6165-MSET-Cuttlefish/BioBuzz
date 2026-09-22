@@ -1,4 +1,4 @@
-"""BIOBUZZ cell-tip SnapScript for the Limelight 3A — pipeline 0, RED_1.
+"""BIOBUZZ cell-tip SnapScript for the Limelight 3A — pipeline 4, BLUE_2.
 
 Watches the four AprilTags under one cell and decides, on the camera, whether that cell has tipped
 over onto them: the verdict is false while any of the four is in view and true once all four have
@@ -31,9 +31,9 @@ import time
 import cv2
 import numpy as np
 
-TAG_IDS = (30, 31, 32, 33)
-CELL_NAME = "RED_1"
-PIPELINE_INDEX = 0
+TAG_IDS = (42, 43, 44, 45)
+CELL_NAME = "BLUE_2"
+PIPELINE_INDEX = 4
 
 HOLD_SECONDS = 0.25
 MIN_TAG_AREA_PX = 120.0

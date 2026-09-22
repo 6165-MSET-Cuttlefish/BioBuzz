@@ -19,10 +19,10 @@ public final class Context {
      * {@code limelight/pipelines/} — so these indices and those files have to agree.
      */
     public enum Cell {
-        RED_1(0, 30, 31, 32, 33),
-        RED_2(1, 34, 35, 36, 37),
-        BLUE_1(2, 38, 39, 40, 41),
-        BLUE_2(3, 42, 43, 44, 45);
+        RED_1(1, 30, 31, 32, 33),
+        RED_2(2, 34, 35, 36, 37),
+        BLUE_1(3, 38, 39, 40, 41),
+        BLUE_2(4, 42, 43, 44, 45);
 
         public final int pipeline;
         public final int[] tagIds;
