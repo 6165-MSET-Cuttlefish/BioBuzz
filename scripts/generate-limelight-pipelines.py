@@ -17,6 +17,8 @@ CONTEXT = ROOT / "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/architec
 
 CELL_RE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\((\d+),\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\)", re.M)
 TAG_IDS_RE = re.compile(r"^TAG_IDS = \([^)]*\).*$", re.M)
+CELL_NAME_RE = re.compile(r"^CELL_NAME = .*$", re.M)
+PIPELINE_RE = re.compile(r"^PIPELINE_INDEX = .*$", re.M)
 
 
 def cells():
@@ -29,8 +31,10 @@ def cells():
 
 def main():
     template = TEMPLATE.read_text()
-    if not TAG_IDS_RE.search(template):
-        sys.exit("No TAG_IDS line to replace in %s" % TEMPLATE)
+    for name, pattern in (("TAG_IDS", TAG_IDS_RE), ("CELL_NAME", CELL_NAME_RE),
+                          ("PIPELINE_INDEX", PIPELINE_RE)):
+        if not pattern.search(template):
+            sys.exit("No %s line to replace in %s" % (name, TEMPLATE))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for stale in OUT_DIR.glob("pipeline*.py"):
@@ -38,9 +42,9 @@ def main():
 
     for name, pipeline, tags in cells():
         body = TAG_IDS_RE.sub(
-            "TAG_IDS = (%s)  # %s, Limelight pipeline %d" % (", ".join(str(t) for t in tags), name, pipeline),
-            template,
-            count=1)
+            "TAG_IDS = (%s)" % ", ".join(str(t) for t in tags), template, count=1)
+        body = CELL_NAME_RE.sub('CELL_NAME = "%s"' % name, body, count=1)
+        body = PIPELINE_RE.sub("PIPELINE_INDEX = %d" % pipeline, body, count=1)
         body = body.replace("— template.\n", "— pipeline %d, %s.\n" % (pipeline, name), 1)
         body = body.replace(
             "This file is the source of truth. It is NOT what gets uploaded: `scripts/generate-limelight-\n"

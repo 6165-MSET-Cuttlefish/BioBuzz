@@ -31,7 +31,9 @@ import time
 import cv2
 import numpy as np
 
-TAG_IDS = (38, 39, 40, 41)  # BLUE_1, Limelight pipeline 2
+TAG_IDS = (38, 39, 40, 41)
+CELL_NAME = "BLUE_1"
+PIPELINE_INDEX = 2
 
 HOLD_SECONDS = 0.25
 MIN_TAG_AREA_PX = 120.0
@@ -66,6 +68,58 @@ _seen_since_start = False
 _frames = 0
 
 
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+GREEN = (0, 255, 0)
+RED = (0, 0, 255)
+GREY = (150, 150, 150)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+
+def _label(image, text, origin, color, scale=0.5, thickness=1):
+    """Text on a filled black plate, so it stays readable over a bright field."""
+    (w, h), base = cv2.getTextSize(text, FONT, scale, thickness)
+    x, y = origin
+    cv2.rectangle(image, (x - 2, y - h - 2), (x + w + 2, y + base), BLACK, -1)
+    cv2.putText(image, text, (x, y), FONT, scale, color, thickness, cv2.LINE_AA)
+
+
+def _draw_overlay(image, seen, mask, visible, detected, hidden_s, tipped):
+    """Everything the hub knows, drawn on the frame the Limelight web UI streams."""
+    for pts, tag_id, slot in seen:
+        mine = slot >= 0
+        cv2.polylines(image, [pts.astype(np.int32)], True, GREEN if mine else GREY, 2 if mine else 1)
+        cx, cy = pts.mean(axis=0)
+        _label(image, "%d" % tag_id, (int(cx) - 10, int(cy)), GREEN if mine else GREY)
+
+    y = 18
+    _label(image, "%s  pipeline %d" % (CELL_NAME, PIPELINE_INDEX), (8, y), WHITE)
+
+    # One column per watched tag, so a single missing tag is obvious at a glance.
+    y += 22
+    x = 8
+    for i, tag_id in enumerate(TAG_IDS):
+        lit = (mask >> i) & 1
+        _label(image, "%d%s" % (tag_id, "" if lit else " x"), (x, y), GREEN if lit else RED)
+        x += 62
+
+    if tipped:
+        (w, h), _ = cv2.getTextSize("TIPPED", FONT, 1.1, 3)
+        cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), RED, -1)
+        cv2.putText(image, "TIPPED", (8, y + 14 + h), FONT, 1.1, WHITE, 3, cv2.LINE_AA)
+        y += 28 + h
+    else:
+        y += 26
+        _label(image, "UPRIGHT  %d/4 visible" % visible, (8, y), GREEN, 0.6, 2)
+
+    y += 22
+    _label(image, "hidden %.2fs / %.2fs" % (hidden_s, HOLD_SECONDS),
+           (8, y), RED if hidden_s >= HOLD_SECONDS else WHITE)
+    y += 18
+    _label(image, "tags in frame %d   seen since start %s   frame %d"
+           % (detected, "yes" if _seen_since_start else "no", _frames), (8, y), WHITE, 0.45)
+
+
 def runPipeline(image, llrobot):
     global _last_seen, _seen_since_start, _frames
 
@@ -82,6 +136,7 @@ def runPipeline(image, llrobot):
     detected = 0
     best_quad = None
     best_area = 0.0
+    seen = []  # (pts, tag_id, slot) for the overlay; slot is the TAG_IDS index, or -1 for a stranger
 
     if found is not None and len(found) > 0:
         for quad, tag_id in zip(corners, found.flatten()):
@@ -91,15 +146,15 @@ def runPipeline(image, llrobot):
                 continue
             detected += 1
             tag_id = int(tag_id)
-            for i, wanted in enumerate(TAG_IDS):
-                if tag_id != wanted or (mask >> i) & 1:
-                    continue
-                mask |= 1 << i
-                visible += 1
-                if area > best_area:
-                    best_area = area
-                    best_quad = pts
-                break
+            slot = TAG_IDS.index(tag_id) if tag_id in TAG_IDS else -1
+            seen.append((pts, tag_id, slot))
+            if slot < 0 or (mask >> slot) & 1:
+                continue
+            mask |= 1 << slot
+            visible += 1
+            if area > best_area:
+                best_area = area
+                best_quad = pts
 
     if visible > 0:
         _last_seen = now
@@ -109,17 +164,7 @@ def runPipeline(image, llrobot):
     tipped = visible == 0 and hidden_s >= HOLD_SECONDS and (_seen_since_start or not REQUIRE_SEEN)
 
     if DRAW_OVERLAY:
-        if best_quad is not None:
-            cv2.polylines(image, [best_quad.astype(np.int32)], True, (0, 255, 0), 2)
-        cv2.putText(
-            image,
-            "TIPPED" if tipped else "%d/4 visible  %.2fs" % (visible, hidden_s),
-            (8, 24),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 0, 255) if tipped else (0, 255, 0),
-            2,
-        )
+        _draw_overlay(image, seen, mask, visible, detected, hidden_s, tipped)
 
     llpython = [
         1.0 if tipped else 0.0,
