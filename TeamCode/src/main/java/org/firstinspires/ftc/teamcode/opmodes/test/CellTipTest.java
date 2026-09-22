@@ -22,10 +22,10 @@ import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
  * <p>{@code Cell Tip Test → alliance} writes {@link Context#allianceColor} at {@code createRobot()},
  * and only takes effect on the next init, because that is when the pipeline is selected.
  *
- * <p>Point the camera at a cell of your alliance: its tags in frame should read SCORABLE, and
- * taking them out of frame should read TIPPED a quarter second later. Roll is reported alongside but
- * does not gate the verdict unless the script's {@code REQUIRE_UPRIGHT} is on. A permanent
- * "NO VERDICT" with the Limelight connected means the wrong script is on that pipeline index.
+ * <p>Point the camera at a cell of your alliance: right-side up should read SCORABLE, and showing
+ * the cluster upside-down — or taking it out of frame — should read TIPPED a quarter second later.
+ * A permanent "NO VERDICT" with the Limelight connected means the wrong script is on that pipeline
+ * index.
  */
 @TeleOp(name = "Cell Tip Test", group = "test")
 public class CellTipTest extends EnhancedOpMode {

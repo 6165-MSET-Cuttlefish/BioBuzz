@@ -14,13 +14,11 @@ import org.firstinspires.ftc.teamcode.architecture.core.State;
 /**
  * Limelight 3A AprilTag subsystem: reports whether this alliance's HIVE cell is scorable.
  *
- * <p>The verdict is visibility. A cell that is up shows its AprilTag cluster to the camera; a cell
- * that has tipped down points its cluster away, so it leaves the frame entirely rather than staying
- * readable upside-down. Tags of this alliance in frame means scorable, none of them for the hold
- * time means tipped. The cluster's roll — its rotation about the camera's viewing axis, the same
- * angle the manual's {@code |roll| < 90} test uses — is measured and reported either way, and the
- * script's {@code REQUIRE_UPRIGHT} can make it gate the verdict too, for the case where a tipped
- * cluster stays in view instead of vanishing.
+ * <p>The verdict is orientation, per the manual: a scorable cell shows its AprilTag cluster
+ * right-side up and an unscorable one shows it upside-down, so the test is {@code |roll| < 90} on
+ * the cluster's roll — its rotation about the camera's viewing axis. In frame and right-side up is
+ * scorable; upside-down for the hold time is tipped, and so is nothing in frame at all for that
+ * long, since a cell can also turn its tags away entirely.
  *
  * <p>There is one Limelight pipeline per alliance, holding its own copy of the SnapScript with that
  * alliance's eight tag ids (both clusters) and the roll test baked in, so the hub writes nothing
@@ -177,12 +175,12 @@ public class LimelightCamera extends Module {
     }
 
     /**
-     * Whether the cell has tipped down — nothing of this alliance's cluster has been scorable for
-     * the hold time baked into the pipeline's script. A single tag coming back into view clears it
-     * at once. False whenever the answer isn't current or isn't about this alliance.
+     * Whether the cell has tipped down — this alliance's cluster has not been both in frame and
+     * right-side up for the hold time baked into the pipeline's script. An upright sighting clears
+     * it at once. False whenever the answer isn't current or isn't about this alliance.
      *
-     * <p>With the script's {@code REQUIRE_SEEN} off (the default) an empty frame reports tipped once
-     * the hold elapses, so a camera pointed away from the hive reads the same as a tipped cell.
+     * <p>With the script's {@code REQUIRE_SEEN} off (the default) an empty frame also reports tipped
+     * once the hold elapses, so a camera pointed away from the hive reads the same as a tipped cell.
      */
     public boolean isTipped() {
         return fresh && tipped;
@@ -193,7 +191,7 @@ public class LimelightCamera extends Module {
         return isTipped();
     }
 
-    /** Whether enough of this alliance's cluster is in frame to score, undebounced. */
+    /** Whether this alliance's cluster is in frame and right-side up, undebounced. */
     public boolean isScorable() {
         return fresh && scorable;
     }
@@ -208,7 +206,7 @@ public class LimelightCamera extends Module {
         return fresh ? cluster : Cluster.NONE;
     }
 
-    /** Roll of the cluster in view, in degrees; {@code |roll| < 90} is right-side up. NaN if none. Reported, not acted on unless the script gates on it. */
+    /** Roll of the cluster in view, in degrees; {@code |roll| < 90} is right-side up. NaN if none. */
     public double getRollDeg() {
         return fresh && rollDeg != ROLL_NONE ? rollDeg : Double.NaN;
     }
