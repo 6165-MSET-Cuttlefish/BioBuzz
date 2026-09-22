@@ -78,8 +78,11 @@ public class LimelightCamera extends Module {
     /**
      * Which of the alliance's two HIVE cells is in view; {@code NONE} when neither is.
      *
-     * <p>Which one the robot is looking at also says which half of the field it is on, since each
-     * cell faces its own side.
+     * <p>Never the alliance. Alliance comes from {@link Context#allianceColor} and nothing else —
+     * a pipeline only holds one alliance's ids, so a cluster code cannot distinguish alliances,
+     * only which of that alliance's two cells the camera is pointed at. That does imply which end
+     * of the field the robot is at (audience end vs scoring-table end), since each cell faces its
+     * own end, but it says nothing about which alliance the robot is on.
      */
     public enum Cluster {
         NONE(-1),
