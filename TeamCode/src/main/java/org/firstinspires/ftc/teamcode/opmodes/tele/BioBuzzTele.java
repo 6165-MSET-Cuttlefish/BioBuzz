@@ -47,5 +47,9 @@ public class BioBuzzTele extends BioBuzzOpMode {
     protected void telemetry() {
         telemetry.addData("Slow Mode", slowMode ? "75%" : "OFF");
         telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
+        telemetry.addData("Cell", robot.limelight.hasVerdict()
+                ? (robot.limelight.isTipped() ? "TIPPED" : "SCORABLE")
+                : (robot.limelight.isWrongPipeline() ? "incorrect pipeline! please switch manually"
+                        : (robot.limelight.isConnected() ? "no verdict" : "Limelight not responding")));
     }
 }
