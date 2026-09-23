@@ -11,9 +11,9 @@ import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
 /**
- * Limelight 3A HIVE-cell tip detector. Per FIRST's "AprilTag Clusters" Tech Tip, this alliance's
- * cluster right-side up ({@code |roll| < 90}) is scorable; upside-down or out of frame for the hold
- * time is tipped. The alliance pipeline is selected once in {@link #init()}, so set
+ * Limelight 3A HIVE-cell tip detector. Inverting FIRST's "AprilTag Clusters" Tech Tip, this
+ * alliance's cluster upside-down ({@code |roll| >= 90}) is scorable; right-side up or out of frame
+ * for the hold time is tipped. The alliance pipeline is selected once in {@link #init()}, so set
  * {@link Context#allianceColor} in {@code createRobot()}.
  */
 @Config

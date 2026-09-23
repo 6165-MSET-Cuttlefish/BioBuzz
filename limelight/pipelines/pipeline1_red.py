@@ -2,10 +2,11 @@
 
 GENERATED from limelight/cell_tip_snapscript.py by limelight/generate_pipelines.py; do not edit.
 
-Reports whether this alliance's HIVE cell is scorable: its AprilTag cluster in frame and right-side
-up (|roll| < 90). That heuristic is from FIRST's "AprilTag Clusters" Tech Tip and assumes the camera
-looks the way the launcher launches. Roll is each tag's in-image rotation, not a pose solve, so the
-Limelight must be mounted with its image upright. Upside-down or absent for HOLD_SECONDS is tipped.
+Reports whether this alliance's HIVE cell is scorable: its AprilTag cluster in frame and reading
+upside-down (|roll| >= 90). That is the inverse of the roll heuristic in FIRST's "AprilTag Clusters"
+Tech Tip, which assumes the camera looks the way the launcher launches. Roll is each tag's in-image
+rotation, not a pose solve, so the Limelight must be mounted with its image upright. Right-side up
+(|roll| < 90) or absent for HOLD_SECONDS is tipped.
 
 llpython, 8 doubles; keep in step with LimelightCamera's OUT_* constants:
     0  tipped, 1 or 0
@@ -32,7 +33,7 @@ CLUSTERS = (("SCORING", (30, 31, 32, 33)), ("AUDIENCE", (34, 35, 36, 37)))
 HOLD_SECONDS = 0.25
 MIN_TAG_AREA_PX = 120.0
 MIN_VISIBLE_TAGS = 1
-UPRIGHT_MAX_ROLL_DEG = 90.0
+SCORABLE_MIN_ROLL_DEG = 90.0
 # False: an empty frame reads as tipped after HOLD_SECONDS, even if the cluster was never seen.
 REQUIRE_SEEN = False
 # llpython travels in the results JSON, where a NaN can cost the hub the whole payload.
@@ -83,6 +84,10 @@ def _tag_roll_deg(pts):
     return math.degrees(math.atan2(dy, dx))
 
 
+def _scorable_roll(roll):
+    return not math.isnan(roll) and abs(roll) >= SCORABLE_MIN_ROLL_DEG
+
+
 def _circular_mean_deg(angles):
     """So 179 and -179 average to 180, not 0."""
     x = sum(math.cos(math.radians(a)) for a in angles)
@@ -106,8 +111,7 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
         _label(image, "%d" % tag_id, (int(cx) - 10, int(cy)), GREY)
 
     for c, tags in enumerate(found_by_cluster):
-        upright = not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG
-        color = GREEN if upright else RED
+        color = GREEN if _scorable_roll(rolls[c]) else RED
         for pts, tag_id in tags:
             cv2.polylines(image, [pts.astype(np.int32)], True, color, 2)
             cx, cy = pts.mean(axis=0)
@@ -123,11 +127,11 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
         if not tags:
             _label(image, "%-8s %d-%d  0/4  --" % (label, ids[0], ids[-1]), (8, y), GREY)
             continue
-        upright = not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
+        good = _scorable_roll(roll)
         _label(image, "%-8s %d-%d  %d/4  roll %+.1f  %s%s"
                % (label, ids[0], ids[-1], len(tags), roll,
-                  "UP" if upright else "DOWN", "  <-- target" if c == target else ""),
-               (8, y), GREEN if upright else RED)
+                  "DOWN" if good else "UP", "  <-- target" if c == target else ""),
+               (8, y), GREEN if good else RED)
 
     y += 8
     if tipped:
@@ -146,9 +150,9 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
 
     y += 20
     away = 0.0 if _last_good is None else time.monotonic() - _last_good
-    _label(image, "not scorable for %.2fs / %.2fs   need %d tag%s + |roll| < %.0f   seen %s   frame %d"
+    _label(image, "not scorable for %.2fs / %.2fs   need %d tag%s + |roll| >= %.0f   seen %s   frame %d"
            % (away, HOLD_SECONDS, MIN_VISIBLE_TAGS, "" if MIN_VISIBLE_TAGS == 1 else "s",
-              UPRIGHT_MAX_ROLL_DEG, "yes" if _seen_since_start else "no", _frames),
+              SCORABLE_MIN_ROLL_DEG, "yes" if _seen_since_start else "no", _frames),
            (8, y), WHITE, 0.45)
 
 
@@ -180,15 +184,15 @@ def runPipeline(image, llrobot):
     rolls = [_circular_mean_deg([_tag_roll_deg(pts) for pts, _ in tags]) if tags else float("nan")
              for tags in found_by_cluster]
 
-    # Any upright cluster wins; tag count breaks ties.
+    # Any scorable-roll cluster wins; tag count breaks ties.
     target = -1
-    best = (-1, -1)  # (upright, visible count)
+    best = (-1, -1)  # (scorable roll, visible count)
     for c, tags in enumerate(found_by_cluster):
         if not tags:
             continue
-        upright = 1 if (not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG) else 0
-        if (upright, len(tags)) > best:
-            best = (upright, len(tags))
+        good = 1 if _scorable_roll(rolls[c]) else 0
+        if (good, len(tags)) > best:
+            best = (good, len(tags))
             target = c
 
     if target < 0:
@@ -200,8 +204,7 @@ def runPipeline(image, llrobot):
         visible = len(found_by_cluster[target])
         other_visible = len(found_by_cluster[1 - target])
 
-    upright = target >= 0 and not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
-    scorable = visible >= MIN_VISIBLE_TAGS and upright
+    scorable = target >= 0 and visible >= MIN_VISIBLE_TAGS and _scorable_roll(roll)
     if scorable:
         _last_good = now
         _seen_since_start = True
