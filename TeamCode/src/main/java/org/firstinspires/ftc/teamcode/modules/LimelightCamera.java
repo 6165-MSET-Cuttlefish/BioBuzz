@@ -29,6 +29,7 @@ public class LimelightCamera extends Module {
     public static double checkTipTimeoutMs = 10000;
 
     private static final String DEFAULT_NAME = "limelight";
+    private static final String WRONG_PIPELINE_WARNING = "incorrect pipeline! please switch manually";
 
     // limelight/generate_pipelines.py regex-parses these, so keep each on one line. The order differs
     // by alliance: RED's low run is the scoring-side cell, BLUE's the audience-side one.
@@ -58,6 +59,7 @@ public class LimelightCamera extends Module {
 
     private boolean fresh;
     private boolean tipped;
+    private boolean wrongPipeline;
     private double stalenessMs;
 
     public LimelightCamera(HardwareMap hardwareMap) {
@@ -126,6 +128,11 @@ public class LimelightCamera extends Module {
         return fresh;
     }
 
+    /** The Limelight is answering, but not with this alliance's cell-tip script. */
+    public boolean isWrongPipeline() {
+        return wrongPipeline;
+    }
+
     /** False when absent, unplugged, booting or paused. */
     public boolean isConnected() {
         return limelight != null && limelight.isConnected();
@@ -156,6 +163,8 @@ public class LimelightCamera extends Module {
     private void parse(LLResult result) {
         applyVerdict(result == null ? null : result.getPythonOutput(),
                 result == null ? Double.NaN : result.getStaleness());
+        wrongPipeline = !fresh && alliance != null && result != null
+                && stalenessMs <= maxStalenessMs;
     }
 
     private void applyVerdict(double[] out, double stalenessMs) {
@@ -177,6 +186,7 @@ public class LimelightCamera extends Module {
     private void clearVerdict() {
         fresh = false;
         tipped = false;
+        wrongPipeline = false;
     }
 
     @Override
@@ -187,6 +197,7 @@ public class LimelightCamera extends Module {
             return;
         }
         logDashboard("Alliance", "%s pipeline %d", alliance, pipelineFor(alliance));
+        if (wrongPipeline) log("Warning", WRONG_PIPELINE_WARNING);
         if (!fresh) {
             // Cached reads only: getStatus() is a blocking HTTP GET on the loop thread.
             boolean linked = limelight.isConnected();
