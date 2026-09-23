@@ -207,6 +207,6 @@ public class LimelightCamera extends Module {
                     stalenessMs);
             return;
         }
-        logDashboard("Cell", tipped ? "TIPPED" : "SCORABLE");
+        log("Cell", tipped ? "TIPPED" : "SCORABLE");
     }
 }
