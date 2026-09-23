@@ -163,6 +163,7 @@ def runPipeline(image, llrobot):
     _frames = (_frames + 1) % 10000
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     corners, found = _detect(gray)
 
     found_by_cluster = [[], []]
