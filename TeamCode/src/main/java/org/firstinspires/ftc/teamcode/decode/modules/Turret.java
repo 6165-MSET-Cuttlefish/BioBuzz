@@ -35,7 +35,6 @@ import org.firstinspires.ftc.teamcode.decode.DecodeContext;
 public class Turret extends Module {
 
     public double turretManualOffset = 0;
-    public double leftSideOffset = 0;
     public static double autoTurretOffset = 0;
 
     public static boolean isCloseTele = true;
@@ -94,16 +93,16 @@ public class Turret extends Module {
     private Follower follower;
     private Endgame endgame;
 
-    public double targetAngle = 0;
-    public double rawTargetAngle = 0;
+    private double targetAngle = 0;
+    private double rawTargetAngle = 0;
     private double previousTargetAngle = 0.0;
 
-    public double aheadTargetAngle = 0.0;
+    private double aheadTargetAngle = 0.0;
 
-    public double targetServoPosition = 0.5;
-    public double lastTargetServoPosition = 0.5;
+    private double targetServoPosition = 0.5;
+    private double lastTargetServoPosition = 0.5;
 
-    public double deltaRawTarget = 0;
+    private double deltaRawTarget = 0;
     private double previousRawTargetAngle = 0.0;
 
     private boolean withinRange = true;
@@ -124,7 +123,6 @@ public class Turret extends Module {
         LEFT(0.005),
         AUTOAIM(-1),
         HOLD(-1),
-        OFF(-1),
         MANUAL(-1);
 
         TurretState(double value) {
@@ -133,7 +131,6 @@ public class Turret extends Module {
     }
 
     public Turret(HardwareMap hardwareMap) {
-        super();
         setTelemetryEnabled(turretTelemetry.TOGGLE);
 
         turretServoFront = new EnhancedServo(hardwareMap, "turretFront").withCachingTolerance(0.001);
@@ -245,14 +242,10 @@ public class Turret extends Module {
 
     @Override
     protected void write() {
-        if (getState(TurretState.class) == TurretState.OFF) {
-            return;
-        }
-
         double frontPos = Math.max(0.0, Math.min(1.0, targetServoPosition - TENSION_OFFSET + frontServoOffset));
         double backPos = Math.max(0.0, Math.min(1.0, targetServoPosition + TENSION_OFFSET + backServoOffset));
 
-        if (!requireEndgame().disableServosForEndgame) {
+        if (!requireEndgame().servosDisabled()) {
             turretServoFront.setPosition(frontPos);
             turretServoBack.setPosition(backPos);
         } else {
@@ -316,10 +309,6 @@ public class Turret extends Module {
             previousRawTargetAngle = rawTargetAngle;
 
             targetAngle = rawTargetAngle + turretManualOffset;
-
-            if (targetAngle < 90) {
-                targetAngle += leftSideOffset;
-            }
 
             double signedAngle = targetAngle > 180 ? targetAngle - 360 : targetAngle;
             withinRange = Math.abs(signedAngle) <= maxTurretAngle;
@@ -415,27 +404,15 @@ public class Turret extends Module {
 
     public void lock(Pose target) {
         double heading = target.heading();
-
-        double lockTurretFieldX = target.x() + turretX * Math.cos(heading) - turretY * Math.sin(heading);
-        double lockTurretFieldY = target.y() + turretX * Math.sin(heading) + turretY * Math.cos(heading);
+        Pose lockTurret = DecodeContext.turretFieldPosition(target);
 
         double absoluteAngle = Math.toDegrees(
-                Math.atan2(DecodeContext.targetY - lockTurretFieldY, DecodeContext.targetX - lockTurretFieldX));
+                Math.atan2(DecodeContext.targetY - lockTurret.y(), DecodeContext.targetX - lockTurret.x()));
         double angle = normalizeAngle(absoluteAngle - Math.toDegrees(heading)) + autoTurretOffset;
-        if (angle < 90) {
-            angle += leftSideOffset;
-        }
 
         double servoPosition = clampServoPosition(angleToServoPosition(angle));
         TurretState.MANUAL.setValue(servoPosition);
         TurretState.MANUAL.activate();
-    }
-
-    public double robotAngleToPoseDeg(Pose target) {
-        Pose robotPose = requireFollower().pose();
-        return Math.toDegrees(Math.atan2(
-                target.y() - robotPose.y(),
-                target.x() - robotPose.x()));
     }
 
     public void unlock() {

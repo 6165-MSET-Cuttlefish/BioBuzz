@@ -37,6 +37,8 @@ public class DecodeSystemCheck extends DecodeOpMode {
     private static final double DRIVETRAIN_TEST_POWER = 0.3;
     private static final double ODO_HEADING_DELTA_RADIANS = Math.toRadians(2.0);
     private static final double INITIAL_ENCODER_VOLTAGE_DELTA = 0.05;
+    // getStatus() is a blocking HTTP GET that can stall ~200 ms on a hung Limelight, so poll it sparingly.
+    private static final double LIMELIGHT_POLL_MS = 250;
 
     private enum Stage {
         SENSORS,
@@ -59,6 +61,7 @@ public class DecodeSystemCheck extends DecodeOpMode {
     private String[] colorNames;
 
     private Limelight3A limelight;
+    private final ElapsedTime limelightPollTimer = new ElapsedTime();
     // Read raw: the follower's pose keeps integrating from a cached source when the Pinpoint is unplugged.
     private GoBildaPinpointDriver pinpoint;
     private int odoXBaselineTicks, odoYBaselineTicks;
@@ -74,11 +77,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
 
     private final Map<String, Boolean> checks = new LinkedHashMap<>();
     private final Set<String> visualChecks = new HashSet<>();
-
-    @Override
-    protected boolean shouldReadDuringInit() {
-        return true;
-    }
 
     @Override
     protected void initialize() {
@@ -191,16 +189,13 @@ public class DecodeSystemCheck extends DecodeOpMode {
         updateOdometryChecks();
 
         switch (stage) {
-            case SENSORS:           runSensorsStage();          break;
-            case HEADLIGHTS:        runHeadlightsStage();       break;
             case DRIVETRAIN_FORWARD:runDrivetrainForwardStage();break;
             case TURRET_SWEEP:      runTurretSweepStage();      break;
             case FLYWHEEL_HOOD:     runFlywheelHoodStage();     break;
             case INTAKE:            runIntakeStage();           break;
             case VERTICAL:          runVerticalStage();         break;
-            case HORIZONTAL_OPEN:   runHorizontalOpenStage();   break;
-            case HORIZONTAL_CLOSED: runHorizontalClosedStage(); break;
             case DONE:              stopAll();                  break;
+            default:                                            break;
         }
 
         robot.magazine.updateMagazineColorState();
@@ -212,9 +207,7 @@ public class DecodeSystemCheck extends DecodeOpMode {
     }
 
     private void advanceStage() {
-        Stage[] all = Stage.values();
-        int next = Math.min(stage.ordinal() + 1, all.length - 1);
-        stage = all[next];
+        stage = nextStage();
         stageEntered = false;
     }
 
@@ -268,7 +261,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
 
     private void stopAll() {
         robot.drivetrain.setRawTargets(0, 0, 0, 0);
-        // Restore the SDK default so OpModes that expect coast aren't surprised after a check run.
         setDrivetrainZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         Magazine.IntakeState.OFF.activate();
         Magazine.VerticalState.OFF.activate();
@@ -283,13 +275,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
         robot.drivetrain.getFr().setZeroPowerBehavior(behavior);
         robot.drivetrain.getBl().setZeroPowerBehavior(behavior);
         robot.drivetrain.getBr().setZeroPowerBehavior(behavior);
-    }
-
-    private void runSensorsStage() {
-    }
-
-    private void runHeadlightsStage() {
-        Magazine.HeadlightFrontState.STROBE.activate();
     }
 
     private void runDrivetrainForwardStage() {
@@ -353,16 +338,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
         }
     }
 
-    private void runHorizontalOpenStage() {
-        Magazine.HorizontalFrontState.OPEN.activate();
-        Magazine.HorizontalBackState.OPEN.activate();
-    }
-
-    private void runHorizontalClosedStage() {
-        Magazine.HorizontalFrontState.STORED.activate();
-        Magazine.HorizontalBackState.STORED.activate();
-    }
-
     private void resetEncoder(EnhancedMotor m) {
         m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
@@ -383,6 +358,9 @@ public class DecodeSystemCheck extends DecodeOpMode {
     }
 
     private void updateVisionChecks() {
+        if (Boolean.TRUE.equals(checks.get("Limelight capturing"))) return;
+        if (limelightPollTimer.milliseconds() < LIMELIGHT_POLL_MS) return;
+        limelightPollTimer.reset();
         boolean llConnected = false;
         boolean llCapturing = false;
         if (limelight != null) {
@@ -463,11 +441,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
             addDSHtml(e.getKey(), mark);
             robot.telemetry.addDashboardData(e.getKey(), dashStatus);
         }
-    }
-
-    private void addDSLarge(String caption, Object value) {
-        robot.telemetry.addDSLine(htmlSize(FONT_SMALL, htmlBold(htmlEscape(caption))) + ": "
-                + htmlColorSize(COLOR_VALUE, FONT_XLARGE, htmlEscape(String.valueOf(value))));
     }
 
     private void addDSHtml(String caption, String html) {

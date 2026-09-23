@@ -32,6 +32,7 @@ public class ConfigureLaserRangefinder extends LinearOpMode {
         telemetry.update();
 
         waitForStart();
+        if (isStopRequested()) return;
 
         lrf.setDistanceMode(LaserRangefinder.DistanceMode.LONG);
         lrf.setTiming(33, 0);   // 30 Hz, less noisy; period=0 → start next range immediately

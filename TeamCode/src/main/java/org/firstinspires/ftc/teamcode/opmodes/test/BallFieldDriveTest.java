@@ -12,6 +12,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
+import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
@@ -34,7 +35,6 @@ public class BallFieldDriveTest extends LinearOpMode {
         public static boolean cameraStreamEnabled = true;
     }
 
-    private static final String WEBCAM_NAME = "nerdDetector";
     private static final String PINPOINT_NAME = "pinpoint";
 
     // The Cuttle bot's Pinpoint values; must match pedro/CuttleConstants.localizerConfig.
@@ -76,7 +76,7 @@ public class BallFieldDriveTest extends LinearOpMode {
         pinpoint.resetPosAndIMU(); // robot must be stationary (IMU recalibration)
 
         pipeline = new BallDetectionPipeline();
-        session = new WebcamSession(hardwareMap, telemetry, WEBCAM_NAME, pipeline);
+        session = new WebcamSession(hardwareMap, telemetry, Camera.WEBCAM_NAME, pipeline);
 
         while (opModeInInit()) pump(false);
         while (opModeIsActive()) pump(true);

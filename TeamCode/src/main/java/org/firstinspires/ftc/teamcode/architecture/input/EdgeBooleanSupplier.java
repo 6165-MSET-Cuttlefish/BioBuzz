@@ -10,7 +10,6 @@ public class EdgeBooleanSupplier {
     private boolean previous;
     private boolean current;
     private boolean toggleTrue;
-    private boolean toggleFalse;
     private long timeMarker = 0L;
     // Last InputClock frame refreshed on; -1 forces a refresh on first query.
     private long lastUpdatedFrame = -1L;
@@ -28,7 +27,6 @@ public class EdgeBooleanSupplier {
         this.previous = booleanSupplier.getAsBoolean();
         this.current = previous;
         this.toggleTrue = current;
-        this.toggleFalse = current;
     }
 
     public EdgeBooleanSupplier(BooleanSupplier booleanSupplier) {
@@ -57,7 +55,6 @@ public class EdgeBooleanSupplier {
         } else if (current && !raw) {
             if (time - timeMarker >= fallingDebounce) {
                 current = false;
-                toggleFalse = !toggleFalse;
                 timeMarker = time;
             }
         } else {
@@ -77,7 +74,7 @@ public class EdgeBooleanSupplier {
         current = state;
         lastUpdatedFrame = InputClock.current();
         doubleClickDetected = false;
-        // toggleTrue/toggleFalse deliberately preserved: priming must not clear operator-set latches.
+        // toggleTrue deliberately preserved: priming must not clear operator-set latches.
         // Dropping lastRisingEdgeTime keeps presses across a prime gap from reading as a double-click.
         lastRisingEdgeTime = 0L;
         timeMarker = System.nanoTime();
@@ -104,11 +101,6 @@ public class EdgeBooleanSupplier {
     public boolean wasJustReleased() {
         ensureFresh();
         return !current && previous;
-    }
-
-    public boolean isDown() {
-        ensureFresh();
-        return current;
     }
 
     public boolean isToggledOn() {

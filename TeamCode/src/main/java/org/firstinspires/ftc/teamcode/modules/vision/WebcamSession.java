@@ -63,8 +63,6 @@ public final class WebcamSession {
         else FtcDashboard.getInstance().stopCameraStream();
     }
 
-    public boolean isCameraStreamEnabled() { return cameraStreamEnabled; }
-
     public void close() {
         FtcDashboard.getInstance().stopCameraStream();
         webcam.stopStreaming();

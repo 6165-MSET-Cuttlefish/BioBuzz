@@ -11,18 +11,16 @@ public final class FieldBall {
     public final double y;
     public final double vx;
     public final double vy;
-    public final TrackedBall source;
     private final boolean visible;
 
     FieldBall(int id, BallVisionConstants.BallType type, double x, double y, double vx, double vy,
-              TrackedBall source, boolean visible) {
+              boolean visible) {
         this.id = id;
         this.type = type;
         this.x = x;
         this.y = y;
         this.vx = vx;
         this.vy = vy;
-        this.source = source;
         this.visible = visible;
     }
 
@@ -48,12 +46,6 @@ public final class FieldBall {
     }
 
     public double distanceTo(Pose pose) { return distanceTo(pose.x(), pose.y()); }
-
-    public double timeOfClosestApproach(double fieldX, double fieldY) {
-        double speedSq = vx * vx + vy * vy;
-        if (speedSq < 1e-9) return 0;
-        return Math.max(0, ((fieldX - x) * vx + (fieldY - y) * vy) / speedSq);
-    }
 
     @Override
     public String toString() {

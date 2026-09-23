@@ -54,10 +54,10 @@ public final class BallTracker {
         }
 
         for (int i = 0; i < detections.size(); i++) {
-            if (!detectionUsed[i]) tracks.add(new Track(nextId++, detections.get(i), timestampSeconds));
+            if (!detectionUsed[i]) tracks.add(new Track(nextId++, detections.get(i)));
         }
 
-        return publish(timestampSeconds);
+        return publish();
     }
 
     public void reset() {
@@ -100,10 +100,10 @@ public final class BallTracker {
         return pairings;
     }
 
-    private List<TrackedBall> publish(double timestampSeconds) {
+    private List<TrackedBall> publish() {
         List<TrackedBall> published = new ArrayList<>(tracks.size());
         for (Track t : tracks) {
-            if (t.hits >= Tuning.minHits) published.add(t.snapshot(timestampSeconds));
+            if (t.hits >= Tuning.minHits) published.add(t.snapshot());
         }
         return published;
     }
@@ -123,16 +123,14 @@ public final class BallTracker {
     private static final class Track {
         final int id;
         final BallVisionConstants.BallType type;
-        final double firstSeenSeconds;
         double x, y, vx, vy, radiusPx;
         int hits = 1;
         int misses = 0;
         boolean visible = true;
 
-        Track(int id, BallDetection seed, double timestampSeconds) {
+        Track(int id, BallDetection seed) {
             this.id = id;
             this.type = seed.type;
-            this.firstSeenSeconds = timestampSeconds;
             this.x = seed.fieldX;
             this.y = seed.fieldY;
             this.radiusPx = seed.imageRadius;
@@ -169,9 +167,8 @@ public final class BallTracker {
             return misses <= Tuning.maxMisses;
         }
 
-        TrackedBall snapshot(double timestampSeconds) {
-            return new TrackedBall(id, type, x, y, vx, vy, radiusPx, hits, misses,
-                    timestampSeconds - firstSeenSeconds, visible);
+        TrackedBall snapshot() {
+            return new TrackedBall(id, type, x, y, vx, vy, radiusPx, visible);
         }
     }
 }

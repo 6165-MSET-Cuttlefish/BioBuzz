@@ -3,29 +3,22 @@ package org.firstinspires.ftc.teamcode.architecture.telemetry;
 /** Renders a 2D pixel grid as Unicode Braille (U+2800..U+28FF, 2×4 pixels per glyph) in HTML for the DS field map. */
 public class FieldMapRenderer {
 
-    private int width;
-    private int height;
-    private boolean[][] pixels;
-    private String[][] cellColors;
+    private final int width;
+    private final int height;
+    private final boolean[][] pixels;
+    private final String[][] cellColors;
     private boolean[][] snapshotPixels;
     private String[][] snapshotColors;
-    private double scaleX;
-    private double scaleY;
+    private final double scaleX;
+    private final double scaleY;
 
     public FieldMapRenderer(int width, int height) {
-        setSize(width, height);
-    }
-
-    public final void setSize(int width, int height) {
         this.width = width;
         this.height = height;
         this.scaleX = width / 144.0;
         this.scaleY = height / 144.0;
         this.pixels = new boolean[height][width];
         this.cellColors = new String[(height + 3) / 4][(width + 1) / 2];
-        // Snapshot was sized to the old dimensions; void it so restore() can't mismatch bounds.
-        this.snapshotPixels = null;
-        this.snapshotColors = null;
     }
 
     public void drawFieldLayout() {
@@ -58,14 +51,7 @@ public class FieldMapRenderer {
         drawLine(px, py, endX, endY, color);
     }
 
-    public void drawPoint(double xInches, double yInches, String color) {
-        int px = toPxX(xInches);
-        int py = toPxY(yInches);
-        int r = Math.max(1, toPxX(5 / 2.0));
-        drawCircle(px, py, r, color);
-    }
-
-    public void clear() {
+    private void clear() {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) pixels[y][x] = false;
         }
@@ -91,58 +77,35 @@ public class FieldMapRenderer {
             System.arraycopy(snapshotColors[y], 0, cellColors[y], 0, cellColors[0].length);
     }
 
-    public void setPixel(int x, int y, String color) {
+    private void setPixel(int x, int y, String color) {
         int py = (height - 1) - y;
         if (x < 0 || py < 0 || x >= width || py >= height) return;
         pixels[py][x] = true;
         cellColors[py / 4][x / 2] = color;
     }
 
-    public void setPixel(int x, int y) {
+    private void setPixel(int x, int y) {
         int py = (height - 1) - y;
         if (x < 0 || py < 0 || x >= width || py >= height) return;
         pixels[py][x] = true;
     }
 
-    public void drawHorizontal(int x1, int x2, int y) {
+    private void drawHorizontal(int x1, int x2, int y) {
         for (int x = x1; x <= x2; x++) setPixel(x, y);
     }
 
-    public void drawHorizontal(int x1, int x2, int y, String color) {
-        for (int x = x1; x <= x2; x++) setPixel(x, y, color);
-    }
-
-    public void drawVertical(int y1, int y2, int x) {
+    private void drawVertical(int y1, int y2, int x) {
         for (int y = y1; y <= y2; y++) setPixel(x, y);
     }
 
-    public void drawVertical(int y1, int y2, int x, String color) {
-        for (int y = y1; y <= y2; y++) setPixel(x, y, color);
-    }
-
-    public void drawRect(int x, int y, int w, int h) {
+    private void drawRect(int x, int y, int w, int h) {
         drawHorizontal(x, x + w, y);
         drawHorizontal(x, x + w, y + h);
         drawVertical(y, y + h, x);
         drawVertical(y, y + h, x + w);
     }
 
-    public void drawRect(int x, int y, int w, int h, String color) {
-        drawHorizontal(x, x + w, y, color);
-        drawHorizontal(x, x + w, y + h, color);
-        drawVertical(y, y + h, x, color);
-        drawVertical(y, y + h, x + w, color);
-    }
-
-    public void drawLine(int x0, int y0, int x1, int y1) {
-        drawLineImpl(x0, y0, x1, y1, null);
-    }
-
-    public void drawLine(int x0, int y0, int x1, int y1, String color) {
-        drawLineImpl(x0, y0, x1, y1, color);
-    }
-
-    private void drawLineImpl(int x0, int y0, int x1, int y1, String color) {
+    private void drawLine(int x0, int y0, int x1, int y1, String color) {
         int dx = Math.abs(x1 - x0);
         int dy = Math.abs(y1 - y0);
         int sx = x0 < x1 ? 1 : -1;
@@ -150,8 +113,7 @@ public class FieldMapRenderer {
         int err = dx - dy;
 
         while (true) {
-            if (color == null) setPixel(x0, y0);
-            else setPixel(x0, y0, color);
+            setPixel(x0, y0, color);
             if (x0 == x1 && y0 == y1) break;
             int e2 = 2 * err;
             if (e2 > -dy) { err -= dy; x0 += sx; }

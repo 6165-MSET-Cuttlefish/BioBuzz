@@ -12,13 +12,10 @@ public final class TrackedBall {
     public final double vx;
     public final double vy;
     public final double radiusPx;
-    public final int hits;
-    public final int misses;
-    public final double ageSeconds;
     public final boolean visible;
 
     TrackedBall(int id, BallVisionConstants.BallType type, double x, double y, double vx, double vy,
-                double radiusPx, int hits, int misses, double ageSeconds, boolean visible) {
+                double radiusPx, boolean visible) {
         this.id = id;
         this.type = type;
         this.x = x;
@@ -26,9 +23,6 @@ public final class TrackedBall {
         this.vx = vx;
         this.vy = vy;
         this.radiusPx = radiusPx;
-        this.hits = hits;
-        this.misses = misses;
-        this.ageSeconds = ageSeconds;
         this.visible = visible;
     }
 
@@ -40,24 +34,14 @@ public final class TrackedBall {
 
     public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIn; }
 
-    public double predictedX(double seconds) { return x + vx * seconds; }
-
-    public double predictedY(double seconds) { return y + vy * seconds; }
-
     /** Constant-velocity extrapolation; balls on carpet decelerate, so keep the horizon short. */
     public Point predict(double seconds) {
-        return new Point(predictedX(seconds), predictedY(seconds));
+        return new Point(x + vx * seconds, y + vy * seconds);
     }
 
     public Point position() { return new Point(x, y); }
 
     public double distanceTo(double px, double py) { return Math.hypot(x - px, y - py); }
-
-    public double timeOfClosestApproach(double px, double py) {
-        double speedSq = vx * vx + vy * vy;
-        if (speedSq < 1e-9) return 0;
-        return Math.max(0, ((px - x) * vx + (py - y) * vy) / speedSq);
-    }
 
     @Override
     public String toString() {

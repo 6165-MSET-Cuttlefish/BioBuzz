@@ -19,13 +19,11 @@ import java.util.Map;
 import java.util.Set;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
+import org.firstinspires.ftc.teamcode.architecture.auto.PoseRing;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.LoopProfiler;
-import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedCRServo;
-import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
+import org.firstinspires.ftc.teamcode.architecture.hardware.BatteryVoltage;
 import org.firstinspires.ftc.teamcode.architecture.input.InputClock;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.FieldMapRenderer;
-import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
-import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
 
 import static org.firstinspires.ftc.teamcode.architecture.core.Robot.telemetryToggles;
 import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.*;
@@ -33,13 +31,18 @@ import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.*;
 
 /** Base OpMode with auto-discovered modules, voltage compensation, dual telemetry, and dashboard field rendering. Subclasses provide a {@link Robot} via {@link #createRobot()}. */
 public abstract class EnhancedOpMode extends OpMode {
+    private static final int FIELD_RENDER_INTERVAL = 10;
+    // The voltage read is a bus call costing a few ms; battery voltage moves slowly.
+    private static final int VOLTAGE_READ_LOOP_INTERVAL = 50;
+
     protected Robot robot;
 
     private final ElapsedTime loopTimer = new ElapsedTime();
     private final ElapsedTime gameTimer = new ElapsedTime();
-    private final ElapsedTime readWriteTimer = new ElapsedTime();
     private final double[] loopTimes = new double[20];
     private final LoopProfiler profiler = new LoopProfiler();
+    private final PoseRing poseHistory = new PoseRing(30);
+    private TelemetryPacket packet;
     private List<LynxModule> lynxHubs;
     private int loopIndex = 0;
     private long monotonicLoopCount = 0;
@@ -57,9 +60,6 @@ public abstract class EnhancedOpMode extends OpMode {
     private double cachedTotalCurrent = 0.0;
     private VoltageSensor voltageSensor;
     private double voltage = 12.0;
-    private boolean running = false;
-    private boolean stopRequested = false;
-    private boolean isInit = false;
     private boolean telemetryRenderedThisLoop = false;
     private int loopDumpCounter = 0;
     private String cachedLoopDump = "";
@@ -72,14 +72,6 @@ public abstract class EnhancedOpMode extends OpMode {
     private int loopsSinceFieldRender = Integer.MAX_VALUE;
     private AllianceColor cachedAllianceColor;
     private String cachedAllianceHtml;
-    /** Re-render the DS field map at most every N loops even when the pose hasn't moved. */
-    protected int fieldRenderInterval = 10;
-
-    /** Hold each loop to at least this many ms (0 = no holding). */
-    protected int minLoopMs = 0;
-    /** Loops between voltage reads. Bus call costs a few ms; voltage moves slowly. */
-    protected int voltageReadLoopInterval = 50;
-    protected boolean voltageCompensationEnabled = true;
 
     protected void initialize() {}
     protected void initializeLoop() {}
@@ -96,11 +88,6 @@ public abstract class EnhancedOpMode extends OpMode {
     /** Called at the top of every init_loop and loop, before module reads. */
     protected void onLoopStart() {}
 
-    /**
-     * Draw game-specific field overlay. Called only on loops where the packet is actually SENT — every
-     * dashboard frame is standalone, so anything drawn on a subset of sent frames flickers. Draw here
-     * rather than into {@code robot.packet} from game code, which cannot know if the packet is sent.
-     */
     protected void dashboardOverlay(Canvas overlay) {}
 
     @Override
@@ -118,8 +105,9 @@ public abstract class EnhancedOpMode extends OpMode {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+        robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
         telemetry = robot.telemetry;
-        robot.packet = newPacket();
+        packet = newPacket();
 
         autoDiscoverModules();
         initModules();
@@ -131,7 +119,6 @@ public abstract class EnhancedOpMode extends OpMode {
 
         loopTimer.reset();
         gameTimer.reset();
-        isInit = true;
 
         field = new FieldMapRenderer(73, 74);
         field.drawFieldLayout();
@@ -140,36 +127,7 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void init_loop() {
-        if (!isInit) return;
-        if (stopRequested) {
-            requestOpModeStop();
-            return;
-        }
-
-        profiler.enabled = profilerEnabled;
-        profiler.start();
-
-        clearBulkCaches();
-        profiler.mark("clearBulkCaches");
-
-        InputClock.advance();
-
-        if (voltageCompensationEnabled) {
-            updateVoltageThrottled();
-            EnhancedMotor.updateVoltage(voltage);
-            EnhancedCRServo.updateVoltage(voltage);
-        }
-        profiler.mark("voltage");
-
-        onLoopStart();
-        profiler.mark("onLoopStart");
-
-        if (shouldReadDuringInit()) readModules();
-        profiler.mark("readModules");
-
-        robot.follower.update();
-        robot.poseHistory.record(robot.follower.pose());
-        profiler.mark("follower.update");
+        runPipelineHead(shouldReadDuringInit());
 
         initializeLoop();
         profiler.mark("initializeLoop");
@@ -195,7 +153,6 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void start() {
-        running = true;
         gameTimer.reset();
         clearBulkCaches();
         // Reset throttle counters so the first match loop samples fresh instead of inheriting the init loop's mid-cycle phase.
@@ -219,36 +176,7 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void loop() {
-        if (stopRequested) {
-            running = false;
-            requestOpModeStop();
-            return;
-        }
-
-        profiler.enabled = profilerEnabled;
-        profiler.start();
-
-        clearBulkCaches();
-        profiler.mark("clearBulkCaches");
-
-        InputClock.advance();
-
-        if (voltageCompensationEnabled) {
-            updateVoltageThrottled();
-            EnhancedMotor.updateVoltage(voltage);
-            EnhancedCRServo.updateVoltage(voltage);
-        }
-        profiler.mark("voltage");
-
-        onLoopStart();
-        profiler.mark("onLoopStart");
-
-        readModules();
-        profiler.mark("readModules");
-
-        robot.follower.update();
-        robot.poseHistory.record(robot.follower.pose());
-        profiler.mark("follower.update");
+        runPipelineHead(true);
 
         gameLoop();
         profiler.mark("gameLoop");
@@ -266,24 +194,15 @@ public abstract class EnhancedOpMode extends OpMode {
         updateDashboard();
         profiler.mark("updateDashboard");
 
-        long remaining = minLoopMs - (long) loopTimer.milliseconds();
-        if (remaining > 0) {
-            try {
-                Thread.sleep(remaining);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
         recordLoopTime();
         loopTimer.reset();
     }
 
     @Override
     public final void stop() {
-        running = false;
         // reset() drops every command without running its end() hook, so hardware safe-state must live in Module.stop().
         Scheduler.reset();
-        // Safe-state pass: every module must get its stop() even if an earlier one throws (the SDK does not auto-zero motors on stop); the first Throwable is rethrown afterwards so the failure still surfaces.
+        // Every module's stop() runs even if one throws; the first Throwable is rethrown.
         Throwable first = null;
         for (int i = 0; i < modules.size(); i++) {
             try {
@@ -303,11 +222,30 @@ public abstract class EnhancedOpMode extends OpMode {
         }
     }
 
-    /** Manually register modules; reflection auto-discovery picks up the rest. */
-    protected void register(Module... mods) {
-        for (Module m : mods) {
-            if (!modules.contains(m)) modules.add(m);
-        }
+    private void runPipelineHead(boolean read) {
+        robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
+
+        profiler.enabled = profilerEnabled;
+        profiler.start();
+
+        clearBulkCaches();
+        profiler.mark("clearBulkCaches");
+
+        InputClock.advance();
+
+        updateVoltageThrottled();
+        BatteryVoltage.update(voltage);
+        profiler.mark("voltage");
+
+        onLoopStart();
+        profiler.mark("onLoopStart");
+
+        if (read) readModules();
+        profiler.mark("readModules");
+
+        robot.follower.update();
+        poseHistory.record(robot.follower.pose());
+        profiler.mark("follower.update");
     }
 
     private void autoDiscoverModules() {
@@ -315,7 +253,7 @@ public abstract class EnhancedOpMode extends OpMode {
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         try {
             discover(this, getClass(), visited);
-            // discover() stops above EnhancedOpMode, so the inherited `robot` field is not a discovery root — seed from it directly (idempotent via the visited set).
+            // discover() stops above EnhancedOpMode, so seed the inherited robot field directly.
             discoverValue(robot, visited);
         } catch (IllegalAccessException e) {
             throw new RuntimeException("Module auto-discovery failed", e);
@@ -339,7 +277,7 @@ public abstract class EnhancedOpMode extends OpMode {
         if (val == null) return;
 
         if (val instanceof Module) {
-            register((Module) val);
+            if (!modules.contains(val)) modules.add((Module) val);
         } else if (val instanceof Object[]) {
             for (Object e : (Object[]) val) discoverValue(e, visited);
         } else if (val instanceof Iterable<?>) {
@@ -364,7 +302,7 @@ public abstract class EnhancedOpMode extends OpMode {
         // Idempotent via initializedModuleCount: this runs twice (before and after initialize()) and must not re-init a module.
         for (int i = initializedModuleCount; i < modules.size(); i++) {
             Module m = modules.get(i);
-            m.setTelemetry(telemetry);
+            m.setTelemetry(robot.telemetry);
             m.initStates();
             m.init();
         }
@@ -397,7 +335,7 @@ public abstract class EnhancedOpMode extends OpMode {
         }
     }
 
-    protected void writeModules() {
+    private void writeModules() {
         for (int i = 0; i < modules.size(); i++) {
             Module m = modules.get(i);
             if (m.isWriteEnabled()) {
@@ -429,9 +367,8 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void updateVoltageThrottled() {
-        int interval = Math.max(1, voltageReadLoopInterval);
         if (voltageLoopCounter == 0) voltage = voltageSensor.getVoltage();
-        voltageLoopCounter = (voltageLoopCounter + 1) % interval;
+        voltageLoopCounter = (voltageLoopCounter + 1) % VOLTAGE_READ_LOOP_INTERVAL;
     }
 
     private void recordLoopTime() {
@@ -447,42 +384,37 @@ public abstract class EnhancedOpMode extends OpMode {
     private void updateTelemetry() {
         int every = Math.max(1, telemetryEveryNLoops);
         if (every > 1 && (telemetryLoopCounter++ % every) != 0) {
-            // Pending items carry over; calling update() here would cause partial-packet flicker.
+            // Skip the frame build; the SDK's post-loop update() sends nothing to the dashboard while a packet is set.
             telemetryRenderedThisLoop = false;
             return;
         }
         telemetryRenderedThisLoop = true;
 
-        DualTelemetry.enableDSTelemetry = telemetryToggles.dsTelemetry;
-        DualTelemetry.enableDashboardTelemetry = telemetryToggles.dashboardTelemetry;
-
         // Dashboard data goes into the packet that also carries the field overlay, so exactly one
         // complete frame is sent per loop. Re-set every loop: updateDashboard swaps in a fresh packet.
-        robot.telemetry.setPacket(robot.packet);
+        robot.telemetry.setPacket(packet);
 
-        Pose currentPose = robot.follower.pose();
-        addStatusTelemetry(currentPose);
+        if (telemetryToggles.dsTelemetry || telemetryToggles.dashboardTelemetry) {
+            Pose currentPose = robot.follower.pose();
+            addStatusTelemetry(currentPose);
 
-        if (telemetry instanceof DualTelemetry) {
-            DualTelemetry et = (DualTelemetry) telemetry;
-
-            et.addDashboardData("Game Time", "%.1fs", gameTimer.seconds());
-            et.addData("Loop Time", "%.1fms (avg %.1fms)", loopTimer.milliseconds(), avgLoopMs());
+            robot.telemetry.addDashboardData("Game Time", "%.1fs", gameTimer.seconds());
+            robot.telemetry.addData("Loop Time", "%.1fms (avg %.1fms)", loopTimer.milliseconds(), avgLoopMs());
 
             if (!modules.isEmpty()) {
-                et.addSeparator();
-                et.addGroupHeader("MODULES", HtmlFormatter.COLOR_MODULE);
+                robot.telemetry.addSeparator();
+                robot.telemetry.addGroupHeader("MODULES", COLOR_MODULE);
                 List<Module> ordered = telemetryOrderedModules();
                 for (int i = 0; i < ordered.size(); i++) ordered.get(i).telemetry();
             }
 
             if (telemetryToggles.loopProfile) {
-                et.addSeparator();
-                et.addGroupHeader("LOOP PROFILE (avg ms)", HtmlFormatter.COLOR_BLUE);
+                robot.telemetry.addSeparator();
+                robot.telemetry.addGroupHeader("LOOP PROFILE (avg ms)", COLOR_BLUE);
                 List<Map.Entry<String, Double>> snapshot = profiler.snapshotSortedDesc();
                 for (int i = 0; i < snapshot.size(); i++) {
                     Map.Entry<String, Double> entry = snapshot.get(i);
-                    et.addDashboardData(entry.getKey(), "%.2fms", entry.getValue());
+                    robot.telemetry.addDashboardData(entry.getKey(), "%.2fms", entry.getValue());
                 }
                 // Single copy-pasteable dashboard value: whole-run per-section avg/peak/count. Rebuilt
                 // rarely — it's ~60 String.formats and, being cumulative, barely moves loop to loop.
@@ -490,35 +422,30 @@ public abstract class EnhancedOpMode extends OpMode {
                     double loopAvg = profiledLoopCount == 0 ? 0 : profiledLoopSumMs / profiledLoopCount;
                     cachedLoopDump = profiler.report(profiledLoopCount, loopAvg, profiledLoopMaxMs);
                 }
-                et.addDashboardData("LOOP_DUMP", cachedLoopDump);
+                robot.telemetry.addDashboardData("LOOP_DUMP", cachedLoopDump);
             }
 
             renderFieldMap(currentPose);
-        } else {
-            telemetry.addData("Game Time", "%.1fs", gameTimer.seconds());
-            telemetry.addData("Loop Time", "%.1fms (avg %.1fms)", loopTimer.milliseconds(), avgLoopMs());
-            List<Module> ordered = telemetryOrderedModules();
-            for (int i = 0; i < ordered.size(); i++) ordered.get(i).telemetry();
         }
 
         telemetry();
-        telemetry.update();
+        robot.telemetry.update();
     }
 
     private void renderFieldMap(Pose fieldPose) {
         // Only sink is addDSLine (a no-op when DS telemetry is off) — skip the whole render then.
-        if (!DualTelemetry.enableDSTelemetry) return;
+        if (!telemetryToggles.dsTelemetry) return;
         double fx = fieldPose.x();
         double fy = fieldPose.y();
         double fh = fieldPose.heading();
         boolean poseChanged = Math.abs(fx - lastFieldRenderX) > 0.5
                 || Math.abs(fy - lastFieldRenderY) > 0.5
                 || Math.abs(fh - lastFieldRenderHeading) > Math.toRadians(2);
-        if (poseChanged || loopsSinceFieldRender >= fieldRenderInterval) {
+        if (poseChanged || loopsSinceFieldRender >= FIELD_RENDER_INTERVAL) {
             field.restore();
             field.drawRobot(fx, fy, fh,
                     Context.allianceColor.equals(AllianceColor.RED) ? COLOR_RED : COLOR_BLUE);
-            cachedFieldHtml = HtmlFormatter.htmlSize(FONT_SMALL, field.renderHtml());
+            cachedFieldHtml = htmlSize(FONT_SMALL, field.renderHtml());
             lastFieldRenderX = fx;
             lastFieldRenderY = fy;
             lastFieldRenderHeading = fh;
@@ -537,18 +464,18 @@ public abstract class EnhancedOpMode extends OpMode {
         return p;
     }
 
-    protected void updateDashboard() {
+    private void updateDashboard() {
         // Only send a frame carrying BOTH the routed telemetry data and the overlay. Sending one without
         // the other blanks that half for a frame, which reads as flicker; skipping the send entirely
         // just leaves the previous complete frame up.
-        int every = Math.max(1, dashboardEveryNLoops);
+        int every = Math.max(1, dashboardEveryNTelemetryFrames);
         if (!telemetryRenderedThisLoop || (every > 1 && (dashboardLoopCounter++ % every) != 0)) {
             // Fresh packet discards draws accumulated this loop, which would otherwise pile up across skipped loops.
-            robot.packet = newPacket();
+            packet = newPacket();
             return;
         }
 
-        Canvas overlay = robot.packet.fieldOverlay();
+        Canvas overlay = packet.fieldOverlay();
 
         if (!dashboardSkipFieldImage) {
             overlay.setAlpha(0.4);
@@ -561,13 +488,13 @@ public abstract class EnhancedOpMode extends OpMode {
         FieldVisualization.drawRobot(overlay, robot.follower.pose());
 
         if (!dashboardSkipPoseHistory) {
-            FieldVisualization.drawPoseHistory(overlay, robot.poseHistory);
+            FieldVisualization.drawPoseHistory(overlay, poseHistory);
         }
 
         dashboardOverlay(overlay);
 
-        FtcDashboard.getInstance().sendTelemetryPacket(robot.packet);
-        robot.packet = newPacket();
+        FtcDashboard.getInstance().sendTelemetryPacket(packet);
+        packet = newPacket();
     }
 
     private void addStatusTelemetry(Pose currentPose) {
@@ -581,26 +508,20 @@ public abstract class EnhancedOpMode extends OpMode {
     private void addAllianceTelemetry() {
         if (Context.allianceColor != cachedAllianceColor) {
             cachedAllianceColor = Context.allianceColor;
-            String colorHex = Context.allianceColor == AllianceColor.RED
-                    ? HtmlFormatter.COLOR_RED
-                    : HtmlFormatter.COLOR_BLUE;
-            cachedAllianceHtml = HtmlFormatter.htmlColor(colorHex,
-                    HtmlFormatter.htmlBold(String.valueOf(Context.allianceColor)));
+            String colorHex = Context.allianceColor == AllianceColor.RED ? COLOR_RED : COLOR_BLUE;
+            cachedAllianceHtml = htmlColor(colorHex, htmlBold(String.valueOf(Context.allianceColor)));
         }
         robot.telemetry.addRawHtml("Alliance", cachedAllianceHtml);
     }
 
     private void addVoltageCurrentTelemetry() {
         if (telemetryToggles.voltage) robot.telemetry.addDashboardData("Voltage", "%.2fV", voltage);
-        if (telemetryToggles.current) robot.telemetry.addDashboardData("Current", "%.2fA", getTotalCurrent());
+        if (telemetryToggles.current && telemetryToggles.dashboardTelemetry) {
+            robot.telemetry.addDashboardData("Current", "%.2fA", getTotalCurrent());
+        }
     }
 
-    public final void requestStop() { stopRequested = true; }
-    public final boolean isRunning() { return running; }
-    public final double getVoltage() { return voltage; }
-    public final ElapsedTime getGameTimer() { return gameTimer; }
-
-    public final double avgLoopMs() {
+    private double avgLoopMs() {
         double sum = 0;
         int count = 0;
         for (double t : loopTimes) {
@@ -612,9 +533,9 @@ public abstract class EnhancedOpMode extends OpMode {
         return count > 0 ? sum / count : 0;
     }
 
-    public final double getTotalCurrent() {
+    private double getTotalCurrent() {
         int every = Math.max(1, currentReadEveryNLoops);
-        // Throttle against the loop counter, not call count: this is only called on render loops with the current toggle on, so a per-call counter would read far less often than currentReadEveryNLoops promises.
+        // Throttle on loop count; this is only called on render loops.
         if (lastCurrentReadLoop == Long.MIN_VALUE || monotonicLoopCount - lastCurrentReadLoop >= every) {
             double total = 0;
             for (LynxModule hub : lynxHubs) total += hub.getCurrent(CurrentUnit.AMPS);
@@ -622,10 +543,6 @@ public abstract class EnhancedOpMode extends OpMode {
             lastCurrentReadLoop = monotonicLoopCount;
         }
         return cachedTotalCurrent;
-    }
-
-    public final List<Module> getModules() {
-        return Collections.unmodifiableList(modules);
     }
 
     public final LoopProfiler getProfiler() { return profiler; }

@@ -19,7 +19,7 @@ public final class PoseRing {
     }
 
     public void record(Pose p) {
-        // Time-gated, not per-loop: 30 samples at 50 ms is the 1.5 s trail Pedro 2.x drew, independent of loop rate.
+        // Time-gated so the trail spans capacity x 50 ms regardless of loop rate.
         long now = System.currentTimeMillis();
         if (now - lastRecordMs < 50) return;
         lastRecordMs = now;
@@ -27,16 +27,6 @@ public final class PoseRing {
         y[head] = p.y();
         head = (head + 1) % capacity;
         if (size < capacity) size++;
-    }
-
-    public void clear() {
-        head = 0;
-        size = 0;
-        lastRecordMs = Long.MIN_VALUE;
-    }
-
-    public int size() {
-        return size;
     }
 
     /** Oldest first. */

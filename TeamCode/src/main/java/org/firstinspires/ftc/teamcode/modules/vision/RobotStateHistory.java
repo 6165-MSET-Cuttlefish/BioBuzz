@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
+import com.pedropathing.utils.Angle;
+
 /** Not thread-safe: record and read from the OpMode thread only. */
 public final class RobotStateHistory {
 
@@ -69,7 +71,7 @@ public final class RobotStateHistory {
         return new Sample(
                 lerp(older.x, newer.x, t),
                 lerp(older.y, newer.y, t),
-                older.heading + normalizeRadians(newer.heading - older.heading) * t,
+                older.heading + Angle.error(older.heading, newer.heading) * t,
                 lerp(older.vx, newer.vx, t),
                 lerp(older.vy, newer.vy, t),
                 lerp(older.omega, newer.omega, t),
@@ -77,10 +79,4 @@ public final class RobotStateHistory {
     }
 
     private static double lerp(double a, double b, double t) { return a + (b - a) * t; }
-
-    private static double normalizeRadians(double radians) {
-        while (radians > Math.PI) radians -= 2 * Math.PI;
-        while (radians < -Math.PI) radians += 2 * Math.PI;
-        return radians;
-    }
 }

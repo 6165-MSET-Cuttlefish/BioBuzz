@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.architecture.telemetry;
 
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -40,18 +41,15 @@ public final class LoopProfiler {
     public List<Map.Entry<String, Double>> snapshotSortedDesc() {
         List<Map.Entry<String, Double>> out = new ArrayList<>(sections.size());
         for (Map.Entry<String, Bucket> e : sections.entrySet()) {
-            out.add(new java.util.AbstractMap.SimpleEntry<>(e.getKey(), e.getValue().avg()));
+            out.add(new SimpleEntry<>(e.getKey(), e.getValue().avg()));
         }
         Collections.sort(out, (a, b) -> Double.compare(b.getValue(), a.getValue()));
         return out;
     }
 
     /**
-     * One compact, paste-friendly line. Header: loop count, whole-run loop avg/max, the sum of the
-     * top-level stage marks, and {@code unprofiled} (loopAvg - sumMarks = the post-render minLoopMs
-     * hold-sleep + record overhead — should be ~0 unless minLoopMs is set). Then each section as
-     * {@code name=avg/peak/count} sorted by avg desc; {@code *} flags nested drill-downs (read./write./
-     * auto.*) that are already counted inside a stage — do not add them to the stage total.
+     * {@code unprofiled} = loop time minus top-level marks: the SDK's between-loop work (1 ms sleep + telemetry.update()).
+     * {@code *} marks nested read./write./tele. sections already counted inside a stage.
      */
     public String report(long loops, double loopAvgMs, double loopMaxMs) {
         List<Map.Entry<String, Bucket>> entries = new ArrayList<>(sections.entrySet());

@@ -10,17 +10,9 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
-/**
- * Limelight 3A HIVE-cell tip detector. Inverting FIRST's "AprilTag Clusters" Tech Tip, this
- * alliance's cluster upside-down ({@code |roll| >= 90}) is scorable; right-side up or out of frame
- * is tipped, each after the script's hold time. The script sends only that verdict and an alliance checksum. The alliance
- * pipeline is selected once in {@link #init()}, so set {@link Context#allianceColor} in
- * {@code createRobot()}.
- */
+/** HIVE-cell tip verdict from the cell-tip SnapScript; the alliance pipeline is fixed at init. */
 @Config
 public class LimelightCamera extends Module {
-
-    public static boolean limelightTelemetry = true;
 
     public static int redPipeline = 1;
     public static int bluePipeline = 2;
@@ -44,7 +36,6 @@ public class LimelightCamera extends Module {
     // llpython layout; must match the slot table in limelight/cell_tip_snapscript.py's docstring.
     private static final int OUT_TIPPED = 0;
     private static final int OUT_ALLIANCE_CHECKSUM = 1;
-    private static final int OUT_LENGTH = 2;
 
     public enum VisionState implements State {
         ENABLED,
@@ -57,6 +48,7 @@ public class LimelightCamera extends Module {
     private AllianceColor alliance;
     private boolean polling;
 
+    private LLResult result;
     private boolean fresh;
     private boolean tipped;
     private boolean wrongPipeline;
@@ -89,7 +81,8 @@ public class LimelightCamera extends Module {
     @Override
     protected void read() {
         if (limelight == null || !polling) return;
-        parse(limelight.getLatestResult());
+        result = limelight.getLatestResult();
+        parse();
     }
 
     @Override
@@ -124,20 +117,6 @@ public class LimelightCamera extends Module {
         return fresh && !tipped;
     }
 
-    public boolean hasVerdict() {
-        return fresh;
-    }
-
-    /** The Limelight is answering, but not with this alliance's cell-tip script. */
-    public boolean isWrongPipeline() {
-        return wrongPipeline;
-    }
-
-    /** False when absent, unplugged, booting or paused. */
-    public boolean isConnected() {
-        return limelight != null && limelight.isConnected();
-    }
-
     public LimelightCamera requireDevice() {
         if (limelight == null) {
             throw new IllegalStateException("No \"" + name + "\" in the robot configuration; "
@@ -160,27 +139,22 @@ public class LimelightCamera extends Module {
         return alliance == AllianceColor.BLUE ? BLUE_CHECKSUM : RED_CHECKSUM;
     }
 
-    private void parse(LLResult result) {
-        applyVerdict(result == null ? null : result.getPythonOutput(),
-                result == null ? Double.NaN : result.getStaleness());
-        wrongPipeline = !fresh && alliance != null && result != null
-                && stalenessMs <= maxStalenessMs;
-    }
-
-    private void applyVerdict(double[] out, double stalenessMs) {
-        this.stalenessMs = stalenessMs;
-
-        fresh = alliance != null
-                && out != null
-                && out.length >= OUT_LENGTH
-                && stalenessMs <= maxStalenessMs
-                && (int) Math.round(out[OUT_ALLIANCE_CHECKSUM]) == checksumFor(alliance);
-        if (!fresh) {
+    private void parse() {
+        // getLatestResult() re-synthesizes a null, but a malformed poll landing mid-call can still return one.
+        if (result == null) {
+            stalenessMs = Double.NaN;
             clearVerdict();
             return;
         }
-
-        tipped = out[OUT_TIPPED] != 0;
+        stalenessMs = result.getStaleness();
+        double[] out = result.getPythonOutput();
+        fresh = alliance != null
+                && stalenessMs <= maxStalenessMs
+                && (int) Math.round(out[OUT_ALLIANCE_CHECKSUM]) == checksumFor(alliance);
+        tipped = fresh && out[OUT_TIPPED] != 0;
+        // Before the first real poll the SDK serves a synthetic empty result with ~0 staleness.
+        wrongPipeline = !fresh && alliance != null && stalenessMs <= maxStalenessMs
+                && limelight.isConnected();
     }
 
     private void clearVerdict() {
@@ -191,7 +165,6 @@ public class LimelightCamera extends Module {
 
     @Override
     protected void onTelemetry() {
-        if (!limelightTelemetry) return;
         if (limelight == null) {
             log("Limelight", "NOT CONFIGURED (\"%s\")", name);
             return;
@@ -203,7 +176,7 @@ public class LimelightCamera extends Module {
             boolean linked = limelight.isConnected();
             log("Cell", "NO VERDICT (%s, pipeline %s, staleness %.0fms)",
                     linked ? "linked" : "no link",
-                    linked ? String.valueOf(limelight.getLatestResult().getPipelineIndex()) : "?",
+                    linked && result != null ? String.valueOf(result.getPipelineIndex()) : "?",
                     stalenessMs);
             return;
         }

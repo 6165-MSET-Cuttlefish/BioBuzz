@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
+import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
@@ -14,15 +15,13 @@ import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
 @TeleOp(name = "Ball Vision", group = "Test")
 public class BallVisionTest extends LinearOpMode {
 
-    private static final String WEBCAM_NAME = "nerdDetector";
-
     private WebcamSession session;
     private BallDetectionPipeline pipeline;
 
     @Override
     public void runOpMode() {
         pipeline = new BallDetectionPipeline();
-        session = new WebcamSession(hardwareMap, telemetry, WEBCAM_NAME, pipeline);
+        session = new WebcamSession(hardwareMap, telemetry, Camera.WEBCAM_NAME, pipeline);
 
         while (opModeInInit()) pump();
         while (opModeIsActive()) pump();

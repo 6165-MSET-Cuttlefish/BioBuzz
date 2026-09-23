@@ -1,8 +1,6 @@
 package org.firstinspires.ftc.teamcode.decode;
 
-import static org.firstinspires.ftc.teamcode.decode.DecodeContext.blueApriltagPose;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.blueTargetPose;
-import static org.firstinspires.ftc.teamcode.decode.DecodeContext.redApriltagPose;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.redTargetPose;
 
 import com.acmerobotics.dashboard.config.Config;
@@ -10,6 +8,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
@@ -31,8 +30,6 @@ public class DecodeRobot extends Robot {
     public DecodeActions actions;
 
     public Pose targetPose;
-    public Pose targetApriltagPose;
-    public Pose cornerPose;
 
     public static WriteToggles writeToggles = new WriteToggles();
     public static ShooterTelemetry shooterTelemetry = new ShooterTelemetry();
@@ -40,7 +37,6 @@ public class DecodeRobot extends Robot {
     public static DrivetrainTelemetry drivetrainTelemetry = new DrivetrainTelemetry();
     public static EndgameTelemetry endgameTelemetry = new EndgameTelemetry();
     public static MagazineTelemetry magazineTelemetry = new MagazineTelemetry();
-    public static AprilTagTelemetry aprilTagTelemetry = new AprilTagTelemetry();
 
     public DecodeRobot(EnhancedOpMode opMode) throws InterruptedException {
         super(opMode);
@@ -53,7 +49,7 @@ public class DecodeRobot extends Robot {
 
     @Override
     protected void initializeGameModules() {
-        setTargetPosesForAlliance();
+        targetPose = Context.allianceColor == AllianceColor.RED ? redTargetPose : blueTargetPose;
         HardwareMap hw = opMode.hardwareMap;
         drivetrain = new Drivetrain(hw).withFollower(follower);
         shooter = new Shooter(hw);
@@ -63,27 +59,6 @@ public class DecodeRobot extends Robot {
         magazine.withEndgame(endgame);
         turret.withEndgame(endgame);
         actions = new DecodeActions(this);
-    }
-
-    private void setTargetPosesForAlliance() {
-        if (Context.allianceColor == null) {
-            throw new IllegalStateException(
-                    "Context.allianceColor is null; auto/teleop must set it before Robot init.");
-        }
-        switch (Context.allianceColor) {
-            case RED:
-                targetPose = redTargetPose;
-                targetApriltagPose = redApriltagPose;
-                cornerPose = new Pose(141.5, 141.5);
-                break;
-            case BLUE:
-                targetPose = blueTargetPose;
-                targetApriltagPose = blueApriltagPose;
-                cornerPose = new Pose(0, 141.5);
-                break;
-            default:
-                throw new IllegalStateException("Unhandled alliance: " + Context.allianceColor);
-        }
     }
 
     public void updateWriteToggles() {
@@ -130,7 +105,6 @@ public class DecodeRobot extends Robot {
 
     public static class DrivetrainTelemetry {
         public boolean TOGGLE = false;
-        public boolean current = false;
     }
 
     public static class EndgameTelemetry {
@@ -148,10 +122,5 @@ public class DecodeRobot extends Robot {
         public boolean current = false;
         public boolean headlights = false;
         public boolean colorSensors = true;
-    }
-
-    public static class AprilTagTelemetry {
-        public boolean TOGGLE = false;
-        public boolean raw = false;
     }
 }

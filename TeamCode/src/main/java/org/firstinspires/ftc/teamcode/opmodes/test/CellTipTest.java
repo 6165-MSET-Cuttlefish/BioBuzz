@@ -6,9 +6,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
-import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
-import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzRobot;
+import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
 
 /**
@@ -16,25 +14,18 @@ import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
  * {@code res/xml/cuttledecode.xml}: the framework needs the drivetrain and Pinpoint even here.
  */
 @TeleOp(name = "Cell Tip Test", group = "Test")
-public class CellTipTest extends EnhancedOpMode {
+public class CellTipTest extends BioBuzzOpMode {
 
     private final ElapsedTime sinceStart = new ElapsedTime();
 
-    private BioBuzzRobot bot;
     private Command watch;
     private boolean started;
     private double tippedAtSeconds = -1;
     private String outcome;
 
     @Override
-    protected Robot createRobot() throws InterruptedException {
-        bot = new BioBuzzRobot(this);
-        return bot;
-    }
-
-    @Override
     protected void initialize() {
-        watch = bot.actions.checkTip();
+        watch = robot.actions.checkTip();
     }
 
     @Override
@@ -50,12 +41,12 @@ public class CellTipTest extends EnhancedOpMode {
         if (outcome == null && !Scheduler.isRunning(watch)) {
             outcome = tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip";
         }
-        if (tippedAtSeconds < 0 && bot.limelight.isTipped()) tippedAtSeconds = sinceStart.seconds();
+        if (tippedAtSeconds < 0 && robot.limelight.isTipped()) tippedAtSeconds = sinceStart.seconds();
     }
 
     @Override
     protected void telemetry() {
-        LimelightCamera limelight = bot.limelight;
+        LimelightCamera limelight = robot.limelight;
         if (Context.allianceColor != limelight.getAlliance()) {
             telemetry.addData("Note", "%s selected — re-init to apply", Context.allianceColor);
         }

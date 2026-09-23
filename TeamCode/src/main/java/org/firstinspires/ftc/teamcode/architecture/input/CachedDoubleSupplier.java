@@ -30,10 +30,6 @@ public class CachedDoubleSupplier {
         return current;
     }
 
-    public ConditionalBinder conditionalBindState() {
-        return new ConditionalBinder(this);
-    }
-
     public EdgeBooleanSupplier greaterThan(double threshold) {
         return new EdgeBooleanSupplier(() -> this.getValue() > threshold);
     }
@@ -55,50 +51,5 @@ public class CachedDoubleSupplier {
             double value = this.getValue();
             return value >= min && value <= max;
         });
-    }
-
-    public static class ConditionalBinder {
-        private final CachedDoubleSupplier supplier;
-        private double minValue = Double.NEGATIVE_INFINITY;
-        private double maxValue = Double.POSITIVE_INFINITY;
-        private boolean minInclusive = false;
-        private boolean maxInclusive = false;
-
-        public ConditionalBinder(CachedDoubleSupplier supplier) {
-            this.supplier = supplier;
-        }
-
-        public ConditionalBinder greaterThan(double value) {
-            this.minValue = value;
-            this.minInclusive = false;
-            return this;
-        }
-
-        public ConditionalBinder greaterThanEqualTo(double value) {
-            this.minValue = value;
-            this.minInclusive = true;
-            return this;
-        }
-
-        public ConditionalBinder lessThan(double value) {
-            this.maxValue = value;
-            this.maxInclusive = false;
-            return this;
-        }
-
-        public ConditionalBinder lessThanEqualTo(double value) {
-            this.maxValue = value;
-            this.maxInclusive = true;
-            return this;
-        }
-
-        public EdgeBooleanSupplier bind() {
-            return new EdgeBooleanSupplier(() -> {
-                double value = supplier.getValue();
-                boolean minCheck = minInclusive ? value >= minValue : value > minValue;
-                boolean maxCheck = maxInclusive ? value <= maxValue : value < maxValue;
-                return minCheck && maxCheck;
-            });
-        }
     }
 }

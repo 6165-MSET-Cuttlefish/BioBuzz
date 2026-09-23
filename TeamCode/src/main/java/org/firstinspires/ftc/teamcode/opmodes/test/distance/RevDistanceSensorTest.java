@@ -23,8 +23,8 @@ public class RevDistanceSensorTest extends OpMode {
     @Override
     public void loop() {
         double mm = sensor.getDistance(DistanceUnit.MM);
-        double cm = sensor.getDistance(DistanceUnit.CM);
-        double in = sensor.getDistance(DistanceUnit.INCH);
+        double cm = DistanceUnit.CM.fromMm(mm);
+        double in = DistanceUnit.INCH.fromMm(mm);
 
         telemetry.addData("mm", "%.1f", mm);
         telemetry.addData("cm", "%.2f", cm);

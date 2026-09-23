@@ -1,9 +1,3 @@
-/**
- * Top-level build file for ftc_app project.
- *
- * It is extraordinarily rare that you will ever need to edit this file.
- */
-
 plugins {
     id 'com.android.application' version '8.13.2' apply false
     // Sloth hot-reload deployment tasks (assembleSloth, dexSloth, deploySloth, etc.).
@@ -14,7 +8,7 @@ allprojects {
     repositories {
         mavenCentral()
         google()
-        // Sloth runtime, its Sinister dependency, and slothboard.
+        // Sloth runtime and its Sinister dependency.
         maven { url = 'https://repo.dairy.foundation/releases' }
         // 6165's slothboard build (Dairy tag + team PRs), committed under TeamCode/libs/m2.
         maven {

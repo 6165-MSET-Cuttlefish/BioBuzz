@@ -2,7 +2,6 @@ import java.text.SimpleDateFormat
 
 plugins {
     id 'com.android.application'
-    // Sloth hot-reload deployment tasks (assembleSloth, dexSloth, deploySloth, etc.).
     id 'dev.frozenmilk.sinister.sloth.load'
 }
 
@@ -89,12 +88,10 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.2.0'
 
     implementation 'com.pedropathing:revhub:3.0.1'
-    // AutoTune procedures (pedro/procedures/, vendored) and their web UI on port 10158.
     implementation 'com.pedropathing:tuning:1.0.1'
-    // Ivy: Pedro's command framework, used for every action and autonomous sequence.
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
 
     implementation 'dev.frozenmilk.sinister:Sloth:0.3.2'
-    // Dairy's ftc-dashboard fork. Version is {slothVersion}+{dashboardVersion}.
+    // 6165 slothboard build from TeamCode/libs/m2; the version prefix must match the Sloth version.
     implementation 'com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.3'
 }

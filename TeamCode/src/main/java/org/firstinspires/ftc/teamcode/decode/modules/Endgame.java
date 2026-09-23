@@ -6,7 +6,6 @@ import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
-import java.util.Arrays;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.architecture.control.PidController;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
@@ -33,18 +32,11 @@ public class Endgame extends Module {
 
     private Drivetrain drivetrain;
 
-    public boolean disableServosForEndgame = false;
-
-    public double leftPidflOffset = 0;
-    public double rightPidflOffset = 0;
-
     private boolean firstRead = true;
 
     public static class FullLiftConfig {
         public double leftMultiplier = 1;
         public double rightMultiplier = 0.96;
-        public double leftPower;
-        public double rightPower;
 
         public boolean enableLinearDeceleration = true;
         public double decelerationDistanceTicks = 1000;
@@ -60,41 +52,26 @@ public class Endgame extends Module {
         public double minimumDecelerationPower = 0.1;
     }
 
-    public static class LeftPIDFLConfig {
-        public double p = 0.01, i = 0.0, d = 0.0002, f = 0.0, l = 0.0;
+    /** {@code l} is the static-friction kick (kS); {@code f} is the position feed-forward. */
+    public static class Pidfl {
+        public double p, i, d, f, l;
+
+        Pidfl(double p, double d) {
+            this.p = p;
+            this.d = d;
+        }
     }
 
-    public static class RightPIDFLConfig {
-        public double p = 0.01, i = 0.0, d = 0.0002, f = 0.0, l = 0.0;
-    }
-
-    public static class LeftInitialPIDFLConfig {
-        public double p = 0.005, i = 0.0, d = 0.0002, f = 0.0, l = 0.0;
-    }
-
-    public static class RightInitialPIDFLConfig {
-        public double p = 0.005, i = 0.0, d = 0.0002, f = 0.0, l = 0.0;
-    }
-
-    public static class LeftInitialHoldPIDFL {
-        public double p = 0.002, i = 0.0, d = 0.0002, f = 0.0, l = 0.0;
-    }
-
-    public static class RightInitialHoldPIDFL {
-        public double p = 0.002, i = 0.0, d = 0.0002, f = 0.0, l = 0.0;
-    }
-
-    public static LeftPIDFLConfig leftPidflConfig = new LeftPIDFLConfig();
-    public static RightPIDFLConfig rightPidflConfig = new RightPIDFLConfig();
+    public static Pidfl leftPidflConfig = new Pidfl(0.01, 0.0002);
+    public static Pidfl rightPidflConfig = new Pidfl(0.01, 0.0002);
     public static InitialLiftConfig initialLiftConfig = new InitialLiftConfig();
-    public static LeftInitialPIDFLConfig leftInitialPidflConfig = new LeftInitialPIDFLConfig();
-    public static RightInitialPIDFLConfig rightInitialPidflConfig = new RightInitialPIDFLConfig();
-    public static LeftInitialHoldPIDFL leftInitialHoldPidfl = new LeftInitialHoldPIDFL();
-    public static RightInitialHoldPIDFL rightInitialHoldPidfl = new RightInitialHoldPIDFL();
+    public static Pidfl leftInitialPidflConfig = new Pidfl(0.005, 0.0002);
+    public static Pidfl rightInitialPidflConfig = new Pidfl(0.005, 0.0002);
+    public static Pidfl leftInitialHoldPidfl = new Pidfl(0.002, 0.0002);
+    public static Pidfl rightInitialHoldPidfl = new Pidfl(0.002, 0.0002);
     public static FullLiftConfig fullLiftConfig = new FullLiftConfig();
 
     public enum FullLiftState implements State {
-        INIT(0),
         OFF(0),
         FULL_LIFT(-14000);
 
@@ -105,8 +82,7 @@ public class Endgame extends Module {
 
     public enum LeftPtoState implements State {
         UP(0.4),
-        DOWN(1),
-        MANUAL(-1);
+        DOWN(1);
 
         LeftPtoState(double value) {
             setValue(value);
@@ -115,8 +91,7 @@ public class Endgame extends Module {
 
     public enum RightPtoState implements State {
         UP(0.5),
-        DOWN(0.3),
-        MANUAL(-1);
+        DOWN(0.3);
 
         RightPtoState(double value) {
             setValue(value);
@@ -126,7 +101,6 @@ public class Endgame extends Module {
     public enum InitialState implements State {
         LIFT(700),
         DISABLED(LIFT.getValue()),
-        ZERO(0),
         HOLD_BELLYPAN(-150);
 
         InitialState(double value) {
@@ -139,12 +113,9 @@ public class Endgame extends Module {
     private double leftInitialPosition = 0.0;
     private double rightInitialPosition = 0.0;
 
-    private final double[] cachedLeftInitial = nanArray(5);
-    private final double[] cachedRightInitial = nanArray(5);
-    private final double[] cachedLeft = nanArray(5);
-    private final double[] cachedRight = nanArray(5);
-
-    public double fullLiftTargetPosition = 0;
+    private double fullLiftTargetPosition = 0;
+    private double fullLiftLeftPower = 0;
+    private double fullLiftRightPower = 0;
     private double leftInitialPower = 0;
     private double rightInitialPower = 0;
 
@@ -176,7 +147,7 @@ public class Endgame extends Module {
 
     @Override
     protected void initStates() {
-        setStates(FullLiftState.INIT, LeftPtoState.UP, RightPtoState.UP, InitialState.HOLD_BELLYPAN);
+        setStates(FullLiftState.OFF, LeftPtoState.UP, RightPtoState.UP, InitialState.HOLD_BELLYPAN);
     }
 
     @Override
@@ -196,16 +167,16 @@ public class Endgame extends Module {
 
         InitialState initialState = getState(InitialState.class);
         if (initialState == InitialState.LIFT) {
-            updateController(leftInitialPidfl, leftInitialPidflConfig.p, leftInitialPidflConfig.i, leftInitialPidflConfig.d, leftInitialPidflConfig.f, leftInitialPidflConfig.l, cachedLeftInitial);
-            updateController(rightInitialPidfl, rightInitialPidflConfig.p, rightInitialPidflConfig.i, rightInitialPidflConfig.d, rightInitialPidflConfig.f, rightInitialPidflConfig.l, cachedRightInitial);
+            applyGains(leftInitialPidfl, leftInitialPidflConfig);
+            applyGains(rightInitialPidfl, rightInitialPidflConfig);
         } else {
-            updateController(leftInitialPidfl, leftInitialHoldPidfl.p, leftInitialHoldPidfl.i, leftInitialHoldPidfl.d, leftInitialHoldPidfl.f, leftInitialHoldPidfl.l, cachedLeftInitial);
-            updateController(rightInitialPidfl, rightInitialHoldPidfl.p, rightInitialHoldPidfl.i, rightInitialHoldPidfl.d, rightInitialHoldPidfl.f, rightInitialHoldPidfl.l, cachedRightInitial);
+            applyGains(leftInitialPidfl, leftInitialHoldPidfl);
+            applyGains(rightInitialPidfl, rightInitialHoldPidfl);
         }
 
-        leftInitialPidfl.setTarget(initialState.getValue() + leftPidflOffset);
+        leftInitialPidfl.setTarget(initialState.getValue());
         leftInitialPidfl.updatePosition(leftInitialPosition);
-        rightInitialPidfl.setTarget(initialState.getValue() + rightPidflOffset);
+        rightInitialPidfl.setTarget(initialState.getValue());
         rightInitialPidfl.updatePosition(rightInitialPosition);
 
         double leftPower = leftInitialPidfl.calculate();
@@ -223,8 +194,8 @@ public class Endgame extends Module {
 
         if (getState(FullLiftState.class) == FullLiftState.FULL_LIFT) {
             Drivetrain dt = requireDrivetrain();
-            updateController(leftPidfl, leftPidflConfig.p, leftPidflConfig.i, leftPidflConfig.d, leftPidflConfig.f, leftPidflConfig.l, cachedLeft);
-            updateController(rightPidfl, rightPidflConfig.p, rightPidflConfig.i, rightPidflConfig.d, rightPidflConfig.f, rightPidflConfig.l, cachedRight);
+            applyGains(leftPidfl, leftPidflConfig);
+            applyGains(rightPidfl, rightPidflConfig);
 
             fullLiftTargetPosition = getState(FullLiftState.class).getValue();
             leftPidfl.setTarget(fullLiftTargetPosition);
@@ -232,37 +203,27 @@ public class Endgame extends Module {
             rightPidfl.setTarget(fullLiftTargetPosition);
             rightPidfl.updatePosition(-dt.getFr().getCurrentPosition());
 
-            fullLiftConfig.leftPower = -1 * Math.max(-1, Math.min(1, leftPidfl.calculate())) * fullLiftConfig.leftMultiplier;
-            fullLiftConfig.rightPower = -1 * Math.max(-1, Math.min(1, rightPidfl.calculate())) * fullLiftConfig.rightMultiplier;
+            fullLiftLeftPower = -1 * Math.max(-1, Math.min(1, leftPidfl.calculate())) * fullLiftConfig.leftMultiplier;
+            fullLiftRightPower = -1 * Math.max(-1, Math.min(1, rightPidfl.calculate())) * fullLiftConfig.rightMultiplier;
 
             if (fullLiftConfig.enableLinearDeceleration) {
                 double leftDecelMultiplier = computeDecelMultiplier(leftPidfl.getError(),
                         fullLiftConfig.decelerationDistanceTicks, fullLiftConfig.minimumMultiplier);
                 double rightDecelMultiplier = computeDecelMultiplier(rightPidfl.getError(),
                         fullLiftConfig.decelerationDistanceTicks, fullLiftConfig.minimumMultiplier);
-                fullLiftConfig.leftPower *= leftDecelMultiplier;
-                fullLiftConfig.rightPower *= rightDecelMultiplier;
+                fullLiftLeftPower *= leftDecelMultiplier;
+                fullLiftRightPower *= rightDecelMultiplier;
             }
 
             // Must happen in read() so the targets land before Drivetrain.write() runs.
-            dt.setRawTargets(fullLiftConfig.leftPower, fullLiftConfig.leftPower,
-                    fullLiftConfig.rightPower, fullLiftConfig.rightPower);
+            dt.setRawTargets(fullLiftLeftPower, fullLiftLeftPower,
+                    fullLiftRightPower, fullLiftRightPower);
         }
     }
 
-    private static double[] nanArray(int size) {
-        double[] a = new double[size];
-        Arrays.fill(a, Double.NaN);
-        return a;
-    }
-
-    private static void updateController(PidController controller,
-            double p, double i, double d, double f, double l, double[] cache) {
-        if (p != cache[0] || i != cache[1] || d != cache[2] || f != cache[3] || l != cache[4]) {
-            controller.setGains(p, i, d, l);
-            controller.kPosition = f;
-            cache[0] = p; cache[1] = i; cache[2] = d; cache[3] = f; cache[4] = l;
-        }
+    private static void applyGains(PidController controller, Pidfl gains) {
+        controller.setGains(gains.p, gains.i, gains.d, gains.l);
+        controller.kPosition = gains.f;
     }
 
     private static double computeDecelMultiplier(double error, double decelerationDistance, double minimumMultiplier) {
@@ -285,12 +246,10 @@ public class Endgame extends Module {
 
     @Override
     protected void write() {
-        if (getState(InitialState.class) == InitialState.DISABLED) {
-            disableServosForEndgame = true;
+        if (servosDisabled()) {
             leftInitial.setPwmDisable();
             rightInitial.setPwmDisable();
         } else {
-            disableServosForEndgame = false;
             if (!leftInitial.isPwmEnabled()) {
                 leftInitial.setPwmEnable();
             }
@@ -309,6 +268,11 @@ public class Endgame extends Module {
     public void stop() {
         leftInitial.setPower(0);
         rightInitial.setPower(0);
+    }
+
+    /** True while the endgame has the initial-lift servos PWM-disabled; turret and headlight servos follow suit. */
+    public boolean servosDisabled() {
+        return getState(InitialState.class) == InitialState.DISABLED;
     }
 
     public boolean initialLiftComplete() {
@@ -334,9 +298,6 @@ public class Endgame extends Module {
             logDashboard("Left PID Error", "%.3f", leftPidfl.getError());
             logDashboard("Right PID Error", "%.3f", rightPidfl.getError());
 
-            log("Left Endgame Offset", "%.1f", leftPidflOffset);
-            log("Right Endgame Offset", "%.1f", rightPidflOffset);
-
             if (endgameTelemetry.current) {
                 logDashboard("FL Current (A)", "%.2f", dt.getFl().getCurrent(CurrentUnit.AMPS));
                 logDashboard("FR Current (A)", "%.2f", dt.getFr().getCurrent(CurrentUnit.AMPS));
@@ -353,8 +314,7 @@ public class Endgame extends Module {
 
             if (endgameTelemetry.initial) {
                 logDashboard("Initial Lift State", getState(InitialState.class));
-                logDashboard("Left Initial Target", "%.2f", getState(InitialState.class).getValue());
-                logDashboard("Right Initial Target", "%.2f", getState(InitialState.class).getValue());
+                logDashboard("Initial Target", "%.2f", getState(InitialState.class).getValue());
                 log("Left Initial Encoder (deg)", "%.2f", leftInitialPosition);
                 log("Right Initial Encoder (deg)", "%.2f", rightInitialPosition);
                 logDashboard("Left Initial Voltage", "%.2f", leftInitialEncoder.getVoltage());

@@ -53,6 +53,7 @@ public class ConfigureUltrasonicAddress extends LinearOpMode {
         telemetry.update();
 
         waitForStart();
+        if (isStopRequested()) return;
 
         sonar.writeI2cAddrToSensorEEPROM((byte) NEW_ADDR_8BIT);
         sonar.setI2cAddress(I2cAddr.create8bit(NEW_ADDR_8BIT));

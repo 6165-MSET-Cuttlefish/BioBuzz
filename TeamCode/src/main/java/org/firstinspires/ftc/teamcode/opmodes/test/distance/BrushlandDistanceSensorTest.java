@@ -26,8 +26,8 @@ public class BrushlandDistanceSensorTest extends OpMode {
     @Override
     public void loop() {
         double mm = lrf.getDistance(DistanceUnit.MM);
-        double cm = lrf.getDistance(DistanceUnit.CM);
-        double in = lrf.getDistance(DistanceUnit.INCH);
+        double cm = DistanceUnit.CM.fromMm(mm);
+        double in = DistanceUnit.INCH.fromMm(mm);
         int status = lrf.getStatus();
 
         telemetry.addData("mm",     "%.1f", mm);

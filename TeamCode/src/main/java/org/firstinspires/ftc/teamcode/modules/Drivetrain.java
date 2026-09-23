@@ -13,7 +13,6 @@ import org.firstinspires.ftc.teamcode.architecture.control.PidController;
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
-import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 
 @Config
@@ -37,23 +36,17 @@ public class Drivetrain extends Module {
     public static class CurrentLimiterConfig {
         public boolean enabled = true;
         public double currentThresholdMin = 25.0;
-        public double currentThresholdMax = 30.0;
-        public double currentOverTime = 0;
-        public double minCurrentOverTime = 2;
         public double integratedCurrentLimit = 400000;
         public double decayRate = 0.9;
         public double decayLoopMs = 5;
     }
 
-    public static class TelemetryToggles {
-        public boolean TOGGLE = true;
-        public boolean current = false;
-    }
-
     public static EnableMotors enableMotors = new EnableMotors();
     public static CurrentLimiterConfig currentLimiterConfig = new CurrentLimiterConfig();
-    public static TelemetryToggles telemetryToggles = new TelemetryToggles();
-    private ElapsedTime currentLoopTimer;
+    public static boolean motorCurrentTelemetry = false;
+
+    private final ElapsedTime currentLoopTimer = new ElapsedTime();
+    private double currentOverTime = 0;
 
     private boolean headingLocked = false;
     private double lockedHeading = 0;
@@ -61,15 +54,6 @@ public class Drivetrain extends Module {
             .withGains(1, 0, 0.2, 0.0)
             .withFeedforward(0, 0)
             .withContinuousInput(-Math.PI, Math.PI);
-
-    public enum DriveState implements State {
-        MANUAL(0),
-        EXTERNAL(0);
-
-        DriveState(double value) {
-            setValue(value);
-        }
-    }
 
     private double flPower, blPower, brPower, frPower;
     private double lastCurrentLimiterMultiplier = 1.0;
@@ -101,12 +85,11 @@ public class Drivetrain extends Module {
     @Override
     public void init() {
         super.init();
-        currentLoopTimer = new ElapsedTime();
+        currentLoopTimer.reset();
     }
 
     @Override
     protected void initStates() {
-        setStates(DriveState.MANUAL);
     }
 
     @Override
@@ -115,12 +98,10 @@ public class Drivetrain extends Module {
 
     @Override
     protected void write() {
-        if (!getState(DriveState.class).equals(DriveState.EXTERNAL)) {
-            fl.setPower(enableMotors.enableFl ? flPower : 0);
-            bl.setPower(enableMotors.enableBl ? blPower : 0);
-            br.setPower(enableMotors.enableBr ? brPower : 0);
-            fr.setPower(enableMotors.enableFr ? frPower : 0);
-        }
+        fl.setPower(enableMotors.enableFl ? flPower : 0);
+        bl.setPower(enableMotors.enableBl ? blPower : 0);
+        br.setPower(enableMotors.enableBr ? brPower : 0);
+        fr.setPower(enableMotors.enableFr ? frPower : 0);
     }
 
     public void setTargets(double fl, double bl, double br, double fr) {
@@ -134,8 +115,6 @@ public class Drivetrain extends Module {
             br /= maxPower;
         }
 
-        // The floodgate is an analog input (served by the once-per-loop bulk read, no extra bus call),
-        // so compute every loop — finer sampling for the I²·t integral, at no cost.
         lastCurrentLimiterMultiplier = computeCurrentLimiterMultiplier();
         currentLoopTimer.reset();
         flPower = fl * lastCurrentLimiterMultiplier;
@@ -153,8 +132,6 @@ public class Drivetrain extends Module {
 
     @Override
     public void stop() {
-        setRawTargets(0, 0, 0, 0);
-        // write() never runs after EnhancedOpMode.stop(), so the cut must go to the motors here.
         fl.setPower(0);
         bl.setPower(0);
         br.setPower(0);
@@ -173,10 +150,6 @@ public class Drivetrain extends Module {
         return false;
     }
 
-    public boolean hasFloodgate() {
-        return floodgate != null;
-    }
-
     public double getFloodgateCurrent() {
         if (floodgate == null) return 0.0;
         double voltage = floodgate.getVoltage();
@@ -187,15 +160,15 @@ public class Drivetrain extends Module {
         if (floodgate == null || !currentLimiterConfig.enabled) return 1.0;
 
         double current = getFloodgateCurrent();
-        currentLimiterConfig.currentOverTime += Math.pow(current, 2) * currentLoopTimer.milliseconds();
-        currentLimiterConfig.currentOverTime *= Math.pow(currentLimiterConfig.decayRate, (currentLoopTimer.milliseconds() / currentLimiterConfig.decayLoopMs));
+        currentOverTime += Math.pow(current, 2) * currentLoopTimer.milliseconds();
+        currentOverTime *= Math.pow(currentLimiterConfig.decayRate, (currentLoopTimer.milliseconds() / currentLimiterConfig.decayLoopMs));
 
         if (current <= currentLimiterConfig.currentThresholdMin) {
             return 1.0;
         }
 
         // Integral (I²·t) scaling rather than a hard cutoff; integratedCurrentLimit is the ceiling I²·t shouldn't exceed.
-        return 1.0 - Range.clip(currentLimiterConfig.currentOverTime / currentLimiterConfig.integratedCurrentLimit, 0, 1);
+        return 1.0 - Range.clip(currentOverTime / currentLimiterConfig.integratedCurrentLimit, 0, 1);
     }
 
     public void lockHeading() {
@@ -273,9 +246,6 @@ public class Drivetrain extends Module {
 
     @Override
     protected void onTelemetry() {
-        if (!telemetryToggles.TOGGLE) return;
-
-        logDashboard("Drive Mode", getState(DriveState.class));
         logDashboard("Motor Powers", "FL:%.2f BL:%.2f FR:%.2f BR:%.2f", flPower, blPower, frPower, brPower);
 
         logDashboard("FL Position (ticks)", fl.getCurrentPosition());
@@ -288,11 +258,10 @@ public class Drivetrain extends Module {
         if (floodgate != null) {
             logDashboard("Floodgate Current (A)", "%.2f", getFloodgateCurrent());
             logDashboard("Current Limiter Multiplier", "%.2f", lastCurrentLimiterMultiplier);
-            logDashboard("currentOverTime", "%.2f", currentLimiterConfig.currentOverTime);
-            logDashboard("final current scale", "%.3f", 1.0 - currentLimiterConfig.currentOverTime / currentLimiterConfig.integratedCurrentLimit);
+            logDashboard("currentOverTime", "%.2f", currentOverTime);
         }
 
-        if (telemetryToggles.current) {
+        if (motorCurrentTelemetry) {
             logDashboard("FL Current (A)", "%.2f", fl.getCurrent(CurrentUnit.AMPS));
             logDashboard("BL Current (A)", "%.2f", bl.getCurrent(CurrentUnit.AMPS));
             logDashboard("BR Current (A)", "%.2f", br.getCurrent(CurrentUnit.AMPS));

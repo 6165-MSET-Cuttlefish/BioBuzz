@@ -42,8 +42,9 @@ public final class DecodeContext {
         Pose robotPose = robot.follower.pose();
         double robotRad = robotPose.heading();
 
-        turretFieldX = robotPose.x() + turretX * Math.cos(robotRad) - turretY * Math.sin(robotRad);
-        turretFieldY = robotPose.y() + turretX * Math.sin(robotRad) + turretY * Math.cos(robotRad);
+        Pose turretField = turretFieldPosition(robotPose);
+        turretFieldX = turretField.x();
+        turretFieldY = turretField.y();
 
         double targetX = robot.targetPose.x();
         double targetY = robot.targetPose.y();
@@ -96,6 +97,14 @@ public final class DecodeContext {
         DecodeContext.targetX = targetX;
         DecodeContext.targetY = targetY;
         distanceToGoal = Math.hypot(targetX - turretFieldX, targetY - turretFieldY);
+    }
+
+    /** Turret pivot's field x/y for a robot at {@code robot}; the returned heading is unused. */
+    public static Pose turretFieldPosition(Pose robot) {
+        double h = robot.heading();
+        return new Pose(
+                robot.x() + turretX * Math.cos(h) - turretY * Math.sin(h),
+                robot.y() + turretX * Math.sin(h) + turretY * Math.cos(h));
     }
 
     private DecodeContext() {}

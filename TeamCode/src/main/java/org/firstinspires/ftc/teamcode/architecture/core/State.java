@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * State-machine state. Implement on an enum and set the setpoint via {@link #setValue(double)} in the constructor.
  *
- * <p>Backing maps are static so values survive OpMode reconstruction (Sloth hot-reload, re-runs); {@link #clearModuleBindings()} drops stale State→Module pointers at init.
+ * <p>Maps are static, so bindings from the previous OpMode linger until {@link #clearModuleBindings()} at init.
  */
 public interface State {
 

@@ -2,11 +2,8 @@ package org.firstinspires.ftc.teamcode.decode.modules;
 
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.distanceToGoal;
 import static org.firstinspires.ftc.teamcode.decode.DecodeRobot.shooterTelemetry;
-import static org.firstinspires.ftc.teamcode.decode.modules.Turret.turretX;
-import static org.firstinspires.ftc.teamcode.decode.modules.Turret.turretY;
 
 import com.acmerobotics.dashboard.config.Config;
-import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
@@ -18,21 +15,18 @@ import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
-import org.firstinspires.ftc.teamcode.decode.DecodeContext;
 
 @Config("Decode Shooter")
 public class Shooter extends Module {
     private static final double TICKS_PER_REV = 8192.0;
     private static final double VELOCITY_TOLERANCE_RPM = 50;
-    public static double maxRobotVelocity = 3;
-    public static boolean robotVelocityCorrection = true;
 
     private final EnhancedMotor left;
     private final EnhancedMotor right;
     private final EnhancedServo hood;
 
-    public double targetVelocityRPM = 50;
-    public double hoodPosition;
+    private double targetVelocityRPM = 50;
+    private double hoodPosition;
 
     public double closeVelocityOffset = 0;
     public double closeHoodOffset = 0;
@@ -43,7 +37,6 @@ public class Shooter extends Module {
         public double Kp = 0.0018;
         public double Ki = 0;
         public double Kd = 0.000195;
-        public double Kf = 1;
         public double FScale = 0.89;
         public double Kl = 0;
         public double LP1Rate = 0.7;
@@ -64,7 +57,6 @@ public class Shooter extends Module {
 
     private final PidController shooterPidController = new PidController();
     private final ElapsedTime shooterVelocityTimer = new ElapsedTime();
-    private final ElapsedTime spinUpTimer = new ElapsedTime();
 
     private double shooterCurrentVelocityRPM = 0;
     private double shooterCurrentVelocityRPMRaw = 0;
@@ -72,11 +64,7 @@ public class Shooter extends Module {
     private double shooterCurrentVelocityRPMHoodLP1 = 0;
     private int shooterPreviousPosition = 0;
     private boolean shooterFirstLoop = true;
-    public double shooterPidOutput = 0;
-
-    private double cachedKp = Double.NaN, cachedKi = Double.NaN, cachedKd = Double.NaN,
-            cachedKf = Double.NaN, cachedKl = Double.NaN;
-    private double cachedTargetRPMForKf = Double.NaN, cachedFScale = Double.NaN;
+    private double shooterPidOutput = 0;
 
     public enum FlywheelState implements State {
         IDLE(1800),
@@ -96,8 +84,6 @@ public class Shooter extends Module {
             setValue(value);
         }
     }
-
-    public int ballInSequence = 2;
 
     public enum HoodState implements State {
         RESET(0.585),
@@ -134,12 +120,9 @@ public class Shooter extends Module {
         left.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         left.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
-        shooterPidController.setGains(shooterPid.Kp, shooterPid.Ki, shooterPid.Kd, shooterPid.Kl);
-        shooterPidController.kPosition = shooterPid.Kf;
         shooterPidController.resetIntegralOnTargetChange = false;
         shooterPidController.derivativeOnMeasurement = true;
         shooterVelocityTimer.reset();
-        spinUpTimer.reset();
     }
 
     @Override
@@ -317,35 +300,18 @@ public class Shooter extends Module {
     }
 
     private double calculateShooterPIDPower() {
-        if (targetVelocityRPM != 0
-                && (targetVelocityRPM != cachedTargetRPMForKf || shooterPid.FScale != cachedFScale)) {
-            // Fit from https://www.desmos.com/calculator/ykvsfthqvf
-            double f = shooterPid.FScale * (0.0253212 * Math.sqrt(targetVelocityRPM + 3626.49145) - 1.47831);
-            shooterPid.Kf = f / targetVelocityRPM;
-            cachedTargetRPMForKf = targetVelocityRPM;
-            cachedFScale = shooterPid.FScale;
-        }
-        if (shooterPid.Kp != cachedKp || shooterPid.Ki != cachedKi || shooterPid.Kd != cachedKd
-                || shooterPid.Kf != cachedKf || shooterPid.Kl != cachedKl) {
-            shooterPidController.setGains(shooterPid.Kp, shooterPid.Ki, shooterPid.Kd, shooterPid.Kl);
-            shooterPidController.kPosition = shooterPid.Kf;
-            cachedKp = shooterPid.Kp; cachedKi = shooterPid.Ki; cachedKd = shooterPid.Kd;
-            cachedKf = shooterPid.Kf; cachedKl = shooterPid.Kl;
-        }
+        // Fit from https://www.desmos.com/calculator/ykvsfthqvf
+        double kf = targetVelocityRPM != 0
+                ? shooterPid.FScale * (0.0253212 * Math.sqrt(targetVelocityRPM + 3626.49145) - 1.47831) / targetVelocityRPM
+                : 0;
+        shooterPidController.setGains(shooterPid.Kp, shooterPid.Ki, shooterPid.Kd, shooterPid.Kl);
+        shooterPidController.kPosition = kf;
         shooterPidController.update(targetVelocityRPM, shooterCurrentVelocityRPM);
         return shooterPidController.calculate();
     }
 
     public double getCurrentVelocityRPM() {
         return shooterCurrentVelocityRPM;
-    }
-
-    public double getCurrentVelocityRPMRaw() {
-        return shooterCurrentVelocityRPMRaw;
-    }
-
-    public double getTargetVelocityRPM() {
-        return targetVelocityRPM;
     }
 
     public double getLeftShooterCurrent() {
@@ -371,37 +337,5 @@ public class Shooter extends Module {
 
         double currentVelocity = getCurrentVelocityRPM();
         return currentVelocity >= minRPM - VELOCITY_TOLERANCE_RPM && currentVelocity <= maxRPM + VELOCITY_TOLERANCE_RPM;
-    }
-
-    private double lockDistance(Pose target) {
-        double heading = target.heading();
-        double lockTurretFieldX = target.x() + turretX * Math.cos(heading) - turretY * Math.sin(heading);
-        double lockTurretFieldY = target.y() + turretX * Math.sin(heading) + turretY * Math.cos(heading);
-        return Math.hypot(DecodeContext.targetX - lockTurretFieldX, DecodeContext.targetY - lockTurretFieldY);
-    }
-
-    public void lockFlywheel(Pose target) {
-        double lockedRPM = ShooterInterpolation.getTargetRPM(lockDistance(target));
-        activateOrThrow(FlywheelState.MANUAL);
-        getState(FlywheelState.class).setValue(lockedRPM);
-    }
-
-    public void lockHood(Pose target) {
-        double distance = lockDistance(target);
-        double lockedRPM = ShooterInterpolation.getTargetRPM(distance);
-        double lockedHood = ShooterInterpolation.getHoodPosition(distance, lockedRPM);
-        activateOrThrow(HoodState.MANUAL);
-        getState(HoodState.class).setValue(lockedHood);
-    }
-
-    public void unlock() {
-        setStates(FlywheelState.PID, HoodState.PID);
-    }
-
-    // A failed activate would otherwise make the following setValue overwrite the current state's setpoint.
-    private static void activateOrThrow(State state) {
-        if (!state.activate()) {
-            throw new IllegalStateException("Shooter could not enter " + state + "; is the Shooter initialized?");
-        }
     }
 }

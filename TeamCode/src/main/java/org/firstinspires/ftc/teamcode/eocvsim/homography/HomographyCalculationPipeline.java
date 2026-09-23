@@ -23,11 +23,10 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class HomographyCalculationPipeline extends OpenCvPipeline {
 
-    // Hand-synced with BallVisionConstants: EOCV-Sim compiles this file in isolation and can't import it.
     private static final int   GRID_COLS          = 9;
     private static final int   GRID_ROWS          = 6;
     private static final int   EXPECTED_CORNERS   = GRID_COLS * GRID_ROWS;
-    private static final float SQUARE_SIZE_INCHES = 1.0f; // TODO: verify against your physical board
+    private static final float SQUARE_SIZE_INCHES = 1.0f; // must equal the printed board's square size
     private static final float OUTPUT_SCALE_PX    = 50.0f;
     private static final float MARGIN_PX          = 250.0f;
     private static final int   FRAMES_TO_CONFIRM  = 5;
@@ -61,10 +60,8 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     }
 
     private final AtomicBoolean        homographyLocked        = new AtomicBoolean(false);
-    private final AtomicReference<Mat> lockedHomography        = new AtomicReference<>(null);
     private final AtomicReference<Mat> lockedPreviewHomography = new AtomicReference<>(null);
     private final AtomicInteger        confirmCount            = new AtomicInteger(0);
-    private final AtomicReference<Mat> candidateHomography     = new AtomicReference<>(null);
 
     private final AtomicReference<Mat> pendingFrame     = new AtomicReference<>(null);
     private final AtomicBoolean        detectionRunning  = new AtomicBoolean(false);
@@ -78,13 +75,11 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     // Reused: EasyOpenCV copies the returned Mat's pixels but never releases it, so a per-frame new Mat leaks.
     private final Mat          output = new Mat();
 
-    private final Thread detectionThread;
-
     public HomographyCalculationPipeline(Telemetry telemetry) {
         this.telemetry  = telemetry;
         this.dstCorners = buildCalibrationDstCorners();
 
-        detectionThread = new Thread(this::detectionLoop, "HomographyDetection");
+        Thread detectionThread = new Thread(this::detectionLoop, "HomographyDetection");
         detectionThread.setDaemon(true);
         detectionThread.start();
     }
@@ -110,6 +105,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         }
 
         telemetry.addLine(statusLine);
+        telemetry.addData("Input", input.width() + "x" + input.height() + " (H_ARRAY needs 640x480)");
         telemetry.addData("Confirmations", confirmCount.get() + " / " + FRAMES_TO_CONFIRM);
         telemetry.update();
         return input;
@@ -162,19 +158,20 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
             return;
         }
 
-        // Superseded candidates are deliberately not released: another thread may be reading one.
-        candidateHomography.set(h);
-        statusLine = "Board found — confirming...";
+        try {
+            statusLine = "Board found — confirming...";
 
-        if (confirmCount.incrementAndGet() >= FRAMES_TO_CONFIRM) {
+            if (confirmCount.incrementAndGet() >= FRAMES_TO_CONFIRM) {
 
-            Mat previewHomography = new Mat();
-            Core.gemm(PREVIEW_SCALE, h, 1.0, new Mat(), 0.0, previewHomography);
+                Mat previewHomography = new Mat();
+                Core.gemm(PREVIEW_SCALE, h, 1.0, new Mat(), 0.0, previewHomography);
 
-            lockedHomography.set(h);
-            lockedPreviewHomography.set(previewHomography);
-            homographyStr = buildHomographyString(h);
-            homographyLocked.set(true); // must be last
+                lockedPreviewHomography.set(previewHomography);
+                homographyStr = buildHomographyString(h, frame.width(), frame.height());
+                homographyLocked.set(true); // must be last
+            }
+        } finally {
+            h.release();
         }
     }
 
@@ -188,7 +185,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         return dst;
     }
 
-    private static String buildHomographyString(Mat h) {
+    private static String buildHomographyString(Mat h, int width, int height) {
         StringBuilder sb = new StringBuilder("double[][] H_ARRAY = {\n");
         for (int r = 0; r < 3; r++) {
             sb.append("    { ");
@@ -198,22 +195,6 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
             }
             sb.append(r < 2 ? " },\n" : " }\n");
         }
-        return sb.append("};").toString();
-    }
-
-    public String getHomographyAsString() {
-        if (homographyStr != null) return homographyStr;
-        Mat h = candidateHomography.get();
-        return (h != null && !h.empty()) ? buildHomographyString(h) : "Homography not available";
-    }
-
-    public Mat getHomography() {
-        Mat locked = lockedHomography.get();
-        return locked != null ? locked : candidateHomography.get();
-    }
-
-    /** Call from your op-mode's stop() to shut down the background thread. */
-    public void stop() {
-        detectionThread.interrupt();
+        return sb.append("};\n// calibrated at ").append(width).append('x').append(height).toString();
     }
 }

@@ -59,8 +59,10 @@ red pixels cluster near just one end (e.g., all near 179, or all near 0), report
 same way as the others. If they genuinely span **both** ends — some pixels near 0, some near 179,
 meaning the colour truly straddles the wrap and one band can't cover it — say so explicitly rather
 than reporting only whichever end has more samples: the current code has no second band for red, so
-covering a real two-sided spread needs a field added back to `RedNectarHsv` (and its `BallType.NECTAR_RED`
-entry gaining a second `HsvRange`) before the fix is usable, not just new numbers.
+covering a real two-sided spread needs a second hue band added to `RedNectarHsv` (e.g. `hLow2/hHigh2`)
+and matching extra `applyRange(out, false, ...)` calls in the `NECTAR_RED` case of
+`BallDetectionPipeline.buildColorMask` (the colour band, and the glare band if it straddles too)
+before the fix is usable, not just new numbers.
 
 ### 3. How to sample pixels from the photos
 

@@ -38,7 +38,7 @@ public class Magazine extends Module {
     private final DistanceSensor middleBackDistance;
     private final DistanceSensor backLeftDistance;
     private final DistanceSensor backRightDistance;
-    public GoBildaPrismDriver prism;
+    private final GoBildaPrismDriver prism;
 
     private Endgame endgame;
 
@@ -75,11 +75,11 @@ public class Magazine extends Module {
     private Color currentStatusPrismColor = null;
     private boolean currentStatusPrismIsSnake = false;
     private boolean prismFlashActive = false;
-    public double horizontalFrontPosition, horizontalBackPosition;
-    public double intakePower, verticalPower;
-    public double headlightFrontPosition;
-    public double headlightMiddlePosition;
-    public double headlightBackPosition;
+    private double horizontalFrontPosition, horizontalBackPosition;
+    private double intakePower, verticalPower;
+    private double headlightFrontPosition;
+    private double headlightMiddlePosition;
+    private double headlightBackPosition;
 
     private MagazineState currentState = new MagazineState(
             MagazineState.ArtifactColor.EMPTY,
@@ -115,7 +115,6 @@ public class Magazine extends Module {
     public static double backLeftDistanceThreshold = 40;
     public static double backRightDistanceThreshold = 40;
 
-    public static int horizontalTime = 400;
     public static boolean updateDistanceSensor = true;
     public static boolean updateColorSensor = true;
 
@@ -137,8 +136,7 @@ public class Magazine extends Module {
     public enum HorizontalFrontState implements State {
         OPEN(0.6),
         OPEN_SHOOT(OPEN.getValue() - 0.125),
-        STORED(0.06),
-        MANUAL(-1);
+        STORED(0.06);
 
         HorizontalFrontState(double value) {
             setValue(value);
@@ -159,7 +157,6 @@ public class Magazine extends Module {
     public enum IntakeState implements State {
         FORWARD(1),
         SHOOTING(1),
-        HALF(0.5),
         IDLE(0.3),
         REVERSE(-1),
         OFF(0),
@@ -182,47 +179,31 @@ public class Magazine extends Module {
     }
 
     private static final double HEADLIGHT_OFF = 0;
-    private static final double HEADLIGHT_RED = 0.28;
     private static final double HEADLIGHT_STROBE_SENTINEL = -1;
     private static final double HEADLIGHT_ORANGE = 0.333;
     private static final double HEADLIGHT_GREEN = .5;
-    private static final double HEADLIGHT_CYAN_STROBE = 0.6;
-    private static final double HEADLIGHT_YELLOW = 0.39;
     private static final double HEADLIGHT_WHITE = 0.8;
     private static final double HEADLIGHT_PURPLE = 0.722;
-    private static final double HEADLIGHT_WHITE_STROBE = 1;
 
     private static final double HEADLIGHT_FRONT_CYAN = 0.518;
     private static final double HEADLIGHT_MIDDLE_CYAN = 0.522;
     private static final double HEADLIGHT_BACK_CYAN = 0.526;
 
     public enum HeadlightFrontState implements State {
-        OFF(HEADLIGHT_OFF), RED(HEADLIGHT_RED), RED_STROBE(HEADLIGHT_RED),
-        RED_GREEN_STROBE(HEADLIGHT_STROBE_SENTINEL), BLUE_GREEN_STROBE(HEADLIGHT_STROBE_SENTINEL),
-        ORANGE(HEADLIGHT_ORANGE), GREEN(HEADLIGHT_GREEN), CYAN(HEADLIGHT_FRONT_CYAN),
-        CYAN_STROBE(HEADLIGHT_CYAN_STROBE), YELLOW(HEADLIGHT_YELLOW),
-        WHITE(HEADLIGHT_WHITE), PURPLE(HEADLIGHT_PURPLE), WHITE_STROBE(HEADLIGHT_WHITE_STROBE),
-        STROBE(HEADLIGHT_STROBE_SENTINEL);
+        OFF(HEADLIGHT_OFF), ORANGE(HEADLIGHT_ORANGE), GREEN(HEADLIGHT_GREEN), CYAN(HEADLIGHT_FRONT_CYAN),
+        PURPLE(HEADLIGHT_PURPLE), STROBE(HEADLIGHT_STROBE_SENTINEL);
         HeadlightFrontState(double value) { setValue(value); }
     }
 
     public enum HeadlightMiddleState implements State {
-        OFF(HEADLIGHT_OFF), RED(HEADLIGHT_RED), RED_STROBE(HEADLIGHT_RED),
-        RED_GREEN_STROBE(HEADLIGHT_STROBE_SENTINEL), BLUE_GREEN_STROBE(HEADLIGHT_STROBE_SENTINEL),
-        ORANGE(HEADLIGHT_ORANGE), GREEN(HEADLIGHT_GREEN), CYAN(HEADLIGHT_MIDDLE_CYAN),
-        CYAN_STROBE(HEADLIGHT_CYAN_STROBE), YELLOW(HEADLIGHT_YELLOW),
-        WHITE(HEADLIGHT_WHITE), PURPLE(HEADLIGHT_PURPLE), WHITE_STROBE(HEADLIGHT_WHITE_STROBE),
-        STROBE(HEADLIGHT_STROBE_SENTINEL);
+        OFF(HEADLIGHT_OFF), ORANGE(HEADLIGHT_ORANGE), GREEN(HEADLIGHT_GREEN), CYAN(HEADLIGHT_MIDDLE_CYAN),
+        PURPLE(HEADLIGHT_PURPLE), WHITE(HEADLIGHT_WHITE);
         HeadlightMiddleState(double value) { setValue(value); }
     }
 
     public enum HeadlightBackState implements State {
-        OFF(HEADLIGHT_OFF), RED(HEADLIGHT_RED), RED_STROBE(HEADLIGHT_RED),
-        RED_GREEN_STROBE(HEADLIGHT_STROBE_SENTINEL), BLUE_GREEN_STROBE(HEADLIGHT_STROBE_SENTINEL),
-        ORANGE(HEADLIGHT_ORANGE), GREEN(HEADLIGHT_GREEN), CYAN(HEADLIGHT_BACK_CYAN),
-        CYAN_STROBE(HEADLIGHT_CYAN_STROBE), YELLOW(HEADLIGHT_YELLOW),
-        WHITE(HEADLIGHT_WHITE), PURPLE(HEADLIGHT_PURPLE), WHITE_STROBE(HEADLIGHT_WHITE_STROBE),
-        STROBE(HEADLIGHT_STROBE_SENTINEL);
+        OFF(HEADLIGHT_OFF), ORANGE(HEADLIGHT_ORANGE), GREEN(HEADLIGHT_GREEN), CYAN(HEADLIGHT_BACK_CYAN),
+        PURPLE(HEADLIGHT_PURPLE), WHITE(HEADLIGHT_WHITE);
         HeadlightBackState(double value) { setValue(value); }
     }
 
@@ -237,7 +218,6 @@ public class Magazine extends Module {
     }
 
     public Magazine(HardwareMap hardwareMap) {
-        super();
         setTelemetryEnabled(magazineTelemetry.TOGGLE);
 
         double servoTol = optimizeServoCachingTolerances ? 0.005 : 0.0;
@@ -317,33 +297,16 @@ public class Magazine extends Module {
             currentHorizontalBackPosition = targetHorizontalBackPos;
         }
 
-        if (targetHorizontalFrontPos >= 0) {
-            long now = System.currentTimeMillis();
-            if (lastHorizontalFrontUpdateTime == 0) lastHorizontalFrontUpdateTime = now;
-            long dtMs = now - lastHorizontalFrontUpdateTime;
-            lastHorizontalFrontUpdateTime = now;
+        long now = System.currentTimeMillis();
+        if (lastHorizontalFrontUpdateTime == 0) lastHorizontalFrontUpdateTime = now;
+        currentHorizontalFrontPosition = slew(currentHorizontalFrontPosition, targetHorizontalFrontPos,
+                horizontalFrontSpeed, now - lastHorizontalFrontUpdateTime);
+        lastHorizontalFrontUpdateTime = now;
 
-            double maxStep = horizontalFrontSpeed * dtMs;
-            if (currentHorizontalFrontPosition < targetHorizontalFrontPos) {
-                currentHorizontalFrontPosition = Math.min(currentHorizontalFrontPosition + maxStep, targetHorizontalFrontPos);
-            } else if (currentHorizontalFrontPosition > targetHorizontalFrontPos) {
-                currentHorizontalFrontPosition = Math.max(currentHorizontalFrontPosition - maxStep, targetHorizontalFrontPos);
-            }
-        }
-
-        if (targetHorizontalBackPos >= 0) {
-            long now = System.currentTimeMillis();
-            if (lastHorizontalBackUpdateTime == 0) lastHorizontalBackUpdateTime = now;
-            long dtMs = now - lastHorizontalBackUpdateTime;
-            lastHorizontalBackUpdateTime = now;
-
-            double maxStep = horizontalBackSpeed * dtMs;
-            if (currentHorizontalBackPosition < targetHorizontalBackPos) {
-                currentHorizontalBackPosition = Math.min(currentHorizontalBackPosition + maxStep, targetHorizontalBackPos);
-            } else if (currentHorizontalBackPosition > targetHorizontalBackPos) {
-                currentHorizontalBackPosition = Math.max(currentHorizontalBackPosition - maxStep, targetHorizontalBackPos);
-            }
-        }
+        if (lastHorizontalBackUpdateTime == 0) lastHorizontalBackUpdateTime = now;
+        currentHorizontalBackPosition = slew(currentHorizontalBackPosition, targetHorizontalBackPos,
+                horizontalBackSpeed, now - lastHorizontalBackUpdateTime);
+        lastHorizontalBackUpdateTime = now;
 
         horizontalFrontPosition = currentHorizontalFrontPosition;
         horizontalBackPosition = currentHorizontalBackPosition;
@@ -354,10 +317,6 @@ public class Magazine extends Module {
         HeadlightFrontState frontState = getState(HeadlightFrontState.class);
         if (frontState == HeadlightFrontState.STROBE) {
             updateColorStrobe();
-        } else if (frontState == HeadlightFrontState.RED_GREEN_STROBE || frontState == HeadlightFrontState.BLUE_GREEN_STROBE) {
-            updateTwoColorStrobe();
-        } else if (frontState == HeadlightFrontState.CYAN_STROBE || frontState == HeadlightFrontState.WHITE_STROBE || frontState == HeadlightFrontState.RED_STROBE) {
-            updateBlinkStrobe();
         } else {
             headlightFrontPosition = frontState.getValue();
         }
@@ -389,7 +348,7 @@ public class Magazine extends Module {
         horizontalBack.setPosition(horizontalBackPosition);
         intake.setPower(intakePower);
         vertical.setPower(verticalPower);
-        if (!requireEndgame().disableServosForEndgame) {
+        if (!requireEndgame().servosDisabled()) {
             headlightFront.setPosition(headlightFrontPosition);
             headlightMiddle.setPosition(headlightMiddlePosition);
         } else {
@@ -533,6 +492,13 @@ public class Magazine extends Module {
         }
     }
 
+    private static double slew(double current, double target, double unitsPerMs, long dtMs) {
+        double maxStep = unitsPerMs * dtMs;
+        if (current < target) return Math.min(current + maxStep, target);
+        if (current > target) return Math.max(current - maxStep, target);
+        return current;
+    }
+
     private void resetBallDetection() {
         backSlotsFilled = false;
         middleSlotFilled = false;
@@ -657,7 +623,7 @@ public class Magazine extends Module {
         return currentState.toPattern();
     }
 
-    public MagazineState.ArtifactColor getSensorColor(int sensorNumber) {
+    private MagazineState.ArtifactColor getSensorColor(int sensorNumber) {
         return currentState.getPosition(sensorNumber);
     }
 
@@ -673,10 +639,6 @@ public class Magazine extends Module {
 
     public MagazineState getMagazineState() {
         return currentState;
-    }
-
-    public boolean isFull() {
-        return currentState.isFull();
     }
 
     public boolean isBackSlotFilled() {
@@ -733,11 +695,7 @@ public class Magazine extends Module {
         }
     }
 
-    public boolean isEmpty() {
-        return currentState.isEmpty();
-    }
-
-    public int countColor(MagazineState.ArtifactColor color) {
+    private int countColor(MagazineState.ArtifactColor color) {
         return currentState.countColor(color);
     }
 
@@ -810,36 +768,12 @@ public class Magazine extends Module {
         }
     }
 
-    private void updateBlinkStrobe() {
-        long currentTime = System.currentTimeMillis();
-        if (Math.sin((double) currentTime / 1000 * 2 * Math.PI) > 0) {
-            headlightFrontPosition = HeadlightFrontState.OFF.getValue();
-        } else {
-            headlightFrontPosition = getState(HeadlightFrontState.class).getValue();
-        }
-    }
-
-    private void updateTwoColorStrobe() {
-        long currentTime = System.currentTimeMillis();
-        HeadlightFrontState frontState = getState(HeadlightFrontState.class);
-        boolean firstColor = (currentTime / 500) % 2 == 0;
-        if (frontState == HeadlightFrontState.RED_GREEN_STROBE) {
-            headlightFrontPosition = firstColor
-                    ? HeadlightFrontState.RED.getValue()
-                    : HeadlightFrontState.GREEN.getValue();
-        } else if (frontState == HeadlightFrontState.BLUE_GREEN_STROBE) {
-            headlightFrontPosition = firstColor
-                    ? HeadlightFrontState.CYAN.getValue()
-                    : HeadlightFrontState.GREEN.getValue();
-        }
-    }
-
     public double getIntakeCurrent() {
         return intake.getCurrent(CurrentUnit.AMPS);
     }
 
     private boolean isPrismWriteAllowed() {
-        return prismWritesEnabled && prism != null;
+        return prismWritesEnabled;
     }
 
     private void loadPrismArtboard(GoBildaPrismDriver.Artboard artboard) {

@@ -43,7 +43,7 @@ public final class BallFieldTransform {
             vy += robot.vy + robot.omega * offset[0];
         }
 
-        return new FieldBall(ball.id, ball.type, robot.x + offset[0], robot.y + offset[1], vx, vy, ball, ball.visible);
+        return new FieldBall(ball.id, ball.type, robot.x + offset[0], robot.y + offset[1], vx, vy, ball.visible);
     }
 
     public static Pose cameraPointToField(double cameraX, double cameraY,

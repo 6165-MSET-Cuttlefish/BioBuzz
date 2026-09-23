@@ -38,8 +38,6 @@ public class WebcamControls {
     // Pushes only changed values (each write is a blocking USB transfer); caches a value only once
     // its set call succeeds, so a write that fails right after a mode switch retries next loop.
     public void update() {
-        if (webcam == null) return;
-
         boolean modeChanged = manual != lastManual;
         lastManual = manual;
 

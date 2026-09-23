@@ -1,7 +1,6 @@
 package org.firstinspires.ftc.teamcode.eocvsim.balldetection;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
@@ -11,7 +10,6 @@ import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.core.TermCriteria;
 import org.opencv.imgproc.Imgproc;
 import org.openftc.easyopencv.OpenCvPipeline;
 
@@ -26,8 +24,6 @@ import java.util.List;
  * so its constants are separate from modules.vision.BallVisionConstants.
  */
 public class PollenDetectionPipeline extends OpenCvPipeline {
-
-    private static final boolean USE_PREDETERMINED_HOMOGRAPHY = true;
 
     public enum DisplayMode { MASK, OVERLAY, BOX }
     private static final DisplayMode DISPLAY_MODE = DisplayMode.MASK;
@@ -124,23 +120,9 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     // Of r1 + r2 (touching balls sit at 1.0); Hough's minDist is per call and too small for this.
     private static final double MIN_CENTER_SEPARATION_FRACTION = 0.7;
 
-    // Inner corners, not squares.
-    private static final int   GRID_COLS        = 9;
-    private static final int   GRID_ROWS        = 6;
-    private static final int   EXPECTED_CORNERS = GRID_COLS * GRID_ROWS;
-    private static final float SQUARE_SIZE_INCHES = 1.0f; // TODO: verify against the physical board
-    private static final int   DETECTION_FRAME_INTERVAL = 3;
-    private static final int   FRAMES_TO_CONFIRM = 5;
+    private final Mat homography = buildHomographyFromArray(H_ARRAY);
+    private final Mat inverseHomography = homography.inv();
 
-    private enum Phase { CALIBRATING, DETECTING }
-
-    // volatile: written on the camera thread (processFrame), read on the OpMode thread.
-    private volatile Phase phase;
-    private volatile Mat   homography   = null;
-    private int   confirmCount = 0;
-    private int   frameCount   = 0;
-
-    private final Mat gray         = new Mat();
     private final Mat small        = new Mat();
     private final Mat smallGray    = new Mat();
     private final Mat roiWork      = new Mat();
@@ -151,8 +133,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     private final Mat displayImage = new Mat();
     private final Mat maskCanvas   = new Mat();
     private final Mat contourHierarchy = new Mat();
-
-    private final MatOfPoint2f dstCorners;
 
     private final Telemetry telemetry;
 
@@ -168,99 +148,10 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
 
     public PollenDetectionPipeline(Telemetry telemetry) {
         this.telemetry = telemetry;
-
-        if (USE_PREDETERMINED_HOMOGRAPHY) {
-            homography = buildHomographyFromArray(H_ARRAY);
-            phase = Phase.DETECTING;
-        } else {
-            phase = Phase.CALIBRATING;
-        }
-
-        dstCorners = buildCalibrationDstCorners();
-    }
-
-    public Mat getHomography()    { return homography; }
-    public boolean isCalibrated() { return phase == Phase.DETECTING; }
-
-    public String getHomographyAsString() {
-        if (homography == null || homography.empty()) return "Homography not available";
-        StringBuilder sb = new StringBuilder("double[][] H_ARRAY = {\n");
-        for (int r = 0; r < 3; r++) {
-            sb.append("    { ");
-            for (int c = 0; c < 3; c++) {
-                sb.append(String.format("%.10e", homography.get(r, c)[0]));
-                if (c < 2) sb.append(", ");
-            }
-            sb.append(" }");
-            if (r < 2) sb.append(",");
-            sb.append("\n");
-        }
-        sb.append("};");
-        return sb.toString();
     }
 
     @Override
     public Mat processFrame(Mat input) {
-        switch (phase) {
-            case CALIBRATING: return runCalibrationFrame(input);
-            case DETECTING:   return runDetectionFrame(input);
-            default:          return input;
-        }
-    }
-
-    private Mat runCalibrationFrame(Mat input) {
-        frameCount++;
-
-        if (frameCount % DETECTION_FRAME_INTERVAL != 0) {
-            telemetry.addLine("[Calibrating] Searching for chessboard...");
-            telemetry.addData("Confirmed", confirmCount + " / " + FRAMES_TO_CONFIRM);
-            telemetry.update();
-            return input;
-        }
-
-        MatOfPoint2f imageCorners = detectChessboardCorners(input);
-
-        if (imageCorners == null) {
-            confirmCount = 0;
-            telemetry.addLine("[Calibrating] Chessboard NOT found");
-            telemetry.addData("Tip", "Ensure full board is visible and flat");
-            telemetry.update();
-            return input;
-        }
-
-        Mat h = computeHomography(imageCorners, dstCorners);
-
-        if (h == null) {
-            imageCorners.release();
-            confirmCount = 0;
-            telemetry.addLine("[Calibrating] Homography computation failed");
-            telemetry.update();
-            return input;
-        }
-
-        Mat previousHomography = homography;
-        homography = h;
-        if (previousHomography != null && previousHomography != h) previousHomography.release();
-        confirmCount++;
-
-        if (confirmCount >= FRAMES_TO_CONFIRM) {
-            phase = Phase.DETECTING;
-        }
-
-        telemetry.addLine(phase == Phase.DETECTING
-                ? "[LOCKED] Switching to detection..."
-                : "[Calibrating] Confirming...");
-        telemetry.addLine("--- Homography (image px -> field inches) ---");
-        telemetry.addLine(getHomographyAsString());
-        telemetry.update();
-
-        Calib3d.drawChessboardCorners(input, new Size(GRID_COLS, GRID_ROWS), imageCorners, true);
-        imageCorners.release();
-        return input;
-    }
-
-    private Mat runDetectionFrame(Mat input) {
-
         Size smallSize = new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE);
         Imgproc.resize(input, small, smallSize, 0, 0, Imgproc.INTER_AREA);
 
@@ -361,7 +252,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
 
             double fullResX = contactXSmall / DETECTION_SCALE;
             double fullResY = contactYSmall / DETECTION_SCALE;
-            result.fieldPoint = transformPointToField(fullResX, fullResY);
+            result.fieldPoint = perspectiveTransform(fullResX, fullResY, homography);
         }
 
         if (DISPLAY_MODE == DisplayMode.MASK) {
@@ -606,26 +497,20 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                 fontFace, fontScale, textColor, thickness);
     }
 
-    private Point transformPointToField(double x, double y) {
+    private static Point perspectiveTransform(double x, double y, Mat transform) {
         MatOfPoint2f src = new MatOfPoint2f(new Point(x, y));
         MatOfPoint2f dst = new MatOfPoint2f();
-        Core.perspectiveTransform(src, dst, homography);
-        return dst.toArray()[0];
-    }
-
-    private Point transformFieldToPoint(double fieldX, double fieldY) {
-        Mat inverseHomography = homography.inv();
-        MatOfPoint2f src = new MatOfPoint2f(new Point(fieldX, fieldY));
-        MatOfPoint2f dst = new MatOfPoint2f();
-        Core.perspectiveTransform(src, dst, inverseHomography);
-        inverseHomography.release();
-        return dst.toArray()[0];
+        try {
+            Core.perspectiveTransform(src, dst, transform);
+            return dst.toArray()[0];
+        } finally {
+            src.release();
+            dst.release();
+        }
     }
 
     private void drawOriginCrosshair(Mat displayImage) {
-        if (homography == null || homography.empty()) return;
-
-        Point originPixel = transformFieldToPoint(0.0, 0.0);
+        Point originPixel = perspectiveTransform(0.0, 0.0, inverseHomography);
 
         int size = 10;
         Scalar color = new Scalar(255, 0, 255);
@@ -642,50 +527,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         Imgproc.putText(displayImage, "(0,0)",
                 new Point(originPixel.x + size + 4, originPixel.y),
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
-    }
-
-    private MatOfPoint2f detectChessboardCorners(Mat input) {
-        Imgproc.cvtColor(input, gray, Imgproc.COLOR_RGB2GRAY);
-
-        MatOfPoint2f imageCorners = new MatOfPoint2f();
-        boolean found = Calib3d.findChessboardCorners(
-                gray,
-                new Size(GRID_COLS, GRID_ROWS),
-                imageCorners,
-                Calib3d.CALIB_CB_ADAPTIVE_THRESH |
-                        Calib3d.CALIB_CB_NORMALIZE_IMAGE |
-                        Calib3d.CALIB_CB_FAST_CHECK
-        );
-
-        if (!found || imageCorners.rows() != EXPECTED_CORNERS) return null;
-
-        Imgproc.cornerSubPix(
-                gray, imageCorners,
-                new Size(5, 5), new Size(-1, -1),
-                new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 0.01)
-        );
-
-        return imageCorners;
-    }
-
-    private static Mat computeHomography(MatOfPoint2f srcCorners, MatOfPoint2f dstCorners) {
-        Mat h = Calib3d.findHomography(srcCorners, dstCorners, Calib3d.RANSAC, 5.0);
-        return (h == null || h.empty()) ? null : h;
-    }
-
-    private static MatOfPoint2f buildCalibrationDstCorners() {
-        List<Point> dstList = new ArrayList<>();
-        for (int row = 0; row < GRID_ROWS; row++) {
-            for (int col = 0; col < GRID_COLS; col++) {
-                dstList.add(new Point(
-                        col * SQUARE_SIZE_INCHES,
-                        row * SQUARE_SIZE_INCHES
-                ));
-            }
-        }
-        MatOfPoint2f dst = new MatOfPoint2f();
-        dst.fromList(dstList);
-        return dst;
     }
 
     private static Mat buildHomographyFromArray(double[][] arr) {

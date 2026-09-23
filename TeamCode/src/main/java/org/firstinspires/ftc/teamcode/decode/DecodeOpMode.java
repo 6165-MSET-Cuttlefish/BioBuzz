@@ -2,6 +2,13 @@ package org.firstinspires.ftc.teamcode.decode;
 
 import static org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization.ROBOT_RADIUS;
 import static org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization.toField;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.COLOR_VALUE;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.FONT_SMALL;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.FONT_XLARGE;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.htmlBold;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.htmlColorSize;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.htmlEscape;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.htmlSize;
 
 import com.acmerobotics.dashboard.canvas.Canvas;
 import com.pedropathing.math.Pose;
@@ -44,6 +51,11 @@ public abstract class DecodeOpMode extends EnhancedOpMode {
 
         if (Turret.drawMT1) drawLimelightPose(overlay, robot.turret.getMT1Pose(), "#FFFF00");
         if (Turret.drawMT2) drawLimelightPose(overlay, robot.turret.getMT2Pose(), "#00FFFF");
+    }
+
+    protected void addDSLarge(String caption, Object value) {
+        robot.telemetry.addDSLine(htmlSize(FONT_SMALL, htmlBold(htmlEscape(caption))) + ": "
+                + htmlColorSize(COLOR_VALUE, FONT_XLARGE, htmlEscape(String.valueOf(value))));
     }
 
     private static void drawLimelightPose(Canvas overlay, Pose pedroPose, String color) {

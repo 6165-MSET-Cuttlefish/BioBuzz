@@ -35,7 +35,7 @@ public class Camera extends Module {
     public static double defaultLookaheadSeconds = 0.25;
     public static double staleFrameSeconds = 0.5;
 
-    private static final String DEFAULT_WEBCAM_NAME = "nerdDetector";
+    public static final String WEBCAM_NAME = "nerdDetector";
 
     public enum VisionState implements State {
         ENABLED,
@@ -43,7 +43,6 @@ public class Camera extends Module {
     }
 
     private final HardwareMap hardwareMap;
-    private final String webcamName;
     private final BallDetectionPipeline pipeline = new BallDetectionPipeline();
     private final RobotStateHistory robotHistory = new RobotStateHistory();
     private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
@@ -56,13 +55,8 @@ public class Camera extends Module {
     private double lastFieldBallFrameTimestamp = -1;
 
     public Camera(HardwareMap hardwareMap) {
-        this(hardwareMap, DEFAULT_WEBCAM_NAME);
-    }
-
-    public Camera(HardwareMap hardwareMap, String webcamName) {
         super();
         this.hardwareMap = hardwareMap;
-        this.webcamName = webcamName;
     }
 
     public Camera withFollower(Follower follower) {
@@ -84,7 +78,7 @@ public class Camera extends Module {
     @Override
     public void init() {
         // Not in the constructor: open failures report through telemetry, which a Module only gets at init.
-        session = new WebcamSession(hardwareMap, getTelemetry(), webcamName, pipeline);
+        session = new WebcamSession(hardwareMap, getTelemetry(), WEBCAM_NAME, pipeline);
     }
 
     @Override

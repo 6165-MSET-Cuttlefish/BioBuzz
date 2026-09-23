@@ -62,53 +62,25 @@ public final class BallVisionConstants {
         public static int glareSHigh = 100, glareVLow = 200;
     }
 
-    public static final class HsvRange {
-        public final Scalar low, high;
-
-        public HsvRange(double h0, double s0, double v0, double h1, double s1, double v1) {
-            low  = new Scalar(h0, s0, v0);
-            high = new Scalar(h1, s1, v1);
-        }
-    }
-
-    // Each type's second range is its glare band: highlights wash out saturation and raise value but keep hue.
     public enum BallType {
-        POLLEN("Pollen", 2.8, new Scalar(255, 255, 0), new Scalar(0, 0, 0),
-                new HsvRange(PollenHsv.hLow, PollenHsv.sLow, PollenHsv.vLow,
-                        PollenHsv.hHigh, PollenHsv.sHigh, PollenHsv.vHigh),
-                new HsvRange(PollenHsv.hLow, 0, PollenHsv.glareVLow,
-                        PollenHsv.hHigh, PollenHsv.glareSHigh, 255)),
-
-        NECTAR_RED("Red Nectar", 3.6, new Scalar(255, 40, 40), new Scalar(255, 255, 255),
-                new HsvRange(RedNectarHsv.hLow, RedNectarHsv.sLow, RedNectarHsv.vLow,
-                        RedNectarHsv.hHigh, RedNectarHsv.sHigh, RedNectarHsv.vHigh),
-                new HsvRange(RedNectarHsv.hLow, 0, RedNectarHsv.glareVLow,
-                        RedNectarHsv.hHigh, RedNectarHsv.glareSHigh, 255)),
-
-        NECTAR_BLUE("Blue Nectar", 3.6, new Scalar(40, 120, 255), new Scalar(255, 255, 255),
-                new HsvRange(BlueNectarHsv.hLow, BlueNectarHsv.sLow, BlueNectarHsv.vLow,
-                        BlueNectarHsv.hHigh, BlueNectarHsv.sHigh, BlueNectarHsv.vHigh),
-                new HsvRange(BlueNectarHsv.hLow, 0, BlueNectarHsv.glareVLow,
-                        BlueNectarHsv.hHigh, BlueNectarHsv.glareSHigh, 255));
+        POLLEN("Pollen", 2.8, new Scalar(255, 255, 0), new Scalar(0, 0, 0)),
+        NECTAR_RED("Red Nectar", 3.6, new Scalar(255, 40, 40), new Scalar(255, 255, 255)),
+        NECTAR_BLUE("Blue Nectar", 3.6, new Scalar(40, 120, 255), new Scalar(255, 255, 255));
 
         public final String label;
         public final Scalar drawColor;
         public final Scalar labelTextColor;
-        /** Class-load snapshot of the {@code @Config} HSV fields; dashboard edits don't reach it. */
-        public final HsvRange[] defaultRanges;
         public final double radiusScale;
 
-        BallType(String label, double diameterInches, Scalar drawColor, Scalar labelTextColor,
-                 HsvRange... defaultRanges) {
+        BallType(String label, double diameterInches, Scalar drawColor, Scalar labelTextColor) {
             this.label = label;
             this.drawColor = drawColor;
             this.labelTextColor = labelTextColor;
-            this.defaultRanges = defaultRanges;
             this.radiusScale = diameterInches / REFERENCE_BALL_DIAMETER_INCHES;
         }
     }
 
-    // Full-resolution image pixels to field inches.
+    // Full-resolution image pixels to field inches; calibrate at 640x480, the size WebcamSession streams.
     public static final double[][] H_ARRAY = {
             { -6.8658673540e-02, -1.4582606197e-02, 2.5633211718e+01 },
             { -8.0700352292e-04, -2.1452449123e-01, 6.3092382406e+01 },
@@ -138,14 +110,6 @@ public final class BallVisionConstants {
     /** Hough votes scale with circumference, so ROIs searching below this radius are upscaled first. */
     public static final double HOUGH_WORKING_MIN_RADIUS_PX = 6.0;
     public static final double ROI_MAX_UPSCALE = 4.0;
-
-    // Calibration board, counted in inner corners (not squares).
-    public static final int GRID_COLS = 9;
-    public static final int GRID_ROWS = 6;
-    public static final int EXPECTED_CORNERS = GRID_COLS * GRID_ROWS;
-    public static final float SQUARE_SIZE_INCHES = 1.0f;
-    public static final int CALIBRATION_FRAME_INTERVAL = 3;
-    public static final int FRAMES_TO_CONFIRM = 5;
 
     public static final Scalar COLOR_CENTER   = new Scalar(255, 255, 255);
     public static final Scalar COLOR_CONTACT  = new Scalar(0, 0, 255);

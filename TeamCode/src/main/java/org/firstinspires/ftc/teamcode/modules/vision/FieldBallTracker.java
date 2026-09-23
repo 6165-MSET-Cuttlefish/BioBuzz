@@ -88,7 +88,6 @@ public final class FieldBallTracker {
         final BallVisionConstants.BallType type;
         double x, y, vx, vy;
         double lastSeenSeconds;
-        TrackedBall source;
         boolean visible;
 
         Known(int id, FieldBall seed, double timestampSeconds) {
@@ -102,13 +101,12 @@ public final class FieldBallTracker {
             y = fresh.y;
             vx = fresh.vx;
             vy = fresh.vy;
-            source = fresh.source;
             lastSeenSeconds = timestampSeconds;
             visible = true;
         }
 
         FieldBall toFieldBall() {
-            return new FieldBall(id, type, x, y, vx, vy, source, visible);
+            return new FieldBall(id, type, x, y, vx, vy, visible);
         }
     }
 }

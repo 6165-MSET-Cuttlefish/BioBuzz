@@ -5,6 +5,7 @@ import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Gamepad;
 
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
@@ -13,7 +14,6 @@ import org.firstinspires.ftc.teamcode.architecture.input.LayerGamepad;
 import org.firstinspires.ftc.teamcode.architecture.input.LayerStack;
 import org.firstinspires.ftc.teamcode.architecture.input.LayeredGamepad;
 import org.firstinspires.ftc.teamcode.architecture.prism.Color;
-import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
 import org.firstinspires.ftc.teamcode.decode.DecodeContext;
 import org.firstinspires.ftc.teamcode.decode.DecodeOpMode;
 import org.firstinspires.ftc.teamcode.decode.modules.Endgame;
@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.firstinspires.ftc.teamcode.architecture.core.Context.allianceColor;
+import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.COLOR_BLUE;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.blueTargetPose;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.redTargetPose;
 import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.GREEN;
@@ -42,23 +43,21 @@ public class DecodeTele extends DecodeOpMode {
     public static boolean outOfRangeRedAndPreventShooting = false;
 
     public static boolean optimizeInputInvalidation = true;
-    public static boolean optimizeControlsTelemetryCadence = false;
-    public static int optimizeControlsTelemetryEveryNLoops = 1;
     public static boolean optimizeRumbleCooldown = true;
     public static long optimizeRumbleCooldownMs = 250;
 
     private static final long OUT_OF_RANGE_SHOOT_DELAY_MS = 1000;
+    private static final double SLOW_MULTIPLIER = 0.75;
 
     private ActionLayer d1Layer = ActionLayer.TELE;
     private ActionLayer d2Layer = ActionLayer.TELE;
-    private double slowMultiplier = 1.0;
+    private boolean slowMode = false;
 
     private boolean lastIntakeBallDetected = false;
     private boolean lastPrismWarningActive = false;
     private long outOfRangeShootDelayStartMs = 0;
-    private int controlsTelemetryLoopCounter = 0;
-    private long lastGamepad1RumbleMs = 0;
-    private long lastGamepad2RumbleMs = 0;
+    private final long[] lastGamepad1RumbleMs = {0};
+    private final long[] lastGamepad2RumbleMs = {0};
     private String pendingRelocalizeStatus = null;
 
     private LayeredGamepad<ActionLayer> d1;
@@ -73,11 +72,6 @@ public class DecodeTele extends DecodeOpMode {
     private EdgeBooleanSupplier d2RsDown;
     private EdgeBooleanSupplier d2RsRight;
     private EdgeBooleanSupplier d2RsLeft;
-
-    private EdgeBooleanSupplier d2LsUp;
-    private EdgeBooleanSupplier d2LsDown;
-    private EdgeBooleanSupplier d2LsRight;
-    private EdgeBooleanSupplier d2LsLeft;
 
     @Override
     protected boolean shouldReadDuringInit() {
@@ -129,27 +123,17 @@ public class DecodeTele extends DecodeOpMode {
     @Override
     protected void telemetry() {
         long stamp = getProfiler().enterSection();
-        if (shouldEmitControlsTelemetryThisLoop()) {
-            addDSLargeData("D1 Layer", d1Layer);
-            addDSLargeData("D2 Layer", d2Layer);
-            robot.telemetry.addSeparator();
-            robot.telemetry.addGroupHeader("CONTROLS", HtmlFormatter.COLOR_BLUE);
-            robot.telemetry.addData("Slow Mode", slowMultiplier == 0.5 ? "50%" : slowMultiplier == 0.75 ? "75%" : "OFF");
-            robot.telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
-        }
+        addDSLarge("D1 Layer", d1Layer);
+        addDSLarge("D2 Layer", d2Layer);
+        robot.telemetry.addSeparator();
+        robot.telemetry.addGroupHeader("CONTROLS", COLOR_BLUE);
+        robot.telemetry.addData("Slow Mode", slowMode ? "75%" : "OFF");
+        robot.telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
         if (pendingRelocalizeStatus != null) {
-            addDSLargeData("Relocalize", pendingRelocalizeStatus);
+            addDSLarge("Relocalize", pendingRelocalizeStatus);
             pendingRelocalizeStatus = null;
         }
         getProfiler().leaveSection("tele.controlsTelemetry", stamp);
-    }
-
-    private void addDSLargeData(String caption, Object value) {
-        robot.telemetry.addDSLine(
-                HtmlFormatter.htmlSize(HtmlFormatter.FONT_SMALL, HtmlFormatter.htmlBold(HtmlFormatter.htmlEscape(caption)))
-                        + " : "
-                        + HtmlFormatter.htmlColorSize(HtmlFormatter.COLOR_VALUE, HtmlFormatter.FONT_XLARGE,
-                        HtmlFormatter.htmlEscape(String.valueOf(value))));
     }
 
     private void setBothLayers(ActionLayer layer) {
@@ -186,11 +170,6 @@ public class DecodeTele extends DecodeOpMode {
     }
 
     private void invalidateD2KeyReaders() {
-        d2LsUp.invalidate();
-        d2LsDown.invalidate();
-        d2LsRight.invalidate();
-        d2LsLeft.invalidate();
-
         d2RsUp.invalidate();
         d2RsDown.invalidate();
         d2RsRight.invalidate();
@@ -241,39 +220,17 @@ public class DecodeTele extends DecodeOpMode {
         }
     }
 
-    private boolean shouldEmitControlsTelemetryThisLoop() {
-        if (!optimizeControlsTelemetryCadence) {
-            return true;
-        }
-        int every = Math.max(1, optimizeControlsTelemetryEveryNLoops);
-        return (controlsTelemetryLoopCounter++ % every) == 0;
-    }
-
-    private void rumbleGamepad1(int durationMs) {
+    private void rumble(Gamepad gamepad, long[] lastRumbleMs, int durationMs) {
         if (!optimizeRumbleCooldown) {
-            gamepad1.rumble(durationMs);
+            gamepad.rumble(durationMs);
             return;
         }
 
         long now = System.currentTimeMillis();
         long cooldown = Math.max(0, optimizeRumbleCooldownMs);
-        if (now - lastGamepad1RumbleMs >= cooldown) {
-            gamepad1.rumble(durationMs);
-            lastGamepad1RumbleMs = now;
-        }
-    }
-
-    private void rumbleGamepad2(int durationMs) {
-        if (!optimizeRumbleCooldown) {
-            gamepad2.rumble(durationMs);
-            return;
-        }
-
-        long now = System.currentTimeMillis();
-        long cooldown = Math.max(0, optimizeRumbleCooldownMs);
-        if (now - lastGamepad2RumbleMs >= cooldown) {
-            gamepad2.rumble(durationMs);
-            lastGamepad2RumbleMs = now;
+        if (now - lastRumbleMs[0] >= cooldown) {
+            gamepad.rumble(durationMs);
+            lastRumbleMs[0] = now;
         }
     }
 
@@ -303,15 +260,9 @@ public class DecodeTele extends DecodeOpMode {
         d2RsRight = d2.getRightStickX().greaterThan(0.5);
         d2RsLeft = d2.getRightStickX().lessThan(-0.5);
 
-        d2LsUp = d2.getLeftStickY().lessThan(-0.5);
-        d2LsDown = d2.getLeftStickY().greaterThan(0.5);
-        d2LsRight = d2.getLeftStickX().greaterThan(0.5);
-        d2LsLeft = d2.getLeftStickX().lessThan(-0.5);
-
         // Untracked derived suppliers aren't primed on a layer switch and fire a spurious edge.
         d1.track(d1Lt, d1Rt);
-        d2.track(d2Lt, d2Rt, d2RsUp, d2RsDown, d2RsRight, d2RsLeft,
-                d2LsUp, d2LsDown, d2LsRight, d2LsLeft);
+        d2.track(d2Lt, d2Rt, d2RsUp, d2RsDown, d2RsRight, d2RsLeft);
     }
 
     private void d1TeleControls() {
@@ -383,7 +334,7 @@ public class DecodeTele extends DecodeOpMode {
         }
 
         if (d1Lt.wasJustPressed()) {
-            slowMultiplier = (slowMultiplier == 0.75) ? 1.0 : 0.75;
+            slowMode = !slowMode;
         }
 
         boolean allHeld = d1.RB().getValue() && d1.LB().getValue()
@@ -410,17 +361,15 @@ public class DecodeTele extends DecodeOpMode {
             }
         }
 
-        boolean slowModeActive = slowMultiplier == 0.5 || slowMultiplier == 0.75;
-
         if (warningActive && !lastPrismWarningActive) {
-            rumbleGamepad1(200);
+            rumble(gamepad1, lastGamepad1RumbleMs, 200);
         }
         lastPrismWarningActive = warningActive;
 
         if (!d1Rt.getValue()) {
             if (warningActive) {
                 robot.magazine.setStatusPrismColor(Color.RED);
-            } else if (slowModeActive) {
+            } else if (slowMode) {
                 robot.magazine.setStatusPrismColor(Color.WHITE);
             } else if (robot.drivetrain.isHeadingLocked()) {
                 robot.magazine.setStatusPrismColor(Color.PURPLE);
@@ -474,7 +423,7 @@ public class DecodeTele extends DecodeOpMode {
 
         if (robot.magazine.intakeIsFull != lastIntakeBallDetected) {
             if (robot.magazine.intakeIsFull) {
-                rumbleGamepad1(500);
+                rumble(gamepad1, lastGamepad1RumbleMs, 500);
             }
         }
         lastIntakeBallDetected = robot.magazine.intakeIsFull;
@@ -542,7 +491,7 @@ public class DecodeTele extends DecodeOpMode {
         }
 
         if (robot.turret.getState(Turret.TurretState.class) == Turret.TurretState.HOLD) {
-            rumbleGamepad2(200);
+            rumble(gamepad2, lastGamepad2RumbleMs, 200);
         }
 
         if (d2Rt.getValue()) {
@@ -595,26 +544,26 @@ public class DecodeTele extends DecodeOpMode {
         if (d2.LB().wasJustPressed()) {
             setD1Layer(ActionLayer.TELE);
             setD2Layer(ActionLayer.SORT);
-            rumbleGamepad2(150);
+            rumble(gamepad2, lastGamepad2RumbleMs, 150);
             return;
         }
         if (d2.RB().wasJustPressed()) {
             setBothLayers(ActionLayer.ENDGAME);
-            rumbleGamepad2(150);
+            rumble(gamepad2, lastGamepad2RumbleMs, 150);
         }
     }
 
     private void sortLayer() {
-        rumbleGamepad2(200);
+        rumble(gamepad2, lastGamepad2RumbleMs, 200);
 
         if (d2.LB().wasJustPressed()) {
             setBothLayers(ActionLayer.TELE);
-            rumbleGamepad2(150);
+            rumble(gamepad2, lastGamepad2RumbleMs, 150);
             return;
         }
         if (d2.RB().wasJustPressed()) {
             setBothLayers(ActionLayer.ENDGAME);
-            rumbleGamepad2(150);
+            rumble(gamepad2, lastGamepad2RumbleMs, 150);
             return;
         }
 
@@ -697,7 +646,7 @@ public class DecodeTele extends DecodeOpMode {
             // Pose only; the shooter/turret tuning offsets are deliberately kept.
             robot.follower.setPose(new Pose(relocalizedPose.x(), relocalizedPose.y(), robot.follower.pose().heading()));
             robot.turret.turretAprilTagOffset = 0;
-            rumbleGamepad1(200);
+            rumble(gamepad1, lastGamepad1RumbleMs, 200);
             pendingRelocalizeStatus = "SUCCESS";
         } else {
             pendingRelocalizeStatus = String.valueOf(robot.turret.getRelocalizationStatus());
@@ -705,7 +654,7 @@ public class DecodeTele extends DecodeOpMode {
     }
 
     private void endgameLayer() {
-        rumbleGamepad2(200);
+        rumble(gamepad2, lastGamepad2RumbleMs, 200);
 
         if (d2.A().wasJustPressed()) {
             Endgame.InitialState.LIFT.activate();
@@ -715,7 +664,7 @@ public class DecodeTele extends DecodeOpMode {
         }
         if (d2.LB().wasJustPressed()) {
             setBothLayers(ActionLayer.TELE);
-            rumbleGamepad2(150);
+            rumble(gamepad2, lastGamepad2RumbleMs, 150);
             return;
         }
         if (d2.Y().wasJustPressed()) {
@@ -731,10 +680,10 @@ public class DecodeTele extends DecodeOpMode {
         double strafe = d1.getLeftStickX().getValue();
         double turn = d1.getRightStickX().getValue();
 
-        if (slowMultiplier < 1.0) {
-            forward *= slowMultiplier;
-            strafe *= slowMultiplier;
-            turn *= slowMultiplier;
+        if (slowMode) {
+            forward *= SLOW_MULTIPLIER;
+            strafe *= SLOW_MULTIPLIER;
+            turn *= SLOW_MULTIPLIER;
         }
 
         robot.drivetrain.setMecanumTargets(forward, strafe, turn, false);

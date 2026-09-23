@@ -40,14 +40,6 @@ public class EnhancedMotor implements DcMotorEx {
         return this;
     }
 
-    public static void updateVoltage(double voltage) {
-        BatteryVoltage.update(voltage);
-    }
-
-    public static double getCurrentVoltage() {
-        return BatteryVoltage.get();
-    }
-
     @Override
     public void setPower(double power) {
         double corrected = cache.clamp(cache.applyVoltageScaling(power));

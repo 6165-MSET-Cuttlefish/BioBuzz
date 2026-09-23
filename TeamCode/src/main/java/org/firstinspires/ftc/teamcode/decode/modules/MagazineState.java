@@ -57,36 +57,6 @@ public class MagazineState {
         return "" + position1.getSymbol() + position2.getSymbol() + position3.getSymbol();
     }
 
-    public static MagazineState fromPattern(String pattern) {
-        if (pattern == null || pattern.length() != 3) {
-            throw new IllegalArgumentException(
-                    "MagazineState pattern must be exactly 3 chars, got: " + pattern);
-        }
-        return new MagazineState(charToArtifactColor(pattern.charAt(0)),
-                charToArtifactColor(pattern.charAt(1)), charToArtifactColor(pattern.charAt(2)));
-    }
-
-    private static ArtifactColor charToArtifactColor(char c) {
-        switch (c) {
-            case 'G':
-                return ArtifactColor.GREEN;
-            case 'P':
-                return ArtifactColor.PURPLE;
-            default:
-                return ArtifactColor.EMPTY;
-        }
-    }
-
-    public boolean isFull() {
-        return position1 != ArtifactColor.EMPTY && position2 != ArtifactColor.EMPTY
-                && position3 != ArtifactColor.EMPTY;
-    }
-
-    public boolean isEmpty() {
-        return position1 == ArtifactColor.EMPTY && position2 == ArtifactColor.EMPTY
-                && position3 == ArtifactColor.EMPTY;
-    }
-
     public int countColor(ArtifactColor color) {
         int count = 0;
         if (position1 == color)
@@ -101,24 +71,5 @@ public class MagazineState {
     @Override
     public String toString() {
         return String.format("MagazineState[%s, %s, %s]", position1, position2, position3);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (!(obj instanceof MagazineState))
-            return false;
-        MagazineState other = (MagazineState) obj;
-        return position1 == other.position1 && position2 == other.position2
-                && position3 == other.position3;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = position1.hashCode();
-        result = 31 * result + position2.hashCode();
-        result = 31 * result + position3.hashCode();
-        return result;
     }
 }

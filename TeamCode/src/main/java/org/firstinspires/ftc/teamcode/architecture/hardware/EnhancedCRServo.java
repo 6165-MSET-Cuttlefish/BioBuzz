@@ -36,10 +36,6 @@ public class EnhancedCRServo implements CRServo, PwmControl {
         return this;
     }
 
-    public static void updateVoltage(double voltage) {
-        BatteryVoltage.update(voltage);
-    }
-
     @Override
     public void setPower(double power) {
         double corrected = cache.clamp(cache.applyVoltageScaling(power));

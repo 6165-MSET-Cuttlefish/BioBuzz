@@ -7,12 +7,11 @@ import com.acmerobotics.dashboard.config.Config;
 public final class OptimizationToggles {
     private OptimizationToggles() {}
 
-    public static int dashboardEveryNLoops = 1;
+    public static int dashboardEveryNTelemetryFrames = 1;
 
     public static boolean dashboardSkipFieldImage = false;
     public static boolean dashboardSkipGrid = false;
     public static boolean dashboardSkipPoseHistory = false;
-
 
     public static int telemetryEveryNLoops = 1;
 
@@ -27,8 +26,6 @@ public final class OptimizationToggles {
     /** loopProfile default, read at class load — not live like the rest of this class. */
     public static boolean loopProfileTelemetryByDefault = true;
 
-    /** Lynx whole-hub current read (a real ADC bus command, not bulk-cached); cadence when the
-     *  current telemetry toggle is on. The drivetrain floodgate is a bulk-cached analog input, so it
-     *  is NOT throttled — only this per-hub ADC read is. */
+    /** Loops between per-hub Lynx current reads (a bus command, not bulk-cached). */
     public static int currentReadEveryNLoops = 1;
 }

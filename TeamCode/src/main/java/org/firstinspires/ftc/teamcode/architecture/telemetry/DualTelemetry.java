@@ -17,12 +17,11 @@ import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.te
  * map is Driver Station only.
  */
 public class DualTelemetry implements Telemetry {
-    public static boolean enableDSTelemetry = true;
-    public static boolean enableDashboardTelemetry = true;
-
     private final Telemetry dsTelemetry;
     private final Telemetry dashTelemetry;
     private TelemetryPacket packet;
+    private boolean enableDSTelemetry = true;
+    private boolean enableDashboardTelemetry = true;
     private boolean dsFormatApplied = false;
     private boolean dashFormatApplied = false;
     private final ArrayDeque<String> packetLog = new ArrayDeque<>();
@@ -57,19 +56,15 @@ public class DualTelemetry implements Telemetry {
         }
     }
 
-    public void setDSTransmissionInterval(int interval) {
-        if (enableDSTelemetry) this.dsTelemetry.setMsTransmissionInterval(interval);
+    public void setEnabled(boolean ds, boolean dash) {
+        enableDSTelemetry = ds;
+        enableDashboardTelemetry = dash;
     }
 
-    /**
-     * Route dashboard data into {@code packet} (the same one carrying the field overlay) instead of
-     * FtcDashboard's telemetry adapter. The adapter's {@code update()} sends a packet of its own whose
-     * field overlay is empty; alternating that with the overlay packet is what makes the field view
-     * flicker at loop rate. One packet per loop carrying both halves fixes it. Null restores the adapter.
-     */
+    /** Dashboard data goes into this packet so one frame carries data and overlay; null restores the adapter. */
     public void setPacket(TelemetryPacket packet) { this.packet = packet; }
 
-    private static boolean noSinkEnabled() {
+    private boolean noSinkEnabled() {
         return telemetryLazyFormat && !enableDSTelemetry && !enableDashboardTelemetry;
     }
 
@@ -228,6 +223,7 @@ public class DualTelemetry implements Telemetry {
             dashTelemetry.clear();
             return;
         }
+        // The adapter's clear() never touches the packet, so browsers keep the last frame unless it is cleared here.
         packet.getItems().clear();
         packet.getData().clear();
         // An item-less packet only blanks the view if it says it is a telemetry frame.
@@ -248,9 +244,6 @@ public class DualTelemetry implements Telemetry {
         packet.clearLog();
         packet.markTelemetryFrame();
     }
-
-    // The adapter clears only the entry list it owns, which the packet path never fills, so browsers
-    // keep showing the last frame unless they are cleared directly.
 
     @Override
     public Object addAction(Runnable action) {
@@ -281,11 +274,9 @@ public class DualTelemetry implements Telemetry {
     @Override
     public boolean update() {
         ensureDisplayFormats();
-        // Telemetry contract: true if transmitted. Fan-out → "any backend transmitted".
         if (!enableDSTelemetry && !enableDashboardTelemetry) return true;
         boolean ds = enableDSTelemetry && dsTelemetry.update();
-        // packet != null: EnhancedOpMode sends the shared packet, so the adapter must NOT send a
-        // second overlay-less one — that alternation is the field-view flicker.
+        // EnhancedOpMode sends the shared packet.
         if (enableDashboardTelemetry && packet != null) replayLog(packet);
         boolean dash = enableDashboardTelemetry && (packet != null || dashTelemetry.update());
         return ds || dash;

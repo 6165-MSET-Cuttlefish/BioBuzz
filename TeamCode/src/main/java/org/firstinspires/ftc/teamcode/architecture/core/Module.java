@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.DoubleSupplier;
-import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 
 public abstract class Module {
@@ -26,7 +25,7 @@ public abstract class Module {
     private final List<Runnable> tunableRefreshers = new ArrayList<>();
 
     private final ElapsedTime stateTimer = new ElapsedTime();
-    private Telemetry telemetry;
+    private DualTelemetry telemetry;
     private Command startupCommand;
     private boolean telemetryEnabled = true;
     private boolean writeEnabled = true;
@@ -37,7 +36,6 @@ public abstract class Module {
     public Module() {
         this.name = getClass().getSimpleName();
         recomputeSectionNames();
-        // State→module bindings aren't in place until initStates() runs (after this ctor returns) — reference registered states from init()/initStates(), not here.
     }
 
     private void recomputeSectionNames() {
@@ -217,9 +215,9 @@ public abstract class Module {
         }
     }
 
-    final void setTelemetry(Telemetry t) { this.telemetry = t; }
+    final void setTelemetry(DualTelemetry t) { this.telemetry = t; }
 
-    protected final Telemetry getTelemetry() { return telemetry; }
+    protected final DualTelemetry getTelemetry() { return telemetry; }
 
     protected final String getStateString() {
         StringBuilder sb = new StringBuilder();
@@ -230,15 +228,9 @@ public abstract class Module {
         return sb.toString();
     }
 
-    protected void telemetry() {
-        if (!telemetryEnabled || telemetry == null) return;
-
-        DualTelemetry et = getDualTelemetry();
-        if (et != null) {
-            et.addModuleHeader(name, getStateString());
-        } else {
-            telemetry.addData(name, getStateString());
-        }
+    protected final void telemetry() {
+        if (!telemetryEnabled) return;
+        telemetry.addModuleHeader(name, getStateString());
         onTelemetry();
     }
 
@@ -259,44 +251,28 @@ public abstract class Module {
     public final void setStartupCommand(Command command) { this.startupCommand = command; }
     public final Command getStartupCommand() { return startupCommand; }
 
-    protected final DualTelemetry getDualTelemetry() {
-        return telemetry instanceof DualTelemetry ? (DualTelemetry) telemetry : null;
-    }
-
     protected final void logDS(String caption, Object value) {
-        DualTelemetry et = getDualTelemetry();
-        if (et != null) et.addDSData(name + " " + caption, value);
-        else log(caption, value);
+        telemetry.addDSData(name + " " + caption, value);
     }
 
     protected final void logDS(String caption, String format, Object... args) {
-        DualTelemetry et = getDualTelemetry();
-        if (et != null) et.addDSData(name + " " + caption, format, args);
-        else log(caption, format, args);
+        telemetry.addDSData(name + " " + caption, format, args);
     }
 
     protected final void logDashboard(String caption, Object value) {
-        DualTelemetry et = getDualTelemetry();
-        if (et != null) et.addDashboardData(name + " " + caption, value);
-        else log(caption, value);
+        telemetry.addDashboardData(name + " " + caption, value);
     }
 
     protected final void logDashboard(String caption, String format, Object... args) {
-        DualTelemetry et = getDualTelemetry();
-        if (et != null) et.addDashboardData(name + " " + caption, format, args);
-        else log(caption, format, args);
+        telemetry.addDashboardData(name + " " + caption, format, args);
     }
 
     protected final void log(String caption, Object value) {
-        if (telemetryEnabled && telemetry != null) {
-            telemetry.addData(name + " " + caption, value);
-        }
+        if (telemetryEnabled) telemetry.addData(name + " " + caption, value);
     }
 
     protected final void log(String caption, String format, Object... args) {
-        if (telemetryEnabled && telemetry != null) {
-            telemetry.addData(name + " " + caption, String.format(format, args));
-        }
+        if (telemetryEnabled) telemetry.addData(name + " " + caption, String.format(format, args));
     }
 
     @FunctionalInterface

@@ -1,5 +1,15 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.DETECTION_SCALE;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.HOUGH_BLUR_KERNEL;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.HOUGH_CANNY_MIN_THRESHOLD;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.HOUGH_MAX_RADIUS_FRACTION;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.HOUGH_MIN_DIST_FRACTION;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.HOUGH_WORKING_MIN_RADIUS_PX;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.ROI_MAX_UPSCALE;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.ROI_MERGE_DIST_PX;
+import static org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.ROI_PAD_PX;
+
 import com.acmerobotics.dashboard.config.Config;
 
 import org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants.BallType;
@@ -47,20 +57,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         public static double velocityArrowSeconds = 0.5;
     }
 
-    private static final double DETECTION_SCALE = BallVisionConstants.DETECTION_SCALE;
-
     private static final Mat ROI_CLOSE_KERNEL = Imgproc.getStructuringElement(
             Imgproc.MORPH_ELLIPSE, BallVisionConstants.ROI_CLOSE_KERNEL_SIZE);
-
-    private static final int ROI_PAD_PX = BallVisionConstants.ROI_PAD_PX;
-    private static final int ROI_MERGE_DIST_PX = BallVisionConstants.ROI_MERGE_DIST_PX;
-
-    private static final Size HOUGH_BLUR_KERNEL = BallVisionConstants.HOUGH_BLUR_KERNEL;
-    private static final double HOUGH_MIN_DIST_FRACTION = BallVisionConstants.HOUGH_MIN_DIST_FRACTION;
-    private static final double HOUGH_CANNY_MIN_THRESHOLD = BallVisionConstants.HOUGH_CANNY_MIN_THRESHOLD;
-    private static final double HOUGH_MAX_RADIUS_FRACTION = BallVisionConstants.HOUGH_MAX_RADIUS_FRACTION;
-    private static final double HOUGH_WORKING_MIN_RADIUS_PX = BallVisionConstants.HOUGH_WORKING_MIN_RADIUS_PX;
-    private static final double ROI_MAX_UPSCALE = BallVisionConstants.ROI_MAX_UPSCALE;
 
     private static final double FPS_SMOOTHING = 0.1;
     private static final double NANOS_TO_SECONDS = 1e-9;
@@ -98,12 +96,12 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     // Written on the camera thread, read on the OpMode thread.
     private volatile Frame latest = Frame.EMPTY;
-    private volatile Mat homography;
-    private volatile Mat inverseHomography;
     private volatile boolean detectionEnabled = true;
     private volatile boolean trackerResetRequested = false;
 
     private final BallTracker tracker = new BallTracker();
+    private final Mat homography = buildHomographyFromArray(BallVisionConstants.H_ARRAY);
+    private final Mat inverseHomography = homography.inv();
 
     private final Mat small        = new Mat();
     private final Mat smallGray    = new Mat();
@@ -133,10 +131,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private int rejectedOverlapCount = 0;
     private double fps = 0;
     private double lastFrameSeconds = Double.NaN;
-
-    public BallDetectionPipeline() {
-        setHomography(buildHomographyFromArray(BallVisionConstants.H_ARRAY));
-    }
 
     @Override
     public Mat processFrame(Mat input) {
@@ -206,7 +200,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         Imgproc.cvtColor(small, smallGray, Imgproc.COLOR_RGB2GRAY);
     }
 
-    /** The first band overwrites {@code out}, which is what clears the previous type's pixels. */
+    /**
+     * Each type's second band is its glare band: highlights wash out saturation and raise value but
+     * keep hue. The first band overwrites {@code out}, which is what clears the previous type's pixels.
+     */
     private void buildColorMask(BallType type, Mat out) {
         switch (type) {
             case POLLEN:
@@ -417,17 +414,14 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     /** Projects each circle's ground-contact point (cx, cy + r) to field inches. */
     private List<BallDetection> projectToField(List<Candidate> circles) {
-        Mat h = homography;
-        if (circles.isEmpty() || h == null || h.empty()) {
-            return Collections.emptyList();
-        }
+        if (circles.isEmpty()) return Collections.emptyList();
 
         List<Point> contacts = new ArrayList<>(circles.size());
         for (Candidate c : circles) {
             contacts.add(new Point(c.x / DETECTION_SCALE, (c.y + c.radius) / DETECTION_SCALE));
         }
 
-        List<Point> field = perspectiveTransform(contacts, h);
+        List<Point> field = perspectiveTransform(contacts, homography);
         List<BallDetection> detections = new ArrayList<>(circles.size());
         for (int i = 0; i < circles.size(); i++) {
             Candidate c = circles.get(i);
@@ -474,12 +468,11 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     private void drawTrackedBoxes(List<TrackedBall> balls) {
-        Mat inverse = inverseHomography;
-        if (inverse == null || balls.isEmpty()) return;
+        if (balls.isEmpty()) return;
 
         List<Point> contacts = new ArrayList<>(balls.size());
         for (TrackedBall ball : balls) contacts.add(ball.position());
-        List<Point> pixels = perspectiveTransform(contacts, inverse);
+        List<Point> pixels = perspectiveTransform(contacts, inverseHomography);
 
         double scaleUp = 1.0 / DETECTION_SCALE;
         for (int i = 0; i < balls.size(); i++) {
@@ -522,8 +515,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     private void drawVelocities(List<TrackedBall> balls) {
-        Mat inverse = inverseHomography;
-        if (inverse == null || balls.isEmpty()) return;
+        if (balls.isEmpty()) return;
 
         List<TrackedBall> moving = new ArrayList<>();
         List<Point> fieldPoints = new ArrayList<>();
@@ -535,7 +527,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         }
         if (moving.isEmpty()) return;
 
-        List<Point> pixels = perspectiveTransform(fieldPoints, inverse);
+        List<Point> pixels = perspectiveTransform(fieldPoints, inverseHomography);
         for (int i = 0; i < moving.size(); i++) {
             Point from = pixels.get(i * 2);
             Point to = pixels.get(i * 2 + 1);
@@ -548,11 +540,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     private void drawOriginCrosshair() {
-        Mat inverse = inverseHomography;
-        if (inverse == null) return;
-
         Point origin = perspectiveTransform(
-                Collections.singletonList(new Point(0, 0)), inverse).get(0);
+                Collections.singletonList(new Point(0, 0)), inverseHomography).get(0);
         int size = 10;
         Scalar color = BallVisionConstants.COLOR_ORIGIN;
 
@@ -577,7 +566,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     public Frame latest() { return latest; }
 
     /** Always true once constructed: the homography is fixed from {@link BallVisionConstants#H_ARRAY}. */
-    public boolean isCalibrated() { return homography != null && !homography.empty(); }
+    public boolean isCalibrated() { return !homography.empty(); }
 
     public void setDetectionEnabled(boolean enabled) {
         if (detectionEnabled == enabled) return;
@@ -587,33 +576,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         resetTracking();
     }
 
-    public boolean isDetectionEnabled() { return detectionEnabled; }
-
     public void resetTracking() { trackerResetRequested = true; }
-
-    public String getHomographyAsString() {
-        Mat h = homography;
-        if (h == null || h.empty()) return "Homography not available";
-        StringBuilder sb = new StringBuilder("double[][] H_ARRAY = {\n");
-        for (int r = 0; r < 3; r++) {
-            sb.append("    { ");
-            for (int c = 0; c < 3; c++) {
-                sb.append(String.format("%.10e", h.get(r, c)[0]));
-                if (c < 2) sb.append(", ");
-            }
-            sb.append(" }").append(r < 2 ? "," : "").append("\n");
-        }
-        return sb.append("};").toString();
-    }
-
-    private void setHomography(Mat h) {
-        Mat previous = homography;
-        Mat previousInverse = inverseHomography;
-        homography = h;
-        inverseHomography = (h == null || h.empty()) ? null : h.inv();
-        if (previous != null && previous != h) previous.release();
-        if (previousInverse != null) previousInverse.release();
-    }
 
     private static List<Point> perspectiveTransform(List<Point> points, Mat transform) {
         MatOfPoint2f src = new MatOfPoint2f();
