@@ -18,8 +18,6 @@ import java.util.List;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.PathCommands;
 import org.firstinspires.ftc.teamcode.architecture.command.StateCommands;
-import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
-import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 
@@ -44,7 +42,6 @@ public class MockAuto extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() throws InterruptedException {
-        Context.allianceColor = AllianceColor.RED;
         mock = new MockRobot(this);
         return mock;
     }

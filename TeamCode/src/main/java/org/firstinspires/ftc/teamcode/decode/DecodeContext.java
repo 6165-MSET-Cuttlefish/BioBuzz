@@ -1,0 +1,102 @@
+package org.firstinspires.ftc.teamcode.decode;
+
+import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.GREEN;
+import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.PURPLE;
+import static org.firstinspires.ftc.teamcode.decode.modules.Turret.turretX;
+import static org.firstinspires.ftc.teamcode.decode.modules.Turret.turretY;
+
+import com.acmerobotics.dashboard.config.Config;
+import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
+
+import org.firstinspires.ftc.teamcode.decode.modules.MagazineState;
+
+@Config("DecodeContext")
+public final class DecodeContext {
+    public static MagazineState motif = new MagazineState(GREEN, PURPLE, PURPLE);
+    public static boolean usedFrontStorage = false;
+
+    public static final Pose redApriltagPose = new Pose(72 + 58.3727, 72 + 55.6425, 54);
+    public static final Pose blueApriltagPose = new Pose(72 - 58.3727, 72 + 55.6425, 54);
+
+    public static final Pose redTargetPose = new Pose(141.5 - 17, 144);
+    public static final Pose blueTargetPose = new Pose(17, 144);
+
+    public static double turretFieldX = 0;
+    public static double turretFieldY = 0;
+
+    /** Aim point, corrected for robot motion when SOTM is on; not the raw goal pose. */
+    public static double targetX = 0;
+    public static double targetY = 0;
+
+    public static double distanceToGoal = 0;
+
+    public static boolean sotmVelocity = true;
+    public static boolean sotmAngle = false;
+    public static boolean sotmAccel = true;
+    public static double sotmAccelScale = 50;
+    public static double sotmDragScale = 0.3;
+
+    /** Runs before module reads and before follower.update(), so it uses last loop's pose and velocity. */
+    public static void updateSharedPose(DecodeRobot robot) {
+        Pose robotPose = robot.follower.pose();
+        double robotRad = robotPose.heading();
+
+        turretFieldX = robotPose.x() + turretX * Math.cos(robotRad) - turretY * Math.sin(robotRad);
+        turretFieldY = robotPose.y() + turretX * Math.sin(robotRad) + turretY * Math.cos(robotRad);
+
+        double targetX = robot.targetPose.x();
+        double targetY = robot.targetPose.y();
+
+        if (sotmVelocity) {
+            double currentDistance = Math.hypot(targetX - turretFieldX, targetY - turretFieldY);
+            robot.turret.flightTime = 0.00103923 * currentDistance + 0.528024;
+
+            Velocity robotVelocity = robot.follower.velocity();
+            double robotVx = robotVelocity.vx;
+            double robotVy = robotVelocity.vy;
+
+            targetX -= robotVx * robot.turret.flightTime;
+            targetY -= robotVy * robot.turret.flightTime;
+
+            if (sotmAccel) {
+                // [fl, bl, br, fr]; localThrustY is always 0 for mecanum commands, kept because sotmAccelScale was tuned with it.
+                double[] powers = robot.drivetrain.getMotorPowers();
+                double localThrustX = (powers[0] + powers[1] + powers[2] + powers[3]) / 4.0;
+                double localThrustY = (powers[0] - powers[1] - powers[2] + powers[3]) / 4.0;
+
+                double cos = Math.cos(robotRad);
+                double sin = Math.sin(robotRad);
+
+                double thrustX = localThrustX * cos - localThrustY * sin;
+                double thrustY = localThrustX * sin + localThrustY * cos;
+
+                double accelX = thrustX * sotmAccelScale - robotVx * sotmDragScale;
+                double accelY = thrustY * sotmAccelScale - robotVy * sotmDragScale;
+
+                double t = robot.turret.flightTime;
+                targetX -= 0.5 * accelX * t * t;
+                targetY -= 0.5 * accelY * t * t;
+            }
+
+            if (sotmAngle) {
+                double angleCompensation = -robotVelocity.omega * robot.turret.flightTime;
+
+                double dx = targetX - turretFieldX;
+                double dy = targetY - turretFieldY;
+
+                double cosA = Math.cos(angleCompensation);
+                double sinA = Math.sin(angleCompensation);
+
+                targetX = turretFieldX + dx * cosA - dy * sinA;
+                targetY = turretFieldY + dx * sinA + dy * cosA;
+            }
+        }
+
+        DecodeContext.targetX = targetX;
+        DecodeContext.targetY = targetY;
+        distanceToGoal = Math.hypot(targetX - turretFieldX, targetY - turretFieldY);
+    }
+
+    private DecodeContext() {}
+}

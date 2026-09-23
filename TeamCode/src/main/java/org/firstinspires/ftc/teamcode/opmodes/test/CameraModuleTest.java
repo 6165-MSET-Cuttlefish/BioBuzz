@@ -2,8 +2,6 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
-import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
@@ -20,7 +18,6 @@ public class CameraModuleTest extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() throws InterruptedException {
-        Context.allianceColor = AllianceColor.RED;
         cam = new CameraModuleRobot(this);
         return cam;
     }

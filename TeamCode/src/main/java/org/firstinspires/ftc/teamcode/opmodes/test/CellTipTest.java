@@ -56,7 +56,6 @@ public class CellTipTest extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         LimelightCamera limelight = bot.limelight;
-        telemetry.addData("Alliance", limelight.getAlliance());
         if (Context.allianceColor != limelight.getAlliance()) {
             telemetry.addData("Note", "%s selected — re-init to apply", Context.allianceColor);
         }

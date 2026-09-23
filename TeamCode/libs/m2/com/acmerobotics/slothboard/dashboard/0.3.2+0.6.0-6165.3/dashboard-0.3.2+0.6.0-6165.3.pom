@@ -8,8 +8,9 @@
   <!-- do_not_remove: published-with-gradle-metadata -->
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.acmerobotics.slothboard</groupId>
-  <artifactId>core</artifactId>
-  <version>0.3.2+0.6.0-6165.2</version>
+  <artifactId>dashboard</artifactId>
+  <version>0.3.2+0.6.0-6165.3</version>
+  <packaging>aar</packaging>
   <name>FTC Dashboard</name>
   <description>Web dashboard designed for FTC</description>
   <url>https://github.com/acmerobotics/ftc-dashboard</url>
@@ -32,10 +33,40 @@
   </scm>
   <dependencies>
     <dependency>
-      <groupId>com.google.code.gson</groupId>
-      <artifactId>gson</artifactId>
-      <version>2.8.6</version>
+      <groupId>com.acmerobotics.slothboard</groupId>
+      <artifactId>core</artifactId>
+      <version>0.3.2+0.6.0-6165.3</version>
+      <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+      <version>2.4.10</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>dev.frozenmilk.sinister</groupId>
+      <artifactId>Sloth</artifactId>
+      <version>0.3.2</version>
       <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.nanohttpd</groupId>
+      <artifactId>nanohttpd-websocket</artifactId>
+      <version>2.3.1</version>
+      <scope>runtime</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>nanohttpd</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 </project>

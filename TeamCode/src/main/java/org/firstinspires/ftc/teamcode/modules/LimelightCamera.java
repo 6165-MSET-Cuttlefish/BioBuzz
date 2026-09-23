@@ -196,7 +196,7 @@ public class LimelightCamera extends Module {
             log("Limelight", "NOT CONFIGURED (\"%s\")", name);
             return;
         }
-        logDashboard("Alliance", "%s pipeline %d", alliance, pipelineFor(alliance));
+        logDashboard("Cell-tip pipeline", "%d (%s)", pipelineFor(alliance), alliance);
         if (wrongPipeline) log("Warning", WRONG_PIPELINE_WARNING);
         if (!fresh) {
             // Cached reads only: getStatus() is a blocking HTTP GET on the loop thread.
