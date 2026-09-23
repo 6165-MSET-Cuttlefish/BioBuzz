@@ -1,12 +1,10 @@
 package org.firstinspires.ftc.teamcode.opmodes.test;
 
-import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
@@ -20,11 +18,6 @@ import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
 @TeleOp(name = "Cell Tip Test", group = "Test")
 public class CellTipTest extends EnhancedOpMode {
 
-    @Config("Cell Tip Test")
-    public static class Tuning {
-        public static AllianceColor alliance = AllianceColor.RED;
-    }
-
     private final ElapsedTime sinceStart = new ElapsedTime();
 
     private BioBuzzRobot bot;
@@ -35,7 +28,6 @@ public class CellTipTest extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() throws InterruptedException {
-        Context.allianceColor = Tuning.alliance;
         bot = new BioBuzzRobot(this);
         return bot;
     }
@@ -65,8 +57,8 @@ public class CellTipTest extends EnhancedOpMode {
     protected void telemetry() {
         LimelightCamera limelight = bot.limelight;
         telemetry.addData("Alliance", limelight.getAlliance());
-        if (Tuning.alliance != limelight.getAlliance()) {
-            telemetry.addData("Note", "%s selected — re-init to apply", Tuning.alliance);
+        if (Context.allianceColor != limelight.getAlliance()) {
+            telemetry.addData("Note", "%s selected — re-init to apply", Context.allianceColor);
         }
         telemetry.addData("Limelight", limelight.isConnected() ? "connected" : "not responding");
         telemetry.addData("Verdict", !limelight.hasVerdict()
