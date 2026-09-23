@@ -588,7 +588,6 @@ public abstract class EnhancedOpMode extends OpMode {
                     HtmlFormatter.htmlBold(String.valueOf(Context.allianceColor)));
         }
         robot.telemetry.addRawHtml("Alliance", cachedAllianceHtml);
-        robot.telemetry.addDashboardData("Alliance Color", Context.allianceColor);
     }
 
     private void addVoltageCurrentTelemetry() {
