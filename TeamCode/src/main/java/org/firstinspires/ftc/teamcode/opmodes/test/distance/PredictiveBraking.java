@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.opmodes.test;
+package org.firstinspires.ftc.teamcode.opmodes.test.distance;
 
 import com.acmerobotics.dashboard.config.Config;
 

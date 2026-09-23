@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.architecture.auto;
+package org.firstinspires.ftc.teamcode.architecture.command;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Command;

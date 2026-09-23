@@ -16,7 +16,7 @@ import static com.pedropathing.ivy.groups.Groups.sequential;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.PathCommands;
+import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.architecture.command.StateCommands;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;

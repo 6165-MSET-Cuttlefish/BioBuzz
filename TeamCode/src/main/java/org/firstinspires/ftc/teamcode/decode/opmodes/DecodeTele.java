@@ -36,6 +36,8 @@ import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.Artifa
 @TeleOp(name = "Decode Tele", group = "Test")
 public class DecodeTele extends DecodeOpMode {
 
+    enum ActionLayer { TELE, SORT, ENDGAME }
+
     public static boolean soloDriver = false;
     public static boolean outOfRangeRedAndPreventShooting = false;
 

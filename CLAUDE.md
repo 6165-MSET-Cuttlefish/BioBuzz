@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this repository.
 
 The 2026–2027 competition-season repository for **FIRST Tech Challenge team 6165 MSET Cuttlefish**, for the **BIOBUZZ™** game (kickoff September 12, 2026). The game elements are **Pollen**, ~2.8" yellow plastic balls, and **Nectar**, ~3.6" red and blue plastic balls; `modules/vision/` detects and tracks them.
 
-Game-specific code (field coordinates, scoring logic, mechanism modules) goes under `biobuzz/`, `modules/`, and `opmodes/`. `decode/` is last season's DECODE robot code (its own `modules/` and `opmodes/`), kept so the Cuttle bot can still run it; nothing outside `decode/` depends on it. Nothing game-specific goes under `architecture/`, which stays portable to the next season. Field constants come from the game manual, not guesses.
+Game-specific code (field coordinates, scoring logic, mechanism modules) goes under `biobuzz/`, `modules/`, and `opmodes/`. `decode/` is last season's DECODE robot code (its own `modules/` and `opmodes/`, plus BioBuzz's `modules/Drivetrain`, so a Drivetrain change reaches Decode Tele too), kept so the Cuttle bot can still run it; nothing outside `decode/` depends on it. Nothing game-specific goes under `architecture/`, which stays portable to the next season. Field constants come from the game manual, not guesses.
 
 Besides the Gradle and repo files, the top level holds only `TeamCode/` (the whole app; `TeamCode/libs/` has the keystore and the committed slothboard maven repo), `limelight/` (code that runs on the Limelight, not in the APK), `scripts/` (vendored-code refresh scripts) and `docs/`. New files go in one of these, and new Java files in an existing package.
 
@@ -42,8 +42,8 @@ Deploy from the buttons on Android Studio's top bar: pick a run configuration in
 Everything framework-level is under `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/architecture/`.
 
 - `core/` — `EnhancedOpMode` (the base OpMode), `Robot` (game-agnostic base; subclasses build mechanisms in `initializeGameModules()` and the follower in `createFollower(HardwareMap)`, which runs first), `Module`, `State`, `AllianceColor`, `Context`.
-- `command/` — `StateCommands`, Ivy commands that drive Module state machines.
-- `auto/` — `FieldConfig.fieldWidthInches` (`@Config`, 141.5); `FieldPose.forAlliance(x, y, heading)`, which mirrors RED geometry to BLUE as `(width - x, y, π - heading)` when `Context.allianceColor` is BLUE (author every pose for RED); `FieldVisualization` (dashboard overlay); `PoseRing` (pose trail); `HeadingInterpolatorBuilder`; `PathCommands`, Ivy commands over a Pedro `Path`.
+- `command/` — the Ivy command factories: `StateCommands` for Module state machines, `PathCommands` for Pedro paths.
+- `auto/` — `FieldConfig.fieldWidthInches` (`@Config`, 141.5); `FieldPose.forAlliance(x, y, heading)`, which mirrors RED geometry to BLUE as `(width - x, y, π - heading)` when `Context.allianceColor` is BLUE (author every pose for RED); `FieldVisualization` (dashboard overlay); `PoseRing` (pose trail).
 - `control/` (PID), `hardware/` (cached motor/servo wrappers, voltage, encoders, the Brushland rangefinder), `input/` (gamepad layering and edge detection), `telemetry/` (the DS+dashboard fan-out and the loop profiler), `prism/` (vendored goBILDA Prism LED driver), and `OptimizationToggles` (framework-wide `@Config` perf toggles).
 
 `Robot`'s constructor sets the follower pose to a placeholder, `(72, fieldWidth - 10, 90°)`, on every init so nothing carries across a Sloth reload. An auto sets its real start with `robot.follower.setPose(FieldPose.forAlliance(...))` in `initialize()` before building paths. The alliance is `Context.allianceColor`, set on the dashboard (`Context → allianceColor`) or in `Context.java`. It is a static, so it carries from one OpMode to the next until the app restarts or Sloth reloads; no OpMode sets it except Decode Tele's in-match swap.
@@ -192,7 +192,8 @@ A `@Tuner` method in `Tuning.java` must be static, take no arguments, and be dec
 - **Cell Tip Test** (`opmodes/test/CellTipTest`, on `cuttledecode.xml`) runs `RobotActions.checkTip` against the live verdict; run it after uploading scripts. Your alliance's cluster upside-down should read SCORABLE, and right-side up or out of frame TIPPED, each a quarter second later. It uses `Context → allianceColor`, which applies on the next init.
 - **BioBuzz Tele** is the robot-centric drive smoke test: brake mode on start, left trigger toggles 75% slow mode, left bumper toggles heading lock at the current heading.
 - **Decode Tele** and **Decode System Check** (`decode/opmodes/`, on `cuttle_decode.xml`) are last season's TeleOp and pit check on the new framework. Tele starts at the placeholder pose, not an auto's end pose, so reset the pose or relocalize before trusting turret aim.
-- For single-device bench tests use FTC Dashboard's Hardware View. For an isolated module test, extend `OpMode` directly rather than `EnhancedOpMode`.
+- **Distance sensors** (`opmodes/test/distance/`): bench tests and address setup for the laser, ultrasonic and REV sensors, plus the predictive-braking experiment built on them; they read the hub config names `Laser`, `sonar` and `distance`.
+- For single-device bench tests of motors, servos and colour sensors use FTC Dashboard's Hardware View; it has no distance-sensor view. For an isolated module test, extend `OpMode` directly rather than `EnhancedOpMode`.
 - SDK sample OpModes are not in this repo; read them on GitHub at the tag matching `TeamCode/build.gradle`.
 
 ## Conventions
