@@ -193,7 +193,7 @@ A `@Tuner` method in `Tuning.java` must be static, take no arguments, and be dec
 - **Ball Vision** (`opmodes/test/BallVisionTest`) runs `BallDetectionPipeline` straight off the webcam with only `nerdDetector`: the webcam bench check, and where to tune HSV live against the dashboard's camera stream.
 - **Ball Field Drive** (`opmodes/test/BallFieldDriveTest`) drives on raw gamepad mecanum and reports ball field positions from the Pinpoint read directly. Its Pinpoint offsets are the Cuttle bot's, copied from `CuttleConstants`; keep the two in sync. Its pose is relative to where the robot was at init. It runs its own `FieldBallTracker`, so it is also the check that a ball keeps its ID when the robot turns away and back.
 - **Cell Tip Test** (`opmodes/test/CellTipTest`, on `cuttledecode.xml`) shows the live cell verdict and runs `RobotActions.checkTip`; run it after uploading scripts. A cell of your alliance whose tags read upside-down should read SCORABLE, and right-side up or out of frame should read TIPPED, each a quarter second later. `Cell Tip Test → alliance` applies on the next init.
-- **BioBuzz Tele** is the robot-centric drive smoke test.
+- **BioBuzz Tele** is the robot-centric drive smoke test: brake mode on start, left trigger toggles 75% slow mode, left bumper toggles heading lock at the current heading.
 - For single-device bench tests use FTC Dashboard's Hardware View. For an isolated module test, extend `OpMode` directly rather than `EnhancedOpMode`.
 - SDK sample OpModes are not in this repo; read them on GitHub at the tag matching `TeamCode/build.gradle`.
 
