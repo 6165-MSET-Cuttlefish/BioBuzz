@@ -207,3 +207,4 @@ A `@Tuner` method in `Tuning.java` must be static, take no arguments, and be dec
 - **Fail fast.** Let exceptions propagate; no try/catch to keep a loop alive. Numeric guards and try/finally are fine. Exception: `modules/vision/WebcamControls.java` deliberately ignores unsupported UVC control calls.
 - OpMode `group` is `"Test"` for test OpModes and `"A"` for the competition teleop; the DS treats group names as case-sensitive.
 - Commit messages are a single imperative subject line, no body, no trailer. Ask before pushing.
+- Commit and push as Alan Rong <alanrong1@gmail.com> (`git config user.name "Alan Rong"`, `git config user.email alanrong1@gmail.com`), never as Claude: no Claude author, co-author, trailer, or session link in commits or PRs. Work directly on `main`; don't create branches.
