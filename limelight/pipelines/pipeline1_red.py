@@ -9,8 +9,9 @@ launches. Roll is each tag's in-image rotation, not a pose solve, so the Limelig
 with its image upright. The verdict only flips once the new reading has held for HOLD_SECONDS, in
 either direction, and starts as tipped.
 
-Reads nothing from the hub. llpython is one value; keep in step with LimelightCamera:
+Reads nothing from the hub. llpython, 2 doubles; keep in step with LimelightCamera's OUT_* constants:
     0  tipped, 1 or 0
+    1  sum of this alliance's ids, so the hub can reject the wrong script
 """
 
 import math
@@ -29,6 +30,7 @@ MIN_VISIBLE_TAGS = 1
 SCORABLE_MIN_ROLL_DEG = 90.0
 DRAW_OVERLAY = True
 
+CHECKSUM = float(sum(CLUSTERS[0][1] + CLUSTERS[1][1]))
 NO_CONTOUR = np.array([[]])
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
@@ -156,9 +158,11 @@ def runPipeline(image, llrobot):
     if DRAW_OVERLAY:
         _draw_overlay(image, found_by_cluster, rolls, now_scorable)
 
+    llpython = [1.0 if _tipped else 0.0, CHECKSUM]
+
     # The contour only feeds tx/ty/ta; the verdict rides in llpython.
     tags = found_by_cluster[0] + found_by_cluster[1]
     if not tags:
-        return NO_CONTOUR, image, [1.0 if _tipped else 0.0]
+        return NO_CONTOUR, image, llpython
     biggest = max(tags, key=lambda t: abs(cv2.contourArea(t[0])))[0]
-    return biggest.reshape(-1, 1, 2).astype(np.int32), image, [1.0 if _tipped else 0.0]
+    return biggest.reshape(-1, 1, 2).astype(np.int32), image, llpython

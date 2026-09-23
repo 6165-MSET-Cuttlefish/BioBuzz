@@ -13,7 +13,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.State;
 /**
  * Limelight 3A HIVE-cell tip detector. Inverting FIRST's "AprilTag Clusters" Tech Tip, this
  * alliance's cluster upside-down ({@code |roll| >= 90}) is scorable; right-side up or out of frame
- * is tipped, each after the script's hold time. The script sends only that verdict. The alliance
+ * is tipped, each after the script's hold time. The script sends only that verdict and an alliance checksum. The alliance
  * pipeline is selected once in {@link #init()}, so set {@link Context#allianceColor} in
  * {@code createRobot()}.
  */
@@ -37,9 +37,13 @@ public class LimelightCamera extends Module {
     private static final int[] BLUE_AUDIENCE_IDS = {38, 39, 40, 41};
     private static final int[] BLUE_SCORING_IDS = {42, 43, 44, 45};
 
-    // llpython layout; must match limelight/cell_tip_snapscript.py's docstring.
+    private static final int RED_CHECKSUM = sum(RED_SCORING_IDS) + sum(RED_AUDIENCE_IDS);
+    private static final int BLUE_CHECKSUM = sum(BLUE_AUDIENCE_IDS) + sum(BLUE_SCORING_IDS);
+
+    // llpython layout; must match the slot table in limelight/cell_tip_snapscript.py's docstring.
     private static final int OUT_TIPPED = 0;
-    private static final int OUT_LENGTH = 1;
+    private static final int OUT_ALLIANCE_CHECKSUM = 1;
+    private static final int OUT_LENGTH = 2;
 
     public enum VisionState implements State {
         ENABLED,
@@ -135,8 +139,18 @@ public class LimelightCamera extends Module {
         return this;
     }
 
+    private static int sum(int[] ids) {
+        int total = 0;
+        for (int id : ids) total += id;
+        return total;
+    }
+
     private static int pipelineFor(AllianceColor alliance) {
         return alliance == AllianceColor.BLUE ? bluePipeline : redPipeline;
+    }
+
+    private static int checksumFor(AllianceColor alliance) {
+        return alliance == AllianceColor.BLUE ? BLUE_CHECKSUM : RED_CHECKSUM;
     }
 
     private void parse(LLResult result) {
@@ -150,7 +164,8 @@ public class LimelightCamera extends Module {
         fresh = alliance != null
                 && out != null
                 && out.length >= OUT_LENGTH
-                && stalenessMs <= maxStalenessMs;
+                && stalenessMs <= maxStalenessMs
+                && (int) Math.round(out[OUT_ALLIANCE_CHECKSUM]) == checksumFor(alliance);
         if (!fresh) {
             clearVerdict();
             return;
