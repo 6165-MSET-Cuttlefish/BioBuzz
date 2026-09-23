@@ -11,10 +11,11 @@ import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
 /**
- * Limelight 3A HIVE-cell tip detector. Per FIRST's "AprilTag Clusters" Tech Tip, this alliance's
- * cluster right-side up ({@code |roll| < 90}) is scorable; upside-down or out of frame for the hold
- * time is tipped. The alliance pipeline is selected once in {@link #init()}, so set
- * {@link Context#allianceColor} in {@code createRobot()}.
+ * Limelight 3A HIVE-cell tip detector. Inverting FIRST's "AprilTag Clusters" Tech Tip, this
+ * alliance's cluster upside-down ({@code |roll| >= 90}) is scorable; right-side up or out of frame
+ * is tipped, each after the script's hold time. The script sends only that verdict and an alliance checksum. The alliance
+ * pipeline is selected once in {@link #init()}, so set {@link Context#allianceColor} in
+ * {@code createRobot()}.
  */
 @Config
 public class LimelightCamera extends Module {
@@ -28,9 +29,7 @@ public class LimelightCamera extends Module {
     public static double checkTipTimeoutMs = 10000;
 
     private static final String DEFAULT_NAME = "limelight";
-
-    /** Sentinel for "no cluster in view": NaN is not valid JSON, so the scripts can't send it. */
-    private static final double ROLL_NONE = 999.0;
+    private static final String WRONG_PIPELINE_WARNING = "incorrect pipeline! please switch manually";
 
     // limelight/generate_pipelines.py regex-parses these, so keep each on one line. The order differs
     // by alliance: RED's low run is the scoring-side cell, BLUE's the audience-side one.
@@ -44,33 +43,8 @@ public class LimelightCamera extends Module {
 
     // llpython layout; must match the slot table in limelight/cell_tip_snapscript.py's docstring.
     private static final int OUT_TIPPED = 0;
-    private static final int OUT_SCORABLE = 1;
-    private static final int OUT_ROLL_DEG = 2;
-    private static final int OUT_VISIBLE_COUNT = 3;
-    private static final int OUT_CLUSTER = 4;
-    private static final int OUT_OTHER_VISIBLE_COUNT = 5;
-    private static final int OUT_ALLIANCE_CHECKSUM = 6;
-    private static final int OUT_FRAME_COUNTER = 7;
-    private static final int OUT_LENGTH = 8;
-
-    /** Which of this alliance's two HIVE cells is in view; never identifies the alliance. */
-    public enum Cluster {
-        NONE(-1),
-        /** The cell on the scoring-table side. */
-        SCORING(0),
-        AUDIENCE(1);
-
-        public final int index;
-
-        Cluster(int index) {
-            this.index = index;
-        }
-
-        static Cluster of(int index) {
-            for (Cluster c : values()) if (c.index == index) return c;
-            return NONE;
-        }
-    }
+    private static final int OUT_ALLIANCE_CHECKSUM = 1;
+    private static final int OUT_LENGTH = 2;
 
     public enum VisionState implements State {
         ENABLED,
@@ -85,11 +59,7 @@ public class LimelightCamera extends Module {
 
     private boolean fresh;
     private boolean tipped;
-    private boolean scorable;
-    private double rollDeg;
-    private int visibleCount;
-    private Cluster cluster = Cluster.NONE;
-    private int otherVisibleCount;
+    private boolean wrongPipeline;
     private double stalenessMs;
 
     public LimelightCamera(HardwareMap hardwareMap) {
@@ -145,39 +115,22 @@ public class LimelightCamera extends Module {
         return alliance;
     }
 
-    /**
-     * Debounced by the script's hold time. With {@code REQUIRE_SEEN} off, an empty frame also reads
-     * tipped, so a camera pointed away from the hive looks like a tipped cell.
-     */
+    /** An empty frame also reads tipped, so a camera pointed away looks like a tipped cell. */
     public boolean isTipped() {
         return fresh && tipped;
     }
 
-    /** Undebounced, unlike {@link #isTipped()}. */
     public boolean isScorable() {
-        return fresh && scorable;
+        return fresh && !tipped;
     }
 
     public boolean hasVerdict() {
         return fresh;
     }
 
-    public Cluster getCluster() {
-        return fresh ? cluster : Cluster.NONE;
-    }
-
-    /** {@code |roll| < 90} is right-side up; NaN when no cluster is in view. */
-    public double getRollDeg() {
-        return fresh && rollDeg != ROLL_NONE ? rollDeg : Double.NaN;
-    }
-
-    public int getVisibleCount() {
-        return fresh ? visibleCount : 0;
-    }
-
-    /** Tags of this alliance's <em>other</em> cell in the current frame. */
-    public int getOtherVisibleCount() {
-        return fresh ? otherVisibleCount : 0;
+    /** The Limelight is answering, but not with this alliance's cell-tip script. */
+    public boolean isWrongPipeline() {
+        return wrongPipeline;
     }
 
     /** False when absent, unplugged, booting or paused. */
@@ -210,6 +163,8 @@ public class LimelightCamera extends Module {
     private void parse(LLResult result) {
         applyVerdict(result == null ? null : result.getPythonOutput(),
                 result == null ? Double.NaN : result.getStaleness());
+        wrongPipeline = !fresh && alliance != null && result != null
+                && stalenessMs <= maxStalenessMs;
     }
 
     private void applyVerdict(double[] out, double stalenessMs) {
@@ -226,21 +181,12 @@ public class LimelightCamera extends Module {
         }
 
         tipped = out[OUT_TIPPED] != 0;
-        scorable = out[OUT_SCORABLE] != 0;
-        rollDeg = out[OUT_ROLL_DEG];
-        visibleCount = (int) Math.round(out[OUT_VISIBLE_COUNT]);
-        cluster = Cluster.of((int) Math.round(out[OUT_CLUSTER]));
-        otherVisibleCount = (int) Math.round(out[OUT_OTHER_VISIBLE_COUNT]);
     }
 
     private void clearVerdict() {
         fresh = false;
         tipped = false;
-        scorable = false;
-        rollDeg = Double.NaN;
-        visibleCount = 0;
-        cluster = Cluster.NONE;
-        otherVisibleCount = 0;
+        wrongPipeline = false;
     }
 
     @Override
@@ -251,6 +197,7 @@ public class LimelightCamera extends Module {
             return;
         }
         logDashboard("Alliance", "%s pipeline %d", alliance, pipelineFor(alliance));
+        if (wrongPipeline) log("Warning", WRONG_PIPELINE_WARNING);
         if (!fresh) {
             // Cached reads only: getStatus() is a blocking HTTP GET on the loop thread.
             boolean linked = limelight.isConnected();
@@ -260,9 +207,6 @@ public class LimelightCamera extends Module {
                     stalenessMs);
             return;
         }
-        logDashboard("Cell", tipped ? "TIPPED" : (scorable ? "SCORABLE" : "not scorable, within hold"));
-        logDashboard("Cluster", "%s %d/4 visible", cluster, visibleCount);
-        logDashboard("Roll", cluster == Cluster.NONE ? "--" : String.format("%.1fdeg", rollDeg));
-        log("Other cluster", otherVisibleCount + "/4 visible");
+        logDashboard("Cell", tipped ? "TIPPED" : "SCORABLE");
     }
 }

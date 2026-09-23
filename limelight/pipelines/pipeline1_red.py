@@ -2,20 +2,16 @@
 
 GENERATED from limelight/cell_tip_snapscript.py by limelight/generate_pipelines.py; do not edit.
 
-Reports whether this alliance's HIVE cell is scorable: its AprilTag cluster in frame and right-side
-up (|roll| < 90). That heuristic is from FIRST's "AprilTag Clusters" Tech Tip and assumes the camera
-looks the way the launcher launches. Roll is each tag's in-image rotation, not a pose solve, so the
-Limelight must be mounted with its image upright. Upside-down or absent for HOLD_SECONDS is tipped.
+Reports whether this alliance's HIVE cell has tipped. A cluster in frame and reading upside-down
+(|roll| >= 90) is scorable; right-side up or absent is tipped. That is the inverse of the roll
+heuristic in FIRST's "AprilTag Clusters" Tech Tip, which assumes the camera looks the way the launcher
+launches. Roll is each tag's in-image rotation, not a pose solve, so the Limelight must be mounted
+with its image upright. The verdict only flips once the new reading has held for HOLD_SECONDS, in
+either direction, and starts as tipped.
 
-llpython, 8 doubles; keep in step with LimelightCamera's OUT_* constants:
+Reads nothing from the hub. llpython, 2 doubles; keep in step with LimelightCamera's OUT_* constants:
     0  tipped, 1 or 0
-    1  scorable, 1 or 0
-    2  roll of the targeted cluster in degrees, ROLL_NONE when none is in view
-    3  visible tags in the targeted cluster
-    4  targeted cell: 0 scoring side, 1 audience side, -1 none
-    5  visible tags in the other cluster
-    6  sum of this alliance's ids, so the hub can reject the wrong script
-    7  frame counter, wrapping at 10000
+    1  sum of this alliance's ids, so the hub can reject the wrong script
 """
 
 import math
@@ -26,21 +22,15 @@ import numpy as np
 
 ALLIANCE = "RED"
 PIPELINE_INDEX = 1
-# Scoring side first for both alliances, so llpython[4] means the same thing either way.
 CLUSTERS = (("SCORING", (30, 31, 32, 33)), ("AUDIENCE", (34, 35, 36, 37)))
 
 HOLD_SECONDS = 0.25
 MIN_TAG_AREA_PX = 120.0
 MIN_VISIBLE_TAGS = 1
-UPRIGHT_MAX_ROLL_DEG = 90.0
-# False: an empty frame reads as tipped after HOLD_SECONDS, even if the cluster was never seen.
-REQUIRE_SEEN = False
-# llpython travels in the results JSON, where a NaN can cost the hub the whole payload.
-ROLL_NONE = 999.0
+SCORABLE_MIN_ROLL_DEG = 90.0
 DRAW_OVERLAY = True
 
-ALL_IDS = CLUSTERS[0][1] + CLUSTERS[1][1]
-CHECKSUM = float(sum(ALL_IDS))
+CHECKSUM = float(sum(CLUSTERS[0][1] + CLUSTERS[1][1]))
 NO_CONTOUR = np.array([[]])
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX
@@ -70,17 +60,14 @@ def _make_detector():
 
 _detect = _make_detector()
 
-# Module globals persist between frames; the hold timer lives here.
-_last_good = None
-_seen_since_start = False
-_frames = 0
+# Module globals persist between frames; the debounce lives here.
+_tipped = True
+_pending_since = None
 
 
 def _tag_roll_deg(pts):
     """c0->c1 is the tag's top edge: ~0 upright, ~180 upside-down."""
-    dx = pts[1][0] - pts[0][0]
-    dy = pts[1][1] - pts[0][1]
-    return math.degrees(math.atan2(dy, dx))
+    return math.degrees(math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]))
 
 
 def _circular_mean_deg(angles):
@@ -92,6 +79,10 @@ def _circular_mean_deg(angles):
     return math.degrees(math.atan2(y, x))
 
 
+def _scorable_roll(roll):
+    return not math.isnan(roll) and abs(roll) >= SCORABLE_MIN_ROLL_DEG
+
+
 def _label(image, text, origin, color, scale=0.5, thickness=1):
     (w, h), base = cv2.getTextSize(text, FONT, scale, thickness)
     x, y = origin
@@ -99,15 +90,9 @@ def _label(image, text, origin, color, scale=0.5, thickness=1):
     cv2.putText(image, text, (x, y), FONT, scale, color, thickness, cv2.LINE_AA)
 
 
-def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, scorable):
-    for pts, tag_id in strangers:
-        cv2.polylines(image, [pts.astype(np.int32)], True, GREY, 1)
-        cx, cy = pts.mean(axis=0)
-        _label(image, "%d" % tag_id, (int(cx) - 10, int(cy)), GREY)
-
+def _draw_overlay(image, found_by_cluster, rolls, now_scorable):
     for c, tags in enumerate(found_by_cluster):
-        upright = not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG
-        color = GREEN if upright else RED
+        color = GREEN if _scorable_roll(rolls[c]) else RED
         for pts, tag_id in tags:
             cv2.polylines(image, [pts.astype(np.int32)], True, color, 2)
             cx, cy = pts.mean(axis=0)
@@ -115,118 +100,69 @@ def _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, sco
 
     y = 18
     _label(image, "%s  pipeline %d" % (ALLIANCE, PIPELINE_INDEX), (8, y), WHITE)
-
     for c, (label, ids) in enumerate(CLUSTERS):
         y += 20
         tags = found_by_cluster[c]
-        roll = rolls[c]
         if not tags:
             _label(image, "%-8s %d-%d  0/4  --" % (label, ids[0], ids[-1]), (8, y), GREY)
             continue
-        upright = not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
-        _label(image, "%-8s %d-%d  %d/4  roll %+.1f  %s%s"
-               % (label, ids[0], ids[-1], len(tags), roll,
-                  "UP" if upright else "DOWN", "  <-- target" if c == target else ""),
-               (8, y), GREEN if upright else RED)
+        good = _scorable_roll(rolls[c])
+        _label(image, "%-8s %d-%d  %d/4  roll %+.1f  %s"
+               % (label, ids[0], ids[-1], len(tags), rolls[c], "DOWN" if good else "UP"),
+               (8, y), GREEN if good else RED)
 
+    text, fill, ink = ("TIPPED", RED, WHITE) if _tipped else ("SCORABLE", GREEN, BLACK)
+    (w, h), _ = cv2.getTextSize(text, FONT, 1.1, 3)
     y += 8
-    if tipped:
-        (w, h), _ = cv2.getTextSize("TIPPED", FONT, 1.1, 3)
-        cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), RED, -1)
-        cv2.putText(image, "TIPPED", (8, y + 14 + h), FONT, 1.1, WHITE, 3, cv2.LINE_AA)
-        y += 28 + h
-    elif scorable:
-        (w, h), _ = cv2.getTextSize("SCORABLE", FONT, 1.1, 3)
-        cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), GREEN, -1)
-        cv2.putText(image, "SCORABLE", (8, y + 14 + h), FONT, 1.1, BLACK, 3, cv2.LINE_AA)
-        y += 28 + h
-    else:
-        y += 20
-        _label(image, "NOT SCORABLE, waiting out the hold", (8, y), AMBER, 0.6, 2)
-
-    y += 20
-    away = 0.0 if _last_good is None else time.monotonic() - _last_good
-    _label(image, "not scorable for %.2fs / %.2fs   need %d tag%s + |roll| < %.0f   seen %s   frame %d"
-           % (away, HOLD_SECONDS, MIN_VISIBLE_TAGS, "" if MIN_VISIBLE_TAGS == 1 else "s",
-              UPRIGHT_MAX_ROLL_DEG, "yes" if _seen_since_start else "no", _frames),
-           (8, y), WHITE, 0.45)
+    cv2.rectangle(image, (4, y + 8), (12 + w, y + 20 + h), fill, -1)
+    cv2.putText(image, text, (8, y + 14 + h), FONT, 1.1, ink, 3, cv2.LINE_AA)
+    if _pending_since is not None:
+        _label(image, "reads %s for %.2fs / %.2fs"
+               % ("SCORABLE" if now_scorable else "TIPPED", time.monotonic() - _pending_since,
+                  HOLD_SECONDS),
+               (8, y + 40 + h), AMBER, 0.5, 1)
 
 
 def runPipeline(image, llrobot):
-    global _last_good, _seen_since_start, _frames
+    global _tipped, _pending_since
 
     now = time.monotonic()
-    _frames = (_frames + 1) % 10000
-
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
     corners, found = _detect(gray)
 
     found_by_cluster = [[], []]
-    strangers = []
-
-    if found is not None and len(found) > 0:
+    if found is not None:
         for quad, tag_id in zip(corners, found.flatten()):
-            pts = quad.reshape(-1, 2).astype(np.float32)
-            if abs(cv2.contourArea(pts)) < MIN_TAG_AREA_PX:
-                continue
             tag_id = int(tag_id)
             for c, (_, ids) in enumerate(CLUSTERS):
                 if tag_id in ids:
-                    found_by_cluster[c].append((pts, tag_id))
+                    pts = quad.reshape(-1, 2).astype(np.float32)
+                    if abs(cv2.contourArea(pts)) >= MIN_TAG_AREA_PX:
+                        found_by_cluster[c].append((pts, tag_id))
                     break
-            else:
-                strangers.append((pts, tag_id))
 
     rolls = [_circular_mean_deg([_tag_roll_deg(pts) for pts, _ in tags]) if tags else float("nan")
              for tags in found_by_cluster]
+    now_scorable = any(len(tags) >= MIN_VISIBLE_TAGS and _scorable_roll(rolls[c])
+                       for c, tags in enumerate(found_by_cluster))
 
-    # Any upright cluster wins; tag count breaks ties.
-    target = -1
-    best = (-1, -1)  # (upright, visible count)
-    for c, tags in enumerate(found_by_cluster):
-        if not tags:
-            continue
-        upright = 1 if (not math.isnan(rolls[c]) and abs(rolls[c]) < UPRIGHT_MAX_ROLL_DEG) else 0
-        if (upright, len(tags)) > best:
-            best = (upright, len(tags))
-            target = c
-
-    if target < 0:
-        roll = float("nan")
-        visible = 0
-        other_visible = 0
-    else:
-        roll = rolls[target]
-        visible = len(found_by_cluster[target])
-        other_visible = len(found_by_cluster[1 - target])
-
-    upright = target >= 0 and not math.isnan(roll) and abs(roll) < UPRIGHT_MAX_ROLL_DEG
-    scorable = visible >= MIN_VISIBLE_TAGS and upright
-    if scorable:
-        _last_good = now
-        _seen_since_start = True
-    elif _last_good is None:
-        _last_good = now
-
-    away_s = now - _last_good
-    tipped = not scorable and away_s >= HOLD_SECONDS and (_seen_since_start or not REQUIRE_SEEN)
+    if now_scorable != _tipped:
+        _pending_since = None
+    elif _pending_since is None:
+        _pending_since = now
+    if _pending_since is not None and now - _pending_since >= HOLD_SECONDS:
+        _tipped = not now_scorable
+        _pending_since = None
 
     if DRAW_OVERLAY:
-        _draw_overlay(image, found_by_cluster, strangers, rolls, target, tipped, scorable)
+        _draw_overlay(image, found_by_cluster, rolls, now_scorable)
 
-    llpython = [
-        1.0 if tipped else 0.0,
-        1.0 if scorable else 0.0,
-        ROLL_NONE if math.isnan(roll) else float(roll),
-        float(visible),
-        float(target),
-        float(other_visible),
-        CHECKSUM,
-        float(_frames),
-    ]
+    llpython = [1.0 if _tipped else 0.0, CHECKSUM]
 
     # The contour only feeds tx/ty/ta; the verdict rides in llpython.
-    if target < 0:
+    tags = found_by_cluster[0] + found_by_cluster[1]
+    if not tags:
         return NO_CONTOUR, image, llpython
-    biggest = max(found_by_cluster[target], key=lambda t: abs(cv2.contourArea(t[0])))[0]
+    biggest = max(tags, key=lambda t: abs(cv2.contourArea(t[0])))[0]
     return biggest.reshape(-1, 1, 2).astype(np.int32), image, llpython

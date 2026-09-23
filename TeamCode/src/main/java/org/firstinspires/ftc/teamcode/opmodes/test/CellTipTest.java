@@ -70,14 +70,12 @@ public class CellTipTest extends EnhancedOpMode {
         }
         telemetry.addData("Limelight", limelight.isConnected() ? "connected" : "not responding");
         telemetry.addData("Verdict", !limelight.hasVerdict()
-                ? (limelight.isConnected()
-                        ? "none — is the right SnapScript on this alliance's pipeline?"
-                        : "none — the Limelight is not responding")
-                : (limelight.isTipped() ? "TIPPED" : (limelight.isScorable() ? "SCORABLE" : "not scorable, within hold")));
-        telemetry.addData("Cluster", "%s  %d/4 visible  (other %d/4)",
-                limelight.getCluster(), limelight.getVisibleCount(), limelight.getOtherVisibleCount());
-        telemetry.addData("Roll", Double.isNaN(limelight.getRollDeg())
-                ? "—" : String.format("%.1fdeg", limelight.getRollDeg()));
+                ? (limelight.isWrongPipeline()
+                        ? "none — incorrect pipeline! please switch manually"
+                        : (limelight.isConnected()
+                                ? "none — no result from the Limelight yet"
+                                : "none — the Limelight is not responding"))
+                : (limelight.isTipped() ? "TIPPED" : "SCORABLE"));
         telemetry.addData("Command", !started ? "not started" : (outcome == null ? "watching" : outcome));
         telemetry.addData("First tip at", tippedAtSeconds < 0 ? "—" : String.format("%.2fs", tippedAtSeconds));
     }
