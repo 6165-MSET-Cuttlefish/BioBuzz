@@ -42,8 +42,8 @@ public class PredictiveBrakingUltrasonicTest extends OpMode {
         /** Forward power the braking logic gets to clamp down from. */
         public static double driveSpeed = 1.0;
 
-        // Starting guess copied from pedro/Constants.drivetrainConfig (left side reversed). The wheel test is
-        // there because this is a guess — correct it there, then port it back to Constants.
+        // Starting guess copied from BettaConstants.drivetrainConfig (left side reversed). The wheel test
+        // is there because this is a guess — correct it there, then port it back to BettaConstants.
         public static boolean reverseFrontLeft  = true;
         public static boolean reverseBackLeft   = true;
         public static boolean reverseFrontRight = false;

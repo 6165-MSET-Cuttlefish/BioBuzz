@@ -8,48 +8,25 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Associates per-frame {@link BallDetection}s with persistent tracks so each ball keeps an identity,
- * a smoothed field position, and a velocity across frames.
- *
- * <p>Association is greedy nearest-neighbour against each track's <em>predicted</em> position, which
- * is what lets a fast-moving ball stay matched: gating on the last seen position instead would need
- * a radius large enough to also swallow neighbouring balls. That tight pass runs first; anything left
- * unmatched — a detection, a track, or both — gets a second, looser pass gated on the track's last
- * <em>known</em> position instead of its extrapolation (see {@link Tuning#reacquireRadiusIn}), so a
- * detection that jitters or drops out for a frame reacquires its existing track's identity instead of
- * forking a brand-new one that sits right next to it until the original ages out — the visible symptom
- * of that is what looks like the same ball being "detected" over and over as separate objects.
- *
- * <p>Single-threaded — {@link BallDetectionPipeline} owns one instance and only ever calls it from
- * the camera thread.
+ * Camera-thread only. Tight pass against predicted positions, then a looser pass against last-known
+ * positions so a jittery detection reacquires its track instead of forking a duplicate.
  */
 public final class BallTracker {
 
     @Config("BallTracking")
     public static class Tuning {
-        /** Max field-inches between a track's predicted position and a detection to keep matching it. */
         public static double matchRadiusIn = 8.0;
-        /**
-         * Second-chance radius, checked against a track's last known (not extrapolated) position for
-         * whatever's still unmatched after the tight pass above. Wider on purpose — it exists to catch
-         * noisy/intermittent detections reacquiring their own track rather than forking a duplicate —
-         * but the wider this is, the more likely two distinct same-type balls that happen to be close
-         * together get conflated into one track. Set equal to matchRadiusIn to disable it.
-         */
+        /** Set equal to matchRadiusIn to disable; too wide merges nearby same-type balls. */
         public static double reacquireRadiusIn = 16.0;
-        /** Frames a track survives unseen before it is dropped. */
         public static int maxMisses = 8;
-        /** Frames a track must be seen before it is published. */
         public static int minHits = 3;
-        /** Position EMA toward the measurement, 0-1; higher is snappier and noisier. */
+        /** EMA weight on the new measurement, 0-1. */
         public static double positionSmoothing = 0.6;
-        /** Velocity EMA toward the frame-to-frame difference, 0-1. */
         public static double velocitySmoothing = 0.35;
-        /** Speed at or above which a ball counts as moving, in/s. */
         public static double movingSpeedIn = 3.0;
-        /** Measured speeds above this are treated as an association error and ignored, in/s. */
+        /** in/s; faster measured speeds are treated as a mis-association and ignored. */
         public static double maxPlausibleSpeedIn = 250.0;
-        /** Per-missed-frame velocity decay while coasting, so a lost track stops running away. */
+        /** Velocity multiplier per missed frame. */
         public static double coastDecay = 0.8;
     }
 
@@ -68,9 +45,6 @@ public final class BallTracker {
         applyPairings(buildPairings(detections, detectionUsed, trackUsed, dt,
                 Tuning.matchRadiusIn, false), detections, detectionUsed, trackUsed, dt);
 
-        // Second, looser pass over whatever the tight pass above left unmatched: gates on each
-        // track's last KNOWN position (already coasted forward through every miss() so far) rather
-        // than a fresh velocity extrapolation, and allows a wider radius — see Tuning.reacquireRadiusIn.
         applyPairings(buildPairings(detections, detectionUsed, trackUsed, dt,
                 Tuning.reacquireRadiusIn, true), detections, detectionUsed, trackUsed, dt);
 
@@ -101,13 +75,6 @@ public final class BallTracker {
         }
     }
 
-    /**
-     * Never pairs a track with a detection of a different {@link BallVisionConstants.BallType} —
-     * without this, a red Nectar ball settling near a yellow Pollen ball could steal its track and
-     * hand it a false one-frame teleport in both position and colour. Only considers tracks/detections
-     * not already flagged used, so the two passes in {@link #update} compose without needing to know
-     * about each other.
-     */
     private List<Pairing> buildPairings(List<BallDetection> detections, boolean[] detectionUsed,
                                          boolean[] trackUsed, double dt, double radiusIn,
                                          boolean useLastKnownPosition) {
@@ -191,7 +158,7 @@ public final class BallTracker {
             visible = true;
         }
 
-        /** Coasts one frame on the last known velocity; false once the track has expired. */
+        /** Coasts one frame; false once the track has expired. */
         boolean miss(double dt) {
             x += vx * dt;
             y += vy * dt;

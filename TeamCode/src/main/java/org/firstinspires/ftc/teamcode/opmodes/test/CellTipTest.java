@@ -14,20 +14,10 @@ import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzRobot;
 import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
 
 /**
- * Bench check for the Limelight HIVE-cell pipelines: shows the selected alliance pipeline's live
- * verdict and runs {@code RobotActions.checkTip} against it, so the command path and its timeout are
- * exercised too. Run it on {@code res/xml/biobuzz.xml} — going through the framework means the
- * drivetrain and Pinpoint must be in the config even though nothing here drives.
- *
- * <p>{@code Cell Tip Test → alliance} writes {@link Context#allianceColor} at {@code createRobot()},
- * and only takes effect on the next init, because that is when the pipeline is selected.
- *
- * <p>Point the camera at a cell of your alliance: right-side up should read SCORABLE, and showing
- * the cluster upside-down — or taking it out of frame — should read TIPPED a quarter second later.
- * A permanent "NO VERDICT" with the Limelight connected means the wrong script is on that pipeline
- * index.
+ * Bench check for the Limelight pipelines and {@code RobotActions.checkTip}. Run it on
+ * {@code res/xml/cuttledecode.xml}: the framework needs the drivetrain and Pinpoint even here.
  */
-@TeleOp(name = "Cell Tip Test", group = "test")
+@TeleOp(name = "Cell Tip Test", group = "Test")
 public class CellTipTest extends EnhancedOpMode {
 
     @Config("Cell Tip Test")
@@ -41,6 +31,7 @@ public class CellTipTest extends EnhancedOpMode {
     private Command watch;
     private boolean started;
     private double tippedAtSeconds = -1;
+    private String outcome;
 
     @Override
     protected Robot createRobot() throws InterruptedException {
@@ -63,6 +54,10 @@ public class CellTipTest extends EnhancedOpMode {
 
     @Override
     protected void gameLoop() {
+        // Judge the outcome before recording the tip: the command's done() saw last loop's tip state.
+        if (outcome == null && !Scheduler.isRunning(watch)) {
+            outcome = tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip";
+        }
         if (tippedAtSeconds < 0 && bot.limelight.isTipped()) tippedAtSeconds = sinceStart.seconds();
     }
 
@@ -73,19 +68,17 @@ public class CellTipTest extends EnhancedOpMode {
         if (Tuning.alliance != limelight.getAlliance()) {
             telemetry.addData("Note", "%s selected — re-init to apply", Tuning.alliance);
         }
-        telemetry.addData("Limelight", limelight.isPresent() ? "connected" : "NOT CONFIGURED");
+        telemetry.addData("Limelight", limelight.isConnected() ? "connected" : "not responding");
         telemetry.addData("Verdict", !limelight.hasVerdict()
-                ? "none — is the right SnapScript on this alliance's pipeline?"
+                ? (limelight.isConnected()
+                        ? "none — is the right SnapScript on this alliance's pipeline?"
+                        : "none — the Limelight is not responding")
                 : (limelight.isTipped() ? "TIPPED" : (limelight.isScorable() ? "SCORABLE" : "not scorable, within hold")));
         telemetry.addData("Cluster", "%s  %d/4 visible  (other %d/4)",
                 limelight.getCluster(), limelight.getVisibleCount(), limelight.getOtherVisibleCount());
         telemetry.addData("Roll", Double.isNaN(limelight.getRollDeg())
                 ? "—" : String.format("%.1fdeg", limelight.getRollDeg()));
-        telemetry.addData("Command", !started
-                ? "not started"
-                : Scheduler.isRunning(watch)
-                        ? "watching"
-                        : (tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip"));
+        telemetry.addData("Command", !started ? "not started" : (outcome == null ? "watching" : outcome));
         telemetry.addData("First tip at", tippedAtSeconds < 0 ? "—" : String.format("%.2fs", tippedAtSeconds));
     }
 }

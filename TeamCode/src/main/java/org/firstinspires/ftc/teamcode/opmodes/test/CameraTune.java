@@ -3,8 +3,8 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamControls;
-import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamSession;
+import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
+import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.opencv.core.Mat;
 import org.openftc.easyopencv.OpenCvPipeline;
 
@@ -13,7 +13,7 @@ import org.openftc.easyopencv.OpenCvPipeline;
  * white-balance sliders applied. Must run on the robot — EOCV-Sim never opens an OpenCvWebcam, so
  * the controls only take effect here.
  */
-@TeleOp(name = "Camera Tune", group = "test")
+@TeleOp(name = "Camera Tune", group = "Test")
 public class CameraTune extends LinearOpMode {
 
     // Must match the webcam name in res/xml/camera.xml (the Arducam UC-852 / OV9782).

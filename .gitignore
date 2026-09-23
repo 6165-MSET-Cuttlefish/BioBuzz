@@ -4,7 +4,6 @@
 *.ap_
 *.aab
 
-!libs/*.aar
 # 6165 slothboard build, served from the committed local maven repo.
 !TeamCode/libs/m2/**/*.aar
 

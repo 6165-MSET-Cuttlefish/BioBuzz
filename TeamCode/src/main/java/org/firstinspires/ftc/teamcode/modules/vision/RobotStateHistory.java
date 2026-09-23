@@ -1,15 +1,6 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
-/**
- * Short ring of timestamped robot poses and velocities, so a camera frame can be transformed with
- * the robot state from the instant it was <em>captured</em> rather than the instant it was read.
- *
- * <p>That gap is not academic: the camera runs at ~30 fps and the pipeline adds its own latency, so
- * a robot turning at 3 rad/s has rotated ~10 degrees by the time its detections arrive. Applying
- * the current heading to them would smear every ball around the robot.
- *
- * <p>Written and read from the OpMode thread only.
- */
+/** Not thread-safe: record and read from the OpMode thread only. */
 public final class RobotStateHistory {
 
     private static final int CAPACITY = 64;
@@ -52,11 +43,7 @@ public final class RobotStateHistory {
         return size == 0 ? null : samples[(nextIndex - 1 + CAPACITY) % CAPACITY];
     }
 
-    /**
-     * Robot state at {@code timestampSeconds}, linearly interpolated between the two bracketing
-     * samples. Clamps to the nearest end when the timestamp falls outside the retained window —
-     * a frame older than the ring is better served by the oldest pose than by the newest.
-     */
+    /** Interpolated; clamps to the oldest/newest sample outside the retained window. */
     public Sample sampleAt(double timestampSeconds) {
         if (size == 0) return null;
 
@@ -91,7 +78,6 @@ public final class RobotStateHistory {
 
     private static double lerp(double a, double b, double t) { return a + (b - a) * t; }
 
-    /** Shortest signed difference, so interpolating across the +/-pi seam doesn't spin the long way. */
     private static double normalizeRadians(double radians) {
         while (radians > Math.PI) radians -= 2 * Math.PI;
         while (radians < -Math.PI) radians += 2 * Math.PI;

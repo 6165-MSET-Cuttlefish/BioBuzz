@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.OpenCVPipelines;
+package org.firstinspires.ftc.teamcode.modules.vision;
 
 import com.acmerobotics.dashboard.config.Config;
 
@@ -10,34 +10,17 @@ import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.WhiteBa
 import org.openftc.easyopencv.OpenCvWebcam;
 
 /**
- * Live, dashboard-tunable exposure / gain / white-balance for an EasyOpenCV webcam — the fix for the
- * washed-out / white look: drop {@link #exposureMs} until the yellow Pollen stops clipping, then
- * trim white balance and gain.
- *
- * <p>Construct it once the camera is open and streaming, then call {@link #update()} every loop. It
- * pushes a value to the camera only when its dashboard field actually changed (each control write is
- * a blocking USB transfer), and it caches a value only once the {@code set*} call reports success, so
- * a write that transiently fails right after a mode switch is retried on the next loop.
- *
- * <p>Robot-only: EOCV-Sim feeds frames straight into the pipeline and never opens an OpenCvWebcam, so
- * these controls do nothing there — sim-tune exposure in the camera driver, use this on the Hub.
+ * Live, dashboard-tunable webcam exposure/gain/white balance. Robot-only: EOCV-Sim never opens an
+ * OpenCvWebcam.
  */
 @Config
 public class WebcamControls {
 
-    // false → hand exposure/white-balance back to the camera's own auto algorithm.
     public static boolean manual = true;
-    // Shutter time in milliseconds. Lower = darker; this is the primary knob for the white-out.
     public static int exposureMs = 8;
-    // Sensor gain in raw device units (clamped to the camera's range). Keep low to avoid washout.
+    // Raw device units, clamped to the camera's range.
     public static int gain = 0;
-    // White-balance color temperature in Kelvin (clamped to range). This is what the camera
-    // assumes the room's light source is, so it can cancel that tint back out — set it LOWER than
-    // the room's actual temperature and everything reads too warm/red (the camera under-corrects);
-    // set it too high and the compensation over-corrects the other way (too cool/blue). 5500
-    // (daylight) is the neutral, venue-independent default — checking in a venue-specific number
-    // here just means the next venue starts from someone else's room. Live on FtcDashboard — nudge
-    // it to match whatever room you're actually in, no redeploy needed.
+    // BallVisionConstants' HSV bands were tuned at this value.
     public static int whiteBalanceK = 3250;
 
     private final OpenCvWebcam webcam;
@@ -52,7 +35,8 @@ public class WebcamControls {
         this.lastManual = !manual; // force a mode apply on the first update()
     }
 
-    /** Call once per loop, after the camera is streaming. No-op for unchanged values. */
+    // Pushes only changed values (each write is a blocking USB transfer); caches a value only once
+    // its set call succeeds, so a write that fails right after a mode switch retries next loop.
     public void update() {
         if (webcam == null) return;
 
@@ -66,7 +50,7 @@ public class WebcamControls {
 
         if (modeChanged) {
             setModes(ExposureControl.Mode.Manual, WhiteBalanceControl.Mode.MANUAL);
-            // The camera resets values on a mode switch — force a re-push of all three.
+            // The camera resets values on a mode switch.
             lastExposureMs = lastGain = lastWhiteBalance = Integer.MIN_VALUE;
         }
         applyExposure();

@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.OpenCVPipelines.PollenDetectionPipeline;
+package org.firstinspires.ftc.teamcode.eocvsim.balldetection;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.opencv.calib3d.Calib3d;
@@ -21,141 +21,26 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * ARCHITECTURE NOTE (shape-based detection refactor):
- *
- * DETECTION STRATEGY CHANGED from color-blob segmentation to curve/edge-based
- * circle fitting (Hough Circle Transform). Here's the difference and why it
- * was made:
- *
- * OLD (color-first): threshold HSV for "yellow-ish" pixels -> morphologically
- * CLOSE that mask aggressively to bridge every hole/glare gap into one solid
- * blob per ball -> distance-transform + watershed to split touching balls ->
- * validate the resulting blob's shape (area/circularity/roundness) as a
- * downstream filter. Every step depends on the color mask being close to a
- * solid disc FIRST. If a ball's surface is broken up badly enough by holes +
- * glare + shadow that no amount of closing bridges it into one blob, the ball
- * is invisible to everything downstream — color segmentation was the
- * bottleneck, and "is this actually round" was only ever checked AFTER a
- * blob already existed.
- *
- * NEW (shape-first): cv::HoughCircles searches directly for GRADIENT edges
- * whose curvature is consistent with a circle of some radius, independent of
- * what color or brightness sits inside that boundary. A hole punched in the
- * ball has its own strong edge, but that edge's curvature doesn't match the
- * ball's actual outer radius, so it doesn't vote for the ball's true center.
- * Glare is similarly irrelevant — it's just interior texture; Hough is
- * looking at the ball's outer silhouette against the (differently colored)
- * background, not at what's happening inside that boundary. This means a
- * ball can be found even when its visible surface is mostly broken up by
- * holes/glare/shadow, as long as its outer edge against the background is a
- * clean, mostly-unbroken curve.
- *
- * The colour HSV masks are NOT gone — they're now used only as a coarse,
- * cheap ROI (region-of-interest) filter: find rough clusters of ball-coloured
- * pixels, pad them out generously, and run HoughCircles ONLY inside those
- * small regions. This keeps performance reasonable (HoughCircles over a
- * full 640x480 frame is expensive) while getting the robustness of curve
- * fitting for the actual circle detection.
- *
- * WHAT THIS ELIMINATES: distance transform, watershed, the native
- * marker-building chain, connected-components labeling, and the separate
- * post-hoc area/circularity/roundness validation. HoughCircles solves what
- * all of that machinery existed for — splitting touching balls (each circle
- * is found independently, so touching balls naturally separate) and
- * validating "is this actually round" (built into the algorithm, not a
- * downstream filter) — in one native call per ROI.
- *
- * MULTIPLE BALL TYPES: the field carries 2.8 in yellow Pollen and 3.6 in red
- * and blue Nectar. Each colour runs the whole ROI-then-Hough chain on its own
- * mask, with its own radius window scaled by the ball's physical diameter, and
- * a circle is only kept if its interior actually matches the colour whose mask
- * seeded it. Hough is colour-blind — it fits the ball's outer silhouette — so
- * the colour mask is what assigns a type, and it is also what stops a red ball
- * whose specular highlight leaked into the yellow glare band from being
- * reported as Pollen. Overlap suppression then runs across all three types.
- *
- * CONSTANTS: every numeric constant below is a hand-kept mirror of
- * org.firstinspires.ftc.teamcode.modules.vision.BallVisionConstants, the
- * canonical, on-robot copy consumed by BallDetectionPipeline. EOCV-Sim
- * compiles this file in the isolated workspace rooted at this folder's
- * eocvsim_workspace.json and can't resolve an import into the rest of
- * TeamCode (most of it depends on the FTC SDK, Pedro, or Android, none of
- * which EOCV-Sim's classpath has), so this can't just import that class —
- * a change to either copy's numbers needs the same change pasted into the
- * other. Every number here is additionally live-tunable on the robot —
- * BallVisionConstants.Detection / PollenHsv / RedNectarHsv / BlueNectarHsv are
- * each @Config-bound and read fresh every frame by BallDetectionPipeline, no
- * separate seeding step — with these same values as their defaults; this file
- * has no dashboard, so tune it by editing the constants here and re-running.
+ * Shape-first: HSV masks only seed ROIs and pick the ball type; HoughCircles fits the outer
+ * silhouette, so holes and glare don't break detection. EOCV-Sim's workspace can't import TeamCode,
+ * so its constants are separate from modules.vision.BallVisionConstants.
  */
 public class PollenDetectionPipeline extends OpenCvPipeline {
 
-    // -------------------------------------------------------------------------
-    // MODE SWITCH: set to true to skip live homography calibration and use the
-    // hardcoded H_ARRAY below instead.
-    // -------------------------------------------------------------------------
     private static final boolean USE_PREDETERMINED_HOMOGRAPHY = true;
 
-    // -------------------------------------------------------------------------
-    // DISPLAY MODE — all modes draw on the ORIGINAL (unwarped) camera frame,
-    // preserving full field of view.
-    //
-    //   MASK    — the coarse ROI masks at full camera resolution, each ball
-    //             type painted in its own colour, with circle/center/contact
-    //             overlays. Useful for tuning HSV thresholds and seeing
-    //             which regions Hough actually searched.
-    //
-    //   OVERLAY — full-color camera image with circle outline + center dot +
-    //             contact dot overlays. Useful for verifying detections
-    //             against the real scene.
-    //
-    //   BOX     — full-color camera image with a clean axis-aligned bounding
-    //             box around each ball and a solid label plate above the box
-    //             showing the ball number and its calculated field
-    //             coordinates. Best for a clean, presentation-style view.
-    // -------------------------------------------------------------------------
     public enum DisplayMode { MASK, OVERLAY, BOX }
-    private static final DisplayMode DISPLAY_MODE = DisplayMode.MASK; // ← change here
+    private static final DisplayMode DISPLAY_MODE = DisplayMode.MASK;
 
-    // -------------------------------------------------------------------------
-    // Homography matrix mapping full-resolution image pixels directly to
-    // field-coordinate inches. See buildCalibrationDstCorners() for how the
-    // calibration destination points are defined.
-    // -------------------------------------------------------------------------
+    // Maps full-resolution image pixels to field inches.
     private static final double[][] H_ARRAY = {
             { -1.7797474624e-01, -5.3062009235e-02,  6.0413594965e+01 },
             { -2.0685716542e-02, -3.9378157948e-01,  1.4174826982e+02 },
             { -2.8668090956e-04, -1.2403394999e-02,  1.0000000000e+00 }
     };
 
-    // -------------------------------------------------------------------------
-    // Detection downscale factor. Still the single biggest performance lever:
-    // ROI-finding (HSV threshold + light morphology) scales with pixel count,
-    // and a smaller frame means smaller (cheaper) Hough search regions too.
-    // Detected points are scaled back to full resolution before being
-    // transformed by the homography, so reported field coordinates are
-    // unaffected by this value.
-    // -------------------------------------------------------------------------
     private static final double DETECTION_SCALE = 0.5;
 
-    // -------------------------------------------------------------------------
-    // Ball types and their HSV ranges. These are no longer required to produce
-    // one clean solid blob per ball, so they can stay reasonably loose — Hough
-    // does the real shape validation. Their two jobs are "is there probably a
-    // ball somewhere around here" (ROI seeding, so Hough searches a small
-    // region instead of the whole frame) and "which colour is the thing Hough
-    // found" (see MIN_COLOR_FILL_FRACTION).
-    //
-    // Each type lists its colour band first and its glare band last: a
-    // specular highlight washes saturation out and drives value up while
-    // leaving the hue roughly in place.
-    //
-    // Diameter scales the radius window Hough searches for that type — a 3.6 in
-    // nectar ball subtends a visibly larger circle than a 2.8 in pollen ball at
-    // the same distance. Sharing one window wide enough for both would mean
-    // each type's search also finds the other type's balls, plus every artifact
-    // sized in between.
-    // -------------------------------------------------------------------------
     private static final double REFERENCE_BALL_DIAMETER_INCHES = 2.8;
 
     private static final class HsvRange {
@@ -167,6 +52,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         }
     }
 
+    // Each type's last HsvRange is its glare band: highlights drop S and raise V but keep hue.
     private enum BallType {
         POLLEN("Pollen", 2.8, new Scalar(255, 255, 0), new Scalar(0, 0, 0),
                 new HsvRange( 15, 100, 100,  34, 255, 255),
@@ -196,134 +82,56 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // ROI-finding morphology. Deliberately LIGHT compared to the old
-    // pipeline's aggressive multi-pass closing — this only needs to merge a
-    // few nearby fragments into a rough cluster, not bridge an entire ball's
-    // hole pattern into one solid disc. Over-closing here just wastes time;
-    // Hough doesn't need (or benefit from) a solid blob.
-    // -------------------------------------------------------------------------
+    // Light on purpose: Hough fits the outline, so the mask needs rough clusters, not solid discs.
     private static final Mat ROI_CLOSE_KERNEL = Imgproc.getStructuringElement(
             Imgproc.MORPH_ELLIPSE, new Size(9, 9));
 
-    // How much to pad each color-cluster's bounding box (in scaled pixels)
-    // when turning it into a Hough search ROI. Generous padding matters more
-    // here than in the old pipeline, because a ball's outer silhouette often
-    // extends beyond where the color mask itself lit up (e.g. a thin sliver
-    // of colour near the edge, or a mostly-glare-washed near side).
+    // Detection-scale px; generous since a ball's silhouette often extends past its lit-up mask.
     private static final int ROI_PAD_PX = 14;
 
-    // Nearby candidate ROIs (within this many scaled pixels of each other)
-    // are merged into one larger search region before running Hough, so a
-    // single ball whose color mask fragmented into several disconnected
-    // blobs still gets ONE combined ROI instead of several overlapping ones.
     private static final int ROI_MERGE_DIST_PX = 20;
 
-    // -------------------------------------------------------------------------
-    // Hough Circle Transform parameters. All radius bounds are expressed as a
-    // FRACTION of the frame's shorter dimension, keeping them scale-invariant
-    // with respect to DETECTION_SCALE and camera resolution — the same
-    // scale-invariance philosophy the old pipeline used for area fractions.
-    // -------------------------------------------------------------------------
-
-    // Gaussian blur kernel applied before Hough — circle detection is
-    // sensitive to pixel-level noise, and holes/glare are exactly the kind
-    // of high-frequency noise this needs to smooth over before edge/gradient
-    // analysis runs. Applied per-ROI AFTER the upscale below, not to the whole
-    // small frame: a 5x5 blur erases the entire edge of a 3-5px-radius ball,
-    // which is exactly the size a distant ball occupies at DETECTION_SCALE.
+    // Applied per ROI after upscaling: on the small frame it erases a distant 3-5 px ball's edge.
     private static final Size HOUGH_BLUR_KERNEL = new Size(5, 5);
 
-    // dp: inverse ratio of accumulator resolution to image resolution. 1.0 =
-    // accumulator has the same resolution as the input ROI (most precise,
-    // more compute). Raise toward 1.5–2.0 if Hough becomes a bottleneck.
     private static final double HOUGH_DP = 1.2;
 
-    // Minimum distance between detected circle centers, in pixels within the
-    // ROI. Prevents multiple overlapping detections of the same ball's edge.
-    // Derived from expected ball radius at runtime (see runDetectionFrame).
-    private static final double HOUGH_MIN_DIST_FRACTION = 0.5; // * expected radius
+    private static final double HOUGH_MIN_DIST_FRACTION = 0.5;
 
-    // Canny high threshold used internally by Hough for edge detection. The
-    // low threshold is automatically half of this. Lower = more sensitive to
-    // weak edges (catches faint ball outlines against low-contrast
-    // backgrounds) but noisier; higher = only very strong edges vote.
     private static final double HOUGH_CANNY_THRESHOLD = 80;
 
-    // Floor for the above once it has been divided down for an upscaled ROI
-    // (see ROI_MAX_UPSCALE) — below this, sensor noise starts producing edges.
+    // Floor for HOUGH_CANNY_THRESHOLD after dividing by ROI upscale; below it, noise makes edges.
     private static final double HOUGH_CANNY_MIN_THRESHOLD = 30;
 
-    // Accumulator vote threshold — how many edge-gradient votes a candidate
-    // circle needs to be reported. LOWER finds more circles (including
-    // false positives on strongly-textured non-ball regions); HIGHER is
-    // stricter. Kept fairly low because ROIs are already color-pre-filtered,
-    // so false positives here mostly cost a little compute, not accuracy.
     private static final double HOUGH_ACCUMULATOR_THRESHOLD = 22;
 
-    // Upper bound on a searched circle relative to the ROI's own shorter
-    // dimension — a circle can't meaningfully exceed the region it was found
-    // in. This is only ever the tighter half of a min() against the absolute
-    // ceiling below.
     private static final double HOUGH_MAX_RADIUS_FRACTION = 0.60;
 
-    // Ball radius bounds as a fraction of the FRAME's shorter dimension, for a
-    // ball of REFERENCE_BALL_DIAMETER_INCHES; each type scales these by its own
-    // diameter (BallType.radiusScale).
-    // These are deliberately NOT ROI-relative: ROI size has a hard floor of
-    // 2 * ROI_PAD_PX regardless of how small the ball is, so a ROI-relative
-    // minimum can never shrink below ~5px and silently excludes every distant
-    // ball. Set MIN from the smallest apparent pollen ball at the camera's
-    // furthest useful range, MAX from the largest at its closest.
+    // Frame-relative, for a REFERENCE_BALL_DIAMETER_INCHES ball: ROIs are floored at 2 * ROI_PAD_PX,
+    // so an ROI-relative minimum would exclude every distant ball.
     private static final double MIN_BALL_RADIUS_FRAME_FRACTION = 0.02;
     private static final double MAX_BALL_RADIUS_FRAME_FRACTION = 0.1;
 
-    // A distant ball is only a few pixels across at DETECTION_SCALE, and
-    // Hough's accumulator votes scale with circumference — a 4px-radius circle
-    // has ~25 edge pixels total to clear HOUGH_ACCUMULATOR_THRESHOLD with,
-    // while a near ball clears it trivially. ROIs whose smallest searched
-    // radius falls under this are upscaled before the Hough call so tiny
-    // circles get a proportionate number of votes.
+    // Hough votes scale with circumference, so ROIs whose min radius is below this are upscaled.
     private static final double HOUGH_WORKING_MIN_RADIUS_PX = 6.0;
 
-    // Bounds the cost of the above; Hough is O(pixels), so an unbounded
-    // upscale on a large ROI would be the whole frame's budget.
     private static final double ROI_MAX_UPSCALE = 4.0;
 
-    // Fraction of a detected circle's own area that must be pixels of the mask
-    // that seeded its ROI, for it to count as a ball of that type. ROIs are
-    // padded and merged, so they always contain off-colour margin, and
-    // HOUGH_GRADIENT votes along the gradient normal in BOTH directions — a
-    // real ball's edge therefore also deposits a phantom center about one
-    // radius out into the dark background. Without this check nothing
-    // downstream distinguishes that phantom from the ball. It is also what
-    // assigns the type, since Hough itself is colour-blind: a ball picked up
-    // through another colour's glare band fails that colour's fill test.
-    // Kept low: holes, glare and shadow mean a real ball is never fully masked.
+    // HOUGH_GRADIENT votes both ways, so a real edge leaves a phantom centre ~1 radius outside;
+    // this rejects it and assigns the type. Low: holes and glare mean a ball is never fully masked.
     private static final double MIN_COLOR_FILL_FRACTION = 0.30;
 
-    // Two kept circles must be separated by at least this fraction of the sum
-    // of their radii. Hough's own minDist can't do this job: it is one value
-    // per call, derived from the SMALLEST searched radius (~3px), so it cannot
-    // suppress a second detection on a ball many times that size — and it does
-    // nothing at all across separate ROI calls. Balls resting against each
-    // other sit at 1.0 (dist == r1 + r2), so this must stay well under that.
+    // Of r1 + r2 (touching balls sit at 1.0); Hough's minDist is per call and too small for this.
     private static final double MIN_CENTER_SEPARATION_FRACTION = 0.7;
 
-    // -------------------------------------------------------------------------
-    // Homography calibration settings — GRID_COLS=9, GRID_ROWS=6 matches the
-    // physical board (9 inner corners wide, 6 inner corners tall).
-    // -------------------------------------------------------------------------
+    // Inner corners, not squares.
     private static final int   GRID_COLS        = 9;
     private static final int   GRID_ROWS        = 6;
     private static final int   EXPECTED_CORNERS = GRID_COLS * GRID_ROWS;
-    private static final float SQUARE_SIZE_INCHES = 1.0f; // TODO: verify against your physical board
+    private static final float SQUARE_SIZE_INCHES = 1.0f; // TODO: verify against the physical board
     private static final int   DETECTION_FRAME_INTERVAL = 3;
     private static final int   FRAMES_TO_CONFIRM = 5;
 
-    // -------------------------------------------------------------------------
-    // Pipeline state
-    // -------------------------------------------------------------------------
     private enum Phase { CALIBRATING, DETECTING }
 
     // volatile: written on the camera thread (processFrame), read on the OpMode thread.
@@ -332,17 +140,16 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     private int   confirmCount = 0;
     private int   frameCount   = 0;
 
-    private final Mat gray         = new Mat(); // full-res grayscale, calibration only
-    private final Mat small        = new Mat(); // downscaled color frame
-    private final Mat smallGray    = new Mat(); // downscaled grayscale, unblurred
-    private final Mat roiWork      = new Mat(); // per-ROI upscaled + blurred, fed to Hough
+    private final Mat gray         = new Mat();
+    private final Mat small        = new Mat();
+    private final Mat smallGray    = new Mat();
+    private final Mat roiWork      = new Mat();
     private final Mat hsv          = new Mat();
-    private final Mat rangeMask    = new Mat(); // one HsvRange, OR-ed into colorMask
-    private final Mat colorMask    = new Mat(); // current type's raw colour mask
-    private final Mat roiMask      = new Mat(); // lightly-closed candidate mask
+    private final Mat rangeMask    = new Mat();
+    private final Mat colorMask    = new Mat();
+    private final Mat roiMask      = new Mat();
     private final Mat displayImage = new Mat();
-    private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
-    // findContours hierarchy output, reused across frames.
+    private final Mat maskCanvas   = new Mat();
     private final Mat contourHierarchy = new Mat();
 
     private final MatOfPoint2f dstCorners;
@@ -352,16 +159,13 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     private static final Scalar MASK_CANVAS_CLEAR = new Scalar(0, 0, 0);
 
     private static class BallResult {
-        BallType type;                        // colour whose mask seeded this circle's ROI
-        double centerXSmall, centerYSmall;   // Hough circle center, small-image space
-        double radiusSmall;                   // Hough circle radius, small-image space
-        double fillFraction;                  // of the circle covered by that colour's mask
-        Point fieldPoint;                     // ground-contact point, transformed to inches
+        BallType type;
+        double centerXSmall, centerYSmall;
+        double radiusSmall;
+        double fillFraction;
+        Point fieldPoint; // ground-contact point, field inches
     }
 
-    // =========================================================================
-    // Constructor
-    // =========================================================================
     public PollenDetectionPipeline(Telemetry telemetry) {
         this.telemetry = telemetry;
 
@@ -374,10 +178,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
 
         dstCorners = buildCalibrationDstCorners();
     }
-
-    // =========================================================================
-    // Public accessors
-    // =========================================================================
 
     public Mat getHomography()    { return homography; }
     public boolean isCalibrated() { return phase == Phase.DETECTING; }
@@ -399,9 +199,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         return sb.toString();
     }
 
-    // =========================================================================
-    // Main pipeline entry point
-    // =========================================================================
     @Override
     public Mat processFrame(Mat input) {
         switch (phase) {
@@ -410,10 +207,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
             default:          return input;
         }
     }
-
-    // =========================================================================
-    // PHASE 1 — Homography calibration (unchanged from prior version)
-    // =========================================================================
 
     private Mat runCalibrationFrame(Mat input) {
         frameCount++;
@@ -466,18 +259,12 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         return input;
     }
 
-    // =========================================================================
-    // PHASE 2 — Ball detection via color-filtered ROIs + Hough circle fitting
-    // =========================================================================
-
     private Mat runDetectionFrame(Mat input) {
 
         Size smallSize = new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE);
         Imgproc.resize(input, small, smallSize, 0, 0, Imgproc.INTER_AREA);
 
         Imgproc.cvtColor(small, hsv, Imgproc.COLOR_RGB2HSV);
-        // Grayscale once for the whole small frame; every ROI's Hough search
-        // reads out of it, whatever colour seeded that ROI.
         Imgproc.cvtColor(small, smallGray, Imgproc.COLOR_RGB2GRAY);
 
         if (DISPLAY_MODE == DisplayMode.MASK) {
@@ -494,27 +281,21 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         int roiCount = 0;
 
         for (BallType type : BallType.values()) {
-
-            // --- Step 1: coarse colour-based ROI candidates for this type ------
             buildColorMask(type, colorMask);
 
-            // Light closing only — just enough to merge nearby fragments of the
-            // SAME ball into one rough cluster. Not trying to produce a solid disc.
             Imgproc.morphologyEx(colorMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
 
             if (DISPLAY_MODE == DisplayMode.MASK) maskCanvas.setTo(type.drawColor, roiMask);
 
-            // --- Step 2: build merged ROI rectangles from colour clusters -------
             List<Rect> rois = findMergedRois(roiMask);
             roiCount += rois.size();
 
             double minBallRadiusSmall = minBallRadius(frameShortSide, type);
             double maxBallRadiusSmall = maxBallRadius(frameShortSide, type);
 
-            // --- Step 3: run HoughCircles within each candidate ROI -------------
             for (Rect roi : rois) {
                 int shortSide = Math.min(roi.width, roi.height);
-                if (shortSide < 4) continue; // too small to meaningfully search
+                if (shortSide < 4) continue;
 
                 double maxRadius = Math.min(shortSide * HOUGH_MAX_RADIUS_FRACTION, maxBallRadiusSmall);
                 double minRadius = Math.min(minBallRadiusSmall, maxRadius * 0.5);
@@ -523,10 +304,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                 double roiScale = Math.min(ROI_MAX_UPSCALE,
                         Math.max(1.0, HOUGH_WORKING_MIN_RADIUS_PX / minRadius));
 
-                // Interpolation spreads the same intensity step across roiScale
-                // pixels, so per-pixel gradient magnitude drops by roughly that
-                // factor — a fixed Canny threshold would reject the very edges the
-                // upscale exists to recover.
+                // Upscaling spreads each edge over roiScale px, cutting gradient magnitude to match.
                 double cannyThreshold = Math.max(HOUGH_CANNY_MIN_THRESHOLD,
                         HOUGH_CANNY_THRESHOLD / roiScale);
 
@@ -551,7 +329,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                     int cols = circles.cols();
                     for (int i = 0; i < cols; i++) {
                         double[] c = circles.get(0, i);
-                        // c = { centerX, centerY, radius }, upscaled-ROI-local coordinates
+                        // { centerX, centerY, radius } in upscaled-ROI-local px
                         BallResult result = new BallResult();
                         result.type = type;
                         result.centerXSmall = c[0] / roiScale + roi.x;
@@ -573,15 +351,11 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
             }
         }
 
-        // --- Step 4: drop overlapping detections, then map survivors to field ---
         List<BallResult> results = suppressOverlaps(candidates);
         int overlapCount = candidates.size() - results.size();
 
         for (BallResult result : results) {
-            // Ground-contact point: analytically the lowest point on the
-            // circle, (cx, cy + r) — exact, since Hough gives us a true
-            // circle equation rather than a noisy pixel contour to hunt
-            // through for the "lowest point" the way the old pipeline did.
+            // The homography maps the floor plane, so transform the ground contact, not the centre.
             double contactXSmall = result.centerXSmall;
             double contactYSmall = result.centerYSmall + result.radiusSmall;
 
@@ -590,7 +364,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
             result.fieldPoint = transformPointToField(fullResX, fullResY);
         }
 
-        // --- Step 5: display ----------------------------------------------------
         if (DISPLAY_MODE == DisplayMode.MASK) {
             Imgproc.resize(maskCanvas, displayImage, input.size(), 0, 0, Imgproc.INTER_NEAREST);
         }
@@ -607,7 +380,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
 
         drawOriginCrosshair(displayImage);
 
-        // --- Step 6: telemetry ---------------------------------------------------
         telemetry.addLine("[Detecting Balls — Hough circle fit]");
         telemetry.addData("ROIs searched", roiCount);
         telemetry.addData("Balls Detected", results.size());
@@ -632,11 +404,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         return displayImage;
     }
 
-    /**
-     * ORs every HSV band of one ball type into a single mask. The first band
-     * writes {@code out} directly so the mask is cleared of the previous type's
-     * pixels without a separate zeroing pass.
-     */
+    /** The first band writes {@code out} directly, clearing the previous type's pixels. */
     private void buildColorMask(BallType type, Mat out) {
         for (int i = 0; i < type.ranges.length; i++) {
             HsvRange range = type.ranges[i];
@@ -664,16 +432,8 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
     }
 
     /**
-     * Greedy non-maximum suppression over every circle found this frame,
-     * largest first. A hole, a glare ring or a shadow inside a ball fits a
-     * circle smaller than the ball's own outline, so preferring the larger
-     * radius keeps the ball and drops the artifact.
-     *
-     * This runs over all ball types at once, not per type: the types' glare
-     * bands cover overlapping near-white pixels, so one ball can seed a ROI
-     * under more than one colour and be found twice. Colour fill breaks the
-     * tie, which is only reached when two circles are the same size — i.e.
-     * when they really are the same ball.
+     * Largest first, since holes, glare and shadow fit circles smaller than the ball. Runs across
+     * all types because the glare bands overlap, so one ball can be found under several colours.
      */
     private static List<BallResult> suppressOverlaps(List<BallResult> candidates) {
         Collections.sort(candidates, new Comparator<BallResult>() {
@@ -691,9 +451,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                 double dy = c.centerYSmall - k.centerYSmall;
                 double dist = Math.sqrt(dx * dx + dy * dy);
 
-                // Second test catches an artifact sitting near a ball's rim,
-                // whose centre is outside the kept circle but which is far too
-                // close to be a separate ball.
+                // Second test catches an artifact near a kept ball's rim, centred just outside it.
                 if (dist <= k.radiusSmall
                         || dist < MIN_CENTER_SEPARATION_FRACTION * (k.radiusSmall + c.radiusSmall)) {
                     overlaps = true;
@@ -705,13 +463,7 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         return kept;
     }
 
-    /**
-     * How much of a Hough circle's interior is actually the colour that seeded
-     * its ROI. Counts mask hits in the circle's bounding box against the area a
-     * circle would occupy in that box (pi/4 of it), so a ball clipped by the
-     * frame edge is judged on its visible part rather than being penalised for
-     * the missing half.
-     */
+    /** Normalised by the frame-clipped bounding box, so an edge-clipped ball isn't penalised. */
     private double colorFillFraction(Mat mask, BallResult r) {
         int x0 = (int) Math.max(0, Math.round(r.centerXSmall - r.radiusSmall));
         int y0 = (int) Math.max(0, Math.round(r.centerYSmall - r.radiusSmall));
@@ -728,13 +480,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         }
     }
 
-    /**
-     * Finds coarse candidate regions from one type's (loosely closed) colour mask,
-     * pads each one out, and merges any that are close together into a
-     * single combined ROI. This is intentionally forgiving — its only job is
-     * to hand Hough a small region that PROBABLY contains a ball; Hough does
-     * the actual shape validation.
-     */
     private List<Rect> findMergedRois(Mat mask) {
         List<MatOfPoint> contours = new ArrayList<>();
         Imgproc.findContours(mask, contours, contourHierarchy,
@@ -751,7 +496,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
             if (w > 0 && h > 0) padded.add(new Rect(x, y, w, h));
         }
 
-        // Merge ROIs that are close together (fragments of the same ball).
         List<Rect> merged = new ArrayList<>();
         boolean[] consumed = new boolean[padded.size()];
         for (int i = 0; i < padded.size(); i++) {
@@ -796,10 +540,10 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
         int radiusFull = (int) (r.radiusSmall * scaleUp);
 
         Imgproc.circle(displayImage, centerFull, radiusFull, r.type.drawColor, 2);
-        Imgproc.circle(displayImage, centerFull, 4, new Scalar(255, 255, 255), -1); // center
+        Imgproc.circle(displayImage, centerFull, 4, new Scalar(255, 255, 255), -1);
 
         Point contactFull = new Point(centerFull.x, centerFull.y + radiusFull);
-        Imgproc.circle(displayImage, contactFull, 5, new Scalar(0, 0, 255), -1);  // ground contact
+        Imgproc.circle(displayImage, contactFull, 5, new Scalar(0, 0, 255), -1);
 
         String label = String.format("%s (%.1f, %.1f)in",
                 r.type.label, r.fieldPoint.x, r.fieldPoint.y);
@@ -808,11 +552,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, new Scalar(255, 255, 255), 1);
     }
 
-    /**
-     * BOX display mode: draws a clean axis-aligned bounding rectangle around
-     * the Hough-detected circle plus a solid label plate showing the ball's
-     * index and its calculated field coordinates.
-     */
     private void drawBallBox(Mat displayImage, BallResult r, int ballIndex) {
         double scaleUp = 1.0 / DETECTION_SCALE;
 
@@ -904,10 +643,6 @@ public class PollenDetectionPipeline extends OpenCvPipeline {
                 new Point(originPixel.x + size + 4, originPixel.y),
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
     }
-
-    // =========================================================================
-    // Homography calibration helper methods
-    // =========================================================================
 
     private MatOfPoint2f detectChessboardCorners(Mat input) {
         Imgproc.cvtColor(input, gray, Imgproc.COLOR_RGB2GRAY);

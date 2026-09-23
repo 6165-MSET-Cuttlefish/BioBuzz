@@ -2,13 +2,11 @@
 <Robot type="FirstInspires-FTC">
     <LynxUsbDevice name="Control Hub Portal" parentModuleAddress="173" serialNumber="(embedded)">
         <LynxModule name="Control Hub" port="173">
-            <!-- Motors -->
             <goBILDA5202SeriesMotor name="fr" port="0" />
             <goBILDA5202SeriesMotor name="br" port="1" />
             <goBILDA5202SeriesMotor name="vertical" port="2" />
             <goBILDA5202SeriesMotor name="intake" port="3" />
 
-            <!-- Servos -->
             <Servo name="headlightMiddle" port="0" />
             <Servo name="turretFront" port="1" /> <!-- Right SPI port 1 -->
             <Servo name="turretBack" port="2" /> <!-- Right SPI port 2 -->
@@ -16,10 +14,9 @@
             <ContinuousRotationServo name="rightInitial" port="4" />
             <Servo name="headlightFront" port="5" />
 
-            <!-- Analog (ports 0 and 2 are closer to the edge of the hub) -->
+            <!-- Analog ports 0 and 2 are closer to the edge of the hub -->
             <AnalogInput name="rightInitialEncoder" port="0" />
 
-            <!-- I2C -->
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
             <RevColorSensorV3 name="frontRightColor" bus="0" port="1" /> <!-- Physical port 0 -->
             <RevColorSensorV3 name="frontLeftColor" bus="1" port="0" /> <!-- Physical port 1 -->
@@ -27,13 +24,11 @@
             <RevColorSensorV3 name="middleBackColor" bus="3" port="0" /> <!-- Physical port 3 -->
         </LynxModule>
         <LynxModule name="Expansion Hub 2" port="2">
-            <!-- Motors -->
             <goBILDA5202SeriesMotor name="fl" port="0" />
             <goBILDA5202SeriesMotor name="bl" port="1" />
             <goBILDA5202SeriesMotor name="rightFlywheel" port="2" /> <!-- Don't use the port 2 encoder on the current Expansion Hub, it shorts -->
             <goBILDA5202SeriesMotor name="leftFlywheel" port="3" /> <!-- + encoder -->
 
-            <!-- Servos -->
             <Servo name="horizontalFront" port="0" /> <!-- Left SPI port 3 -->
             <Servo name="horizontalBack" port="1" /> <!-- Left SPI port 2 -->
             <Servo name="leftPto" port="2" /> <!-- Left SPI port 4 -->
@@ -41,11 +36,10 @@
             <Servo name="headlightBack" port="4" />
             <Servo name="rightPto" port="5" /> <!-- Left SPI port 5 -->
 
-            <!-- Analog (ports 0 and 2 are closer to the edge of the hub) -->
+            <!-- Analog ports 0 and 2 are closer to the edge of the hub -->
             <AnalogInput name="floodgate" port="0" />
             <AnalogInput name="leftInitialEncoder" port="2" />
 
-            <!-- I2C -->
             <RevColorSensorV3 name="backRightColor" bus="0" port="0" /> <!-- Physical port 0 -->
             <RevColorSensorV3 name="backLeftColor" bus="1" port="0" /> <!-- Physical port 1 -->
             <goBILDAPrism name="prism" bus="2" port="0" /> <!-- Physical port 2 -->

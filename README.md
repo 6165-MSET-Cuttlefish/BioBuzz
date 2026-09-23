@@ -2,7 +2,7 @@
 
 FTC team 6165 MSET Cuttlefish, 2026–2027 season.
 
-Single-module Android app on FTC SDK 12.0.0, Pedro Pathing 3.0.0, Sloth hot reload, and slothboard.
+Single-module Android app on FTC SDK 12.0.0, Pedro Pathing 3.0.1, Sloth hot reload, and slothboard.
 
 ## Build
 

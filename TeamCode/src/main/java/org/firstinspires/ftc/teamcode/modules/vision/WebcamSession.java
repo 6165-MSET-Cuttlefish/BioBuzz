@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.OpenCVPipelines;
+package org.firstinspires.ftc.teamcode.modules.vision;
 
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -12,17 +12,7 @@ import org.openftc.easyopencv.OpenCvPipeline;
 import org.openftc.easyopencv.OpenCvWebcam;
 
 /**
- * Opens a Control Hub webcam (MJPEG 640x480), streams the pipeline output to FtcDashboard, and
- * builds live {@link WebcamControls} once the camera is streaming. Shared by the camera test
- * OpModes so the open/cleanup boilerplate lives in one place.
- *
- * <p>The dashboard stream can be toggled off with {@link #setCameraStreamEnabled}. EasyOpenCV's own
- * {@code webcam().getPipelineTimeMs()} / {@code getOverheadTimeMs()} / {@code getTotalFrameTimeMs()}
- * already separate time spent inside the pipeline itself from everything else per frame; a dashboard
- * (or DS) camera stream renders its next bitmap synchronously inside that same per-frame call
- * whenever one is due, so it lands in {@code getOverheadTimeMs()}, not off on some other thread where
- * it wouldn't show up at all. Compare {@code getOverheadTimeMs()} with the stream on vs. off to see
- * how much of it is specifically the dashboard stream.
+ * Opens a webcam, streams the pipeline to FtcDashboard, and pumps {@link WebcamControls} once open.
  */
 public final class WebcamSession {
     private static final int WIDTH = 640;
@@ -30,7 +20,7 @@ public final class WebcamSession {
     private static final int DASHBOARD_FPS = 30;
 
     private final OpenCvWebcam webcam;
-    // Built on the camera thread (onOpened), read on the OpMode thread (update()); volatile for visibility.
+    // Written on the camera thread (onOpened), read on the OpMode thread (update()).
     private volatile WebcamControls controls;
     private volatile boolean cameraStreamEnabled = true;
 
@@ -60,13 +50,12 @@ public final class WebcamSession {
 
     public OpenCvWebcam webcam() { return webcam; }
 
-    /** Pump the live controls; no-op until the camera has finished opening. */
     public void update() {
         WebcamControls c = controls;
         if (c != null) c.update();
     }
 
-    /** No-op if already in the requested state, so callers can call this unconditionally every loop. */
+    /** Stream rendering runs inside each frame callback, so it counts toward getOverheadTimeMs(). */
     public void setCameraStreamEnabled(boolean enabled) {
         if (enabled == cameraStreamEnabled) return;
         cameraStreamEnabled = enabled;

@@ -14,7 +14,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
  * touching the drivetrain. Needs the webcam and the Pinpoint in the hub config; the follower is built
  * for pose only, nothing drives.
  */
-@TeleOp(name = "Camera Module Test", group = "test")
+@TeleOp(name = "Camera Module Test", group = "Test")
 public class CameraModuleTest extends EnhancedOpMode {
     private CameraModuleRobot cam;
 

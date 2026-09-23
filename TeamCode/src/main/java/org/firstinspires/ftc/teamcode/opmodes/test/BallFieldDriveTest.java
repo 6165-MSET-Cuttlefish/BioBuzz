@@ -12,7 +12,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
-import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamSession;
+import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
@@ -23,39 +23,21 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Drives on raw gamepad mecanum and reports ball field positions, using a {@link
- * GoBildaPinpointDriver} read directly for robot pose — no {@code Follower}, {@code Robot}, or
- * {@code EnhancedOpMode}. Deliberately independent of the rest of the framework so it only exercises
- * the vision subsystems ({@link BallDetectionPipeline}, {@link BallFieldTransform}, {@link
- * RobotStateHistory}) plus the bare hardware needed to move and localize: {@code fl}/{@code
- * bl}/{@code fr}/{@code br} motors, {@code pinpoint}, and {@code nerdDetector}.
- *
- * <p>Position is relative to wherever the robot was at init — {@link
- * GoBildaPinpointDriver#resetPosAndIMU()} zeroes it there, not to a field-alliance start pose the
- * way an auto's {@code FieldPose.forAlliance(...)} would, so "field position" here means "position
- * relative to that origin," not true field coordinates. Keep the robot stationary through init
- * (IMU recalibration); the Pinpoint offsets/directions below must match {@code
- * pedro/Constants.localizerConfig} — the Y (strafe) pod direction there is an unverified guess per
- * CLAUDE.md, so trust heading before trusting strafe.
+ * Field-frame ball tracking on raw mecanum + a bare Pinpoint, deliberately without the framework.
+ * "Field" positions are relative to the robot's pose at init, not true field coordinates.
  */
-@TeleOp(name = "Ball Field Drive", group = "test")
+@TeleOp(name = "Ball Field Drive", group = "Test")
 public class BallFieldDriveTest extends LinearOpMode {
 
     @Config("BallFieldDrive")
     public static class Tuning {
-        /**
-         * Turn off to stop streaming the pipeline's output to FtcDashboard's camera view. Rendering
-         * that stream happens inline in the same per-frame call as the pipeline itself (see {@link
-         * WebcamSession}'s javadoc), so it's real cost on the loop, not just a nice-to-have picture —
-         * flip this off and compare {@code Overhead (ms)} below to see how much of it was the stream.
-         */
         public static boolean cameraStreamEnabled = true;
     }
 
-    // Must match res/xml/camera.xml and pedro/Constants.localizerConfig's pod offsets/directions.
     private static final String WEBCAM_NAME = "nerdDetector";
     private static final String PINPOINT_NAME = "pinpoint";
 
+    // The Cuttle bot's Pinpoint values; must match pedro/CuttleConstants.localizerConfig.
     private static final double X_POD_OFFSET_IN = 5.827277476393332;
     private static final double Y_POD_OFFSET_IN = -0.7426906946137196;
     private static final GoBildaPinpointDriver.EncoderDirection X_POD_DIRECTION =
@@ -70,8 +52,7 @@ public class BallFieldDriveTest extends LinearOpMode {
     private BallDetectionPipeline pipeline;
     private final RobotStateHistory robotHistory = new RobotStateHistory();
     private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
-    // Loop runs faster than the camera; skip redoing the transform + persistence match on a loop
-    // that sees the same camera frame as the last one (see Camera.updateFieldBalls for the same guard).
+    // The loop outruns the camera; only transform + track on a new frame.
     private double lastFieldBallFrameTimestamp = -1;
     private List<FieldBall> fieldBalls = Collections.emptyList();
 
@@ -92,7 +73,7 @@ public class BallFieldDriveTest extends LinearOpMode {
         pinpoint.setOffsets(X_POD_OFFSET_IN, Y_POD_OFFSET_IN, DistanceUnit.INCH);
         pinpoint.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
         pinpoint.setEncoderDirections(X_POD_DIRECTION, Y_POD_DIRECTION);
-        pinpoint.resetPosAndIMU(); // robot must be stationary; also zeroes pose to (0, 0, 0)
+        pinpoint.resetPosAndIMU(); // robot must be stationary (IMU recalibration)
 
         pipeline = new BallDetectionPipeline();
         session = new WebcamSession(hardwareMap, telemetry, WEBCAM_NAME, pipeline);
@@ -129,9 +110,6 @@ public class BallFieldDriveTest extends LinearOpMode {
                     now.x, now.y, Math.toDegrees(now.heading));
         }
         telemetry.addData("FPS (pipeline's own count)", "%.1f", frame.fps);
-        // EasyOpenCV's own per-frame breakdown, independent of frame.fps above: Pipeline is time
-        // inside processFrame() alone; Overhead is everything else per frame (dashboard/DS stream
-        // rendering included); Total is the two summed, i.e. what actually gates the loop rate.
         telemetry.addData("Pipeline (ms)", session.webcam().getPipelineTimeMs());
         telemetry.addData("Overhead (ms)", session.webcam().getOverheadTimeMs());
         telemetry.addData("Total frame (ms)", session.webcam().getTotalFrameTimeMs());
@@ -152,8 +130,7 @@ public class BallFieldDriveTest extends LinearOpMode {
         double x = gamepad1.left_stick_x;
         double rx = gamepad1.right_stick_x;
 
-        // Matches Drivetrain.setMecanumTargets's robot-centric mixing and normalization exactly, so
-        // this drives the same way BioBuzz Tele does.
+        // Mirrors Drivetrain.setMecanumTargets (robot-centric) so this drives like BioBuzz Tele.
         double frontLeft = y + x + rx;
         double backLeft = y - x + rx;
         double frontRight = y - x - rx;

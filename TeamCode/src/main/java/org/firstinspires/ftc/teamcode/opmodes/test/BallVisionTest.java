@@ -3,27 +3,17 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.OpenCVPipelines.WebcamSession;
+import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
 
 /**
- * Runs the on-robot {@link BallDetectionPipeline} directly against the webcam and streams it to
- * FtcDashboard's camera view via {@link WebcamSession} — the same {@code startCameraStream} call
- * {@code Camera} uses, but without the rest of the framework. Needs only {@code nerdDetector} in the
- * hub config, not the drivetrain/Pinpoint {@code Camera Module Test} pulls in by going through
- * {@code EnhancedOpMode}, so this is the one to run for a webcam-only bench check or to tune Pollen
- * and Nectar detection live.
- *
- * <p>{@code WebcamControls.*} and {@code BallDetectionPipeline}'s {@code @Config} classes
- * ({@code BallVision}, {@code BallVision_Pollen}, {@code BallVision_RedNectar},
- * {@code BallVision_BlueNectar}) are all live on FtcDashboard while it runs; switch
- * {@code BallVision.displayMode} to {@code MASK} there to see each type's colour mask.
+ * Webcam-only bench check for {@link BallDetectionPipeline}: needs just the webcam in the hub config,
+ * unlike Camera Module Test, which pulls in the drivetrain and Pinpoint.
  */
-@TeleOp(name = "Ball Vision", group = "test")
+@TeleOp(name = "Ball Vision", group = "Test")
 public class BallVisionTest extends LinearOpMode {
 
-    // Must match the webcam name in res/xml/camera.xml (the Arducam UC-852 / OV9782).
     private static final String WEBCAM_NAME = "nerdDetector";
 
     private WebcamSession session;

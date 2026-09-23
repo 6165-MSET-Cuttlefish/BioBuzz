@@ -2,10 +2,7 @@ package org.firstinspires.ftc.teamcode.modules.vision;
 
 import org.opencv.core.Point;
 
-/**
- * A ball followed across frames: smoothed field position plus the velocity implied by how that
- * position has moved. Immutable — {@link BallTracker#update} republishes a fresh list each frame.
- */
+/** Camera-relative: a stationary ball reads as moving whenever the robot does. */
 public final class TrackedBall {
 
     public final int id;
@@ -35,10 +32,8 @@ public final class TrackedBall {
         this.visible = visible;
     }
 
-    /** Inches per second. */
     public double speed() { return Math.hypot(vx, vy); }
 
-    /** Direction of travel in field radians, meaningless below {@link #isMoving()}. */
     public double headingRad() { return Math.atan2(vy, vx); }
 
     public double headingDeg() { return Math.toDegrees(headingRad()); }
@@ -58,7 +53,6 @@ public final class TrackedBall {
 
     public double distanceTo(double px, double py) { return Math.hypot(x - px, y - py); }
 
-    /** Seconds until this ball is closest to (px, py) if it keeps its current velocity. */
     public double timeOfClosestApproach(double px, double py) {
         double speedSq = vx * vx + vy * vy;
         if (speedSq < 1e-9) return 0;

@@ -8,39 +8,20 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Gives ball identity persistence across a gap where the camera loses sight of a ball entirely — a
- * robot turn, not just a flickery detection — something {@link BallTracker} can't do on its own: its
- * tracks are camera-relative ("rigidly attached to the robot" — see {@link TrackedBall}), so they go
- * stale the instant the robot rotates, and it drops a track after a handful of missed frames
- * regardless. This runs one layer up, re-labelling the {@link FieldBall} list {@link
- * BallFieldTransform} already computes every frame with a persistent identity, using field position
- * (which a stationary ball keeps regardless of where the camera is pointed) instead of camera
- * position. It does no position smoothing, coordinate transforms, or velocity estimation of its own
- * — all of that already happened upstream — so per ball this is just a distance check.
- *
- * <p>A known ball missing from the current frame is kept, unchanged, reporting its last known
- * position with {@link FieldBall#visible()} false, until {@link Tuning#forgetAfterSeconds} passes
- * with no re-detection. Deliberately not coasted forward on its old velocity: the point is
- * remembering where a (likely now-stationary) ball was, not extrapolating where it went.
- *
- * <p>Runs on the OpMode thread (inside {@code Camera.read()}), never the camera thread. Cost per
- * call is O(known balls x this frame's balls) comparisons over a handful of small game pieces —
- * negligible regardless of camera resolution or detection load.
+ * Keeps ball identity by field position so it survives the camera turning away. OpMode thread only.
+ * Unseen balls hold their last position, deliberately not coasted, until forgotten.
  */
 public final class FieldBallTracker {
 
     @Config("FieldBallTracking")
     public static class Tuning {
-        /** Max field-inches between a known ball's last position and a fresh one to call them the same. */
         public static double matchRadiusIn = 8.0;
-        /** A known ball not re-detected within this long is forgotten entirely. */
         public static double forgetAfterSeconds = 10.0;
     }
 
     private final List<Known> known = new ArrayList<>();
     private int nextId = 1;
 
-    /** Re-labels this frame's FieldBalls with persistent identity. Safe to call every loop. */
     public List<FieldBall> update(List<FieldBall> fresh, double timestampSeconds) {
         for (Known k : known) k.visible = false;
 
@@ -68,12 +49,10 @@ public final class FieldBallTracker {
         return result;
     }
 
-    /** Forget every known ball — use when the robot state source itself changes, not after a move. */
     public void reset() {
         known.clear();
     }
 
-    /** Never pairs across {@link BallVisionConstants.BallType}, same reasoning as {@link BallTracker}. */
     private List<Pairing> buildPairings(List<FieldBall> fresh) {
         List<Pairing> pairings = new ArrayList<>();
         for (int k = 0; k < known.size(); k++) {

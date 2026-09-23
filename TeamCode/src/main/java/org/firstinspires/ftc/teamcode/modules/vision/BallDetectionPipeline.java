@@ -25,67 +25,25 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Finds Pollen (2.8in yellow) and Nectar (3.6in red/blue) balls on the floor and reports where they
- * are — and how they are moving — in field inches. Runs on the camera thread; results are published
- * as an immutable {@link Frame} snapshot that the OpMode thread reads via {@link #latest()}.
- *
- * <p>Detection is shape-first: each type's HSV gate is only a cheap region-of-interest finder, and
- * {@code HoughCircles} does the real work of deciding what is a ball. Hough votes on gradient
- * curvature, so a ball whose surface is broken up by wiffle holes, glare and shadow is still found
- * from its outer silhouette alone, and two touching balls are found as two independent circles —
- * both things a color-blob segmentation has to bolt on afterwards with watershed splitting and
- * circularity filters. Hough is colour-blind, though — it fits a silhouette regardless of what type
- * it belongs to — so the colour mask that seeded a circle's search region is also what assigns its
- * type (see {@link #colorFillFraction}).
- *
- * <p>With one exception: Hough's accumulator is a hard threshold, so a ball whose edge sits near it
- * blinks in and out between frames even when its mask is perfectly steady. When a mask blob is
- * round enough to be a ball on its own and Hough finds nothing inside it, that blob's own enclosing
- * circle stands in (see {@link #addMaskCircle}) — the colour gate does get to produce a detection
- * there, precisely because it is the steadier of the two signals in that situation.
- *
- * <p>Every detected ball is then fed to a {@link BallTracker}, which is what turns a stream of
- * unlabelled per-frame points into balls with identity and velocity; a track only ever matches
- * detections of its own {@link BallType}.
- *
- * <p>Every shared detection-recipe number lives in {@link BallVisionConstants}, the canonical copy
- * that {@code OpenCVPipelines/PollenDetectionPipeline/PollenDetectionPipeline.java} mirrors by hand
- * for EOCV-Sim (see that file's javadoc for why it can't just import this package).
- *
- * <p>The homography is fixed at construction from {@link BallVisionConstants#H_ARRAY} — there is no
- * live chessboard calibration here. Produce {@code H_ARRAY} with
- * {@code OpenCVPipelines/HomographyCalculationPipeline}, which locks a homography from a chessboard
- * and prints it paste-ready, and paste the result into {@code BallVisionConstants}.
+ * Finds Pollen (2.8in yellow) and Nectar (3.6in red/blue) balls and reports their field-inch
+ * positions and velocities. HSV gates only seed ROIs; HoughCircles decides what is a ball, and the
+ * colour mask assigns its type since Hough is colour-blind.
  */
 public class BallDetectionPipeline extends OpenCvPipeline {
 
     public enum DisplayMode {
-        /** Candidate ROI masks, one colour per ball type, for tuning the HSV gates. */
+        /** Per-type ROI masks, for tuning the HSV gates. */
         MASK,
-        /** This frame's raw detections, circle plus center and ground-contact dots — what Hough
-         * actually found, jitter and all, which is what you want when checking detection itself. */
+        /** This frame's raw Hough detections, jitter and all. */
         OVERLAY,
-        /** The tracked balls, smoothed and with stable ids — what robot code consumes. */
+        /** Tracked balls, smoothed with stable ids — what robot code consumes. */
         BOX
     }
 
-    /**
-     * Display/behaviour toggles only — every actual detection-recipe number ({@link
-     * BallVisionConstants.Detection} and the per-type HSV classes) lives on {@link
-     * BallVisionConstants} itself and is read fresh every frame, so it needs no seeding here.
-     *
-     * <p>Named {@code BallVisionDisplay} rather than the old bare {@code BallVision}: this class used
-     * to hold every detection knob before they moved to {@link BallVisionConstants}, and a dashboard
-     * that had that wider {@code BallVision} category pinned or laid out from before the split can
-     * keep reapplying its old snapshot over new edits. If a slider here still won't hold a value,
-     * unpin/remove any saved {@code BallVision} layout on the dashboard and re-add the fields fresh
-     * under this name.
-     */
     @Config("BallVisionDisplay")
     public static class Tuning {
         public static DisplayMode displayMode = DisplayMode.MASK;
         public static boolean drawVelocity = true;
-        /** Lookahead of the drawn velocity arrow, seconds. */
         public static double velocityArrowSeconds = 0.5;
     }
 
@@ -109,10 +67,10 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     private static final Scalar MASK_CANVAS_CLEAR = new Scalar(0, 0, 0);
 
-    // Enum.values() defensively copies its backing array on every call; this loop runs 3x/frame.
+    // Enum.values() clones its array on every call.
     private static final BallType[] BALL_TYPES = BallType.values();
 
-    /** One frame's worth of results, handed from the camera thread to the OpMode thread. */
+    /** Immutable per-frame results, published from the camera thread. */
     public static final class Frame {
         public static final Frame EMPTY = new Frame(
                 Collections.<BallDetection>emptyList(), Collections.<TrackedBall>emptyList(),
@@ -150,34 +108,25 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private final Mat small        = new Mat();
     private final Mat smallGray    = new Mat();
     private final Mat hsv          = new Mat();
-    private final Mat rangeMask    = new Mat(); // one HsvRange, OR-ed into colorMask
-    private final Mat colorMask    = new Mat(); // current type's raw colour mask
-    private final Mat roiMask      = new Mat(); // lightly-closed candidate mask
+    private final Mat rangeMask    = new Mat();
+    private final Mat colorMask    = new Mat();
+    private final Mat roiMask      = new Mat();
     private final Mat roiWork      = new Mat();
-    private final Mat houghCircles = new Mat(); // reused across every Hough call, all regions/types
-    private final Mat maskCanvas   = new Mat(); // MASK mode: per-type masks, colour-coded
-    // Dedicated full-res output buffer for MASK mode. Deliberately NOT input: input is EasyOpenCV's
-    // own persistent decode buffer (OpenCvWebcamImpl's rgbaMat — allocated once as 4-channel and
-    // written into directly by the native MJPEG decoder on every later frame, never reallocated by
-    // EasyOpenCV itself), and resizing maskCanvas (3-channel) into it would retype/reallocate that
-    // shared buffer to 3-channel in place, corrupting every frame decoded after it.
+    private final Mat houghCircles = new Mat();
+    private final Mat maskCanvas   = new Mat();
+    // Never resize into input: it is EasyOpenCV's persistent 4-channel decode buffer, and writing a
+    // 3-channel Mat into it reallocates it and corrupts every later frame.
     private final Mat maskDisplay  = new Mat();
     private final Mat contourHierarchy = new Mat();
-    // OVERLAY/BOX draw in place onto that frame's input Mat rather than a separate copy; MASK mode
-    // uses maskDisplay instead, for the reason above — see render().
     private Mat display;
 
-    // Mutated in place by applyRange() instead of allocating a new Scalar per HSV band per frame.
     private final Scalar rangeLow  = new Scalar(0, 0, 0);
     private final Scalar rangeHigh = new Scalar(0, 0, 0);
 
-    // Reused by addMaskCircle(), which runs once per mask blob per type per frame.
     private final MatOfPoint2f contourAsFloat = new MatOfPoint2f();
     private final Point maskCircleCenter = new Point();
     private final float[] maskCircleRadius = new float[1];
 
-    // Camera resolution is fixed for the pipeline's lifetime, so this is computed once, not
-    // reallocated every frame.
     private Size smallSize;
 
     private int rejectedColorCount = 0;
@@ -188,10 +137,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     public BallDetectionPipeline() {
         setHomography(buildHomographyFromArray(BallVisionConstants.H_ARRAY));
     }
-
-    // =========================================================================
-    // Master pipeline
-    // =========================================================================
 
     @Override
     public Mat processFrame(Mat input) {
@@ -252,10 +197,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return render(input, detections, balls);
     }
 
-    // =========================================================================
-    // Detection stages
-    // =========================================================================
-
     private void prepareWorkingFrames(Mat input) {
         if (smallSize == null) {
             smallSize = new Size(input.cols() * DETECTION_SCALE, input.rows() * DETECTION_SCALE);
@@ -265,11 +206,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         Imgproc.cvtColor(small, smallGray, Imgproc.COLOR_RGB2GRAY);
     }
 
-    /**
-     * ORs every live-tunable HSV band of one ball type into {@code out}. The first band writes
-     * {@code out} directly so the mask is cleared of the previous type's pixels without a separate
-     * zeroing pass.
-     */
+    /** The first band overwrites {@code out}, which is what clears the previous type's pixels. */
     private void buildColorMask(BallType type, Mat out) {
         switch (type) {
             case POLLEN:
@@ -312,11 +249,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         }
     }
 
-    /**
-     * Also collects, into {@code maskCircles}, the enclosing circle of every mask blob round enough
-     * to be a ball on its own — see {@link #addMaskCircle}. Free to do here: the contour is already
-     * in hand for the bounding box.
-     */
+    /** Also collects round-enough mask blobs into {@code maskCircles} as Hough fallbacks. */
     private List<Rect> buildSearchRegions(BallType type, double minBallRadius, double maxBallRadius,
                                           List<Candidate> maskCircles) {
         List<MatOfPoint> contours = new ArrayList<>();
@@ -338,13 +271,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     /**
-     * A mask blob that actually fills its own enclosing circle is already a usable circle estimate,
-     * so keep it as a fallback for frames where Hough comes up empty on that ball. Hough runs on
-     * gradients in the grayscale image, not on the mask, and its accumulator is a hard threshold —
-     * a ball whose edge lands near {@link Detection#houghAccumulator} flickers in and out as sensor
-     * and MJPEG noise shift which edge pixels survive Canny, even with a completely steady mask.
-     * The roundness gate ({@link Detection#maskCircleMinFill}) is what keeps a smear or two merged
-     * balls from being promoted into a detection.
+     * Fallback for frames Hough misses: its accumulator is a hard threshold, so a borderline ball
+     * flickers in and out even when its mask is steady.
      */
     private void addMaskCircle(BallType type, MatOfPoint contour,
                                double minBallRadius, double maxBallRadius, List<Candidate> out) {
@@ -362,10 +290,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         if (candidate.fillFraction >= Detection.minColorFill) out.add(candidate);
     }
 
-    /**
-     * Drops mask circles that Hough already found a circle inside — when Hough fires, its gradient
-     * fit is the better estimate, and the fallback is only meant to cover the frames it misses.
-     */
     private static List<Candidate> unclaimedMaskCircles(List<Candidate> maskCircles,
                                                         List<Candidate> hough) {
         if (maskCircles.isEmpty() || hough.isEmpty()) return maskCircles;
@@ -386,18 +310,14 @@ public class BallDetectionPipeline extends OpenCvPipeline {
 
     private List<Candidate> findCircles(BallType type, List<Rect> searchRegions,
                                         double minBallRadius, double maxBallRadius) {
-        // Derived from the frame and ball type only, never from a region's own size, so they are
-        // identical on every frame: tying them to the ROI would let a mask bounding box that
-        // wanders a pixel or two change the upscale factor and Canny threshold from frame to
-        // frame, which is its own source of detections blinking on and off.
+        // Never derived from the ROI's size: a bounding box wandering a pixel would change upscale
+        // and Canny frame to frame and make detections blink.
         double minRadius = minBallRadius;
         double minDist = Math.max(4.0, minRadius * HOUGH_MIN_DIST_FRACTION * 2.0);
         double upscale = Math.min(ROI_MAX_UPSCALE,
                 Math.max(1.0, HOUGH_WORKING_MIN_RADIUS_PX / minRadius));
 
-        // Interpolation spreads the same intensity step over `upscale` pixels, so per-pixel
-        // gradient magnitude drops by about that factor — a fixed Canny threshold would reject
-        // the very edges the upscale exists to recover.
+        // Upscaling spreads each edge over `upscale` pixels, cutting gradient magnitude by that factor.
         double canny = Math.max(HOUGH_CANNY_MIN_THRESHOLD, Detection.houghCanny / upscale);
 
         List<Candidate> candidates = new ArrayList<>();
@@ -405,8 +325,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             int shortSide = Math.min(region.width, region.height);
             if (shortSide < 4) continue;
 
-            // Still capped by the region — a circle can't meaningfully exceed the area it was
-            // found in — but only the ceiling moves with it, never the parameters above.
+            // Only this ceiling may follow the region; the parameters above must not.
             double maxRadius = Math.min(shortSide * HOUGH_MAX_RADIUS_FRACTION, maxBallRadius);
             if (maxRadius <= minRadius) continue;
 
@@ -422,8 +341,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 }
                 Imgproc.GaussianBlur(roiWork, roiWork, HOUGH_BLUR_KERNEL, 0);
 
-                // houghCircles is a reused instance field, not allocated per region/type/frame —
-                // HoughCircles resizes its own backing buffer as needed, same as any other Mat output.
                 Imgproc.HoughCircles(roiWork, houghCircles, Imgproc.HOUGH_GRADIENT,
                         Detection.houghDp, minDist * upscale,
                         canny, Detection.houghAccumulator,
@@ -447,15 +364,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     /**
-     * How much of a Hough circle's interior is actually the colour that seeded its ROI. Counted
-     * over the circle's bounding box against the area a circle would occupy in that box (pi/4 of
-     * it), so a frame-clipped ball is judged on its visible part rather than penalised for the
-     * missing half. ROIs are padded and merged so they always contain off-colour margin, and
-     * HOUGH_GRADIENT votes along the gradient normal in both directions — a real ball's edge
-     * therefore also deposits a phantom center about one radius out into the background, and
-     * nothing else downstream tells that phantom from the ball. This is also what assigns the
-     * type, since Hough itself is colour-blind: a ball picked up through another colour's glare
-     * band fails that colour's fill test.
+     * Mask fill over the frame-clipped bounding box (a circle covers pi/4 of it). Rejects the phantom
+     * centers HOUGH_GRADIENT votes one radius outside real edges, and assigns type.
      */
     private double colorFillFraction(Mat mask, Candidate candidate) {
         int x0 = (int) Math.max(0, Math.round(candidate.x - candidate.radius));
@@ -474,25 +384,14 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     }
 
     /**
-     * Greedy non-maximum suppression, largest first: a hole, glare ring or shadow inside a ball
-     * fits a circle smaller than the ball's own outline, so preferring the larger radius keeps the
-     * ball and drops the artifact. Hough's own minDist can't do this — it is one value per call,
-     * derived from the smallest searched radius, and does nothing across separate ROI calls.
-     *
-     * <p>Runs over every type at once, not per type: the types' glare bands cover overlapping
-     * near-white pixels, so one ball can seed a ROI under more than one colour and be found twice.
-     * Colour fill breaks the tie, which is only reached when two circles are the same size — i.e.
-     * when they really are the same ball.
+     * Largest-first NMS across all types: holes and glare fit smaller circles inside a ball, and the
+     * types' overlapping glare bands can find one ball under two colours.
      */
     private static List<Candidate> suppressOverlaps(List<Candidate> candidates) {
         Collections.sort(candidates, new Comparator<Candidate>() {
             @Override public int compare(Candidate a, Candidate b) {
-                // Rounded to whole pixels before comparing: Hough's radius estimate for one ball
-                // moves by a fraction of a pixel between frames, and ordering on the raw doubles
-                // lets that noise decide which of two all-but-identical candidates survives, so the
-                // kept circle jumps between them. Rounding makes those a tie that colour fill —
-                // far steadier, since it comes off the mask — settles instead. Integer compare
-                // keeps the ordering transitive, which a tolerance-based one wouldn't.
+                // Whole-pixel radii so sub-pixel Hough jitter ties and the steadier colour fill decides;
+                // an integer compare stays transitive where a tolerance wouldn't.
                 int byRadius = Integer.compare((int) Math.round(b.radius), (int) Math.round(a.radius));
                 return byRadius != 0 ? byRadius : Double.compare(b.fillFraction, a.fillFraction);
             }
@@ -503,9 +402,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             boolean overlaps = false;
             for (Candidate k : kept) {
                 double distance = Math.hypot(candidate.x - k.x, candidate.y - k.y);
-                // Second test catches an artifact on a ball's rim, whose center is outside the kept
-                // circle but which is far too close to be a separate ball. Balls resting against
-                // each other sit at 1.0, so the fraction must stay well under that.
+                // Second test catches rim artifacts; touching balls sit at 1.0, so
+                // minCenterSeparation must stay well under that.
                 if (distance <= k.radius
                         || distance < Detection.minCenterSeparation * (k.radius + candidate.radius)) {
                     overlaps = true;
@@ -517,10 +415,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return kept;
     }
 
-    /**
-     * Maps each circle's ground-contact point to field inches. Hough gives a true circle equation,
-     * so the contact point is analytically (cx, cy + r) rather than a search for the lowest pixel.
-     */
+    /** Projects each circle's ground-contact point (cx, cy + r) to field inches. */
     private List<BallDetection> projectToField(List<Candidate> circles) {
         Mat h = homography;
         if (circles.isEmpty() || h == null || h.empty()) {
@@ -541,21 +436,13 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return detections;
     }
 
-    // =========================================================================
-    // Rendering
-    // =========================================================================
-
     private Mat render(Mat input, List<BallDetection> detections, List<TrackedBall> balls) {
         DisplayMode mode = Tuning.displayMode;
 
         if (mode == DisplayMode.MASK) {
-            // maskDisplay, not input — see the field's own comment for why input can't be resized into.
             Imgproc.resize(maskCanvas, maskDisplay, input.size(), 0, 0, Imgproc.INTER_NEAREST);
             display = maskDisplay;
         } else {
-            // Draw straight onto input instead of a copy: nothing reads input as data past this
-            // point (detection already ran on small/hsv/smallGray), and EasyOpenCV is fine getting
-            // back the same Mat it handed us. Saves a full-resolution frame copy every loop.
             display = input;
         }
 
@@ -586,14 +473,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, ball.type.labelTextColor, 1);
     }
 
-    /**
-     * Draws the tracked balls rather than this frame's raw detections, so what's on screen is the
-     * smoothed, identity-stable output robot code actually consumes — a raw Hough circle moves by a
-     * pixel or two every frame even on a motionless ball, and watching that is most of what makes
-     * detection "look" jittery. The label carries the track's real id, not a per-frame list index,
-     * so it stays put across frames. OVERLAY still shows raw detections, for checking what Hough
-     * itself found.
-     */
     private void drawTrackedBoxes(List<TrackedBall> balls) {
         Mat inverse = inverseHomography;
         if (inverse == null || balls.isEmpty()) return;
@@ -608,7 +487,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             Point contact = pixels.get(i);
             double radius = ball.radiusPx * scaleUp;
 
-            // The track's position is the ground-contact point, so the box sits on top of it.
+            // Track position is the ground-contact point, so the box sits above it.
             Rect box = new Rect((int) (contact.x - radius), (int) (contact.y - radius * 2),
                     (int) (radius * 2), (int) (radius * 2));
             Imgproc.rectangle(display, new Point(box.x, box.y),
@@ -686,10 +565,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
     }
 
-    // =========================================================================
-    // Homography
-    // =========================================================================
-
     private static Mat buildHomographyFromArray(double[][] values) {
         Mat h = new Mat(3, 3, CvType.CV_64F);
         for (int r = 0; r < 3; r++) {
@@ -698,37 +573,24 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return h;
     }
 
-    // =========================================================================
-    // Public accessors
-    // =========================================================================
-
-    /** Latest published results. Never null; {@link Frame#EMPTY} until the first frame lands. */
+    /** Never null; {@link Frame#EMPTY} until the first frame lands. */
     public Frame latest() { return latest; }
 
-    /**
-     * Always true once constructed — the homography is fixed from {@link
-     * BallVisionConstants#H_ARRAY}, not calibrated live. Kept for callers written when this could
-     * be false during live calibration.
-     */
+    /** Always true once constructed: the homography is fixed from {@link BallVisionConstants#H_ARRAY}. */
     public boolean isCalibrated() { return homography != null && !homography.empty(); }
 
-    /** False makes {@link #processFrame} a passthrough, freeing the CPU it would have spent. */
     public void setDetectionEnabled(boolean enabled) {
         if (detectionEnabled == enabled) return;
         detectionEnabled = enabled;
         latest = Frame.EMPTY;
-        // Resuming against tracks last seen an arbitrary time ago would associate them to whatever
-        // is in frame now and derive a velocity from a gap that was never observed.
+        // Stale tracks would match whatever is in frame now and derive velocity across the unseen gap.
         resetTracking();
     }
 
     public boolean isDetectionEnabled() { return detectionEnabled; }
 
-    /** Drops every track; the next frame starts identities and velocities from scratch. */
     public void resetTracking() { trackerResetRequested = true; }
 
-    /** Diagnostic round-trip of {@link BallVisionConstants#H_ARRAY} — confirms what's actually
-     * loaded, not a live calibration result. */
     public String getHomographyAsString() {
         Mat h = homography;
         if (h == null || h.empty()) return "Homography not available";
@@ -743,10 +605,6 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         }
         return sb.append("};").toString();
     }
-
-    // =========================================================================
-    // Helpers
-    // =========================================================================
 
     private void setHomography(Mat h) {
         Mat previous = homography;

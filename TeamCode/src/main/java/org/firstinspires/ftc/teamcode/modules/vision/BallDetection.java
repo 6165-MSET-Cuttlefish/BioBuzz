@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.modules.vision;
 
 import org.opencv.core.Point;
 
-/** One ball found in a single frame, before any frame-to-frame association. */
+/** Despite the names, fieldX/fieldY are camera-relative homography output, in inches. */
 public final class BallDetection {
 
     public final BallVisionConstants.BallType type;

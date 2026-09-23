@@ -26,9 +26,9 @@ import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 /**
  * End-to-end smoke test for the framework: lifecycle, Robot/Module/State, Ivy commands, telemetry.
  * Enable {@code Tuning.enableDrive} only with wheels off the ground and motor + odometry directions
- * confirmed — the Foresight gains in {@code pedro.Constants} are untuned placeholders.
+ * confirmed.
  */
-@Autonomous(name = "Mock Architecture Test", group = "test")
+@Autonomous(name = "Mock Architecture Test", group = "Test")
 public class MockAuto extends EnhancedOpMode {
 
     @Config("Mock Auto")
