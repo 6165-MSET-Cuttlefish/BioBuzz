@@ -20,7 +20,7 @@
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
             <RevColorSensorV3 name="frontRightColor" bus="0" port="1" /> <!-- Physical port 0 -->
             <RevColorSensorV3 name="frontLeftColor" bus="1" port="0" /> <!-- Physical port 1 -->
-            <MaxSonarI2CXL name="sonar" bus="2" port="0" /> <!-- Physical port 2 -->
+            <RevColorSensorV3 name="middleFrontColor" bus="2" port="0" /> <!-- Physical port 2 -->
             <RevColorSensorV3 name="middleBackColor" bus="3" port="0" /> <!-- Physical port 3 -->
         </LynxModule>
         <LynxModule name="Expansion Hub 2" port="2">
