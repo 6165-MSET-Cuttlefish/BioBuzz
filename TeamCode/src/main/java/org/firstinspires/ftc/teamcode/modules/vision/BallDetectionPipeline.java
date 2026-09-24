@@ -53,7 +53,7 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
 
     @Config("BallVisionDisplay")
     public static class Tuning {
-        public static DisplayMode displayMode = DisplayMode.MASK;
+        public static DisplayMode displayMode = DisplayMode.BOX;
         public static boolean drawVelocity = true;
         public static double velocityArrowSeconds = 0.5;
     }

@@ -27,7 +27,7 @@ GENERATED_TEXT = "GENERATED from limelight/cell_tip_snapscript.py by limelight/g
 
 def alliances():
     """(ALLIANCE, pipeline index, (("SCORING", ids), ("AUDIENCE", ids))), scoring side first."""
-    java = MODULE.read_text()
+    java = MODULE.read_text(encoding="utf-8")
     out = []
     for name in ("red", "blue"):
         pipeline = re.search(PIPELINE_RE % name, java)
@@ -47,7 +47,7 @@ def alliances():
 
 
 def main():
-    template = TEMPLATE.read_text()
+    template = TEMPLATE.read_text(encoding="utf-8")
     for label, pattern in (("ALLIANCE", ALLIANCE_RE), ("PIPELINE_INDEX", INDEX_RE),
                            ("CLUSTERS", CLUSTERS_RE)):
         if not pattern.search(template):
@@ -70,7 +70,7 @@ def main():
         body = body.replace(TITLE_TEXT, "— pipeline %d, %s.\n" % (pipeline, name), 1)
         body = body.replace(SOURCE_TEXT, GENERATED_TEXT, 1)
         out = OUT_DIR / ("pipeline%d_%s.py" % (pipeline, name.lower()))
-        out.write_text(body)
+        out.write_text(body, encoding="utf-8")
         print("wrote %s  %s" % (out.relative_to(ROOT),
                                  "  ".join("%s %d-%d" % (s, i[0], i[-1]) for s, i in clusters)))
 
