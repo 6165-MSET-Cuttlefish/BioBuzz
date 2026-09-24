@@ -83,7 +83,7 @@ public abstract class EnhancedOpMode extends OpMode {
     protected boolean shouldWriteDuringInit() { return false; }
     protected boolean shouldReadDuringInit() { return true; }
 
-    protected abstract Robot createRobot() throws InterruptedException;
+    protected abstract Robot createRobot();
 
     /** Called at the top of every init_loop and loop, before module reads. */
     protected void onLoopStart() {}
@@ -100,11 +100,7 @@ public abstract class EnhancedOpMode extends OpMode {
         configureBulkCaching();
         voltageSensor = hardwareMap.voltageSensor.iterator().next();
 
-        try {
-            robot = createRobot();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        robot = createRobot();
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
         telemetry = robot.telemetry;
         packet = newPacket();

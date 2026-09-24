@@ -10,7 +10,7 @@ import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 public class MockRobot extends Robot {
     public MockMechanism mech;
 
-    public MockRobot(EnhancedOpMode opMode) throws InterruptedException {
+    public MockRobot(EnhancedOpMode opMode) {
         super(opMode);
     }
 

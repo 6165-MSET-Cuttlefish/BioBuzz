@@ -41,7 +41,7 @@ public class MockAuto extends EnhancedOpMode {
     private Command sequence;
 
     @Override
-    protected Robot createRobot() throws InterruptedException {
+    protected Robot createRobot() {
         mock = new MockRobot(this);
         return mock;
     }

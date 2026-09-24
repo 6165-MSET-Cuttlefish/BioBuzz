@@ -25,7 +25,7 @@ public abstract class DecodeOpMode extends EnhancedOpMode {
     protected DecodeRobot robot;
 
     @Override
-    protected final Robot createRobot() throws InterruptedException {
+    protected final Robot createRobot() {
         DecodeRobot r = new DecodeRobot(this);
         this.robot = r;
         return r;

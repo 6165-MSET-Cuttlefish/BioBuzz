@@ -9,7 +9,7 @@ public abstract class BioBuzzOpMode extends EnhancedOpMode {
     protected BioBuzzRobot robot;
 
     @Override
-    protected final Robot createRobot() throws InterruptedException {
+    protected final Robot createRobot() {
         BioBuzzRobot r = new BioBuzzRobot(this);
         this.robot = r; // shadows EnhancedOpMode.robot with a typed reference to the same object
         return r;

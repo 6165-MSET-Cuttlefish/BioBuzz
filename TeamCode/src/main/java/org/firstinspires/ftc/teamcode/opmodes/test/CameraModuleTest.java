@@ -22,7 +22,7 @@ public class CameraModuleTest extends EnhancedOpMode {
     static class CameraRobot extends Robot {
         Camera camera;
 
-        CameraRobot(EnhancedOpMode opMode) throws InterruptedException {
+        CameraRobot(EnhancedOpMode opMode) {
             super(opMode);
         }
 
@@ -40,7 +40,7 @@ public class CameraModuleTest extends EnhancedOpMode {
     private CameraRobot cam;
 
     @Override
-    protected Robot createRobot() throws InterruptedException {
+    protected Robot createRobot() {
         cam = new CameraRobot(this);
         return cam;
     }

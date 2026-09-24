@@ -35,7 +35,7 @@ public class DecodeRobot extends Robot {
     public static DrivetrainTelemetry drivetrainTelemetry = new DrivetrainTelemetry();
     public static MagazineTelemetry magazineTelemetry = new MagazineTelemetry();
 
-    public DecodeRobot(EnhancedOpMode opMode) throws InterruptedException {
+    public DecodeRobot(EnhancedOpMode opMode) {
         super(opMode);
     }
 

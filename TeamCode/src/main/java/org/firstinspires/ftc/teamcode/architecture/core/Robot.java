@@ -20,7 +20,7 @@ public abstract class Robot {
 
     public static TelemetryToggles telemetryToggles = new TelemetryToggles();
 
-    protected Robot(EnhancedOpMode opMode) throws InterruptedException {
+    protected Robot(EnhancedOpMode opMode) {
         this.opMode = opMode;
         opMode.telemetry.setMsTransmissionInterval(100);
         telemetry = new DualTelemetry(opMode.telemetry, FtcDashboard.getInstance().getTelemetry());

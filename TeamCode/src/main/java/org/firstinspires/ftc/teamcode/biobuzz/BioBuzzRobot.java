@@ -14,7 +14,7 @@ public class BioBuzzRobot extends Robot {
     public LimelightCamera limelight;
     public RobotActions actions;
 
-    public BioBuzzRobot(EnhancedOpMode opMode) throws InterruptedException {
+    public BioBuzzRobot(EnhancedOpMode opMode) {
         super(opMode);
     }
 

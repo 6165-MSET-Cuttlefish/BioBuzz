@@ -52,8 +52,8 @@ public abstract class Module {
 
     public void init() {}
 
-    /** Override to put hardware in a safe state on OpMode stop. */
-    public void stop() {}
+    /** Commands every output directly to a safe state at OpMode stop. DecodeRobot's write toggles also call it mid-OpMode, and write() can resume after. */
+    public abstract void stop();
 
     protected void onStateChange() {}
     protected void onTelemetry() {}

@@ -127,7 +127,7 @@ public class Shooter extends Module {
 - `setStates(...)` once per state class; `bindTunable` after it. Don't touch states in the constructor; bindings exist only from `initStates()` on, and `init()` runs after that.
 - Tunables are `public static` fields on the `@Config` module class, optionally grouped in plain nested holder classes. A nested class that is itself `@Config` must be named (`@Config("Shooter")`): slothboard keys config classes by simple name, so bare nested `Tuning` classes collide and vanish.
 - Telemetry goes in `onTelemetry()` via `log`/`logDS`/`logDashboard` (both screens, DS only, dashboard only), never in `read()`. Dashboard data rows stay plain text so its graph view can read them.
-- `stop()` commands hardware directly, past the write cache: `EnhancedMotor.stop()` always writes, while `setPower(0)` can be dropped after Pedro drove the same motor. DECODE's write toggles also call it mid-OpMode and later resume `write()`, so it must not be one-way.
+- `stop()` is abstract and commands hardware directly, past the write cache: `EnhancedMotor.stop()` always writes, while `setPower(0)` can be dropped after Pedro drove the same motor. DECODE's write toggles also call it mid-OpMode and later resume `write()`, so it must not be one-way. A module with no outputs implements it empty.
 - `EnhancedMotor`'s one-argument `setVelocity`/`getVelocity` are in encoder ticks per second, not RPM, and `withVoltageCompensation` scales only `setPower`.
 - `setStartupCommand(command)` arms a command that `start()` schedules once. `state.activate()` returns false only if the state class is unregistered or a guard rejected it.
 
