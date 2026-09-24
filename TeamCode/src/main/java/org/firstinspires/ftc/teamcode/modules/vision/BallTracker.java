@@ -131,8 +131,8 @@ public final class BallTracker {
         Track(int id, BallDetection seed) {
             this.id = id;
             this.type = seed.type;
-            this.x = seed.fieldX;
-            this.y = seed.fieldY;
+            this.x = seed.cameraX;
+            this.y = seed.cameraY;
             this.radiusPx = seed.imageRadius;
         }
 
@@ -143,10 +143,10 @@ public final class BallTracker {
         void hit(BallDetection detection, double dt) {
             double predictedX = predictedX(dt);
             double predictedY = predictedY(dt);
-            double residualX = detection.fieldX - predictedX;
-            double residualY = detection.fieldY - predictedY;
+            double residualX = detection.cameraX - predictedX;
+            double residualY = detection.cameraY - predictedY;
             if (dt > 0) {
-                double measuredSpeed = Math.hypot(detection.fieldX - x, detection.fieldY - y) / dt;
+                double measuredSpeed = Math.hypot(detection.cameraX - x, detection.cameraY - y) / dt;
                 if (measuredSpeed <= Tuning.maxPlausibleSpeedIn) {
                     vx += Tuning.velocitySmoothing * residualX / dt;
                     vy += Tuning.velocitySmoothing * residualY / dt;

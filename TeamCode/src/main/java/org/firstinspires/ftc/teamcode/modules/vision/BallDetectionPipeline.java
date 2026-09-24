@@ -35,9 +35,10 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Finds Pollen (2.8in yellow) and Nectar (3.6in red/blue) balls and reports their field-inch
- * positions and velocities. HSV gates only seed ROIs; HoughCircles decides what is a ball, and the
- * colour mask assigns its type since Hough is colour-blind.
+ * Finds Pollen (2.8in yellow) and Nectar (3.6in red/blue) balls and reports their camera-frame
+ * ground positions (inches) and velocities; {@link BallFieldTransform} makes them field-relative.
+ * HSV gates only seed ROIs; HoughCircles decides what is a ball, and the colour mask assigns its
+ * type since Hough is colour-blind.
  */
 public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
 
@@ -184,7 +185,7 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         List<Candidate> circles = suppressOverlaps(candidates);
         rejectedOverlapCount = candidates.size() - circles.size();
 
-        List<BallDetection> detections = projectToField(circles);
+        List<BallDetection> detections = projectToGround(circles);
         List<TrackedBall> balls = tracker.update(detections, timestamp);
 
         latest = new Frame(detections, balls, searchRegions.size(),
@@ -414,8 +415,8 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         return kept;
     }
 
-    /** Projects each circle's ground-contact point (cx, cy + r) to field inches. */
-    private List<BallDetection> projectToField(List<Candidate> circles) {
+    /** Projects each circle's ground-contact point (cx, cy + r) to camera-frame ground inches. */
+    private List<BallDetection> projectToGround(List<Candidate> circles) {
         if (circles.isEmpty()) return Collections.emptyList();
 
         List<Point> contacts = new ArrayList<>(circles.size());
@@ -423,11 +424,11 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
             contacts.add(new Point(c.x / DETECTION_SCALE, (c.y + c.radius) / DETECTION_SCALE));
         }
 
-        List<Point> field = perspectiveTransform(contacts, homography);
+        List<Point> ground = perspectiveTransform(contacts, homography);
         List<BallDetection> detections = new ArrayList<>(circles.size());
         for (int i = 0; i < circles.size(); i++) {
             Candidate c = circles.get(i);
-            detections.add(new BallDetection(c.type, field.get(i).x, field.get(i).y, c.x, c.y, c.radius));
+            detections.add(new BallDetection(c.type, ground.get(i).x, ground.get(i).y, c.x, c.y, c.radius));
         }
         return detections;
     }
@@ -463,7 +464,7 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         Point contact = new Point(center.x, center.y + radius);
         Imgproc.circle(display, contact, 5, BallVisionConstants.COLOR_CONTACT, -1);
         Imgproc.putText(display,
-                String.format("%s (%.1f, %.1f)in", ball.type.label, ball.fieldX, ball.fieldY),
+                String.format("%s (%.1f, %.1f)in", ball.type.label, ball.cameraX, ball.cameraY),
                 new Point(contact.x + 8, contact.y),
                 Imgproc.FONT_HERSHEY_SIMPLEX, 0.5, ball.type.labelTextColor, 1);
     }
@@ -519,16 +520,16 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         if (balls.isEmpty()) return;
 
         List<TrackedBall> moving = new ArrayList<>();
-        List<Point> fieldPoints = new ArrayList<>();
+        List<Point> groundPoints = new ArrayList<>();
         for (TrackedBall ball : balls) {
             if (!ball.isMoving()) continue;
             moving.add(ball);
-            fieldPoints.add(ball.position());
-            fieldPoints.add(ball.predict(Tuning.velocityArrowSeconds));
+            groundPoints.add(ball.position());
+            groundPoints.add(ball.predict(Tuning.velocityArrowSeconds));
         }
         if (moving.isEmpty()) return;
 
-        List<Point> pixels = perspectiveTransform(fieldPoints, inverseHomography);
+        List<Point> pixels = perspectiveTransform(groundPoints, inverseHomography);
         for (int i = 0; i < moving.size(); i++) {
             Point from = pixels.get(i * 2);
             Point to = pixels.get(i * 2 + 1);

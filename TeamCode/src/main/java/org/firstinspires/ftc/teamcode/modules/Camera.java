@@ -151,11 +151,11 @@ public class Camera extends Module {
         return getNearestBallTo(0, 0);
     }
 
-    public TrackedBall getNearestBallTo(double fieldX, double fieldY) {
+    public TrackedBall getNearestBallTo(double cameraX, double cameraY) {
         TrackedBall nearest = null;
         double bestDistance = Double.MAX_VALUE;
         for (TrackedBall ball : frame.balls) {
-            double distance = ball.distanceTo(fieldX, fieldY);
+            double distance = ball.distanceTo(cameraX, cameraY);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 nearest = ball;

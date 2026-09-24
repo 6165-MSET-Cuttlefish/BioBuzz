@@ -1,30 +1,26 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
-import org.opencv.core.Point;
-
-/** Despite the names, fieldX/fieldY are camera-relative homography output, in inches. */
+/** One frame's raw detection; cameraX/cameraY are camera-frame ground inches, not field coordinates. */
 public final class BallDetection {
 
     public final BallVisionConstants.BallType type;
-    public final double fieldX;
-    public final double fieldY;
+    public final double cameraX;
+    public final double cameraY;
     public final double imageX;
     public final double imageY;
     public final double imageRadius;
 
-    public BallDetection(BallVisionConstants.BallType type, double fieldX, double fieldY,
+    public BallDetection(BallVisionConstants.BallType type, double cameraX, double cameraY,
                          double imageX, double imageY, double imageRadius) {
         this.type = type;
-        this.fieldX = fieldX;
-        this.fieldY = fieldY;
+        this.cameraX = cameraX;
+        this.cameraY = cameraY;
         this.imageX = imageX;
         this.imageY = imageY;
         this.imageRadius = imageRadius;
     }
 
-    public Point fieldPoint() { return new Point(fieldX, fieldY); }
-
-    public double distanceTo(double x, double y) {
-        return Math.hypot(fieldX - x, fieldY - y);
+    public double distanceTo(double cameraX, double cameraY) {
+        return Math.hypot(this.cameraX - cameraX, this.cameraY - cameraY);
     }
 }

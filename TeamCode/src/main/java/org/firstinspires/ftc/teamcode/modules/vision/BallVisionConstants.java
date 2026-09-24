@@ -80,14 +80,14 @@ public final class BallVisionConstants {
         }
     }
 
-    // Full-resolution image pixels to field inches; calibrate at 640x480, the size WebcamSession streams.
+    // Full-resolution image pixels to camera-frame ground inches; calibrate at 640x480, the size WebcamSession streams.
     public static final double[][] H_ARRAY = {
             { -6.8658673540e-02, -1.4582606197e-02, 2.5633211718e+01 },
             { -8.0700352292e-04, -2.1452449123e-01, 6.3092382406e+01 },
             { -1.8726593163e-04, -7.7392061899e-03, 1.0000000000e+00 }
     };
 
-    /** Points are scaled back to full resolution before the homography, so field coordinates don't depend on this. */
+    /** Points are scaled back to full resolution before the homography, so ground coordinates don't depend on this. */
     public static final double DETECTION_SCALE = 0.5;
 
     /** Light on purpose: it only merges nearby fragments into a cluster, it doesn't rebuild a solid disc. */
