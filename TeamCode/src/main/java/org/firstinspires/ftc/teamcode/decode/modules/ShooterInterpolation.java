@@ -147,13 +147,6 @@ public class ShooterInterpolation {
             return lerp(low.hood, high.hood, clamp01((rpm - low.rpm) / (high.rpm - low.rpm)));
         }
 
-        double[] getRange(PositionIndex[] near, double t) {
-            double nearMin = near[0].minRPM;
-            double nearMax = near[0].maxRPM;
-            double farMin = near[1].minRPM;
-            double farMax = near[1].maxRPM;
-            return new double[]{lerp(nearMin, farMin, t), lerp(nearMax, farMax, t)};
-        }
     }
 
     private static final InterpolationTable TABLE = new InterpolationTable();
@@ -240,12 +233,6 @@ public class ShooterInterpolation {
             lastSelectedHood += FAR_HOOD_BIAS;
         }
         return lastSelectedHood;
-    }
-
-    public static double[] getRange(double dist) {
-        PositionIndex[] near = TABLE.getNearestTwo(dist);
-        double t = TABLE.getInterpolant(dist, near);
-        return TABLE.getRange(near, t);
     }
 
     private static double lerp(double a, double b, double t) { return a + (b - a) * t; }

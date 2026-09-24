@@ -12,7 +12,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.decode.modules.Endgame;
 import org.firstinspires.ftc.teamcode.decode.modules.Magazine;
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 import org.firstinspires.ftc.teamcode.decode.modules.Turret;
@@ -23,11 +22,9 @@ import org.firstinspires.ftc.teamcode.pedro.CuttleDecodeConstants;
 public class DecodeRobot extends Robot {
 
     public Drivetrain drivetrain;
-    public Endgame endgame;
     public Shooter shooter;
     public Magazine magazine;
     public Turret turret;
-    public DecodeActions actions;
 
     public Pose targetPose;
 
@@ -35,7 +32,6 @@ public class DecodeRobot extends Robot {
     public static ShooterTelemetry shooterTelemetry = new ShooterTelemetry();
     public static TurretTelemetry turretTelemetry = new TurretTelemetry();
     public static DrivetrainTelemetry drivetrainTelemetry = new DrivetrainTelemetry();
-    public static EndgameTelemetry endgameTelemetry = new EndgameTelemetry();
     public static MagazineTelemetry magazineTelemetry = new MagazineTelemetry();
 
     public DecodeRobot(EnhancedOpMode opMode) throws InterruptedException {
@@ -55,10 +51,6 @@ public class DecodeRobot extends Robot {
         shooter = new Shooter(hw);
         turret = new Turret(hw).withFollower(follower);
         magazine = new Magazine(hw);
-        endgame = new Endgame(hw).withDrivetrain(drivetrain);
-        magazine.withEndgame(endgame);
-        turret.withEndgame(endgame);
-        actions = new DecodeActions(this);
     }
 
     public void updateWriteToggles() {
@@ -66,9 +58,6 @@ public class DecodeRobot extends Robot {
 
         drivetrain.setWriteEnabled(robotWriteEnabled && writeToggles.drivetrainWrite);
         drivetrain.setTelemetryEnabled(drivetrainTelemetry.TOGGLE);
-
-        endgame.setWriteEnabled(robotWriteEnabled && writeToggles.endgameWrite);
-        endgame.setTelemetryEnabled(endgameTelemetry.TOGGLE);
 
         shooter.setWriteEnabled(robotWriteEnabled && writeToggles.shooterWrite);
         shooter.setTelemetryEnabled(shooterTelemetry.TOGGLE);
@@ -85,7 +74,6 @@ public class DecodeRobot extends Robot {
         public boolean magazineWrite = true;
         public boolean turretWrite = true;
         public boolean drivetrainWrite = true;
-        public boolean endgameWrite = true;
         public boolean robotWrite = true;
     }
 
@@ -107,20 +95,11 @@ public class DecodeRobot extends Robot {
         public boolean TOGGLE = false;
     }
 
-    public static class EndgameTelemetry {
-        public boolean TOGGLE = true;
-        public boolean current = false;
-        public boolean initial = true;
-        public boolean pto = false;
-    }
-
     public static class MagazineTelemetry {
         public boolean TOGGLE = true;
-        public boolean intake = false;
-        public boolean vertical = false;
+        public boolean intake = true;
+        public boolean vertical = true;
         public boolean servos = false;
         public boolean current = false;
-        public boolean headlights = false;
-        public boolean colorSensors = true;
     }
 }

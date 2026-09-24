@@ -8,15 +8,12 @@ import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
-import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.decode.DecodeOpMode;
-import org.firstinspires.ftc.teamcode.decode.modules.Endgame;
 import org.firstinspires.ftc.teamcode.decode.modules.Magazine;
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 import org.firstinspires.ftc.teamcode.decode.modules.Turret;
@@ -36,19 +33,17 @@ public class DecodeSystemCheck extends DecodeOpMode {
     private static final int ENCODER_UPDATE_TICKS = 10;
     private static final double DRIVETRAIN_TEST_POWER = 0.3;
     private static final double ODO_HEADING_DELTA_RADIANS = Math.toRadians(2.0);
-    private static final double INITIAL_ENCODER_VOLTAGE_DELTA = 0.05;
     // getStatus() is a blocking HTTP GET that can stall ~200 ms on a hung Limelight, so poll it sparingly.
     private static final double LIMELIGHT_POLL_MS = 250;
 
     private enum Stage {
         SENSORS,
-        HEADLIGHTS,
         DRIVETRAIN_FORWARD,
         TURRET_SWEEP,
         FLYWHEEL_HOOD,
         INTAKE,
         VERTICAL,
-        HORIZONTAL_CLOSED,
+        HORIZONTAL_OPEN_SHOOT,
         HORIZONTAL_OPEN,
         DONE
     }
@@ -57,17 +52,12 @@ public class DecodeSystemCheck extends DecodeOpMode {
     private final ElapsedTime stageTimer = new ElapsedTime();
     private boolean stageEntered = false;
 
-    private NormalizedColorSensor[] colorSensors;
-    private String[] colorNames;
-
     private Limelight3A limelight;
     private final ElapsedTime limelightPollTimer = new ElapsedTime();
     // Read raw: the follower's pose keeps integrating from a cached source when the Pinpoint is unplugged.
     private GoBildaPinpointDriver pinpoint;
     private int odoXBaselineTicks, odoYBaselineTicks;
     private double odoHeadingBaseline;
-
-    private double leftInitialVoltageBaseline, rightInitialVoltageBaseline;
 
     private DcMotorEx leftFlywheel;
     private int flBaselineTicks, frBaselineTicks, blBaselineTicks, brBaselineTicks;
@@ -80,16 +70,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
 
     @Override
     protected void initialize() {
-        colorNames = new String[] {
-                "frontLeftColor", "frontRightColor", "middleFrontColor",
-                "middleBackColor", "backRightColor", "backLeftColor"
-        };
-        colorSensors = new NormalizedColorSensor[colorNames.length];
-        for (int i = 0; i < colorNames.length; i++) {
-            colorSensors[i] = hardwareMap.get(NormalizedColorSensor.class, colorNames[i]);
-        }
-        updateColorChecks();
-
         limelight = hardwareMap.tryGet(Limelight3A.class, "limelight");
 
         resetEncoder(robot.drivetrain.getFl());
@@ -105,10 +85,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
             odoHeadingBaseline = pinpoint.getHeading(AngleUnit.RADIANS);
         }
 
-        // Baseline before start() moves the initial servos, so any later drift proves the encoder reads them.
-        leftInitialVoltageBaseline = robot.endgame.leftInitialEncoder.getVoltage();
-        rightInitialVoltageBaseline = robot.endgame.rightInitialEncoder.getVoltage();
-
         leftFlywheel = hardwareMap.get(DcMotorEx.class, "leftFlywheel");
         leftFlywheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         leftFlywheel.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
@@ -116,14 +92,10 @@ public class DecodeSystemCheck extends DecodeOpMode {
         checks.put("Odometry X updates",       false);
         checks.put("Odometry Y updates",       false);
         checks.put("Odometry heading updates", false);
-        checks.put("Left initial encoder",     false);
-        checks.put("Right initial encoder",    false);
-        checks.put("Headlight strobe",         false);
         checks.put("FL encoder updates",       false);
         checks.put("FR encoder updates",       false);
         checks.put("BL encoder updates",       false);
         checks.put("BR encoder updates",       false);
-        checks.put("PTO disengaged",           false);
         checks.put("Drivetrain FL current",    false);
         checks.put("Drivetrain FR current",    false);
         checks.put("Drivetrain BL current",    false);
@@ -136,31 +108,26 @@ public class DecodeSystemCheck extends DecodeOpMode {
         checks.put("Hood RESET applied",       false);
         checks.put("Intake current",           false);
         checks.put("Vertical current",         false);
+        checks.put("Horizontal Front OPEN_SHOOT", false);
+        checks.put("Horizontal Back OPEN_SHOOT",  false);
         checks.put("Horizontal Front OPEN",    false);
         checks.put("Horizontal Back OPEN",     false);
-        checks.put("Horizontal Front CLOSED",  false);
-        checks.put("Horizontal Back CLOSED",   false);
         checks.put("Limelight connected",      false);
         checks.put("Limelight capturing",      false);
 
-        visualChecks.add("Headlight strobe");
-        visualChecks.add("PTO disengaged");
         visualChecks.add("Turret servo moved");
         visualChecks.add("Hood TOP applied");
         visualChecks.add("Hood RESET applied");
+        visualChecks.add("Horizontal Front OPEN_SHOOT");
+        visualChecks.add("Horizontal Back OPEN_SHOOT");
         visualChecks.add("Horizontal Front OPEN");
         visualChecks.add("Horizontal Back OPEN");
-        visualChecks.add("Horizontal Front CLOSED");
-        visualChecks.add("Horizontal Back CLOSED");
     }
 
     @Override
     protected void initializeLoop() {
-        updateColorChecks();
         updateVisionChecks();
-        updateInitialEncoderChecks();
         updateOdometryChecks();
-        robot.magazine.updateMagazineColorState();
     }
 
     @Override
@@ -183,9 +150,7 @@ public class DecodeSystemCheck extends DecodeOpMode {
             stageTimer.reset();
         }
 
-        updateColorChecks();
         updateVisionChecks();
-        updateInitialEncoderChecks();
         updateOdometryChecks();
 
         switch (stage) {
@@ -197,8 +162,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
             case DONE:              stopAll();                  break;
             default:                                            break;
         }
-
-        robot.magazine.updateMagazineColorState();
     }
 
     @Override
@@ -218,12 +181,7 @@ public class DecodeSystemCheck extends DecodeOpMode {
 
     private void onStageEnter() {
         switch (stage) {
-            case HEADLIGHTS:
-                Magazine.HeadlightFrontState.STROBE.activate();
-                break;
             case DRIVETRAIN_FORWARD:
-                Endgame.LeftPtoState.UP.activate();
-                Endgame.RightPtoState.UP.activate();
                 // BRAKE so the wheels stop with the timer instead of coasting.
                 setDrivetrainZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
                 flBaselineTicks = robot.drivetrain.getFl().getCurrentPosition();
@@ -247,13 +205,13 @@ public class DecodeSystemCheck extends DecodeOpMode {
             case VERTICAL:
                 Magazine.VerticalState.ON.activate();
                 break;
+            case HORIZONTAL_OPEN_SHOOT:
+                Magazine.HorizontalFrontState.OPEN_SHOOT.activate();
+                Magazine.HorizontalBackState.OPEN_SHOOT.activate();
+                break;
             case HORIZONTAL_OPEN:
                 Magazine.HorizontalFrontState.OPEN.activate();
                 Magazine.HorizontalBackState.OPEN.activate();
-                break;
-            case HORIZONTAL_CLOSED:
-                Magazine.HorizontalFrontState.STORED.activate();
-                Magazine.HorizontalBackState.STORED.activate();
                 break;
             default: break;
         }
@@ -264,7 +222,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
         setDrivetrainZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         Magazine.IntakeState.OFF.activate();
         Magazine.VerticalState.OFF.activate();
-        Magazine.HeadlightFrontState.OFF.activate();
         Shooter.FlywheelState.OFF.activate();
         Shooter.HoodState.BOTTOM.activate();
         Turret.TurretState.CENTER.activate();
@@ -351,12 +308,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
         }
     }
 
-    private void updateColorChecks() {
-        for (int i = 0; i < colorSensors.length; i++) {
-            checks.put("Color: " + colorNames[i], isColorSensorAlive(colorSensors[i]));
-        }
-    }
-
     private void updateVisionChecks() {
         if (Boolean.TRUE.equals(checks.get("Limelight capturing"))) return;
         if (limelightPollTimer.milliseconds() < LIMELIGHT_POLL_MS) return;
@@ -390,21 +341,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
         updateIfTrue("Odometry heading updates", Math.abs(dh) > ODO_HEADING_DELTA_RADIANS);
     }
 
-    private void updateInitialEncoderChecks() {
-        updateIfTrue("Left initial encoder",
-                Math.abs(robot.endgame.leftInitialEncoder.getVoltage() - leftInitialVoltageBaseline)
-                        > INITIAL_ENCODER_VOLTAGE_DELTA);
-        updateIfTrue("Right initial encoder",
-                Math.abs(robot.endgame.rightInitialEncoder.getVoltage() - rightInitialVoltageBaseline)
-                        > INITIAL_ENCODER_VOLTAGE_DELTA);
-    }
-
-    private boolean isColorSensorAlive(NormalizedColorSensor s) {
-        NormalizedRGBA rgba = s.getNormalizedColors();
-        return !Float.isNaN(rgba.red) && !Float.isNaN(rgba.green)
-                && !Float.isNaN(rgba.blue) && !Float.isNaN(rgba.alpha);
-    }
-
     @Override
     protected void telemetry() {
         Pose pose = robot.follower.pose();
@@ -421,7 +357,6 @@ public class DecodeSystemCheck extends DecodeOpMode {
         robot.telemetry.addData("Stage Time", "%.2fs", stageTimer.seconds());
         robot.telemetry.addData("Robot Pose", "X: %.1f, Y: %.1f, H: %.1f°",
                 pose.x(), pose.y(), Math.toDegrees(pose.heading()));
-        robot.telemetry.addData("Magazine Pattern", robot.magazine.getColorPattern());
 
         robot.telemetry.addSeparator();
         robot.telemetry.addGroupHeader("CHECKS", COLOR_MODULE);

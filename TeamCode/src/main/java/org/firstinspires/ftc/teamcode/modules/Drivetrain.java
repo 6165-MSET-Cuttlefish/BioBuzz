@@ -14,12 +14,15 @@ import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
+import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 
 @Config
 public class Drivetrain extends Module {
     private final EnhancedMotor fl, bl, br, fr;
     /** Whole-drivetrain current sensor on an analog port; null when the robot config has none. */
     private final AnalogInput floodgate;
+    /** Held at UP so the drive never couples to the lift. */
+    private final EnhancedServo leftPto, rightPto;
     private Follower follower;
 
     public final ElapsedTime bonkTimer = new ElapsedTime();
@@ -41,8 +44,14 @@ public class Drivetrain extends Module {
         public double decayLoopMs = 5;
     }
 
+    public static class PtoConfig {
+        public double leftUp = 0.4;
+        public double rightUp = 0.5;
+    }
+
     public static EnableMotors enableMotors = new EnableMotors();
     public static CurrentLimiterConfig currentLimiterConfig = new CurrentLimiterConfig();
+    public static PtoConfig ptoConfig = new PtoConfig();
     public static boolean motorCurrentTelemetry = false;
 
     private final ElapsedTime currentLoopTimer = new ElapsedTime();
@@ -67,6 +76,9 @@ public class Drivetrain extends Module {
         br = new EnhancedMotor(hardwareMap, "br").withCachingTolerance(0.05);
 
         floodgate = hardwareMap.tryGet(AnalogInput.class, "floodgate");
+
+        leftPto = new EnhancedServo(hardwareMap, "leftPto");
+        rightPto = new EnhancedServo(hardwareMap, "rightPto");
     }
 
     /** Required for isBonk(), lockHeading() and field-centric drive; robot-centric drive works without it. */
@@ -98,6 +110,8 @@ public class Drivetrain extends Module {
 
     @Override
     protected void write() {
+        leftPto.setPosition(ptoConfig.leftUp);
+        rightPto.setPosition(ptoConfig.rightUp);
         fl.setPower(enableMotors.enableFl ? flPower : 0);
         bl.setPower(enableMotors.enableBl ? blPower : 0);
         br.setPower(enableMotors.enableBr ? brPower : 0);
@@ -136,6 +150,7 @@ public class Drivetrain extends Module {
         bl.setPower(0);
         br.setPower(0);
         fr.setPower(0);
+        // PTOs keep their UP hold, not PWM-disabled, so the drive stays decoupled from the lift.
     }
 
     public boolean isBonk() {
@@ -260,6 +275,8 @@ public class Drivetrain extends Module {
             logDashboard("Current Limiter Multiplier", "%.2f", lastCurrentLimiterMultiplier);
             logDashboard("currentOverTime", "%.2f", currentOverTime);
         }
+
+        logDashboard("PTO Positions (L/R)", "%.2f / %.2f", leftPto.getCachedPosition(), rightPto.getCachedPosition());
 
         if (motorCurrentTelemetry) {
             logDashboard("FL Current (A)", "%.2f", fl.getCurrent(CurrentUnit.AMPS));

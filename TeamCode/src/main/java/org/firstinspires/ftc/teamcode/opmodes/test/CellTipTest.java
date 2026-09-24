@@ -11,7 +11,7 @@ import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
 
 /**
  * Bench check for the Limelight pipelines and {@code RobotActions.checkTip}. Run it on
- * {@code res/xml/cuttledecode.xml}: the framework needs the drivetrain and Pinpoint even here.
+ * {@code res/xml/cuttle_decode.xml}: the framework needs the drivetrain and Pinpoint even here.
  */
 @TeleOp(name = "Cell Tip Test", group = "Test")
 public class CellTipTest extends BioBuzzOpMode {

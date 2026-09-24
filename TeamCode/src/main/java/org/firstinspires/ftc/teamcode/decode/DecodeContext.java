@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.decode;
 
-import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.GREEN;
-import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.PURPLE;
 import static org.firstinspires.ftc.teamcode.decode.modules.Turret.turretX;
 import static org.firstinspires.ftc.teamcode.decode.modules.Turret.turretY;
 
@@ -9,15 +7,8 @@ import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 
-import org.firstinspires.ftc.teamcode.decode.modules.MagazineState;
-
 @Config("DecodeContext")
 public final class DecodeContext {
-    public static MagazineState motif = new MagazineState(GREEN, PURPLE, PURPLE);
-    public static boolean usedFrontStorage = false;
-
-    public static final Pose redApriltagPose = new Pose(72 + 58.3727, 72 + 55.6425, 54);
-    public static final Pose blueApriltagPose = new Pose(72 - 58.3727, 72 + 55.6425, 54);
 
     public static final Pose redTargetPose = new Pose(141.5 - 17, 144);
     public static final Pose blueTargetPose = new Pose(17, 144);

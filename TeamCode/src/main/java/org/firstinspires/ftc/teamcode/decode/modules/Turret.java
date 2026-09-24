@@ -6,8 +6,6 @@ import static org.firstinspires.ftc.teamcode.decode.DecodeContext.targetY;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.turretFieldX;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.turretFieldY;
 import static org.firstinspires.ftc.teamcode.decode.DecodeRobot.turretTelemetry;
-import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.GREEN;
-import static org.firstinspires.ftc.teamcode.decode.modules.MagazineState.ArtifactColor.PURPLE;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.follower.Follower;
@@ -41,7 +39,6 @@ public class Turret extends Module {
     public static double teleTurretOffsetClose = 2;
     public static double teleTurretOffsetFar = -4;
 
-    public double turretAprilTagOffset = 0;
     public static boolean isAuto = false;
 
     public static double turretX = -3.875;
@@ -91,7 +88,6 @@ public class Turret extends Module {
     private final EnhancedServo turretServoBack;
 
     private Follower follower;
-    private Endgame endgame;
 
     private double targetAngle = 0;
     private double rawTargetAngle = 0;
@@ -105,11 +101,9 @@ public class Turret extends Module {
     private double deltaRawTarget = 0;
     private double previousRawTargetAngle = 0.0;
 
-    private boolean withinRange = true;
 
     public double flightTime = 1;
 
-    public boolean detectingObelisk = false;
     private int limelightHeadingLoopCounter = 0;
 
     private Pose limelightMT1Pose;
@@ -122,8 +116,7 @@ public class Turret extends Module {
         RIGHT(0.995),
         LEFT(0.005),
         AUTOAIM(-1),
-        HOLD(-1),
-        MANUAL(-1);
+        HOLD(-1);
 
         TurretState(double value) {
             setValue(value);
@@ -153,23 +146,11 @@ public class Turret extends Module {
         return this;
     }
 
-    public Turret withEndgame(Endgame endgame) {
-        this.endgame = endgame;
-        return this;
-    }
-
     private Follower requireFollower() {
         if (follower == null) {
             throw new IllegalStateException("Turret needs a Follower; pass one with withFollower()");
         }
         return follower;
-    }
-
-    private Endgame requireEndgame() {
-        if (endgame == null) {
-            throw new IllegalStateException("Turret needs the Endgame module; pass it with withEndgame()");
-        }
-        return endgame;
     }
 
     @Override
@@ -192,66 +173,13 @@ public class Turret extends Module {
         updateLimelightPoses();
     }
 
-    /** Sets {@link #turretAprilTagOffset} so the turret aims at {@code targetPose}, using the Limelight tx to {@code targetApriltagPose}. */
-    public void snapshotAprilTagOffset(Pose targetPose, Pose targetApriltagPose) {
-        if (!useLimelight) return;
-
-        LLResult result = limelight.getLatestResult();
-        if (result == null || !result.isValid()) return;
-        if (result.getStaleness() > LIMELIGHT_MAX_STALENESS_MS) return;
-
-        int desiredTagId = Context.allianceColor == AllianceColor.RED ? RED_TAG_ID : BLUE_TAG_ID;
-        for (LLResultTypes.FiducialResult fr : result.getFiducialResults()) {
-            if (fr.getFiducialId() == desiredTagId) {
-                double txRad = Math.toRadians(fr.getTargetXDegrees());
-
-                Pose robotPose = requireFollower().pose();
-                double heading = robotPose.heading();
-                double camX = robotPose.x()
-                        + LIMELIGHT_X * Math.cos(heading) - LIMELIGHT_Y * Math.sin(heading);
-                double camY = robotPose.y()
-                        + LIMELIGHT_X * Math.sin(heading) + LIMELIGHT_Y * Math.cos(heading);
-
-                double tagAbsRad = Math.atan2(
-                        targetApriltagPose.y() - camY,
-                        targetApriltagPose.x() - camX);
-                double tpAbsRad = Math.atan2(
-                        targetPose.y() - camY,
-                        targetPose.x() - camX);
-                double tagToTargetRad = Math.atan2(
-                        Math.sin(tpAbsRad - tagAbsRad),
-                        Math.cos(tpAbsRad - tagAbsRad));
-
-                // Limelight tx is positive to the right, i.e. clockwise.
-                double targetLLRad = txRad - tagToTargetRad;
-                double targetAbsDirRad = heading - targetLLRad;
-                double estDist = Math.hypot(
-                        targetPose.x() - camX,
-                        targetPose.y() - camY);
-                double estTargetX = camX + estDist * Math.cos(targetAbsDirRad);
-                double estTargetY = camY + estDist * Math.sin(targetAbsDirRad);
-
-                double turretAbsToTarget = Math.atan2(
-                        estTargetY - turretFieldY, estTargetX - turretFieldX);
-                turretAprilTagOffset = normalizeSignedDeg(
-                        Math.toDegrees(turretAbsToTarget - heading) - rawTargetAngle);
-                return;
-            }
-        }
-    }
-
     @Override
     protected void write() {
         double frontPos = Math.max(0.0, Math.min(1.0, targetServoPosition - TENSION_OFFSET + frontServoOffset));
         double backPos = Math.max(0.0, Math.min(1.0, targetServoPosition + TENSION_OFFSET + backServoOffset));
 
-        if (!requireEndgame().servosDisabled()) {
-            turretServoFront.setPosition(frontPos);
-            turretServoBack.setPosition(backPos);
-        } else {
-            turretServoFront.setPwmDisable();
-            turretServoBack.setPwmDisable();
-        }
+        turretServoFront.setPosition(frontPos);
+        turretServoBack.setPosition(backPos);
     }
 
     @Override
@@ -269,7 +197,6 @@ public class Turret extends Module {
                 log("Target Angle (deg)", "%.1f", targetAngle);
                 logDashboard("Ahead Target Angle (deg)", "%.1f", aheadTargetAngle);
                 log("Turret Offset (deg)", "%.1f", turretManualOffset);
-                log("Turret AprilTag Offset (deg)", "%.1f", turretAprilTagOffset);
                 log("Relocalization status", "%s", relocalizationStatus);
                 logDashboard("Reloc desiredTagId", "%d", relocalizationDesiredTagId);
                 logDashboard("Reloc seenTagCount", "%d", relocalizationSeenTagCount);
@@ -311,7 +238,6 @@ public class Turret extends Module {
             targetAngle = rawTargetAngle + turretManualOffset;
 
             double signedAngle = targetAngle > 180 ? targetAngle - 360 : targetAngle;
-            withinRange = Math.abs(signedAngle) <= maxTurretAngle;
 
             double angleDelta = calculateShortestError(targetAngle, previousTargetAngle);
             aheadTargetAngle = (Math.abs(angleDelta) > MIN_DELTA_FOR_AHEAD)
@@ -331,10 +257,8 @@ public class Turret extends Module {
         double maxServo = Math.max(TurretState.LEFT.getValue(), TurretState.RIGHT.getValue());
         if (targetServoPosition > maxServo) {
             targetServoPosition = maxServo;
-            turretAprilTagOffset = 0;
         } else if (targetServoPosition < minServo) {
             targetServoPosition = minServo;
-            turretAprilTagOffset = 0;
         }
 
         lastTargetServoPosition = targetServoPosition;
@@ -396,50 +320,6 @@ public class Turret extends Module {
 
     public String getRelocalizationStatus() {
         return relocalizationStatus;
-    }
-
-    public boolean isWithinRange() {
-        return withinRange;
-    }
-
-    public void lock(Pose target) {
-        double heading = target.heading();
-        Pose lockTurret = DecodeContext.turretFieldPosition(target);
-
-        double absoluteAngle = Math.toDegrees(
-                Math.atan2(DecodeContext.targetY - lockTurret.y(), DecodeContext.targetX - lockTurret.x()));
-        double angle = normalizeAngle(absoluteAngle - Math.toDegrees(heading)) + autoTurretOffset;
-
-        double servoPosition = clampServoPosition(angleToServoPosition(angle));
-        TurretState.MANUAL.setValue(servoPosition);
-        TurretState.MANUAL.activate();
-    }
-
-    public void unlock() {
-        TurretState.AUTOAIM.activate();
-    }
-
-    public boolean detectObelisk() {
-        LLResult result = limelight.getLatestResult();
-        if (result == null || !result.isValid()) return false;
-
-        for (LLResultTypes.FiducialResult fr : result.getFiducialResults()) {
-            switch (fr.getFiducialId()) {
-                case 21:
-                    DecodeContext.motif = new MagazineState(GREEN, PURPLE, PURPLE);
-                    detectingObelisk = false;
-                    return true;
-                case 22:
-                    DecodeContext.motif = new MagazineState(PURPLE, GREEN, PURPLE);
-                    detectingObelisk = false;
-                    return true;
-                case 23:
-                    DecodeContext.motif = new MagazineState(PURPLE, PURPLE, GREEN);
-                    detectingObelisk = false;
-                    return true;
-            }
-        }
-        return false;
     }
 
     /** Latest fresh MegaTag1 robot pose in Pedro coordinates, or null. */
@@ -507,12 +387,6 @@ public class Turret extends Module {
                 : TurretState.CENTER.getValue() + scale * angle;
     }
 
-    private double clampServoPosition(double position) {
-        double lo = Math.min(TurretState.LEFT.getValue(), TurretState.RIGHT.getValue());
-        double hi = Math.max(TurretState.LEFT.getValue(), TurretState.RIGHT.getValue());
-        return Math.max(lo, Math.min(hi, position));
-    }
-
     private double normalizeAngle(double angle) {
         angle = angle % 360;
         if (angle < 0) angle += 360;
@@ -524,13 +398,6 @@ public class Turret extends Module {
         while (error > 180) error -= 360;
         while (error < -180) error += 360;
         return error;
-    }
-
-    private double normalizeSignedDeg(double deg) {
-        double wrapped = deg % 360.0;
-        if (wrapped > 180.0) wrapped -= 360.0;
-        if (wrapped < -180.0) wrapped += 360.0;
-        return wrapped;
     }
 
     private void clearRelocalizationDebugData() {

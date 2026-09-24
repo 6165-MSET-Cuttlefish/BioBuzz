@@ -19,7 +19,6 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 @Config("Decode Shooter")
 public class Shooter extends Module {
     private static final double TICKS_PER_REV = 8192.0;
-    private static final double VELOCITY_TOLERANCE_RPM = 50;
 
     private final EnhancedMotor left;
     private final EnhancedMotor right;
@@ -310,10 +309,6 @@ public class Shooter extends Module {
         return shooterPidController.calculate();
     }
 
-    public double getCurrentVelocityRPM() {
-        return shooterCurrentVelocityRPM;
-    }
-
     public double getLeftShooterCurrent() {
         return left.getCurrent(CurrentUnit.AMPS);
     }
@@ -322,20 +317,4 @@ public class Shooter extends Module {
         return right.getCurrent(CurrentUnit.AMPS);
     }
 
-    public boolean isAtTargetVelocity() {
-        if (targetVelocityRPM > 0) {
-            double velocityError = Math.abs(targetVelocityRPM - shooterCurrentVelocityRPM);
-            return velocityError <= VELOCITY_TOLERANCE_RPM;
-        }
-        return true;
-    }
-
-    public boolean isWithinLUTRange() {
-        double[] range = ShooterInterpolation.getRange(distanceToGoal);
-        double minRPM = range[0];
-        double maxRPM = range[1];
-
-        double currentVelocity = getCurrentVelocityRPM();
-        return currentVelocity >= minRPM - VELOCITY_TOLERANCE_RPM && currentVelocity <= maxRPM + VELOCITY_TOLERANCE_RPM;
-    }
 }
