@@ -25,7 +25,7 @@ Deploy from the buttons on Android Studio's top bar: pick a run configuration in
 - The Sloth tasks auto-connect adb to `192.168.43.1` when no device is attached, then run a bare `adb disconnect`, which drops every network adb device including any `adb forward`. Deploying over USB or to another address needs a `load { address = "..."; autoconnect = dev.frozenmilk.sinister.sloth.AutoConnect.NEVER }` block in `TeamCode/build.gradle`.
 - If an old hot-load ever keeps replacing new code, run `removeSlothRemote` on its own (Gradle tool window, `TeamCode` → Tasks → install).
 - **The Driver Station must be on 12.0.** An 11.x DS still runs OpModes but fails the Robot Controller Inspection screen that field inspectors check. Install `FtcDriverStation-release.apk` from the `FtcRobotController` `v12.0` release over it.
-- **Build JDK.** The Gradle daemon is pinned to JDK 25 in `gradle/gradle-daemon-jvm.properties`; any JDK 17 or newer works, but whatever is pinned must be installed. Gradle 9.1.0 and AGP 8.13.2 need Android Studio Narwhal 3 Feature Drop or newer.
+- **Build JDK.** The Gradle daemon is pinned to JDK 17 in `gradle/gradle-daemon-jvm.properties`; JDK 17 must be installed. Gradle 9.1.0 and AGP 8.13.2 need Android Studio Narwhal 3 Feature Drop or newer.
 - Pure Java, no Kotlin plugin. There is no test suite; this is a robot controller APK.
 - Claude has no IDE, so it checks its work from the terminal: `./gradlew :TeamCode:compileDebugJavaWithJavac`, or `:TeamCode:assembleDebug` for the full APK.
 
