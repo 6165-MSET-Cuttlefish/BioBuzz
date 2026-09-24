@@ -37,7 +37,7 @@ public class PredictiveBrakingUltrasonicTest extends OpMode {
     @Config("Braking Ultrasonic Test")
     public static class Tuning {
         /** True: skip braking, spin every wheel at 20% so you can spot a reversed one. */
-        public static boolean wheelTest = false;
+        public static boolean wheelTest = true;
         public static double wheelTestPower = 0.2;
         /** Forward power the braking logic gets to clamp down from. */
         public static double driveSpeed = 1.0;

@@ -51,6 +51,13 @@ public class EnhancedMotor implements DcMotorEx {
         }
     }
 
+    /** Always writes zero, past the cache: Pedro drives the same device through its own cache, so ours can be stale. */
+    public void stop() {
+        cache.store(0.0);
+        cachedVelocity = Double.NaN;
+        motor.setPower(0.0);
+    }
+
     /** Bypasses voltage compensation and the write cache. Test-only. */
     public void setPowerRaw(double power) {
         double corrected = cache.clamp(power);

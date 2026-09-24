@@ -18,6 +18,9 @@ import com.qualcomm.robotcore.hardware.PwmControl;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
@@ -44,6 +47,8 @@ public class Turret extends Module {
     public static double turretX = -3.875;
     public static double turretY = -1.6;
 
+    private static final int DECODE_PIPELINE = 0;
+
     public static double TENSION_OFFSET = 0.0;
     public static boolean useLimelight = true;
     public static int RED_TAG_ID = 24;
@@ -60,7 +65,6 @@ public class Turret extends Module {
     public static boolean drawMT2 = true;
     public static boolean logLimelightPoses = false;
 
-    // updateRobotOrientation is a blocking HTTP POST to the Limelight, so don't send it every loop.
     public static int limelightHeadingEveryNLoops = 3;
 
     public static double maxTurretAngle = 90.0;
@@ -88,6 +92,10 @@ public class Turret extends Module {
     private final EnhancedServo turretServoBack;
 
     private Follower follower;
+    private OrientationSender orientationSender;
+    private final boolean pipelineSwitchAccepted;
+    private boolean wrongPipeline = false;
+    private int lastPipelineIndex = DECODE_PIPELINE;
 
     private double targetAngle = 0;
     private double rawTargetAngle = 0;
@@ -137,8 +145,9 @@ public class Turret extends Module {
 
         // Pipeline 0 is the DECODE AprilTag/MT2 pipeline; BioBuzz's cell-tip SnapScripts are 1 and 2.
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
-        limelight.pipelineSwitch(0);
+        pipelineSwitchAccepted = limelight.pipelineSwitch(DECODE_PIPELINE);
         limelight.start();
+        orientationSender = new OrientationSender(limelight);
     }
 
     public Turret withFollower(Follower follower) {
@@ -164,10 +173,16 @@ public class Turret extends Module {
 
         updateTargetPosition();
 
+        // A write toggle calls stop() mid-OpMode, which shuts the Limelight down; bring it back.
+        if (orientationSender == null) {
+            limelight.start();
+            orientationSender = new OrientationSender(limelight);
+        }
+
         if (limelightHeadingLoopCounter++ % Math.max(1, limelightHeadingEveryNLoops) == 0) {
             // Pedro 0 deg points along +x (audience's right); the Limelight's 0 deg points away from the audience.
             double robotHeadingDeg = Math.toDegrees(requireFollower().pose().heading());
-            limelight.updateRobotOrientation(robotHeadingDeg + 90.0);
+            orientationSender.send(robotHeadingDeg + 90.0);
         }
 
         updateLimelightPoses();
@@ -184,6 +199,12 @@ public class Turret extends Module {
 
     @Override
     public void stop() {
+        turretServoFront.setPwmDisable();
+        turretServoBack.setPwmDisable();
+        if (orientationSender != null) {
+            orientationSender.shutdown();
+            orientationSender = null;
+        }
         limelight.stop();
     }
 
@@ -213,6 +234,10 @@ public class Turret extends Module {
                 logDashboard("Back Servo Position", "%.3f", turretServoBack.getPosition());
             }
         }
+        if (wrongPipeline) {
+            log("Limelight", "WRONG PIPELINE %d, needs %d; re-INIT", lastPipelineIndex, DECODE_PIPELINE);
+        }
+        if (!pipelineSwitchAccepted) logDashboard("Limelight pipeline switch", "FAILED");
         if (logLimelightPoses && limelightMT2Pose != null) {
             Pose dash = toField(limelightMT2Pose);
             logDashboard("RAW robot pose LL", "x %.2f y %.2f", mt2RawX, mt2RawY);
@@ -274,13 +299,9 @@ public class Turret extends Module {
         relocalizationOdometryBeforeHeadingDeg = Math.toDegrees(odometryPoseBefore.heading());
 
         LLResult result = limelight.getLatestResult();
-        if (result == null || !result.isValid()) {
-            relocalizationStatus = "NO_VALID_LL_RESULT";
-            return null;
-        }
-
-        if (result.getStaleness() > LIMELIGHT_MAX_STALENESS_MS) {
-            relocalizationStatus = "STALE_RESULT";
+        String rejectReason = rejectReason(result);
+        if (rejectReason != null) {
+            relocalizationStatus = rejectReason;
             return null;
         }
 
@@ -339,8 +360,9 @@ public class Turret extends Module {
         mt2RawY = Double.NaN;
 
         LLResult result = limelight.getLatestResult();
-        if (result == null || !result.isValid()) return;
-        if (result.getStaleness() > LIMELIGHT_MAX_STALENESS_MS) return;
+        String rejectReason = rejectReason(result);
+        wrongPipeline = "WRONG_PIPELINE".equals(rejectReason);
+        if (rejectReason != null) return;
 
         double robotHeadingRad = requireFollower().pose().heading();
         double camOffsetFieldX = LIMELIGHT_X * Math.cos(robotHeadingRad) - LIMELIGHT_Y * Math.sin(robotHeadingRad);
@@ -369,6 +391,17 @@ public class Turret extends Module {
                 limelightMT2Pose = mt2ToPedro(mt2Pose, rawX, rawY);
             }
         }
+    }
+
+    /** Why {@code result} can't be used, as a relocalization status, or null if it is fresh, valid and from pipeline 0. */
+    private String rejectReason(LLResult result) {
+        if (result == null) return "NO_VALID_LL_RESULT";
+        if (result.getStaleness() > LIMELIGHT_MAX_STALENESS_MS) return "STALE_RESULT";
+        // The Limelight stays on whatever pipeline it was last switched to, e.g. a BioBuzz SnapScript.
+        lastPipelineIndex = result.getPipelineIndex();
+        if (lastPipelineIndex != DECODE_PIPELINE) return "WRONG_PIPELINE";
+        if (!result.isValid()) return "NO_VALID_LL_RESULT";
+        return null;
     }
 
     // Inverse of the +90 deg heading sent in read(): FTC center-origin inches to Pedro corner-origin.
@@ -409,5 +442,31 @@ public class Turret extends Module {
         relocalizationOdometryBeforeX = Double.NaN;
         relocalizationOdometryBeforeY = Double.NaN;
         relocalizationOdometryBeforeHeadingDeg = Double.NaN;
+    }
+
+    /** updateRobotOrientation is a blocking HTTP POST with a 15 s read timeout, so it runs off the loop thread. */
+    private static final class OrientationSender {
+        private final Limelight3A limelight;
+        private final AtomicReference<Double> pendingYawDeg = new AtomicReference<>();
+        private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "Limelight orientation");
+            thread.setDaemon(true);
+            return thread;
+        });
+
+        OrientationSender(Limelight3A limelight) {
+            this.limelight = limelight;
+        }
+
+        // Only an empty-to-full swap queues a post, so at most one waits behind the one in flight, and it sends the newest yaw.
+        void send(double yawDeg) {
+            if (pendingYawDeg.getAndSet(yawDeg) == null) {
+                executor.execute(() -> limelight.updateRobotOrientation(pendingYawDeg.getAndSet(null)));
+            }
+        }
+
+        void shutdown() {
+            executor.shutdownNow();
+        }
     }
 }

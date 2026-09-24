@@ -27,7 +27,7 @@ import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
-import org.openftc.easyopencv.OpenCvPipeline;
+import org.openftc.easyopencv.TimestampedOpenCvPipeline;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +39,7 @@ import java.util.List;
  * positions and velocities. HSV gates only seed ROIs; HoughCircles decides what is a ball, and the
  * colour mask assigns its type since Hough is colour-blind.
  */
-public class BallDetectionPipeline extends OpenCvPipeline {
+public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
 
     public enum DisplayMode {
         /** Per-type ROI masks, for tuning the HSV gates. */
@@ -132,14 +132,14 @@ public class BallDetectionPipeline extends OpenCvPipeline {
     private double fps = 0;
     private double lastFrameSeconds = Double.NaN;
 
+    /** {@code captureTimeNanos} is on the System.nanoTime() clock, the one RobotStateHistory is stamped on. */
     @Override
-    public Mat processFrame(Mat input) {
+    public Mat processFrame(Mat input, long captureTimeNanos) {
         if (!detectionEnabled) return input;
-        return runDetection(input);
+        return runDetection(input, captureTimeNanos * NANOS_TO_SECONDS);
     }
 
-    private Mat runDetection(Mat input) {
-        double timestamp = System.nanoTime() * NANOS_TO_SECONDS;
+    private Mat runDetection(Mat input, double timestamp) {
         updateFps(timestamp);
         rejectedColorCount = 0;
 
@@ -153,7 +153,9 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         List<Rect> searchRegions = new ArrayList<>();
         List<Candidate> candidates = new ArrayList<>();
 
-        if (Tuning.displayMode == DisplayMode.MASK) {
+        // Read once: a mid-frame flip to MASK would have render() resize a maskCanvas this frame never filled.
+        DisplayMode mode = Tuning.displayMode;
+        if (mode == DisplayMode.MASK) {
             maskCanvas.create(small.size(), CvType.CV_8UC3);
             maskCanvas.setTo(MASK_CANVAS_CLEAR);
         }
@@ -164,7 +166,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
             buildColorMask(type, colorMask);
             Imgproc.morphologyEx(colorMask, roiMask, Imgproc.MORPH_CLOSE, ROI_CLOSE_KERNEL);
 
-            if (Tuning.displayMode == DisplayMode.MASK) maskCanvas.setTo(type.drawColor, roiMask);
+            if (mode == DisplayMode.MASK) maskCanvas.setTo(type.drawColor, roiMask);
 
             double minBallRadius = frameShortSide * Detection.minRadiusFrameFraction * type.radiusScale;
             double maxBallRadius = frameShortSide * Detection.maxRadiusFrameFraction * type.radiusScale;
@@ -188,7 +190,7 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         latest = new Frame(detections, balls, searchRegions.size(),
                 rejectedColorCount, rejectedOverlapCount, fps, timestamp);
 
-        return render(input, detections, balls);
+        return render(input, detections, balls, mode);
     }
 
     private void prepareWorkingFrames(Mat input) {
@@ -430,9 +432,8 @@ public class BallDetectionPipeline extends OpenCvPipeline {
         return detections;
     }
 
-    private Mat render(Mat input, List<BallDetection> detections, List<TrackedBall> balls) {
-        DisplayMode mode = Tuning.displayMode;
-
+    private Mat render(Mat input, List<BallDetection> detections, List<TrackedBall> balls,
+                       DisplayMode mode) {
         if (mode == DisplayMode.MASK) {
             Imgproc.resize(maskCanvas, maskDisplay, input.size(), 0, 0, Imgproc.INTER_NEAREST);
             display = maskDisplay;

@@ -9,7 +9,8 @@ import java.util.List;
 
 /**
  * Keeps ball identity by field position so it survives the camera turning away. OpMode thread only.
- * Unseen balls hold their last position, deliberately not coasted, until forgotten.
+ * Unseen balls hold their last seen position, deliberately not coasted, until forgotten; that
+ * includes balls the camera tracker is still coasting.
  */
 public final class FieldBallTracker {
 
@@ -22,8 +23,13 @@ public final class FieldBallTracker {
     private final List<Known> known = new ArrayList<>();
     private int nextId = 1;
 
-    public List<FieldBall> update(List<FieldBall> fresh, double timestampSeconds) {
+    public List<FieldBall> update(List<FieldBall> tracked, double timestampSeconds) {
         for (Known k : known) k.visible = false;
+
+        List<FieldBall> fresh = new ArrayList<>(tracked.size());
+        for (FieldBall ball : tracked) {
+            if (ball.visible()) fresh.add(ball);
+        }
 
         boolean[] freshUsed = new boolean[fresh.size()];
         boolean[] knownUsed = new boolean[known.size()];

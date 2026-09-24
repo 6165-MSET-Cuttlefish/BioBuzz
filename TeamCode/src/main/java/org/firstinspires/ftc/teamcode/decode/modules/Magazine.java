@@ -131,8 +131,8 @@ public class Magazine extends Module {
 
     @Override
     public void stop() {
-        intake.setPower(0);
-        vertical.setPower(0);
+        intake.stop();
+        vertical.stop();
     }
 
     private static double slew(double current, double target, double unitsPerMs, long dtMs) {

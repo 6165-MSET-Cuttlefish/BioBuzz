@@ -4,12 +4,14 @@ import com.pedropathing.math.Pose;
 
 /** Fixed-capacity ring of recent robot positions; the oldest is dropped once it is full. */
 public final class PoseRing {
+    private static final long RECORD_INTERVAL_NS = 50_000_000L;
+
     private final double[] x;
     private final double[] y;
     private final int capacity;
     private int head;
     private int size;
-    private long lastRecordMs = Long.MIN_VALUE;
+    private long lastRecordNs;
 
     public PoseRing(int capacity) {
         if (capacity < 1) throw new IllegalArgumentException("capacity must be >= 1 but was " + capacity);
@@ -20,9 +22,9 @@ public final class PoseRing {
 
     public void record(Pose p) {
         // Time-gated so the trail spans capacity x 50 ms regardless of loop rate.
-        long now = System.currentTimeMillis();
-        if (now - lastRecordMs < 50) return;
-        lastRecordMs = now;
+        long now = System.nanoTime();
+        if (size > 0 && now - lastRecordNs < RECORD_INTERVAL_NS) return;
+        lastRecordNs = now;
         x[head] = p.x();
         y[head] = p.y();
         head = (head + 1) % capacity;

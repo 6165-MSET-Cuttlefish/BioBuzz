@@ -53,6 +53,7 @@ public class Camera extends Module {
     private List<FieldBall> fieldBalls = Collections.emptyList();
     private RobotStateHistory.Sample captureState;
     private double lastFieldBallFrameTimestamp = -1;
+    private double previousReadSeconds = Double.NaN;
 
     public Camera(HardwareMap hardwareMap) {
         super();
@@ -63,9 +64,11 @@ public class Camera extends Module {
         return withRobotState(RobotStateSource.fromFollower(follower));
     }
 
+    /** Sampled in read(), before follower.update(): it must return the state the previous loop produced. */
     public Camera withRobotState(RobotStateSource source) {
         this.robotStateSource = source;
         robotHistory.clear();
+        previousReadSeconds = Double.NaN;
         fieldBallTracker.reset();
         return this;
     }
@@ -95,7 +98,12 @@ public class Camera extends Module {
             captureState = null;
             return;
         }
-        robotHistory.record(robotStateSource.sample(nowSeconds()));
+        // read() runs before follower.update(): this pose is the previous loop's, so it gets that loop's time.
+        double now = nowSeconds();
+        if (!Double.isNaN(previousReadSeconds)) {
+            robotHistory.record(robotStateSource.sample(previousReadSeconds));
+        }
+        previousReadSeconds = now;
         if (frame.timestampSeconds == lastFieldBallFrameTimestamp) return;
         lastFieldBallFrameTimestamp = frame.timestampSeconds;
 
@@ -309,7 +317,7 @@ public class Camera extends Module {
                 for (FieldBall ball : fieldBalls) {
                     logDashboard("Ball " + ball.id, "%s field (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
                             ball.type.label, ball.x, ball.y, ball.speed(), ball.headingDeg(),
-                            ball.visible() ? "" : " [coasting]");
+                            ball.visible() ? "" : " [last seen]");
                 }
             } else {
                 for (TrackedBall ball : frame.balls) {

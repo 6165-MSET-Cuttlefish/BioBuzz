@@ -11,6 +11,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
+import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.decode.modules.Magazine;
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
@@ -56,17 +57,23 @@ public class DecodeRobot extends Robot {
     public void updateWriteToggles() {
         boolean robotWriteEnabled = writeToggles.robotWrite;
 
-        drivetrain.setWriteEnabled(robotWriteEnabled && writeToggles.drivetrainWrite);
+        applyWriteToggle(drivetrain, robotWriteEnabled && writeToggles.drivetrainWrite);
         drivetrain.setTelemetryEnabled(drivetrainTelemetry.TOGGLE);
 
-        shooter.setWriteEnabled(robotWriteEnabled && writeToggles.shooterWrite);
+        applyWriteToggle(shooter, robotWriteEnabled && writeToggles.shooterWrite);
         shooter.setTelemetryEnabled(shooterTelemetry.TOGGLE);
 
-        magazine.setWriteEnabled(robotWriteEnabled && writeToggles.magazineWrite);
+        applyWriteToggle(magazine, robotWriteEnabled && writeToggles.magazineWrite);
         magazine.setTelemetryEnabled(magazineTelemetry.TOGGLE);
 
-        turret.setWriteEnabled(robotWriteEnabled && writeToggles.turretWrite);
+        applyWriteToggle(turret, robotWriteEnabled && writeToggles.turretWrite);
         turret.setTelemetryEnabled(turretTelemetry.TOGGLE);
+    }
+
+    // write() stops running once disabled, so without stop() the hardware would hold its last command.
+    private static void applyWriteToggle(Module module, boolean enabled) {
+        if (module.isWriteEnabled() && !enabled) module.stop();
+        module.setWriteEnabled(enabled);
     }
 
     public static class WriteToggles {

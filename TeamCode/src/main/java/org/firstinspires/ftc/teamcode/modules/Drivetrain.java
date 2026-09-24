@@ -146,10 +146,10 @@ public class Drivetrain extends Module {
 
     @Override
     public void stop() {
-        fl.setPower(0);
-        bl.setPower(0);
-        br.setPower(0);
-        fr.setPower(0);
+        fl.stop();
+        bl.stop();
+        br.stop();
+        fr.stop();
         // PTOs keep their UP hold, not PWM-disabled, so the drive stays decoupled from the lift.
     }
 
@@ -210,12 +210,10 @@ public class Drivetrain extends Module {
     public void setMecanumTargets(double y, double x, double rx, boolean fieldCentric) {
         if (fieldCentric) {
             double heading = -requireFollower().pose().heading();
+            // BLUE drives from the opposite wall: a pi rotation, not a one-axis flip (that mirrors strafe).
+            if (Context.allianceColor == AllianceColor.BLUE) heading += Math.PI;
             double cos = Math.cos(heading);
             double sin = Math.sin(heading);
-
-            if (Context.allianceColor == AllianceColor.BLUE) {
-                y = -y;
-            }
 
             double rotatedX = x * cos - y * sin;
             double rotatedY = x * sin + y * cos;

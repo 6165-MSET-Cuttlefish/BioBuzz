@@ -81,6 +81,7 @@ public class MockAuto extends EnhancedOpMode {
                     if (end == EndCondition.NATURALLY) {
                         phase = "SAFETY TIMEOUT";
                         robot.follower.stop();
+                        MockMechanism.Status.IDLE.activate();
                     }
                 }));
     }

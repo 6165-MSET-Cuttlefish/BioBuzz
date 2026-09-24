@@ -20,7 +20,7 @@ public final class BallTracker {
         public static double reacquireRadiusIn = 16.0;
         public static int maxMisses = 8;
         public static int minHits = 3;
-        /** EMA weight on the new measurement, 0-1. */
+        /** Alpha-beta gains, 0-1: how hard each detection corrects the predicted position / velocity. */
         public static double positionSmoothing = 0.6;
         public static double velocitySmoothing = 0.35;
         public static double movingSpeedIn = 3.0;
@@ -139,17 +139,21 @@ public final class BallTracker {
         double predictedX(double dt) { return x + vx * dt; }
         double predictedY(double dt) { return y + vy * dt; }
 
+        // Alpha-beta: correct the prediction; differencing against the smoothed x inflates velocity 1/positionSmoothing.
         void hit(BallDetection detection, double dt) {
+            double predictedX = predictedX(dt);
+            double predictedY = predictedY(dt);
+            double residualX = detection.fieldX - predictedX;
+            double residualY = detection.fieldY - predictedY;
             if (dt > 0) {
-                double measuredVx = (detection.fieldX - x) / dt;
-                double measuredVy = (detection.fieldY - y) / dt;
-                if (Math.hypot(measuredVx, measuredVy) <= Tuning.maxPlausibleSpeedIn) {
-                    vx += Tuning.velocitySmoothing * (measuredVx - vx);
-                    vy += Tuning.velocitySmoothing * (measuredVy - vy);
+                double measuredSpeed = Math.hypot(detection.fieldX - x, detection.fieldY - y) / dt;
+                if (measuredSpeed <= Tuning.maxPlausibleSpeedIn) {
+                    vx += Tuning.velocitySmoothing * residualX / dt;
+                    vy += Tuning.velocitySmoothing * residualY / dt;
                 }
             }
-            x += Tuning.positionSmoothing * (detection.fieldX - x);
-            y += Tuning.positionSmoothing * (detection.fieldY - y);
+            x = predictedX + Tuning.positionSmoothing * residualX;
+            y = predictedY + Tuning.positionSmoothing * residualY;
             radiusPx += Tuning.positionSmoothing * (detection.imageRadius - radiusPx);
             hits++;
             misses = 0;

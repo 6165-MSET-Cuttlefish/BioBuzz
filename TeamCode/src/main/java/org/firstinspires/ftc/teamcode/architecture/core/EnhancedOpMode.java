@@ -148,6 +148,7 @@ public abstract class EnhancedOpMode extends OpMode {
         updateDashboard();
         profiler.mark("updateDashboard");
 
+        recordLoopTime();
         loopTimer.reset();
     }
 
@@ -202,8 +203,21 @@ public abstract class EnhancedOpMode extends OpMode {
     public final void stop() {
         // reset() drops every command without running its end() hook, so hardware safe-state must live in Module.stop().
         Scheduler.reset();
-        // Every module's stop() runs even if one throws; the first Throwable is rethrown.
+        // Every stop step runs even if one throws; the first Throwable is rethrown.
         Throwable first = null;
+        // Follower.stop() only changes mode; Pedro writes its drive motors on the next update(), which never comes.
+        if (robot != null) {
+            try {
+                robot.follower.stop();
+            } catch (Throwable t) {
+                first = t;
+            }
+            try {
+                robot.follower.drivetrain.stop();
+            } catch (Throwable t) {
+                if (first == null) first = t;
+            }
+        }
         for (int i = 0; i < modules.size(); i++) {
             try {
                 modules.get(i).stop();
@@ -399,7 +413,7 @@ public abstract class EnhancedOpMode extends OpMode {
             addStatusTelemetry(currentPose);
 
             robot.telemetry.addDashboardData("Game Time", "%.1fs", gameTimer.seconds());
-            robot.telemetry.addData("Loop Time", "%.1fms (avg %.1fms)", loopTimer.milliseconds(), avgLoopMs());
+            robot.telemetry.addData("Loop Time", "%.1fms (avg %.1fms)", lastLoopMs(), avgLoopMs());
 
             if (!modules.isEmpty()) {
                 robot.telemetry.addSeparator();
@@ -519,6 +533,10 @@ public abstract class EnhancedOpMode extends OpMode {
         if (telemetryToggles.current && telemetryToggles.dashboardTelemetry) {
             robot.telemetry.addDashboardData("Current", "%.2fA", getTotalCurrent());
         }
+    }
+
+    private double lastLoopMs() {
+        return loopTimes[(loopIndex + loopTimes.length - 1) % loopTimes.length];
     }
 
     private double avgLoopMs() {
