@@ -74,9 +74,8 @@ public class CellTipCamera extends Module {
 
     @Override
     public void stop() {
-        if (session == null) return;
-        session.close();
-        pipeline.release();
+        if (session != null) session.close();
+        if (pipeline != null) pipeline.release();
     }
 
     /** Fixed at init from {@link Context#allianceColor}. */
@@ -95,6 +94,10 @@ public class CellTipCamera extends Module {
 
     @Override
     protected void onTelemetry() {
+        if (isInAny(VisionState.DISABLED)) {
+            log("Cell", "OFF");
+            return;
+        }
         if (!fresh) {
             log("Cell", Double.isNaN(stalenessMs)
                     ? "NO VERDICT (no frames from " + Camera.WEBCAM_NAME + ")"

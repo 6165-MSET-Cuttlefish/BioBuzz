@@ -4,11 +4,11 @@ Guidance for Claude Code when working in this repository.
 
 ## Project context
 
-The 2026–2027 competition-season repository for **FIRST Tech Challenge team 6165 MSET Cuttlefish**, for the **BIOBUZZ™** game (kickoff September 12, 2026). The game elements are **Pollen**, ~2.8" yellow plastic balls, and **Nectar**, ~3.6" red and blue plastic balls; `modules/vision/` detects and tracks them.
+FTC team 6165 MSET Cuttlefish's 2026–27 **BIOBUZZ™** season repository. The game elements are **Pollen** (~2.8" yellow balls) and **Nectar** (~3.6" red and blue balls).
 
 Game-specific code (field coordinates, scoring logic, mechanism modules) goes under `biobuzz/`, `modules/`, and `opmodes/`. `decode/` is last season's DECODE robot code, trimmed to what exercises the architecture (shooter, turret, basic intake and transfer); it reuses BioBuzz's `modules/Drivetrain`, so a Drivetrain change reaches Decode Tele too, and nothing outside `decode/` depends on it. Nothing game-specific goes under `architecture/`, which stays portable to the next season. Field constants come from the game manual, not guesses.
 
-Besides the Gradle and repo files, the top level holds only `TeamCode/` (the app), `scripts/` (vendored-code refresh scripts) and `docs/`. New files go in one of these, and new Java files in an existing package.
+Besides the Gradle and repo files, the top level holds only `TeamCode/` (the app), `limelight/` (code that runs on the Limelight, not in the APK), `scripts/` (vendored-code refresh scripts) and `docs/`. New files go in one of these, and new Java files in an existing package.
 
 ## Keep this file fresh
 
@@ -24,18 +24,20 @@ Deploy from Android Studio's top-bar run configurations (IntelliJ IDEA users add
 - A finished `deploySloth` means the push finished, not the load (the Load plugin waits on the wrong lock file): check the RC screen or DS log before deploying again or pressing INIT.
 - The Sloth tasks auto-connect adb to `192.168.43.1` when no device is attached, then run a bare `adb disconnect`, which drops every network adb device and `adb forward`. For USB or another address, add `load { address = "..."; autoconnect = dev.frozenmilk.sinister.sloth.AutoConnect.NEVER }` to `TeamCode/build.gradle`.
 - If an old hot-load ever keeps replacing new code, run `removeSlothRemote` on its own (Gradle tool window, `TeamCode` → Tasks → install).
-- **The Driver Station must be on 12.0**: an 11.x DS runs OpModes but fails the inspection screen. Install `FtcDriverStation-release.apk` from the `FtcRobotController` `v12.0` release.
-- **JDK 17** must be installed; the Gradle daemon is pinned to it in `gradle/gradle-daemon-jvm.properties`. Gradle 9.1.0 and AGP 8.13.2 need Android Studio Narwhal 3 Feature Drop or newer.
+- **The Driver Station must match the SDK version**: an older DS runs OpModes but fails the inspection screen. Install `FtcDriverStation-release.apk` from the matching `FtcRobotController` release.
+- **JDK 17** must be installed; the Gradle daemon is pinned to it in `gradle/gradle-daemon-jvm.properties`. The Gradle and AGP versions need Android Studio Narwhal 3 Feature Drop or newer.
 - Pure Java, no Kotlin plugin. There is no test suite; this is a robot controller APK.
 - Claude has no IDE, so it checks its work from the terminal: `./gradlew :TeamCode:compileDebugJavaWithJavac`, or `:TeamCode:assembleDebug` for the full APK.
 
 ## Dependencies
 
-**Single-module app.** The SDK comes from Maven Central as `org.firstinspires.ftc:*:12.0.0`; there is no `FtcRobotController` module, and the template's activity classes live in `robotcontroller/internal/`. `abiFilters` is `arm64-v8a` only (Control Hub).
+Versions live in `TeamCode/build.gradle` and the root `build.gradle`.
 
-**Sloth and slothboard move together.** Sloth `0.3.2` (`TeamCode/build.gradle`), the root `dev.frozenmilk.sinister.sloth.load` plugin `0.3.2`, and the dashboard's `{sloth}` prefix must match, because slothboard pins Sloth strictly. The dashboard is the team's slothboard build, `com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.3`, served from the committed `TeamCode/libs/m2/`; it is built from the same-named tag on the team fork `github.com/6165-MSET-Cuttlefish/slothboard`; to bump it, tag a new build there and replace the six files and the version string. Keep `exclude group: 'com.acmerobotics.dashboard'` so the upstream dashboard never reaches the classpath. Dashboard: port 8080, websocket 8000.
+**Single-module app.** The SDK comes from Maven Central as `org.firstinspires.ftc:*`; there is no `FtcRobotController` module, and the template's activity classes live in `robotcontroller/internal/`. `abiFilters` is `arm64-v8a` only (Control Hub).
 
-**Pedro Pathing 3.0.1**: `com.pedropathing:revhub:3.0.1` (pulls `core`), `com.pedropathing:tuning:1.0.1` for AutoTune, and Ivy, Pedro's command framework, `com.pedropathing.ivy:pedro:1.1.1`. 3.0 rules: `com.pedropathing.math.Pose` is immutable (`x()/y()/heading()`, heading normalized to [0, 2π)); paths come from `com.pedropathing.api.Paths` and must have a heading interpolator or they throw; per-path overrides are `Modifier`s (`ConfigVar.at(...)` via `Path.with(...)`).
+**Sloth and slothboard move together.** Sloth, the root `dev.frozenmilk.sinister.sloth.load` plugin, and the `{sloth}` prefix of the slothboard version must match, because slothboard pins Sloth strictly. The dashboard is the team's slothboard build, served from the committed `TeamCode/libs/m2/` and built from the same-named tag on the team fork `github.com/6165-MSET-Cuttlefish/slothboard`; to bump it, tag a new build there and replace the six files and the version string. Keep `exclude group: 'com.acmerobotics.dashboard'` so the upstream dashboard never reaches the classpath. Dashboard: port 8080.
+
+**Pedro Pathing 3**: `com.pedropathing:revhub` (pulls `core`), `com.pedropathing:tuning` for AutoTune, and Ivy, Pedro's command framework (`com.pedropathing.ivy:pedro`). 3.x rules: `com.pedropathing.math.Pose` is immutable (`x()/y()/heading()`, heading normalized to [0, 2π)); paths come from `com.pedropathing.api.Paths` and must have a heading interpolator or they throw; per-path overrides are `Modifier`s (`ConfigVar.at(...)` via `Path.with(...)`).
 
 ## Framework layout
 
@@ -43,16 +45,18 @@ Everything framework-level is under `TeamCode/src/main/java/org/firstinspires/ft
 
 - `core/` — `EnhancedOpMode` (the base OpMode), `Robot` (game-agnostic base; subclasses build mechanisms in `initializeGameModules()` and the follower in `createFollower(HardwareMap)`, which runs first), `Module`, `State`, `AllianceColor`, `Context`.
 - `command/` — the Ivy command factories: `StateCommands` for Module state machines, `PathCommands` for Pedro paths.
-- `auto/` — `FieldConfig.fieldWidthInches` (`@Config`, 141.5); `FieldPose.forAlliance(x, y, heading)`, which mirrors RED geometry to BLUE as `(width - x, y, π - heading)` when `Context.allianceColor` is BLUE (author every pose for RED; a bare radian passed to a path is not mirrored, so read headings from a `FieldPose`); `FieldVisualization` and `PoseRing` (dashboard overlay and pose trail).
+- `auto/` — `FieldConfig.fieldWidthInches` (`@Config`); `FieldPose.forAlliance(x, y, heading)`, which mirrors RED geometry to BLUE as `(width - x, y, π - heading)` when `Context.allianceColor` is BLUE (author every pose for RED; a bare radian passed to a path is not mirrored, so read headings from a `FieldPose`); `FieldVisualization` and `PoseRing` (dashboard overlay and pose trail).
 - `control/` (PID), `hardware/` (cached motor/servo wrappers, voltage, encoders, the Brushland rangefinder), `input/` (gamepad layering and edge detection), `telemetry/` (DS and dashboard output, the DS field map, `LoopProfiler`), `prism/` (vendored goBILDA Prism LED driver), and `OptimizationToggles` (framework-wide `@Config` perf toggles).
 
-`Robot`'s constructor sets the follower pose to a placeholder, `(72, fieldWidth - 10, 90°)`, on every init so nothing carries across a Sloth reload. An auto sets its real start with `robot.follower.setPose(FieldPose.forAlliance(...))` in `initialize()` before building paths. The alliance is `Context.allianceColor`, set on the dashboard (`Context → allianceColor`) or in `Context.java`. It is a static, so it carries from one OpMode to the next until the app restarts or Sloth reloads; no OpMode sets it except Decode Tele's in-match swap.
+`Robot`'s constructor sets the follower pose to a placeholder on every init so nothing carries across a Sloth reload. An auto sets its real start with `robot.follower.setPose(FieldPose.forAlliance(...))` in `initialize()` before building paths. The alliance is `Context.allianceColor`, set on the dashboard (`Context → allianceColor`) or in `Context.java`. It is a static, so it carries from one OpMode to the next until the app restarts or Sloth reloads; no OpMode sets it except Decode Tele's in-match swap.
 
 Game code: `biobuzz/` (`BioBuzzRobot` builds the modules and the follower, `BioBuzzOpMode` is the base OpMode with a typed `robot`, `RobotActions` holds the game's Ivy commands as `robot.actions`), `modules/` (mechanisms; `Drivetrain` needs `withFollower(...)` for field-centric drive, heading lock and `isBonk()`, and holds the Cuttle bot's lift PTOs disengaged; field-centric BLUE rotates the stick by π, which assumes the alliances face each other: check at kickoff), `opmodes/tele/` and `opmodes/test/`. `pedro/` follows the Pedro Quickstart layout: one constants file per robot (see Tuning), `Tuning.java` (`@Tuner` registrations) and `procedures/` (vendored).
 
-Vision (`modules/vision/`, on the Cuttle bot) detects Pollen and red/blue Nectar. `TrackedBall` is camera-relative, so a stationary ball reads as moving when the robot moves; `FieldBall` is field-relative (from the robot pose at the frame's capture time) and exists only after `Camera.withFollower(...)`. `FieldBallTracker` keeps a ball's ID when the robot turns away and back; an out-of-view ball stays in `getFieldBalls()` and the nearest/fastest/moving getters at its last position, with `visible()` false, for `forgetAfterSeconds` (10 s), so check `visible()` before chasing one. `BallVisionConstants` holds every detection number: the thresholds are live `@Config` (`BallVision_*`), while `H_ARRAY` and the ROI/Hough constants are `static final`; `BallVisionDisplay` picks the camera view. `eocvsim/balldetection/` is an older standalone copy of the detector for EOCV-Sim, which can't import TeamCode; `eocvsim/homography/` produces `H_ARRAY` from the calibration chessboard, printed with a white border about one square wide. `H_ARRAY` is in 640x480 pixels, the size `WebcamSession` streams, so the EOCV-Sim source must be 640x480 too.
+Vision (`modules/vision/`, on the Cuttle bot) detects Pollen and red/blue Nectar. `TrackedBall` is camera-relative, so a stationary ball reads as moving when the robot moves; `FieldBall` is field-relative (from the robot pose at the frame's capture time) and exists only after `Camera.withFollower(...)`. `FieldBallTracker` keeps a ball's ID when the robot turns away and back; an out-of-view ball stays in `getFieldBalls()` and the nearest/fastest/moving getters at its last position, with `visible()` false, for `forgetAfterSeconds`, so check `visible()` before chasing one. `BallVisionConstants` holds every detection number (thresholds are live `@Config`; `H_ARRAY` and the ROI/Hough constants are `static final`). `eocvsim/balldetection/` is an older standalone copy of the detector for EOCV-Sim, which can't import TeamCode; `eocvsim/homography/` produces `H_ARRAY` from the calibration chessboard, printed with a white border about one square wide. `H_ARRAY` is in 640x480 pixels, the size `WebcamSession` streams, so the EOCV-Sim source must be 640x480 too.
 
-`modules/CellTipCamera` reports whether this alliance's HIVE cell has tipped (`isTipped()`) or is scorable (`isScorable()`), shown as a `Cell` telemetry line. `RobotActions.checkTip()` is the Ivy form; it also finishes after `checkTipTimeoutMs`, so read `isTipped()` afterwards. `modules/vision/CellTipPipeline` decides on the `nerdDetector` webcam with the SDK's AprilTag detector: this alliance's cluster right-side up is scorable, upside-down or out of frame is tipped, each after holding 0.25 s. That is the roll heuristic from FIRST's "AprilTag Clusters" Tech Tip, so mount the webcam image-upright, looking the way the launcher launches; roll comes from each tag's first two corners (its bottom edge), so an upright tag must read roll ≈ 0 on the stream overlay. The alliance's tag ids are chosen at module init from `Context.allianceColor`, so set the alliance before INIT, or in `createRobot()` (`initialize()` is too late). `CellTipCamera` and `Camera` both open `nerdDetector`, so no OpMode can build both. DECODE's `decode/modules/Turret` still owns the Limelight (pipeline 0) for its own AprilTag aiming.
+`modules/CellTipCamera` reports whether this alliance's HIVE cell has tipped (`isTipped()`) or is scorable (`isScorable()`), shown as a `Cell` telemetry line. `RobotActions.checkTip()` is the Ivy form; it also finishes after `checkTipTimeoutMs`, so read `isTipped()` afterwards. `modules/vision/CellTipPipeline` runs AprilTag detection on the `nerdDetector` webcam: this alliance's cluster right-side up is scorable, upside-down or out of frame is tipped, each after `holdSeconds`. Mount the webcam image-upright, looking the way the launcher launches; an upright tag must read roll ≈ 0 on the stream overlay. The alliance's tag ids are chosen at module init from `Context.allianceColor`, so set the alliance before INIT, or in `createRobot()` (`initialize()` is too late). `CellTipCamera` and `Camera` both open `nerdDetector`, so no OpMode can build both. DECODE's `decode/modules/Turret` still owns the Limelight (pipeline 0) for its own AprilTag aiming.
+
+Ball detection is moving to the Limelight: `limelight/ball_detection_snapscript.py` is `BallDetectionPipeline`'s detector as a SnapScript (same algorithm and HSV numbers, no tracking), uploaded as-is to pipeline 3. No hub module reads it yet; one will feed its detections into `BallTracker`. Its `llpython` layout is in the script's docstring. Its `H_ARRAY` is still the webcam's and means nothing until recalibrated for the Limelight's lens with `eocvsim/homography` at `CALIBRATION_SIZE`.
 
 ## OpMode lifecycle
 
@@ -66,7 +70,7 @@ User hooks: `createRobot()` (required), `initialize()`, `initializeLoop()`, `onS
 telemetry.setEnabled        // applies Robot.telemetryToggles
 clearBulkCaches             // every loop, manual mode
 InputClock.advance          // edge suppliers refresh off this
-updateVoltageThrottled      // every 50 loops
+updateVoltageThrottled
 onLoopStart
 readModules                 // refreshTunables() then m.read()
 robot.follower.update       // Pedro odometry + path following
@@ -127,7 +131,7 @@ public class Shooter extends Module {
 - Telemetry goes in `onTelemetry()` via `log`/`logDS`/`logDashboard` (both screens, DS only, dashboard only), never in `read()`. Dashboard data rows stay plain text so its graph view can read them.
 - `stop()` is abstract and must reach the hardware: use `EnhancedMotor.stop()`, since the write cache can drop `setPower(0)`. It can run mid-OpMode with `write()` resuming afterwards, so keep it reversible.
 - `EnhancedMotor`'s one-argument `setVelocity`/`getVelocity` are in encoder ticks per second, not RPM, and `withVoltageCompensation` scales only `setPower`.
-- `setStartupCommand(command)` arms a command that `start()` schedules once. `state.activate()` returns false only if the state class is unregistered or a guard rejected it.
+- `setStartupCommand(command)` arms a command that `start()` schedules once.
 
 ## Commands
 
@@ -176,6 +180,7 @@ private Command sequence;
 4. **`BallVisionConstants`'s per-type HSV classes** for ball colours. `docs/hsv-tuning-prompt.md` derives starting values from photos with a vision-capable AI; confirm them live in **Ball Vision**'s `MASK` view.
 5. **`BallFieldTransform.Mount`** (`@Config("CameraMount")`) is the camera's position on the robot. Set `xIn`/`yIn` by measuring from where **Ball Vision**'s (0,0) crosshair lands to the robot's pose reference (the Pinpoint offsets' origin). Then, holding still under **Ball Field Drive** or **Camera Module Test**, flip `mirrorY` if a ball on the robot's left reads negative Y and nudge `headingDeg` until a centerline ball reads Y ≈ 0.
 6. **Cell-tip detection**: `CellTipDetection` (hold time, minimum tag area and count, roll threshold, detector decimation, overlay) and `CellTipCamera` (staleness, `checkTip` timeout); exposure is `WebcamControls`, shared with ball vision.
+7. **Ball detection on the Limelight**: the constants at the top of `limelight/ball_detection_snapscript.py`, mirroring `BallVisionConstants`' names. Tune in the Limelight web editor with `DISPLAY_MODE = "MASK"`, then copy the values back into the file.
 
 **AutoTune:** deploy, join the robot wifi, open `http://192.168.43.1:10158` (websocket on 12649; over USB forward both and use `localhost`). Run **Mecanum**, **Pinpoint** (it measures directions and offsets itself), **Foresight**, then **Tests**, and paste each emitted block over the matching block in the constants file `Tuning.java` builds from. The Tests procedure ignores its Distance field and always drives 48 in (upstream bug), so leave it at 48 and clear a 48 × 48 in area. Re-run them after any drivetrain, wheel, or odometry-pod change.
 
@@ -183,22 +188,22 @@ A `@Tuner` method in `Tuning.java` must be static, take no arguments, and be dec
 
 ## Testing
 
-**Hub configs.** Every framework OpMode needs `fl`, `bl`, `fr`, `br` and `pinpoint`; BioBuzz and Decode OpModes also need `floodgate` (an Analog Input) and `leftPto`/`rightPto` (Servos), BioBuzz OpModes need `nerdDetector` and Decode OpModes `limelight`; the camera OpModes need `nerdDetector` (the name lives only in `Camera.WEBCAM_NAME`). `res/xml/` ships `cuttle_decode.xml` (the Cuttle bot, for every framework OpMode) and `camera.xml` (webcam only, for **Camera Tune** and **Ball Vision**).
+**Hub configs.** Every framework OpMode needs `fl`, `bl`, `fr`, `br` and `pinpoint`; BioBuzz and Decode OpModes also need `floodgate` (an Analog Input) and `leftPto`/`rightPto` (Servos), BioBuzz and camera OpModes need `nerdDetector` (named only in `Camera.WEBCAM_NAME`), and Decode OpModes `limelight`. `res/xml/` ships `cuttle_decode.xml` (the Cuttle bot, for every framework OpMode) and `camera.xml` (webcam only, for **Camera Tune** and **Ball Vision**).
 
 - **Mock Architecture Test** (`opmodes/test/MockAuto`): the end-to-end smoke test; run it first after a full install. It drives only with `Mock Auto → enableDrive` on, and only finishes on the floor with a clear `driveInches` lane: on a stand the pods don't move, so it runs until `safetyTimeoutMs`.
 - **Camera Module Test** runs `modules/Camera` through the framework, so it also needs the drivetrain and Pinpoint wired up.
 - **Ball Vision** (`opmodes/test/BallVisionTest`) runs the detector straight off the webcam with only `nerdDetector`: the webcam bench check, and where to tune HSV live.
 - **Ball Field Drive** (`opmodes/test/BallFieldDriveTest`) drives raw mecanum and reports ball positions relative to its start pose, reading the Pinpoint directly with offsets copied from `CuttleConstants` (keep them in sync); it checks that a ball keeps its ID when the robot turns away and back.
 - **Cell Tip Test** (`opmodes/test/CellTipTest`, on `cuttle_decode.xml`) runs `RobotActions.checkTip` against the live verdict, with the overlay on the dashboard camera stream: your alliance's cluster right-side up should read SCORABLE, upside-down or out of frame TIPPED.
-- **BioBuzz Tele** is the robot-centric drive smoke test: brake mode on start, left trigger toggles 75% slow mode, left bumper toggles heading lock at the current heading.
+- **BioBuzz Tele** is the robot-centric drive smoke test: brake mode on start, left trigger toggles 75% slow mode, left bumper toggles heading lock at the current heading. Cell-tip detection is off in it.
 - **Decode Tele** and **Decode System Check** (`decode/opmodes/`, on `cuttle_decode.xml`) are last season's TeleOp and pit check on the new framework. Tele starts at the placeholder pose, not an auto's end pose, so reset the pose or relocalize before trusting turret aim.
-- **Distance sensors** (`opmodes/test/distance/`): bench tests, address setup and the predictive-braking experiment for the laser, ultrasonic and REV sensors; they read the hub config names `Laser`, `sonar` and `distance`.
+- **Distance sensors** (`opmodes/test/distance/`): bench tests, address setup and the predictive-braking experiment for the laser, ultrasonic and REV sensors.
 - For single-device bench tests of motors, servos and colour sensors use FTC Dashboard's Hardware View; it has no distance-sensor view. For an isolated module test, extend `OpMode` directly rather than `EnhancedOpMode`.
 - SDK sample OpModes are not in this repo; read them on GitHub at the tag matching `TeamCode/build.gradle`.
 
 ## Conventions
 
-- `JavaVersion.VERSION_1_8` and `targetSdkVersion 28` are pinned by the SDK; `compileSdk 35`, `minSdk 24`, and `ndkVersion 21.3.6528147` are deliberate. `versionCode`/`versionName` track the SDK version. Don't change any without a reason.
+- `JavaVersion.VERSION_1_8` and `targetSdkVersion 28` are pinned by the SDK; `compileSdk`, `minSdk` and `ndkVersion` are deliberate. `versionCode`/`versionName` track the SDK version. Don't change any without a reason.
 - `TeamCode/libs/ftc.debug.keystore` is the FTC standard keystore. `TeamCode/libs/OpModeAnnotationProcessor.jar` is not wired into the build.
 - **Comments are brief and only where necessary**, in every language. Default to none; add one only for a WHY a competent reader would otherwise get wrong (an ordering invariant, a hardware or SDK quirk, a deliberate deviation), one line where possible. Never restate code, narrate design, or add banners, history, or commented-out code; usage guidance belongs in this file.
 - **Vendored code** (`architecture/prism/*`, `architecture/hardware/LaserRangefinder.java`, `pedro/procedures/*`, `robotcontroller/internal/*`) is never hand-edited. Refresh Prism with `scripts/update-prism.sh` (pin in `prism/PRISM_REV`) and the Quickstart procedures with `scripts/update-pedro-quickstart.sh` (pin in `procedures/QUICKSTART_REV`), each as its own commit; if the Quickstart bumped Pedro versions, bump `TeamCode/build.gradle` in the same commit.

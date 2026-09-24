@@ -83,3 +83,6 @@ lint/tmp/
 
 # Claude Code session artifacts
 .claude/
+
+# Python bytecode
+__pycache__/
