@@ -17,8 +17,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * HIVE-cell tip verdict from the webcam: a cluster of this alliance's tags reading upside-down
- * ({@code |roll| >= 90}) is scorable; right-side up or absent is tipped. The verdict starts tipped and
+ * HIVE-cell tip verdict from the webcam: a cluster of this alliance's tags reading right-side up
+ * ({@code |roll| < 90}) is scorable; upside-down or absent is tipped. The verdict starts tipped and
  * flips either way only after the new reading holds for {@link Tuning#holdSeconds}.
  */
 public class CellTipPipeline extends TimestampedOpenCvPipeline {
@@ -28,7 +28,7 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
         public static double holdSeconds = 0.25;
         public static double minTagAreaPx = 120;
         public static int minVisibleTags = 1;
-        public static double scorableMinRollDeg = 90;
+        public static double scorableMaxRollDeg = 90;
         public static float decimation = 2;
         public static boolean drawOverlay = true;
     }
@@ -163,7 +163,7 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
     }
 
     private static boolean scorableRoll(double roll) {
-        return !Double.isNaN(roll) && Math.abs(roll) >= Tuning.scorableMinRollDeg;
+        return !Double.isNaN(roll) && Math.abs(roll) < Tuning.scorableMaxRollDeg;
     }
 
     /** Circular mean, so 179 and -179 average to 180, not 0; NaN for no tags. */
@@ -207,7 +207,7 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
             }
             boolean good = scorableRoll(rolls[c]);
             label(String.format("%s  %d/%d  roll %+.1f  %s", range, tags.size(), ids.length, rolls[c],
-                    good ? "DOWN" : "UP"), new Point(8, y), good ? GREEN : RED, 0.5, 1);
+                    good ? "UP" : "DOWN"), new Point(8, y), good ? GREEN : RED, 0.5, 1);
         }
 
         String text = tipped ? "TIPPED" : "SCORABLE";
