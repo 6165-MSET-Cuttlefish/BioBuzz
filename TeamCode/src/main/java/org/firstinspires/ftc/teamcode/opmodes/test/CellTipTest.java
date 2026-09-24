@@ -50,6 +50,8 @@ public class CellTipTest extends BioBuzzOpMode {
         if (Context.allianceColor != cellTip.getAlliance()) {
             telemetry.addData("Note", "%s selected — re-init to apply", Context.allianceColor);
         }
+        telemetry.addData("Status", cellTip.isTipped() ? "TIPPED"
+                : cellTip.isScorable() ? "SCORABLE" : "NO VERDICT");
         telemetry.addData("Command", !started ? "not started" : (outcome == null ? "watching" : outcome));
         telemetry.addData("First tip at", tippedAtSeconds < 0 ? "—" : String.format("%.2fs", tippedAtSeconds));
     }
