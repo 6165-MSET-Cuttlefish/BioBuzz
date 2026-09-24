@@ -19,7 +19,6 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 @Config
 public class Drivetrain extends Module {
     private final EnhancedMotor fl, bl, br, fr;
-    /** Whole-drivetrain current sensor on an analog port; null when the robot config has none. */
     private final AnalogInput floodgate;
     /** Held at UP so the drive never couples to the lift. */
     private final EnhancedServo leftPto, rightPto;
@@ -75,7 +74,7 @@ public class Drivetrain extends Module {
         fr = new EnhancedMotor(hardwareMap, "fr").withCachingTolerance(0.05);
         br = new EnhancedMotor(hardwareMap, "br").withCachingTolerance(0.05);
 
-        floodgate = hardwareMap.tryGet(AnalogInput.class, "floodgate");
+        floodgate = hardwareMap.get(AnalogInput.class, "floodgate");
 
         leftPto = new EnhancedServo(hardwareMap, "leftPto");
         rightPto = new EnhancedServo(hardwareMap, "rightPto");
@@ -166,13 +165,12 @@ public class Drivetrain extends Module {
     }
 
     public double getFloodgateCurrent() {
-        if (floodgate == null) return 0.0;
         double voltage = floodgate.getVoltage();
         return (voltage / 3.3) * 80.0;
     }
 
     private double computeCurrentLimiterMultiplier() {
-        if (floodgate == null || !currentLimiterConfig.enabled) return 1.0;
+        if (!currentLimiterConfig.enabled) return 1.0;
 
         double current = getFloodgateCurrent();
         currentOverTime += Math.pow(current, 2) * currentLoopTimer.milliseconds();
@@ -268,12 +266,9 @@ public class Drivetrain extends Module {
         logDashboard("BR Velocity (RPM)", "%.1f", br.getVelocity() * ENCODER_TO_RPM);
         logDashboard("FR Velocity (RPM)", "%.1f", fr.getVelocity() * ENCODER_TO_RPM);
 
-        if (floodgate != null) {
-            logDashboard("Floodgate Current (A)", "%.2f", getFloodgateCurrent());
-            logDashboard("Current Limiter Multiplier", "%.2f", lastCurrentLimiterMultiplier);
-            logDashboard("currentOverTime", "%.2f", currentOverTime);
-        }
-
+        logDashboard("Floodgate Current (A)", "%.2f", getFloodgateCurrent());
+        logDashboard("Current Limiter Multiplier", "%.2f", lastCurrentLimiterMultiplier);
+        logDashboard("currentOverTime", "%.2f", currentOverTime);
         logDashboard("PTO Positions (L/R)", "%.2f / %.2f", leftPto.getCachedPosition(), rightPto.getCachedPosition());
 
         if (motorCurrentTelemetry) {

@@ -2,8 +2,6 @@ package org.firstinspires.ftc.teamcode.decode.opmodes;
 
 import com.pedropathing.math.Pose;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
-import com.qualcomm.hardware.limelightvision.LLResult;
-import com.qualcomm.hardware.limelightvision.LLStatus;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
@@ -70,20 +68,18 @@ public class DecodeSystemCheck extends DecodeOpMode {
 
     @Override
     protected void initialize() {
-        limelight = hardwareMap.tryGet(Limelight3A.class, "limelight");
+        limelight = hardwareMap.get(Limelight3A.class, "limelight");
 
         resetEncoder(robot.drivetrain.getFl());
         resetEncoder(robot.drivetrain.getFr());
         resetEncoder(robot.drivetrain.getBl());
         resetEncoder(robot.drivetrain.getBr());
 
-        pinpoint = hardwareMap.tryGet(GoBildaPinpointDriver.class, "pinpoint");
-        if (pinpoint != null) {
-            pinpoint.update();
-            odoXBaselineTicks = pinpoint.getEncoderX();
-            odoYBaselineTicks = pinpoint.getEncoderY();
-            odoHeadingBaseline = pinpoint.getHeading(AngleUnit.RADIANS);
-        }
+        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
+        pinpoint.update();
+        odoXBaselineTicks = pinpoint.getEncoderX();
+        odoYBaselineTicks = pinpoint.getEncoderY();
+        odoHeadingBaseline = pinpoint.getHeading(AngleUnit.RADIANS);
 
         leftFlywheel = hardwareMap.get(DcMotorEx.class, "leftFlywheel");
         leftFlywheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -312,23 +308,15 @@ public class DecodeSystemCheck extends DecodeOpMode {
         if (Boolean.TRUE.equals(checks.get("Limelight capturing"))) return;
         if (limelightPollTimer.milliseconds() < LIMELIGHT_POLL_MS) return;
         limelightPollTimer.reset();
-        boolean llConnected = false;
-        boolean llCapturing = false;
-        if (limelight != null) {
-            LLStatus status = limelight.getStatus();
-            llConnected = status != null;
-            if (llConnected) {
-                LLResult result = limelight.getLatestResult();
-                llCapturing = status.getFps() > 0 && result != null;
-            }
-        }
+        // isConnected() relies on the polling the Turret started; getStatus() never returns null, it returns zeros on failure.
+        boolean llConnected = limelight.isConnected();
+        boolean llCapturing = llConnected && limelight.getStatus().getFps() > 0;
         updateIfTrue("Limelight connected", llConnected);
         updateIfTrue("Limelight capturing", llCapturing);
     }
 
     // Counts only while READY: an unplugged Pinpoint holds frozen ticks and a non-READY status.
     private void updateOdometryChecks() {
-        if (pinpoint == null) return;
         pinpoint.update();
         if (pinpoint.getDeviceStatus() != GoBildaPinpointDriver.DeviceStatus.READY) return;
         updateIfTrue("Odometry X updates",

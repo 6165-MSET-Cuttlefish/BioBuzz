@@ -21,10 +21,10 @@ public class RobotActions {
 
     /**
      * Finishes when the cell tips or after {@code timeoutMs}, whichever comes first; check
-     * {@link LimelightCamera#isTipped()} to tell which. Throws at build time if there is no Limelight.
+     * {@link LimelightCamera#isTipped()} to tell which.
      */
     public CommandBuilder checkTip(double timeoutMs) {
-        LimelightCamera limelight = robot.limelight.requireDevice();
+        LimelightCamera limelight = robot.limelight;
         Command watch = Command.build()
                 .setDone(limelight::isTipped)
                 .requiring(limelight);

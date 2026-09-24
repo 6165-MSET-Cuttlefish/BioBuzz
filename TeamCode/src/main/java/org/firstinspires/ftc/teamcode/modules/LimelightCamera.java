@@ -43,7 +43,6 @@ public class LimelightCamera extends Module {
     }
 
     private final Limelight3A limelight;
-    private final String name;
 
     private AllianceColor alliance;
     private boolean polling;
@@ -60,8 +59,7 @@ public class LimelightCamera extends Module {
 
     public LimelightCamera(HardwareMap hardwareMap, String name) {
         super();
-        this.name = name;
-        this.limelight = hardwareMap.tryGet(Limelight3A.class, name);
+        this.limelight = hardwareMap.get(Limelight3A.class, name);
     }
 
     @Override
@@ -72,7 +70,6 @@ public class LimelightCamera extends Module {
     @Override
     public void init() {
         alliance = Context.allianceColor;
-        if (limelight == null) return;
         limelight.pipelineSwitch(pipelineFor(alliance));
         limelight.start();
         polling = true;
@@ -80,14 +77,13 @@ public class LimelightCamera extends Module {
 
     @Override
     protected void read() {
-        if (limelight == null || !polling) return;
+        if (!polling) return;
         result = limelight.getLatestResult();
         parse();
     }
 
     @Override
     protected void write() {
-        if (limelight == null) return;
         boolean shouldPoll = isInAny(VisionState.ENABLED);
         if (shouldPoll == polling) return;
         polling = shouldPoll;
@@ -100,7 +96,7 @@ public class LimelightCamera extends Module {
 
     @Override
     public void stop() {
-        if (limelight != null) limelight.stop();
+        limelight.stop();
     }
 
     /** Fixed at init from {@link Context#allianceColor}. */
@@ -115,14 +111,6 @@ public class LimelightCamera extends Module {
 
     public boolean isScorable() {
         return fresh && !tipped;
-    }
-
-    public LimelightCamera requireDevice() {
-        if (limelight == null) {
-            throw new IllegalStateException("No \"" + name + "\" in the robot configuration; "
-                    + "add the Limelight 3A to the hub config before using cell tip detection.");
-        }
-        return this;
     }
 
     private static int sum(int[] ids) {
@@ -165,10 +153,6 @@ public class LimelightCamera extends Module {
 
     @Override
     protected void onTelemetry() {
-        if (limelight == null) {
-            log("Limelight", "NOT CONFIGURED (\"%s\")", name);
-            return;
-        }
         logDashboard("Cell-tip pipeline", "%d (%s)", pipelineFor(alliance), alliance);
         if (wrongPipeline) log("Warning", WRONG_PIPELINE_WARNING);
         if (!fresh) {
