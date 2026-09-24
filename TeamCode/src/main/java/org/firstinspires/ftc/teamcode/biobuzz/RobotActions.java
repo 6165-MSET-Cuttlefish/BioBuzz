@@ -5,7 +5,7 @@ import com.pedropathing.ivy.CommandBuilder;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
-import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
+import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
 public class RobotActions {
 
@@ -16,18 +16,18 @@ public class RobotActions {
     }
 
     public CommandBuilder checkTip() {
-        return checkTip(LimelightCamera.checkTipTimeoutMs);
+        return checkTip(CellTipCamera.checkTipTimeoutMs);
     }
 
     /**
      * Finishes when the cell tips or after {@code timeoutMs}, whichever comes first; check
-     * {@link LimelightCamera#isTipped()} to tell which.
+     * {@link CellTipCamera#isTipped()} to tell which.
      */
     public CommandBuilder checkTip(double timeoutMs) {
-        LimelightCamera limelight = robot.limelight;
+        CellTipCamera cellTip = robot.cellTip;
         Command watch = Command.build()
-                .setDone(limelight::isTipped)
-                .requiring(limelight);
+                .setDone(cellTip::isTipped)
+                .requiring(cellTip);
         return Groups.race(watch, Commands.waitMs(timeoutMs));
     }
 }
