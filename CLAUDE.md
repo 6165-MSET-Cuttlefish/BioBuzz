@@ -60,7 +60,7 @@ Ball detection is moving to the Limelight: `limelight/ball_detection_snapscript.
 
 ## OpMode lifecycle
 
-`init()`: `State.clearModuleBindings()` and `Scheduler.reset()` (statics that outlive an OpMode; Ivy's also survives a Sloth reload); Lynx hubs to manual bulk caching; `createRobot()`; discover and init modules (`initStates()` binds State→Module and applies initial values, then `init()`); `initialize()`; a second discover-and-init pass for modules created inside `initialize()`; sort telemetry modules; snapshot the field map.
+`init()`: `State.clearModuleBindings()` and `Scheduler.reset()` (statics that outlive an OpMode; Ivy's also survives a Sloth reload); Lynx hubs to manual bulk caching; `createRobot()`; discover and init modules (`initStates()` binds State→Module and applies initial values, then `init()`); `initialize()`; a second discover-and-init pass for modules created inside `initialize()`; snapshot the field map.
 
 User hooks: `createRobot()` (required), `initialize()`, `initializeLoop()`, `onStart()`, `gameLoop()`, `onLoopStart()`, `onEnd()`, `shouldReadDuringInit()` (default true), `shouldWriteDuringInit()` (default false), `telemetry()` for DS/dashboard lines, and `dashboardOverlay(Canvas)` for field drawings. Draw in `dashboardOverlay`; packets are rebuilt every loop and sent only on some, so drawings elsewhere flicker.
 
@@ -190,7 +190,7 @@ A `@Tuner` method in `Tuning.java` must be static, take no arguments, and be dec
 
 **Hub configs.** Every framework OpMode needs `fl`, `bl`, `fr`, `br` and `pinpoint`; BioBuzz and Decode OpModes also need `floodgate` (an Analog Input) and `leftPto`/`rightPto` (Servos), BioBuzz and camera OpModes need `nerdDetector` (named only in `Camera.WEBCAM_NAME`), and Decode OpModes `limelight`. `res/xml/` ships `cuttle_decode.xml` (the Cuttle bot, for every framework OpMode) and `camera.xml` (webcam only, for **Camera Tune** and **Ball Vision**).
 
-- **Mock Architecture Test** (`opmodes/test/MockAuto`): the end-to-end smoke test; run it first after a full install. It drives only with `Mock Auto → enableDrive` on, and only finishes on the floor with a clear `driveInches` lane: on a stand the pods don't move, so it runs until `safetyTimeoutMs`.
+- **Mock Architecture Test** (`opmodes/test/MockAuto`): the end-to-end smoke test; run it first after a full install. It drives only with `Mock Auto → enableDrive` on (confirm motor and odometry directions first), and only finishes on the floor with a clear `driveInches` lane: on a stand the pods don't move, so it runs until `safetyTimeoutMs`.
 - **Camera Module Test** runs `modules/Camera` through the framework, so it also needs the drivetrain and Pinpoint wired up.
 - **Ball Vision** (`opmodes/test/BallVisionTest`) runs the detector straight off the webcam with only `nerdDetector`: the webcam bench check, and where to tune HSV live.
 - **Ball Field Drive** (`opmodes/test/BallFieldDriveTest`) drives raw mecanum and reports ball positions relative to its start pose, reading the Pinpoint directly with offsets copied from `CuttleConstants` (keep them in sync); it checks that a ball keeps its ID when the robot turns away and back.

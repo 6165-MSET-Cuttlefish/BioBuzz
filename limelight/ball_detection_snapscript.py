@@ -1,21 +1,18 @@
 """Ball-detection SnapScript for the Limelight 3A — finds Pollen and red/blue Nectar.
 
-A port of modules/vision/BallDetectionPipeline. HSV gates only seed ROIs, HoughCircles decides what
-is a ball, and the colour mask assigns its type since Hough is colour-blind. Each circle's ground
-contact point (cx, cy + r) goes through a homography to camera-frame ground inches, so the numbers
-mean what BallDetection's cameraX/cameraY mean and BallFieldTransform can make them field-relative.
-There is no tracking here: every frame's detections stand alone, with no ids and no velocities.
+A port of modules/vision/BallDetectionPipeline. Each circle's ground contact point (cx, cy + r) goes
+through a homography to camera-frame ground inches, so the numbers mean what BallDetection's
+cameraX/cameraY mean and BallFieldTransform can make them field-relative. There is no tracking here:
+every frame's detections stand alone, with no ids and no velocities.
 
-Not generated: edit this file and upload it from the Limelight web UI as a Python pipeline (Input
-tab, pipeline type Python). Pipelines 0-2 are taken (DECODE AprilTags, red and blue cell tip), so
-use 3. The Limelight runs one pipeline at a time, so ball detection and the cell-tip verdict cannot
-both be live.
+Upload this file from the Limelight web UI as a Python pipeline (Input tab, pipeline type Python) to
+pipeline 3. Pipeline 0 is DECODE's AprilTags, and only one pipeline runs at a time.
 
 H_ARRAY is the webcam's, copied from BallVisionConstants, and must be recalibrated for the
 Limelight's lens with eocvsim/homography before the inches mean anything. Contact points are scaled
 to CALIBRATION_SIZE first, so the Limelight's streaming resolution need not match the calibration's.
 
-llpython, 32 doubles; keep in step with the hub's OUT_* constants:
+llpython, 32 doubles:
     0        SCRIPT_ID, so the hub can reject the wrong pipeline
     1        ball count N, 0 to MAX_BALLS
     2 + 3i   type code: 1 Pollen, 2 red Nectar, 3 blue Nectar
@@ -259,7 +256,6 @@ def _suppress_overlaps(candidates):
 
 
 def _to_ground(candidates, scale_x, scale_y):
-    """Projects each circle's ground-contact point (cx, cy + r) to camera-frame ground inches."""
     contacts = np.array([[[candidate[1] / DETECTION_SCALE * scale_x,
                            (candidate[2] + candidate[3]) / DETECTION_SCALE * scale_y]]
                          for candidate in candidates], np.float32)

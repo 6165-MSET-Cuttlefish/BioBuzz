@@ -9,11 +9,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.opencv.core.Mat;
 import org.openftc.easyopencv.OpenCvPipeline;
 
-/**
- * Streams the raw webcam feed to FtcDashboard with the live {@link WebcamControls} exposure / gain /
- * white-balance sliders applied. Must run on the robot — EOCV-Sim never opens an OpenCvWebcam, so
- * the controls only take effect here.
- */
+// EOCV-Sim never opens an OpenCvWebcam, so WebcamControls only take effect on the robot.
 @TeleOp(name = "Camera Tune", group = "Test")
 public class CameraTune extends LinearOpMode {
 
@@ -23,7 +19,7 @@ public class CameraTune extends LinearOpMode {
     public void runOpMode() {
         session = new WebcamSession(hardwareMap, telemetry, Camera.WEBCAM_NAME, new PassThrough());
 
-        while (opModeInInit()) pump();   // stream is live in init, so tuning works before play
+        while (opModeInInit()) pump();
         while (opModeIsActive()) pump();
 
         session.close();

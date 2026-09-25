@@ -10,7 +10,6 @@ import java.util.function.Supplier;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
-/** Ivy commands that drive {@link Module} state machines. */
 public final class StateCommands {
     private StateCommands() {}
 

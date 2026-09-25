@@ -17,12 +17,10 @@ public class ShooterInterpolation {
     private static final double FAR_HOOD_BIAS = -0.04;
 
     public static class ShooterDataPoint {
-        public final double x, y, rpm, hood, tunedDistance;
+        public final double rpm, hood, tunedDistance;
 
         // Tuned from the red side; lookups go by distance, so the table serves both alliances.
         public ShooterDataPoint(double x, double y, double rpm, double hood) {
-            this.x = x;
-            this.y = y;
             this.rpm = rpm;
             this.hood = hood;
             Pose goal = DecodeContext.redTargetPose;
@@ -36,22 +34,19 @@ public class ShooterInterpolation {
         final List<ShooterDataPoint> points;
         final double meanRPM;
         final double maxRPM;
-        final double minRPM;
 
         PositionIndex(String key, double distance, List<ShooterDataPoint> points) {
             this.key = key;
             this.distance = distance;
             this.points = points;
 
-            double sum = 0, max = Double.NEGATIVE_INFINITY, min = Double.POSITIVE_INFINITY;
+            double sum = 0, max = Double.NEGATIVE_INFINITY;
             for (ShooterDataPoint p : points) {
                 sum += p.rpm;
                 max = Math.max(max, p.rpm);
-                min = Math.min(min, p.rpm);
             }
             this.meanRPM = sum / points.size();
             this.maxRPM = max;
-            this.minRPM = min;
         }
     }
 
@@ -78,11 +73,6 @@ public class ShooterInterpolation {
         // Every tuned shot was fit against this exact neighbour choice (including {before, before}); don't "fix" it.
         PositionIndex[] getNearestTwo(double targetDist) {
             int n = sortedByDistance.size();
-            if (n < 2) {
-                PositionIndex only = sortedByDistance.get(0);
-                return new PositionIndex[]{only, only};
-            }
-
             int idx = lastIndexBelow(targetDist);
             if (idx == 0) {
                 return new PositionIndex[]{sortedByDistance.get(0), sortedByDistance.get(1)};
@@ -127,13 +117,8 @@ public class ShooterInterpolation {
         }
 
         double interpolateGroupHood(String k, double rpm) {
-            List<ShooterDataPoint> group = allPointsByKey.get(k);
-            if (group == null || group.isEmpty()) return 0;
-
-            List<ShooterDataPoint> sorted = new ArrayList<>(group);
+            List<ShooterDataPoint> sorted = new ArrayList<>(allPointsByKey.get(k));
             sorted.sort(Comparator.comparingDouble(p -> p.rpm));
-
-            if (sorted.size() == 1) return sorted.get(0).hood;
 
             ShooterDataPoint low = sorted.get(0), high = sorted.get(sorted.size() - 1);
             for (int i = 0; i < sorted.size() - 1; i++) {
@@ -146,7 +131,6 @@ public class ShooterInterpolation {
             if (high.rpm == low.rpm) return low.hood;
             return lerp(low.hood, high.hood, clamp01((rpm - low.rpm) / (high.rpm - low.rpm)));
         }
-
     }
 
     private static final InterpolationTable TABLE = new InterpolationTable();

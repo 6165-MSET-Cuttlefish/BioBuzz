@@ -13,36 +13,20 @@ import com.qualcomm.robotcore.hardware.I2cAddr;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
 /**
- * Driver-controlled version of {@link PredictiveBrakingUltrasonicTest} — mecanum drive on gamepad 1
- * with the forward axis running through the same {@link PredictiveBraking} clamp. Both opmodes read
- * the same "Braking Law" dashboard block, so anything tuned in the automatic test carries straight
- * over to here.
- *
- * Hardware config: motors "fl", "bl", "fr", "br", and a "MaxSonar I2CXL" named "sonar".
- *
- * Controls:
- *   left stick    — translate (forward/back, strafe)
- *   right stick X — turn
- *   right bumper  — hold to override braking entirely, for A/B-ing against the raw drivetrain
- *   left bumper   — hold for slow mode
- *
- * Only forward motion is clamped, since the sensor faces forward — strafing and turning are always
- * at full authority, and backing away is never restricted. Releasing the stick or pulling back
- * clears the stop latch, so a driver can pull off a wall and re-approach without touching anything.
+ * Gamepad mecanum drive with only the forward axis braked on the "sonar" MB1242, using the same
+ * "Braking Law" block as {@link PredictiveBrakingUltrasonicTest}. Hold right bumper to bypass braking,
+ * left bumper for slow mode.
  */
 @TeleOp(name = "Predictive Braking (Driver)", group = "Test")
 public class PredictiveBrakingDriverTest extends OpMode {
 
     @Config("Braking Driver Test")
     public static class Tuning {
-        /** True: skip driving, spin every wheel at 20% so you can spot a reversed one. */
+        /** Skip driving and spin every wheel at wheelTestPower, to spot a reversed one. */
         public static boolean wheelTest = false;
         public static double wheelTestPower = 0.2;
-        /** Overall scale on driver input. */
         public static double driveSpeed = 1.0;
-        /** Scale while the left bumper is held. */
         public static double slowModeSpeed = 0.35;
-        /** Stick deflection below this is ignored. */
         public static double stickDeadzone = 0.05;
 
         public static boolean reverseFrontLeft  = true;
@@ -50,7 +34,7 @@ public class PredictiveBrakingDriverTest extends OpMode {
         public static boolean reverseFrontRight = false;
         public static boolean reverseBackRight  = false;
 
-        /** Ping-to-read delay. 100 ms is the datasheet's full-range figure; lower updates faster. */
+        /** Ping-to-read delay; 100 ms covers full range, lower updates faster. */
         public static int propagationDelayMs = 100;
     }
 
@@ -105,8 +89,6 @@ public class PredictiveBrakingDriverTest extends OpMode {
         double strafe  = deadzone(gamepad1.left_stick_x) * scale;
         double turn    = deadzone(gamepad1.right_stick_x) * scale;
 
-        // Backing off or stopping releases the latch, so the driver re-approaches just by pushing
-        // the stick forward again rather than having to restart the opmode.
         if (forward <= 0) {
             braking.resetStop();
         }
@@ -150,8 +132,6 @@ public class PredictiveBrakingDriverTest extends OpMode {
         double fr = forward - strafe - turn;
         double br = forward + strafe - turn;
 
-        // Scale the whole vector down rather than clipping each wheel, so the commanded heading is
-        // preserved when the mix saturates.
         double max = Math.max(1.0, Math.max(Math.max(Math.abs(fl), Math.abs(bl)),
                                             Math.max(Math.abs(fr), Math.abs(br))));
 

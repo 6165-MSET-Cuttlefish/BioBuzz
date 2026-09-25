@@ -43,9 +43,6 @@ public class Shooter extends Module {
         public double LP2Rate = 0.3;
     }
 
-    // Servo units of hood drop per 100 RPM of velocity deficit; positive lowers the hood.
-    public static double closeAutoHoodCompGain = 0.0165;
-
     public static boolean bangBangEnabled = true;
     public static boolean zeroPower = false;
     public static double bangBangTolerancePercent = 0.10;
@@ -67,16 +64,7 @@ public class Shooter extends Module {
 
     public enum FlywheelState implements State {
         IDLE(1800),
-        FAR(3150.0),
-        FAR_AUTO(3150.0),
-        CLOSE(2750),
-        CLOSE_AUTO(2420),
-        CLOSE_AUTO_PRELOAD(2410),
-        CLOSE_AUTO_PARK(2200),
-        LOW(1500),
         OFF(0),
-        MANUAL(0.2),
-        COAST_TO_TARGET(0),
         PID(0);
 
         FlywheelState(double value) {
@@ -87,16 +75,7 @@ public class Shooter extends Module {
     public enum HoodState implements State {
         RESET(0.585),
         BOTTOM(0),
-        SUPER_CLOSE(0.31),
-        KINDA_CLOSE(0.28),
-        FAR(0.15),
-        FAR_AUTO(0.15),
-        CLOSE(0.19),
-        CLOSE_AUTO(0.115),
-        CLOSE_AUTO_PRELOAD(.12),
-        CLOSE_AUTO_PARK(0.04),
         TOP(0.32),
-        MANUAL(-1),
         PID(0);
 
         HoodState(double value) {
@@ -105,8 +84,6 @@ public class Shooter extends Module {
     }
 
     public Shooter(HardwareMap hardwareMap) {
-        setTelemetryEnabled(shooterTelemetry.TOGGLE);
-
         left = new EnhancedMotor(hardwareMap, "leftFlywheel").withCachingTolerance(0.005);
         right = new EnhancedMotor(hardwareMap, "rightFlywheel").withCachingTolerance(0.005);
         hood = new EnhancedServo(hardwareMap, "hood").withCachingTolerance(0.001);
@@ -168,12 +145,6 @@ public class Shooter extends Module {
         }
         hoodPosition += hoodOffset;
 
-        if (closeAutoHoodCompGain != 0
-                && (fw == FlywheelState.CLOSE_AUTO || fw == FlywheelState.CLOSE_AUTO_PRELOAD)) {
-            double velocityDeficitRPM = targetVelocityRPM - shooterCurrentVelocityRPM;
-            hoodPosition -= closeAutoHoodCompGain * (velocityDeficitRPM / 100.0);
-        }
-
         calculateShooterPower();
     }
 
@@ -196,47 +167,45 @@ public class Shooter extends Module {
 
     @Override
     protected void onTelemetry() {
-        if (shooterTelemetry.TOGGLE) {
-            if (shooterTelemetry.flywheel) {
-                logDashboard("Flywheel State", getState(FlywheelState.class));
-                log("Target Velocity (RPM)", "%.1f", targetVelocityRPM);
-                log("Measured Velocity (RPM)", "%.1f", shooterCurrentVelocityRPM);
-                log("Close Vel Offset", "%.1f", closeVelocityOffset);
-                log("Far Vel Offset", "%.1f", farVelocityOffset);
-                logDashboard("Measured Velocity LP1 (RPM)", "%.1f", shooterCurrentVelocityRPMLP1);
-                logDashboard("Measured Velocity Raw (RPM)", "%.1f", shooterCurrentVelocityRPMRaw);
+        if (shooterTelemetry.flywheel) {
+            logDashboard("Flywheel State", getState(FlywheelState.class));
+            log("Target Velocity (RPM)", "%.1f", targetVelocityRPM);
+            log("Measured Velocity (RPM)", "%.1f", shooterCurrentVelocityRPM);
+            log("Close Vel Offset", "%.1f", closeVelocityOffset);
+            log("Far Vel Offset", "%.1f", farVelocityOffset);
+            logDashboard("Measured Velocity LP1 (RPM)", "%.1f", shooterCurrentVelocityRPMLP1);
+            logDashboard("Measured Velocity Raw (RPM)", "%.1f", shooterCurrentVelocityRPMRaw);
 
-                logDashboard("PID Error (RPM)", "%.1f", shooterPidController.getError());
-                logDashboard("PID Output", "%.3f", shooterPidOutput);
-                logDashboard("Motor power", "%.5f", left.getPower());
+            logDashboard("PID Error (RPM)", "%.1f", shooterPidController.getError());
+            logDashboard("PID Output", "%.3f", shooterPidOutput);
+            logDashboard("Motor power", "%.5f", left.getPower());
 
-                double bbRPM = targetVelocityRPM * bangBangTolerancePercent;
-                logDashboard("Bang-Bang Error (RPM)", "%.1f", targetVelocityRPM - shooterCurrentVelocityRPM);
-                logDashboard("Bang-Bang Tolerance (RPM)", "%.1f", bbRPM);
+            double bbRPM = targetVelocityRPM * bangBangTolerancePercent;
+            logDashboard("Bang-Bang Error (RPM)", "%.1f", targetVelocityRPM - shooterCurrentVelocityRPM);
+            logDashboard("Bang-Bang Tolerance (RPM)", "%.1f", bbRPM);
 
-                logDashboard("Distance to Goal", "%.2f", distanceToGoal);
-            }
+            logDashboard("Distance to Goal", "%.2f", distanceToGoal);
+        }
 
-            if (shooterTelemetry.lut) {
-                logDashboard("Interp Target Distance", "%.1f", ShooterInterpolation.lastTargetDistance);
-                logDashboard("Interp Base RPM", "%.1f", ShooterInterpolation.lastBaseRPM);
-                logDashboard("Interp Compensated RPM", "%.1f", ShooterInterpolation.lastCompensatedRPM);
-                logDashboard("Interp Selected Hood", "%.3f", ShooterInterpolation.lastSelectedHood);
-                logDashboard("Interp Distance Key", "%s", ShooterInterpolation.lastClosestDistanceKey);
-                logDashboard("Interp Points Count", "%d", ShooterInterpolation.lastPointsCount);
-            }
+        if (shooterTelemetry.lut) {
+            logDashboard("Interp Target Distance", "%.1f", ShooterInterpolation.lastTargetDistance);
+            logDashboard("Interp Base RPM", "%.1f", ShooterInterpolation.lastBaseRPM);
+            logDashboard("Interp Compensated RPM", "%.1f", ShooterInterpolation.lastCompensatedRPM);
+            logDashboard("Interp Selected Hood", "%.3f", ShooterInterpolation.lastSelectedHood);
+            logDashboard("Interp Distance Key", "%s", ShooterInterpolation.lastClosestDistanceKey);
+            logDashboard("Interp Points Count", "%d", ShooterInterpolation.lastPointsCount);
+        }
 
-            if (shooterTelemetry.hood) {
-                logDashboard("Hood State", getState(HoodState.class));
-                log("Hood Position", "%.3f", hoodPosition);
-                log("Close Hood Offset", "%.3f", closeHoodOffset);
-                log("Far Hood Offset", "%.3f", farHoodOffset);
-            }
+        if (shooterTelemetry.hood) {
+            logDashboard("Hood State", getState(HoodState.class));
+            log("Hood Position", "%.3f", hoodPosition);
+            log("Close Hood Offset", "%.3f", closeHoodOffset);
+            log("Far Hood Offset", "%.3f", farHoodOffset);
+        }
 
-            if (shooterTelemetry.current) {
-                logDashboard("Left Flywheel Current (A)", "%.2f", left.getCurrent(CurrentUnit.AMPS));
-                logDashboard("Right Flywheel Current (A)", "%.2f", right.getCurrent(CurrentUnit.AMPS));
-            }
+        if (shooterTelemetry.current) {
+            logDashboard("Left Flywheel Current (A)", "%.2f", left.getCurrent(CurrentUnit.AMPS));
+            logDashboard("Right Flywheel Current (A)", "%.2f", right.getCurrent(CurrentUnit.AMPS));
         }
     }
 

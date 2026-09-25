@@ -39,8 +39,6 @@ public final class RobotStateHistory {
         size = 0;
     }
 
-    public boolean isEmpty() { return size == 0; }
-
     public Sample newest() {
         return size == 0 ? null : samples[(nextIndex - 1 + CAPACITY) % CAPACITY];
     }

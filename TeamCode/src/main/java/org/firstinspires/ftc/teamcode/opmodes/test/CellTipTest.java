@@ -9,10 +9,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
-/**
- * Bench check for the webcam cell-tip verdict and {@code RobotActions.checkTip}. Run it on
- * {@code res/xml/cuttle_decode.xml}: the framework needs the drivetrain and Pinpoint even here.
- */
 @TeleOp(name = "Cell Tip Test", group = "Test")
 public class CellTipTest extends BioBuzzOpMode {
 

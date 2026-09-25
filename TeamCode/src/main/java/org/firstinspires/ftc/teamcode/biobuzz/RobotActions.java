@@ -15,19 +15,12 @@ public class RobotActions {
         this.robot = robot;
     }
 
+    /** Finishes on a tip or after {@link CellTipCamera#checkTipTimeoutMs}; check {@link CellTipCamera#isTipped()} to tell which. */
     public CommandBuilder checkTip() {
-        return checkTip(CellTipCamera.checkTipTimeoutMs);
-    }
-
-    /**
-     * Finishes when the cell tips or after {@code timeoutMs}, whichever comes first; check
-     * {@link CellTipCamera#isTipped()} to tell which.
-     */
-    public CommandBuilder checkTip(double timeoutMs) {
         CellTipCamera cellTip = robot.cellTip;
         Command watch = Command.build()
                 .setDone(cellTip::isTipped)
                 .requiring(cellTip);
-        return Groups.race(watch, Commands.waitMs(timeoutMs));
+        return Groups.race(watch, Commands.waitMs(CellTipCamera.checkTipTimeoutMs));
     }
 }

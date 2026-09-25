@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.architecture.hardware;
 
-/** Shared voltage. EnhancedOpMode publishes once per loop; wrappers pull on demand. */
 public final class BatteryVoltage {
     private static volatile double current = 12.0;
 

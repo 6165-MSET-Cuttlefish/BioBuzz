@@ -37,10 +37,8 @@ public class DualTelemetry implements Telemetry {
         ensureDisplayFormats();
     }
 
-    // HTML mode is a one-shot setDisplayFormat() on each backend, so it must be re-applied on every
-    // off→on toggle of the enable flags or raw HTML tags show up instead of markup. The dashboard
-    // adapter additionally resets itself to CLASSIC at onOpModePreInit, which runs before the Robot
-    // constructor that builds this; re-applying it any earlier would be undone.
+    // HTML mode is a one-shot setDisplayFormat(), so re-apply it on every off→on toggle or raw tags show.
+    // The dashboard adapter resets to CLASSIC at onOpModePreInit, before the Robot constructor builds this.
     private void ensureDisplayFormats() {
         if (enableDSTelemetry && !dsFormatApplied) {
             dsTelemetry.setDisplayFormat(DisplayFormat.HTML);

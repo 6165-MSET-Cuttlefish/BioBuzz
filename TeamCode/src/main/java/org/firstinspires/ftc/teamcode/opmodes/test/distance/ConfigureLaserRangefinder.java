@@ -9,10 +9,9 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.LaserRangefinder;
 import java.util.Arrays;
 
 /**
- * Writes persistent config to a Brushland Laser Rangefinder (a "Rev Color Sensor V3" named "Laser").
- * Config only takes effect after unplugging and replugging the sensor.
- * To recover from a bad digital/analog setting: init with the sensor unplugged, stop, then plug in.
- * https://docs.brushlandlabs.com/sensors/laser-rangefinder/getting-started
+ * Writes persistent config to the Brushland rangefinder ("Rev Color Sensor V3" named "Laser"); it takes
+ * effect only after a replug. To recover from a bad digital/analog setting: init with the sensor
+ * unplugged, stop, then plug in.
  */
 @Autonomous(name = "Configure Laser Rangefinder", group = "Test")
 public class ConfigureLaserRangefinder extends LinearOpMode {

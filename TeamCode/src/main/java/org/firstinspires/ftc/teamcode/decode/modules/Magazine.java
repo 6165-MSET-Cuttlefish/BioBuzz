@@ -29,8 +29,7 @@ public class Magazine extends Module {
     public static double horizontalBackSpeed = 0.0005;
     private double currentHorizontalFrontPosition = Double.NaN;
     private double currentHorizontalBackPosition = Double.NaN;
-    private long lastHorizontalFrontUpdateTime = 0;
-    private long lastHorizontalBackUpdateTime = 0;
+    private long lastHorizontalUpdateTime = 0;
 
     public enum HorizontalFrontState implements State {
         OPEN(0.6),
@@ -73,8 +72,6 @@ public class Magazine extends Module {
     }
 
     public Magazine(HardwareMap hardwareMap) {
-        setTelemetryEnabled(magazineTelemetry.TOGGLE);
-
         double servoTol = optimizeServoCachingTolerances ? 0.005 : 0.0;
         horizontalFront = new EnhancedServo(hardwareMap, "horizontalFront").withCachingTolerance(servoTol);
         horizontalBack = new EnhancedServo(hardwareMap, "horizontalBack").withCachingTolerance(servoTol);
@@ -104,15 +101,13 @@ public class Magazine extends Module {
         }
 
         long now = System.currentTimeMillis();
-        if (lastHorizontalFrontUpdateTime == 0) lastHorizontalFrontUpdateTime = now;
+        if (lastHorizontalUpdateTime == 0) lastHorizontalUpdateTime = now;
+        long dtMs = now - lastHorizontalUpdateTime;
+        lastHorizontalUpdateTime = now;
         currentHorizontalFrontPosition = slew(currentHorizontalFrontPosition, targetHorizontalFrontPos,
-                horizontalFrontSpeed, now - lastHorizontalFrontUpdateTime);
-        lastHorizontalFrontUpdateTime = now;
-
-        if (lastHorizontalBackUpdateTime == 0) lastHorizontalBackUpdateTime = now;
+                horizontalFrontSpeed, dtMs);
         currentHorizontalBackPosition = slew(currentHorizontalBackPosition, targetHorizontalBackPos,
-                horizontalBackSpeed, now - lastHorizontalBackUpdateTime);
-        lastHorizontalBackUpdateTime = now;
+                horizontalBackSpeed, dtMs);
 
         horizontalFrontPosition = currentHorizontalFrontPosition;
         horizontalBackPosition = currentHorizontalBackPosition;
@@ -152,25 +147,23 @@ public class Magazine extends Module {
 
     @Override
     protected void onTelemetry() {
-        if (magazineTelemetry.TOGGLE) {
-            if (magazineTelemetry.intake) {
-                logDashboard("Intake State", getState(IntakeState.class));
-                logDashboard("Intake Power", "%.3f", intakePower);
-            }
-            if (magazineTelemetry.vertical) {
-                logDashboard("Vertical State", getState(VerticalState.class));
-                logDashboard("Vertical Power", "%.3f", verticalPower);
-            }
-            if (magazineTelemetry.servos) {
-                logDashboard("Horizontal Front State", getState(HorizontalFrontState.class));
-                logDashboard("Horizontal Front Position", "%.3f", horizontalFrontPosition);
-                logDashboard("Horizontal Back State", getState(HorizontalBackState.class));
-                logDashboard("Horizontal Back Position", "%.3f", horizontalBackPosition);
-            }
-            if (magazineTelemetry.current) {
-                logDashboard("Intake Current (A)", "%.2f", intake.getCurrent(CurrentUnit.AMPS));
-                logDashboard("Vertical Current (A)", "%.2f", vertical.getCurrent(CurrentUnit.AMPS));
-            }
+        if (magazineTelemetry.intake) {
+            logDashboard("Intake State", getState(IntakeState.class));
+            logDashboard("Intake Power", "%.3f", intakePower);
+        }
+        if (magazineTelemetry.vertical) {
+            logDashboard("Vertical State", getState(VerticalState.class));
+            logDashboard("Vertical Power", "%.3f", verticalPower);
+        }
+        if (magazineTelemetry.servos) {
+            logDashboard("Horizontal Front State", getState(HorizontalFrontState.class));
+            logDashboard("Horizontal Front Position", "%.3f", horizontalFrontPosition);
+            logDashboard("Horizontal Back State", getState(HorizontalBackState.class));
+            logDashboard("Horizontal Back Position", "%.3f", horizontalBackPosition);
+        }
+        if (magazineTelemetry.current) {
+            logDashboard("Intake Current (A)", "%.2f", getIntakeCurrent());
+            logDashboard("Vertical Current (A)", "%.2f", getVerticalCurrent());
         }
     }
 }

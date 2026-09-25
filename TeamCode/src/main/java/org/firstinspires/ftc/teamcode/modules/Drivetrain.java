@@ -60,15 +60,12 @@ public class Drivetrain extends Module {
     private double lockedHeading = 0;
     private final PidController headingLockController = new PidController()
             .withGains(1, 0, 0.2, 0.0)
-            .withFeedforward(0, 0)
             .withContinuousInput(-Math.PI, Math.PI);
 
     private double flPower, blPower, brPower, frPower;
     private double lastCurrentLimiterMultiplier = 1.0;
 
     public Drivetrain(HardwareMap hardwareMap) {
-        super();
-
         fl = new EnhancedMotor(hardwareMap, "fl").withCachingTolerance(0.05);
         bl = new EnhancedMotor(hardwareMap, "bl").withCachingTolerance(0.05);
         fr = new EnhancedMotor(hardwareMap, "fr").withCachingTolerance(0.05);
@@ -95,7 +92,6 @@ public class Drivetrain extends Module {
 
     @Override
     public void init() {
-        super.init();
         currentLoopTimer.reset();
     }
 

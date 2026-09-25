@@ -3,18 +3,17 @@ package org.firstinspires.ftc.teamcode.modules;
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
-import org.firstinspires.ftc.teamcode.modules.vision.BallDetection;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
 import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
-import org.firstinspires.ftc.teamcode.modules.vision.RobotStateSource;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
 import org.opencv.core.Point;
 
@@ -48,25 +47,18 @@ public class Camera extends Module {
     private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
 
     private WebcamSession session;
-    private RobotStateSource robotStateSource;
+    private Follower follower;
     private BallDetectionPipeline.Frame frame = BallDetectionPipeline.Frame.EMPTY;
     private List<FieldBall> fieldBalls = Collections.emptyList();
-    private RobotStateHistory.Sample captureState;
     private double lastFieldBallFrameTimestamp = -1;
     private double previousReadSeconds = Double.NaN;
 
     public Camera(HardwareMap hardwareMap) {
-        super();
         this.hardwareMap = hardwareMap;
     }
 
     public Camera withFollower(Follower follower) {
-        return withRobotState(RobotStateSource.fromFollower(follower));
-    }
-
-    /** Sampled in read(), before follower.update(): it must return the state the previous loop produced. */
-    public Camera withRobotState(RobotStateSource source) {
-        this.robotStateSource = source;
+        this.follower = follower;
         robotHistory.clear();
         previousReadSeconds = Double.NaN;
         fieldBallTracker.reset();
@@ -93,22 +85,25 @@ public class Camera extends Module {
     }
 
     private void updateFieldBalls() {
-        if (robotStateSource == null) {
+        if (follower == null) {
             fieldBalls = Collections.emptyList();
-            captureState = null;
             return;
         }
         // read() runs before follower.update(): this pose is the previous loop's, so it gets that loop's time.
         double now = nowSeconds();
         if (!Double.isNaN(previousReadSeconds)) {
-            robotHistory.record(robotStateSource.sample(previousReadSeconds));
+            Pose pose = follower.pose();
+            Velocity velocity = follower.velocity();
+            robotHistory.record(new RobotStateHistory.Sample(
+                    pose.x(), pose.y(), pose.heading(),
+                    velocity.vx, velocity.vy, velocity.omega, previousReadSeconds));
         }
         previousReadSeconds = now;
         if (frame.timestampSeconds == lastFieldBallFrameTimestamp) return;
         lastFieldBallFrameTimestamp = frame.timestampSeconds;
 
         // The frame is tens of ms old: transform with the robot state at capture time, not now.
-        captureState = robotHistory.sampleAt(frame.timestampSeconds);
+        RobotStateHistory.Sample captureState = robotHistory.sampleAt(frame.timestampSeconds);
         List<FieldBall> freshFieldBalls = BallFieldTransform.toField(frame.balls, captureState);
         fieldBalls = fieldBallTracker.update(freshFieldBalls, nowSeconds());
     }
@@ -127,64 +122,22 @@ public class Camera extends Module {
         return frame.balls;
     }
 
-    public List<BallDetection> getDetections() {
-        return frame.detections;
-    }
-
     public int getBallCount() {
         return frame.balls.size();
     }
 
-    public boolean hasBall() {
-        return !frame.balls.isEmpty();
-    }
-
-    public TrackedBall getBallById(int id) {
-        for (TrackedBall ball : frame.balls) {
-            if (ball.id == id) return ball;
-        }
-        return null;
-    }
-
     /** Nearest to the camera frame's origin, not the robot center. */
     public TrackedBall getNearestBall() {
-        return getNearestBallTo(0, 0);
-    }
-
-    public TrackedBall getNearestBallTo(double cameraX, double cameraY) {
         TrackedBall nearest = null;
         double bestDistance = Double.MAX_VALUE;
         for (TrackedBall ball : frame.balls) {
-            double distance = ball.distanceTo(cameraX, cameraY);
+            double distance = ball.distanceTo(0, 0);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 nearest = ball;
             }
         }
         return nearest;
-    }
-
-    public TrackedBall getFastestBall() {
-        TrackedBall fastest = null;
-        for (TrackedBall ball : frame.balls) {
-            if (fastest == null || ball.speed() > fastest.speed()) fastest = ball;
-        }
-        return fastest;
-    }
-
-    public List<TrackedBall> getMovingBalls() {
-        List<TrackedBall> moving = new ArrayList<>(frame.balls.size());
-        for (TrackedBall ball : frame.balls) {
-            if (ball.isMoving()) moving.add(ball);
-        }
-        return Collections.unmodifiableList(moving);
-    }
-
-    public boolean isAnyBallMoving() {
-        for (TrackedBall ball : frame.balls) {
-            if (ball.isMoving()) return true;
-        }
-        return false;
     }
 
     public Point getPredictedBallPosition(TrackedBall ball) {
@@ -196,38 +149,20 @@ public class Camera extends Module {
     }
 
     public boolean hasRobotState() {
-        return robotStateSource != null;
+        return follower != null;
     }
 
     public List<FieldBall> getFieldBalls() {
         return fieldBalls;
     }
 
-    public int getFieldBallCount() {
-        return fieldBalls.size();
-    }
-
-    public FieldBall getFieldBallById(int id) {
-        for (FieldBall ball : fieldBalls) {
-            if (ball.id == id) return ball;
-        }
-        return null;
-    }
-
     public FieldBall getNearestFieldBall() {
         RobotStateHistory.Sample robot = robotHistory.newest();
-        return robot == null ? null : getNearestFieldBallTo(robot.x, robot.y);
-    }
-
-    public FieldBall getNearestFieldBallTo(Pose pose) {
-        return getNearestFieldBallTo(pose.x(), pose.y());
-    }
-
-    public FieldBall getNearestFieldBallTo(double fieldX, double fieldY) {
+        if (robot == null) return null;
         FieldBall nearest = null;
         double bestDistance = Double.MAX_VALUE;
         for (FieldBall ball : fieldBalls) {
-            double distance = ball.distanceTo(fieldX, fieldY);
+            double distance = ball.distanceTo(robot.x, robot.y);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 nearest = ball;
@@ -260,26 +195,6 @@ public class Camera extends Module {
         return ball.predict(lookaheadSeconds + getFrameAgeSeconds());
     }
 
-    /** Null without a robot state source. */
-    public Pose cameraPointToField(double cameraX, double cameraY) {
-        return captureState == null
-                ? null
-                : BallFieldTransform.cameraPointToField(cameraX, cameraY, captureState);
-    }
-
-    /** Robot state when the current frame was captured; null without a robot state source. */
-    public RobotStateHistory.Sample getCaptureState() {
-        return captureState;
-    }
-
-    public BallDetectionPipeline getPipeline() {
-        return pipeline;
-    }
-
-    public double getFps() {
-        return frame.fps;
-    }
-
     public double getFrameAgeSeconds() {
         if (frame.timestampSeconds == 0) return 0;
         return nowSeconds() - frame.timestampSeconds;
@@ -291,14 +206,6 @@ public class Camera extends Module {
 
     public boolean isFrameStale() {
         return frame.timestampSeconds == 0 || getFrameAgeSeconds() > staleFrameSeconds;
-    }
-
-    public boolean isCalibrated() {
-        return pipeline.isCalibrated();
-    }
-
-    public void resetTracking() {
-        pipeline.resetTracking();
     }
 
     @Override

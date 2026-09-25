@@ -37,7 +37,6 @@ public class CellTipCamera extends Module {
     private double stalenessMs = Double.NaN;
 
     public CellTipCamera(HardwareMap hardwareMap) {
-        super();
         this.hardwareMap = hardwareMap;
     }
 
@@ -85,7 +84,7 @@ public class CellTipCamera extends Module {
 
     /** An empty frame also reads tipped, so a camera pointed away looks like a tipped cell. */
     public boolean isTipped() {
-        return fresh && tipped;
+        return tipped;
     }
 
     public boolean isScorable() {

@@ -13,37 +13,21 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.architecture.hardware.LaserRangefinder;
 
 /**
- * Drives straight forward at full power and brakes on the Brushland Labs laser rangefinder,
- * settling at {@link PredictiveBraking.Tuning#stopDistanceCm}. The ultrasonic twin of this opmode
- * is {@link PredictiveBrakingUltrasonicTest}; both share one {@link PredictiveBraking.Tuning}
- * block so the two sensors can be compared under identical braking settings.
- *
- * Hardware config:
- *   - Motors "fl", "bl", "fr", "br" on Control Hub motor ports 0-3.
- *   - I2C device of type "REV Color Sensor V3" named "Laser".
- *
- * Run with {@link Tuning#wheelTest} true first (the default). All four wheels spin at 20% and the
- * braking logic is skipped, so you can confirm every wheel drives the robot forward. Flip the
- * matching reverse{Corner} flag on the dashboard for any wheel spinning backwards — the flags are
- * applied live, no restart needed. Once all four agree, set wheelTest false and run for real.
- *
- * Unlike the ultrasonic, this sensor reads well below 20 cm, so stopDistanceCm can go lower here
- * if you want a tighter standoff. Run ConfigureLaserRangefinder first if the sensor hasn't been
- * set to LONG distance mode.
+ * Drives straight forward on Play and brakes on the laser ("Laser"), sharing the "Braking Law" block
+ * with the ultrasonic test so the sensors compare like for like. Run {@link Tuning#wheelTest} first and
+ * flip reverse flags until every wheel drives forward. Run ConfigureLaserRangefinder first for LONG mode.
  */
 @TeleOp(name = "Predictive Braking (Laser)", group = "Test")
 public class PredictiveBrakingLaserTest extends OpMode {
 
     @Config("Braking Laser Test")
     public static class Tuning {
-        /** True: skip braking, spin every wheel at 20% so you can spot a reversed one. */
+        /** Skip braking and spin every wheel at wheelTestPower, to spot a reversed one. */
         public static boolean wheelTest = true;
         public static double wheelTestPower = 0.2;
-        /** Forward power the braking logic gets to clamp down from. */
         public static double driveSpeed = 1.0;
 
-        // Starting guess copied from BettaConstants.drivetrainConfig (left side reversed). The wheel test
-        // is there because this is a guess — correct it there, then port it back to BettaConstants.
+        // Copied from BettaConstants.drivetrainConfig; wheelTest confirms them.
         public static boolean reverseFrontLeft  = true;
         public static boolean reverseBackLeft   = true;
         public static boolean reverseFrontRight = false;
@@ -68,8 +52,7 @@ public class PredictiveBrakingLaserTest extends OpMode {
         laser = new LaserRangefinder(hardwareMap.get(RevColorSensorV3.class, "Laser"));
         braking = new PredictiveBraking(() -> {
             double cm = laser.getDistance(DistanceUnit.CM);
-            // getStatus() reflects the read we just did, so a bad status discards that sample and
-            // PredictiveBraking holds the previous good distance instead.
+            // getStatus() describes the read just above; NaN makes PredictiveBraking keep the last good one.
             return laser.getStatus() <= MAX_USABLE_STATUS ? cm : Double.NaN;
         });
         dashboard = FtcDashboard.getInstance();
@@ -120,7 +103,6 @@ public class PredictiveBrakingLaserTest extends OpMode {
         dashboard.sendTelemetryPacket(packet);
     }
 
-    /** Same power to all four wheels — straight forward, no strafe, no turn. */
     private void drive(double power) {
         frontLeft.setPower(power  * (Tuning.reverseFrontLeft  ? -1 : 1));
         backLeft.setPower(power   * (Tuning.reverseBackLeft   ? -1 : 1));

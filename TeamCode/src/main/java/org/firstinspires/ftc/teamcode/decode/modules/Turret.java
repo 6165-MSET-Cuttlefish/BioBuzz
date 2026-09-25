@@ -30,7 +30,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
-import org.firstinspires.ftc.teamcode.decode.DecodeContext;
 
 @Config("Decode Turret")
 public class Turret extends Module {
@@ -50,7 +49,6 @@ public class Turret extends Module {
     private static final int DECODE_PIPELINE = 0;
 
     public static double TENSION_OFFSET = 0.0;
-    public static boolean useLimelight = true;
     public static int RED_TAG_ID = 24;
     public static int BLUE_TAG_ID = 20;
 
@@ -66,8 +64,6 @@ public class Turret extends Module {
     public static boolean logLimelightPoses = false;
 
     public static int limelightHeadingEveryNLoops = 3;
-
-    public static double maxTurretAngle = 90.0;
 
     public static double AHEAD_GAIN = 0;
     public static double MIN_DELTA_FOR_AHEAD = 0;
@@ -132,8 +128,6 @@ public class Turret extends Module {
     }
 
     public Turret(HardwareMap hardwareMap) {
-        setTelemetryEnabled(turretTelemetry.TOGGLE);
-
         turretServoFront = new EnhancedServo(hardwareMap, "turretFront").withCachingTolerance(0.001);
         turretServoBack = new EnhancedServo(hardwareMap, "turretBack").withCachingTolerance(0.001);
 
@@ -143,7 +137,6 @@ public class Turret extends Module {
         turretServoFront.setDirection(Servo.Direction.FORWARD);
         turretServoBack.setDirection(Servo.Direction.FORWARD);
 
-        // Pipeline 0 is the DECODE AprilTag/MT2 pipeline; BioBuzz's cell-tip SnapScripts are 1 and 2.
         limelight = hardwareMap.get(Limelight3A.class, "limelight");
         pipelineSwitchAccepted = limelight.pipelineSwitch(DECODE_PIPELINE);
         limelight.start();
@@ -210,29 +203,27 @@ public class Turret extends Module {
 
     @Override
     protected void onTelemetry() {
-        if (turretTelemetry.TOGGLE) {
-            if (turretTelemetry.position) {
-                logDashboard("Turret State", getState(TurretState.class));
-                logDashboard("Raw Target Angle (deg)", "%.1f", rawTargetAngle);
-                logDashboard("Delta Raw Target (deg)", "%.1f", deltaRawTarget);
-                log("Target Angle (deg)", "%.1f", targetAngle);
-                logDashboard("Ahead Target Angle (deg)", "%.1f", aheadTargetAngle);
-                log("Turret Offset (deg)", "%.1f", turretManualOffset);
-                log("Relocalization status", "%s", relocalizationStatus);
-                logDashboard("Reloc desiredTagId", "%d", relocalizationDesiredTagId);
-                logDashboard("Reloc seenTagCount", "%d", relocalizationSeenTagCount);
-                logDashboard("Reloc matchedTagId", "%d", relocalizationMatchedTagId);
-                logDashboard("Reloc tx/ty (deg)", "%.2f / %.2f", relocalizationTxDeg, relocalizationTyDeg);
-                logDashboard("Reloc odo before x/y/h", "%.2f / %.2f / %.2f",
-                        relocalizationOdometryBeforeX,
-                        relocalizationOdometryBeforeY,
-                        relocalizationOdometryBeforeHeadingDeg);
-            }
-            logDashboard("Target Servo Position", "%.3f", targetServoPosition);
-            if (turretTelemetry.servos) {
-                logDashboard("Front Servo Position", "%.3f", turretServoFront.getPosition());
-                logDashboard("Back Servo Position", "%.3f", turretServoBack.getPosition());
-            }
+        if (turretTelemetry.position) {
+            logDashboard("Turret State", getState(TurretState.class));
+            logDashboard("Raw Target Angle (deg)", "%.1f", rawTargetAngle);
+            logDashboard("Delta Raw Target (deg)", "%.1f", deltaRawTarget);
+            log("Target Angle (deg)", "%.1f", targetAngle);
+            logDashboard("Ahead Target Angle (deg)", "%.1f", aheadTargetAngle);
+            log("Turret Offset (deg)", "%.1f", turretManualOffset);
+            log("Relocalization status", "%s", relocalizationStatus);
+            logDashboard("Reloc desiredTagId", "%d", relocalizationDesiredTagId);
+            logDashboard("Reloc seenTagCount", "%d", relocalizationSeenTagCount);
+            logDashboard("Reloc matchedTagId", "%d", relocalizationMatchedTagId);
+            logDashboard("Reloc tx/ty (deg)", "%.2f / %.2f", relocalizationTxDeg, relocalizationTyDeg);
+            logDashboard("Reloc odo before x/y/h", "%.2f / %.2f / %.2f",
+                    relocalizationOdometryBeforeX,
+                    relocalizationOdometryBeforeY,
+                    relocalizationOdometryBeforeHeadingDeg);
+        }
+        logDashboard("Target Servo Position", "%.3f", targetServoPosition);
+        if (turretTelemetry.servos) {
+            logDashboard("Front Servo Position", "%.3f", turretServoFront.getPosition());
+            logDashboard("Back Servo Position", "%.3f", turretServoBack.getPosition());
         }
         if (wrongPipeline) {
             log("Limelight", "WRONG PIPELINE %d, needs %d; re-INIT", lastPipelineIndex, DECODE_PIPELINE);
@@ -261,8 +252,6 @@ public class Turret extends Module {
             previousRawTargetAngle = rawTargetAngle;
 
             targetAngle = rawTargetAngle + turretManualOffset;
-
-            double signedAngle = targetAngle > 180 ? targetAngle - 360 : targetAngle;
 
             double angleDelta = calculateShortestError(targetAngle, previousTargetAngle);
             aheadTargetAngle = (Math.abs(angleDelta) > MIN_DELTA_FOR_AHEAD)

@@ -190,24 +190,24 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
             for (AprilTagDetection tag : found.get(c)) {
                 quad.fromArray(tag.corners);
                 Imgproc.polylines(display, Collections.singletonList(quad), true, color, 2);
-                label(String.valueOf(tag.id), new Point(tag.center.x - 10, tag.center.y), color, 0.5, 1);
+                label(String.valueOf(tag.id), new Point(tag.center.x - 10, tag.center.y), color);
             }
         }
 
         int y = 18;
-        label(alliance + " cell tip", new Point(8, y), WHITE, 0.5, 1);
+        label(alliance + " cell tip", new Point(8, y), WHITE);
         for (int c = 0; c < clusterIds.length; c++) {
             y += 20;
             int[] ids = clusterIds[c];
             String range = String.format("%-8s %d-%d", clusterLabels[c], ids[0], ids[ids.length - 1]);
             List<AprilTagDetection> tags = found.get(c);
             if (tags.isEmpty()) {
-                label(range + "  0/" + ids.length + "  --", new Point(8, y), GREY, 0.5, 1);
+                label(range + "  0/" + ids.length + "  --", new Point(8, y), GREY);
                 continue;
             }
             boolean good = scorableRoll(rolls[c]);
             label(String.format("%s  %d/%d  roll %+.1f  %s", range, tags.size(), ids.length, rolls[c],
-                    good ? "UP" : "DOWN"), new Point(8, y), good ? GREEN : RED, 0.5, 1);
+                    good ? "UP" : "DOWN"), new Point(8, y), good ? GREEN : RED);
         }
 
         String text = tipped ? "TIPPED" : "SCORABLE";
@@ -220,15 +220,15 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
         if (!Double.isNaN(pendingSince)) {
             label(String.format("reads %s for %.2fs / %.2fs", nowScorable ? "SCORABLE" : "TIPPED",
                     now - pendingSince, Tuning.holdSeconds),
-                    new Point(8, y + 40 + size.height), AMBER, 0.5, 1);
+                    new Point(8, y + 40 + size.height), AMBER);
         }
     }
 
-    private void label(String text, Point origin, Scalar color, double scale, int thickness) {
+    private void label(String text, Point origin, Scalar color) {
         int[] baseline = new int[1];
-        Size size = Imgproc.getTextSize(text, FONT, scale, thickness, baseline);
+        Size size = Imgproc.getTextSize(text, FONT, 0.5, 1, baseline);
         Imgproc.rectangle(display, new Point(origin.x - 2, origin.y - size.height - 2),
                 new Point(origin.x + size.width + 2, origin.y + baseline[0]), BLACK, -1);
-        Imgproc.putText(display, text, origin, FONT, scale, color, thickness, Imgproc.LINE_AA);
+        Imgproc.putText(display, text, origin, FONT, 0.5, color, 1, Imgproc.LINE_AA);
     }
 }

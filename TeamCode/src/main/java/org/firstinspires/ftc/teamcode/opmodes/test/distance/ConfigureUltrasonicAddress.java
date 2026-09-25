@@ -8,36 +8,17 @@ import com.qualcomm.robotcore.hardware.I2cAddr;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
 /**
- * One-shot address-change opmode for the MaxBotix MB1242 (I2CXL-MaxSonar-EZ4).
- *
- * Every MB1242 ships on 8-bit address 0xE0, so two of them on the same I2C bus collide. This
- * writes a new address into one sensor's EEPROM, where it persists across power cycles.
- *
- * Usage:
- *  1. Plug in exactly ONE sensor — the one being renumbered — on the port configured as "sonar".
- *     Anything else still on 0xE0 will be renumbered too.
- *  2. Set NEW_ADDR_8BIT below, deploy, run once.
- *  3. Verify the post-write reading below is sane (a hand held ~50 cm away should read ~50).
- *  4. In the opmode that uses this sensor, call setI2cAddress with the same value after pulling
- *     it out of the hardwareMap — the config file always hands you the 0xE0 default.
- *
- * Address rules: 8-bit, even only (odd values round down to the next even). 0x00, 0x50, 0xA4,
- * and 0xAA are rejected and leave the sensor where it was. 0xE2, 0xE4, 0xE6 ... are the obvious
- * picks for a second/third/fourth sensor.
- *
- * Note the MB1242 also has a hardware escape hatch: pin 1 pulled low at power-up makes the
- * sensor use 0xE0 for that power cycle regardless of what's in EEPROM. That's the recovery path
- * if a sensor gets written to an address nothing can find.
- *
- * Datasheet: https://maxbotix.com/pages/i2cxl-maxsonar-ez-datasheet
+ * Writes a new I2C address into a MaxBotix MB1242's EEPROM, since every one ships on 0xE0. Plug in only
+ * the sensor being renumbered, on "sonar": anything else on 0xE0 is renumbered too. The hardwareMap
+ * always hands back 0xE0, so OpModes must {@code setI2cAddress} the new value. Pin 1 held low at
+ * power-up forces 0xE0 for that power cycle, the recovery path for a lost address.
  */
 @Autonomous(name = "Configure Ultrasonic Address", group = "Test")
 public class ConfigureUltrasonicAddress extends LinearOpMode {
 
-    /** Address the sensor is on right now. 0xE0 unless it's already been renumbered. */
     private static final int CURRENT_ADDR_8BIT = 0xE0;
 
-    /** Address to write. Must be even and not one of 0x00 / 0x50 / 0xA4 / 0xAA. */
+    /** Even (odd rounds down) and not 0x00, 0x50, 0xA4 or 0xAA, which the sensor rejects. */
     private static final int NEW_ADDR_8BIT = 0xE2;
 
     @Override
