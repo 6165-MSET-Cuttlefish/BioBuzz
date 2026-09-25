@@ -72,31 +72,35 @@ MAGENTA = (255, 0, 255)
 CONTACT = (0, 0, 255)
 
 
-def _bounds(band):
-    return np.array(band[0], np.uint8), np.array(band[1], np.uint8)
-
-
 class BallType(object):
     """Draw colours are BGR here; the Java Scalars are RGB because EasyOpenCV hands out RGB."""
 
-    def __init__(self, code, label, diameter_in, band, glare, draw):
+    def __init__(self, code, label, diameter_in, hues, s, v, glare, draw):
         self.code = code
         self.label = label
         self.radius_scale = diameter_in / REFERENCE_BALL_DIAMETER_IN
-        self.band_low, self.band_high = _bounds(band)
-        self.glare_low, self.glare_high = _bounds(glare)
+        glare_s_high, glare_v_low = glare
+        self.ranges = []
+        for h_low, h_high in hues:
+            self.ranges.append((np.array((h_low, s[0], v[0]), np.uint8),
+                                np.array((h_high, s[1], v[1]), np.uint8)))
+            self.ranges.append((np.array((h_low, 0, glare_v_low), np.uint8),
+                                np.array((h_high, glare_s_high, 255), np.uint8)))
         self.draw = draw
 
+    def mask(self, hsv):
+        out = cv2.inRange(hsv, *self.ranges[0])
+        for low, high in self.ranges[1:]:
+            out = cv2.bitwise_or(out, cv2.inRange(hsv, low, high))
+        return out
 
-# Each type's second band is its glare band: highlights wash out saturation and raise value but keep
-# hue. Red sits at the 179 end of this HSV space rather than straddling 0, so one band covers it.
+
+# Arguments: hue ranges, (sLow, sHigh), (vLow, vHigh), (glareSHigh, glareVLow). Each hue range also
+# gets a glare band, since highlights wash out saturation and raise value but keep hue. Red wraps past 179.
 BALL_TYPES = (
-    BallType(1, "Pollen", 2.8,
-             ((0, 50, 150), (30, 255, 255)), ((0, 0, 220), (30, 60, 255)), (0, 255, 255)),
-    BallType(2, "Red Nectar", 3.6,
-             ((166, 145, 130), (179, 255, 255)), ((166, 0, 210), (179, 95, 255)), (40, 40, 255)),
-    BallType(3, "Blue Nectar", 3.6,
-             ((105, 140, 115), (123, 255, 255)), ((105, 0, 200), (123, 100, 255)), (255, 120, 40)),
+    BallType(1, "Pollen", 2.8, ((15, 32),), (120, 255), (120, 255), (70, 200), (0, 255, 255)),
+    BallType(2, "Red Nectar", 3.6, ((0, 12), (165, 179)), (130, 255), (90, 255), (80, 190), (40, 40, 255)),
+    BallType(3, "Blue Nectar", 3.6, ((100, 125),), (130, 255), (75, 255), (100, 180), (255, 120, 40)),
 )
 
 _CLOSE_KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, ROI_CLOSE_KERNEL_SIZE)
@@ -275,7 +279,7 @@ def _draw_overlay(image, balls, ground, order, region_count, scale_x, scale_y):
         ball, x, y, radius, _ = balls[i]
         center = (int(x * up), int(y * up))
         r = int(radius * up)
-        cv2.circle(image, center, r, ball.draw, 2)
+        cv2.circle(image, center, r, WHITE, 2)
         cv2.circle(image, center, 4, WHITE, -1)
         cv2.circle(image, (center[0], center[1] + r), 5, CONTACT, -1)
         _label(image, "%s%s (%.1f, %.1f)in"
@@ -316,8 +320,7 @@ def runPipeline(image, llrobot):
     candidates = []
     region_count = 0
     for ball in BALL_TYPES:
-        color_mask = cv2.bitwise_or(cv2.inRange(hsv, ball.band_low, ball.band_high),
-                                    cv2.inRange(hsv, ball.glare_low, ball.glare_high))
+        color_mask = ball.mask(hsv)
         roi_mask = cv2.morphologyEx(color_mask, cv2.MORPH_CLOSE, _CLOSE_KERNEL)
         if mask_canvas is not None:
             mask_canvas[roi_mask > 0] = ball.draw
