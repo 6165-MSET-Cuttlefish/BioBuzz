@@ -12,32 +12,15 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
 /**
- * Bench test for the MaxBotix MB1242 (I2CXL-MaxSonar-EZ4) ultrasonic rangefinder.
- *
- * Hardware config: add an "MaxSonar I2CXL" on an I2C port, named "sonar".
- *
- * Unlike the laser rangefinders, this sensor is ping/wait/read rather than continuously ranging:
- * the ranging cycle takes 25 ms (close target) to 100 ms (no target), and the sensor ignores I2C
- * entirely while it's ranging. {@link MaxSonarI2CXL#getDistanceAsync} handles that without
- * blocking the loop — it reads the previous ping's result and re-pings only once
- * {@link Tuning#propagationDelayMs} has elapsed — so the reported distance holds flat between
- * pings and the dashboard plot is a staircase, not a curve. That staircase width is the real
- * sensor latency and is what matters for braking: at 100 ms, the robot has already travelled
- * a couple of inches at speed before the reading updates.
- *
- * Gamepad A resets the min/max hold.
+ * Needs a "MaxSonar I2CXL" named "sonar". The sensor pings rather than ranging continuously, so the
+ * reading holds flat between pings; that staircase width is its real latency. Gamepad A resets min/max.
  */
 @TeleOp(name = "Maxbotix Ultrasonic", group = "Test")
 public class MaxbotixUltrasonicTest extends OpMode {
 
     @Config("Ultrasonic Sensor Test")
     public static class Tuning {
-        /**
-         * Delay between commanding a ping and reading the result. The datasheet wants 100 ms
-         * between range commands for a full-range cycle; shorter is fine (down to ~25 ms) when
-         * the target is close, but too short and the read lands mid-cycle and returns stale data.
-         * Turn this down to find the fastest update rate that still tracks a wall approach.
-         */
+        /** Ping-to-read delay: 100 ms covers full range, ~25 ms a close target; too short reads stale data. */
         public static int propagationDelayMs = 100;
     }
 
@@ -62,7 +45,6 @@ public class MaxbotixUltrasonicTest extends OpMode {
         dashboard = FtcDashboard.getInstance();
 
         // Before the first ping the sensor answers a read with power-up info bytes, not a range.
-        // Burn one blocking ping/read here so loop() never sees them.
         sonar.getDistanceSync(Tuning.propagationDelayMs, DistanceUnit.CM);
 
         telemetry.addLine("MB1242 ready. Press Play.");
@@ -71,8 +53,7 @@ public class MaxbotixUltrasonicTest extends OpMode {
 
     @Override
     public void loop() {
-        // One async call per loop, then convert. Calling it again with a different DistanceUnit
-        // would issue a second ping and leave the driver's cache in mixed units.
+        // A second async call with another DistanceUnit would ping again and mix units in the driver's cache.
         double cm = sonar.getDistanceAsync(Tuning.propagationDelayMs, DistanceUnit.CM);
         double mm = DistanceUnit.MM.fromCm(cm);
         double in = DistanceUnit.INCH.fromCm(cm);

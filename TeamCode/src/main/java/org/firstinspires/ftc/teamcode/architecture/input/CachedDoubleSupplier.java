@@ -37,19 +37,4 @@ public class CachedDoubleSupplier {
     public EdgeBooleanSupplier lessThan(double threshold) {
         return new EdgeBooleanSupplier(() -> this.getValue() < threshold);
     }
-
-    public EdgeBooleanSupplier greaterThanOrEqual(double threshold) {
-        return new EdgeBooleanSupplier(() -> this.getValue() >= threshold);
-    }
-
-    public EdgeBooleanSupplier lessThanOrEqual(double threshold) {
-        return new EdgeBooleanSupplier(() -> this.getValue() <= threshold);
-    }
-
-    public EdgeBooleanSupplier inRange(double min, double max) {
-        return new EdgeBooleanSupplier(() -> {
-            double value = this.getValue();
-            return value >= min && value <= max;
-        });
-    }
 }

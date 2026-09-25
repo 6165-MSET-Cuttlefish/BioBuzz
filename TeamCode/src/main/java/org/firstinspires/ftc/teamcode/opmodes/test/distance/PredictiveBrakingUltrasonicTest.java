@@ -13,43 +13,27 @@ import com.qualcomm.robotcore.hardware.I2cAddr;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
 /**
- * Drives straight forward at full power and brakes on the MaxBotix MB1242 ultrasonic, settling at
- * {@link PredictiveBraking.Tuning#stopDistanceCm}. No gamepad input — it starts driving on Play.
- *
- * Hardware config:
- *   - Motors "fl", "bl", "fr", "br" on Control Hub motor ports 0-3.
- *   - I2C device of type "MaxSonar I2CXL" named "sonar" (put it on bus 1, not 0).
- *
- * Run with {@link Tuning#wheelTest} true first (the default). All four wheels spin at 20% and the
- * braking logic is skipped, so you can confirm every wheel drives the robot forward. Flip the
- * matching reverse{Corner} flag on the dashboard for any wheel spinning backwards — the flags are
- * applied live, no restart needed. Once all four agree, set wheelTest false and run for real.
- *
- * The MB1242 floors at 20 cm — anything closer still reports 20 — so stopDistanceCm must stay above
- * that or the reading won't follow the robot down and it will creep in forever. 25 cm leaves a
- * usable margin.
- *
- * Gamepad A releases the stop latch if you want it to approach again without restarting.
+ * Drives straight forward on Play and brakes on the MB1242 ("sonar", on I2C bus 1, not 0). Run
+ * {@link Tuning#wheelTest} first and flip reverse flags until every wheel drives forward. The sensor
+ * reads 20 cm for anything closer, so keep stopDistanceCm above that. Gamepad A releases the stop latch.
  */
 @TeleOp(name = "Predictive Braking (Ultrasonic)", group = "Test")
 public class PredictiveBrakingUltrasonicTest extends OpMode {
 
     @Config("Braking Ultrasonic Test")
     public static class Tuning {
-        /** True: skip braking, spin every wheel at 20% so you can spot a reversed one. */
+        /** Skip braking and spin every wheel at wheelTestPower, to spot a reversed one. */
         public static boolean wheelTest = true;
         public static double wheelTestPower = 0.2;
-        /** Forward power the braking logic gets to clamp down from. */
         public static double driveSpeed = 1.0;
 
-        // Starting guess copied from BettaConstants.drivetrainConfig (left side reversed). The wheel test
-        // is there because this is a guess — correct it there, then port it back to BettaConstants.
+        // Copied from BettaConstants.drivetrainConfig; wheelTest confirms them.
         public static boolean reverseFrontLeft  = true;
         public static boolean reverseBackLeft   = true;
         public static boolean reverseFrontRight = false;
         public static boolean reverseBackRight  = false;
 
-        /** Ping-to-read delay. 100 ms is the datasheet's full-range figure; lower updates faster. */
+        /** Ping-to-read delay; 100 ms covers full range, lower updates faster. */
         public static int propagationDelayMs = 100;
     }
 
@@ -71,7 +55,6 @@ public class PredictiveBrakingUltrasonicTest extends OpMode {
         sonar = hardwareMap.get(MaxSonarI2CXL.class, "sonar");
         sonar.setI2cAddress(I2cAddr.create8bit(I2C_ADDR_8BIT));
         // Before the first ping the sensor answers a read with power-up info bytes, not a range.
-        // Burn one blocking ping/read here so the braking logic never sees them.
         sonar.getDistanceSync(Tuning.propagationDelayMs, DistanceUnit.CM);
 
         braking = new PredictiveBraking(
@@ -142,7 +125,6 @@ public class PredictiveBrakingUltrasonicTest extends OpMode {
         dashboard.sendTelemetryPacket(packet);
     }
 
-    /** Same power to all four wheels — straight forward, no strafe, no turn. */
     private void drive(double power) {
         frontLeft.setPower(power  * (Tuning.reverseFrontLeft  ? -1 : 1));
         backLeft.setPower(power   * (Tuning.reverseBackLeft   ? -1 : 1));

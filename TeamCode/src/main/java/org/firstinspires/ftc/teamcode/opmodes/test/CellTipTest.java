@@ -7,12 +7,8 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.LimelightCamera;
+import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
-/**
- * Bench check for the Limelight pipelines and {@code RobotActions.checkTip}. Run it on
- * {@code res/xml/cuttle_decode.xml}: the framework needs the drivetrain and Pinpoint even here.
- */
 @TeleOp(name = "Cell Tip Test", group = "Test")
 public class CellTipTest extends BioBuzzOpMode {
 
@@ -41,15 +37,17 @@ public class CellTipTest extends BioBuzzOpMode {
         if (outcome == null && !Scheduler.isRunning(watch)) {
             outcome = tippedAtSeconds < 0 ? "gave up (timeout)" : "finished on tip";
         }
-        if (tippedAtSeconds < 0 && robot.limelight.isTipped()) tippedAtSeconds = sinceStart.seconds();
+        if (tippedAtSeconds < 0 && robot.cellTip.isTipped()) tippedAtSeconds = sinceStart.seconds();
     }
 
     @Override
     protected void telemetry() {
-        LimelightCamera limelight = robot.limelight;
-        if (Context.allianceColor != limelight.getAlliance()) {
+        CellTipCamera cellTip = robot.cellTip;
+        if (Context.allianceColor != cellTip.getAlliance()) {
             telemetry.addData("Note", "%s selected — re-init to apply", Context.allianceColor);
         }
+        telemetry.addData("Status", cellTip.isTipped() ? "TIPPED"
+                : cellTip.isScorable() ? "SCORABLE" : "NO VERDICT");
         telemetry.addData("Command", !started ? "not started" : (outcome == null ? "watching" : outcome));
         telemetry.addData("First tip at", tippedAtSeconds < 0 ? "—" : String.format("%.2fs", tippedAtSeconds));
     }

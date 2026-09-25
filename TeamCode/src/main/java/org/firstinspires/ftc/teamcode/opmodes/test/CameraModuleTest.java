@@ -11,11 +11,6 @@ import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
-/**
- * Exercises modules/Camera through the framework (init, read, field-frame transform, stop). Nothing
- * drives, but the framework builds the follower, so the hub config needs the drive motors and the
- * Pinpoint as well as the webcam.
- */
 @TeleOp(name = "Camera Module Test", group = "Test")
 public class CameraModuleTest extends EnhancedOpMode {
 

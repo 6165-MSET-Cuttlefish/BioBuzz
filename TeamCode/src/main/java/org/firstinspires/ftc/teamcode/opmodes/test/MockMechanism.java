@@ -7,10 +7,7 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
-/**
- * Mock module for the architecture smoke test. Blank {@link Tuning#pulseMotorName} = no hardware
- * (safe default); never name a drivetrain motor (fl/bl/fr/br) — it fights the Pedro follower.
- */
+/** Never set {@link Tuning#pulseMotorName} to a drive motor (fl/bl/fr/br): it fights the Pedro follower. */
 public class MockMechanism extends Module {
     public enum Status implements State {
         IDLE(0), ACTIVE(1);

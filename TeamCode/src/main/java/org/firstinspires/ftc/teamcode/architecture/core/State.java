@@ -43,7 +43,7 @@ public interface State {
         MODULES.put(this, module);
     }
 
-    /** Transition this state's owning module to this state. False if unbound or guard-rejected. */
+    /** Transition this state's owning module to this state. False if unbound. */
     default boolean activate() {
         Module m = getModule();
         if (m == null) {

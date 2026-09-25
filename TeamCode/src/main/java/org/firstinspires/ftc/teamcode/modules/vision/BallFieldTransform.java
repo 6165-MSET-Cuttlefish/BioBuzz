@@ -1,7 +1,6 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
 import com.acmerobotics.dashboard.config.Config;
-import com.pedropathing.math.Pose;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,12 +43,6 @@ public final class BallFieldTransform {
         }
 
         return new FieldBall(ball.id, ball.type, robot.x + offset[0], robot.y + offset[1], vx, vy, ball.visible);
-    }
-
-    public static Pose cameraPointToField(double cameraX, double cameraY,
-                                          RobotStateHistory.Sample robot) {
-        double[] offset = cameraVectorToFieldAxes(cameraX, cameraY, robot.heading, true);
-        return new Pose(robot.x + offset[0], robot.y + offset[1]);
     }
 
     // Mount offset is for points only: a rigid translation moves a position, not a velocity.

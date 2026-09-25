@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.architecture.hardware;
 
-/** Last-written-value cache + clamp + voltage scaling, shared by the Enhanced* wrappers. */
 final class WriteCache {
     double tolerance = 0.0;
     double cached = Double.NaN;

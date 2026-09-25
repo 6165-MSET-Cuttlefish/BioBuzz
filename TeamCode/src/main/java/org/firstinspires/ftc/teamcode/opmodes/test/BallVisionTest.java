@@ -8,10 +8,6 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
 
-/**
- * Webcam-only bench check for {@link BallDetectionPipeline}: needs just the webcam in the hub config,
- * unlike Camera Module Test, which pulls in the drivetrain and Pinpoint.
- */
 @TeleOp(name = "Ball Vision", group = "Test")
 public class BallVisionTest extends LinearOpMode {
 

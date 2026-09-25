@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
 @TeleOp(name = "BioBuzz Tele", group = "A")
 public class BioBuzzTele extends BioBuzzOpMode {
@@ -20,6 +21,7 @@ public class BioBuzzTele extends BioBuzzOpMode {
     protected void initialize() {
         slowToggle = new EdgeBooleanSupplier(() -> gamepad1.left_trigger > 0.1);
         headingLockToggle = new EdgeBooleanSupplier(() -> gamepad1.left_bumper);
+        CellTipCamera.VisionState.DISABLED.activate();
     }
 
     @Override

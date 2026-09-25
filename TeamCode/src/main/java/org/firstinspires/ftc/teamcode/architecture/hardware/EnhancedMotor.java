@@ -15,22 +15,12 @@ public class EnhancedMotor implements DcMotorEx {
     private final WriteCache cache = new WriteCache();
     private double cachedVelocity = Double.NaN;
 
-    public EnhancedMotor(DcMotorEx motor) {
-        this.motor = motor;
-    }
-
     public EnhancedMotor(HardwareMap hardwareMap, String name) {
         this.motor = hardwareMap.get(DcMotorEx.class, name);
     }
 
     public EnhancedMotor withCachingTolerance(double tolerance) {
-        setCachingTolerance(tolerance);
-        return this;
-    }
-
-    public EnhancedMotor withPowerBounds(double min, double max) {
-        cache.min = min;
-        cache.max = max;
+        cache.tolerance = Math.max(0.0, Math.min(1.0, tolerance));
         return this;
     }
 
@@ -58,33 +48,9 @@ public class EnhancedMotor implements DcMotorEx {
         motor.setPower(0.0);
     }
 
-    /** Bypasses voltage compensation and the write cache. Test-only. */
-    public void setPowerRaw(double power) {
-        double corrected = cache.clamp(power);
-        cache.store(corrected);
-        motor.setPower(corrected);
-    }
-
-    public void setCachingTolerance(double tolerance) {
-        cache.tolerance = Math.max(0.0, Math.min(1.0, tolerance));
-    }
-
-    public double getCachingTolerance() { return cache.tolerance; }
-
-    public void setReferenceVoltage(double voltage) { cache.referenceVoltage = voltage; }
-    public double getReferenceVoltage() { return cache.referenceVoltage; }
-
     public void setVoltageCompensationEnabled(boolean enabled) {
         cache.voltageCompensationEnabled = enabled;
     }
-
-    public boolean isVoltageCompensationEnabled() {
-        return cache.voltageCompensationEnabled;
-    }
-
-    /** Raw device; writing power/velocity through it bypasses the write cache and leaves it stale. */
-    public DcMotorEx getUnderlying() { return motor; }
-    public double getCachedPower() { return cache.cached; }
 
     @Override public void setMotorEnable() { motor.setMotorEnable(); }
     @Override public void setMotorDisable() { motor.setMotorDisable(); }

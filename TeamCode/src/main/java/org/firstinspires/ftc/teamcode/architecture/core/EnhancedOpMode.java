@@ -54,7 +54,6 @@ public abstract class EnhancedOpMode extends OpMode {
     private int telemetryLoopCounter = 0;
 
     private final List<Module> modules = new ArrayList<>();
-    private List<Module> sortedTelemetryModules;
     private long lastCurrentReadLoop = Long.MIN_VALUE;
     private int initializedModuleCount = 0;
     private double cachedTotalCurrent = 0.0;
@@ -92,8 +91,7 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void init() {
-        // Statics: drop stale State→Module bindings and commands from prior runs before modules instantiate.
-        // Ivy's Scheduler is a static in a library class, so it survives Sloth hot-reloads and back-to-back OpModes.
+        // Statics outlive an OpMode; Ivy's Scheduler even survives a Sloth reload.
         State.clearModuleBindings();
         Scheduler.reset();
 
@@ -108,10 +106,9 @@ public abstract class EnhancedOpMode extends OpMode {
         autoDiscoverModules();
         initModules();
         initialize();
-        // Second pass picks up modules created during initialize(); sort once all modules are known.
+        // Second pass picks up modules created during initialize().
         autoDiscoverModules();
         initModules();
-        if (telemetrySortModulesOnce) buildSortedTelemetryModules();
 
         loopTimer.reset();
         gameTimer.reset();
@@ -319,22 +316,6 @@ public abstract class EnhancedOpMode extends OpMode {
         initializedModuleCount = modules.size();
     }
 
-    private List<Module> telemetryOrderedModules() {
-        if (telemetrySortModulesOnce) {
-            if (sortedTelemetryModules == null) buildSortedTelemetryModules();
-            return sortedTelemetryModules;
-        }
-        List<Module> ordered = new ArrayList<>(modules);
-        Collections.sort(ordered, (a, b) -> Integer.compare(a.telemetryOrder(), b.telemetryOrder()));
-        return ordered;
-    }
-
-    private void buildSortedTelemetryModules() {
-        List<Module> ordered = new ArrayList<>(modules);
-        Collections.sort(ordered, (a, b) -> Integer.compare(a.telemetryOrder(), b.telemetryOrder()));
-        sortedTelemetryModules = ordered;
-    }
-
     private void readModules() {
         for (int i = 0; i < modules.size(); i++) {
             Module m = modules.get(i);
@@ -400,8 +381,7 @@ public abstract class EnhancedOpMode extends OpMode {
         }
         telemetryRenderedThisLoop = true;
 
-        // Dashboard data goes into the packet that also carries the field overlay, so exactly one
-        // complete frame is sent per loop. Re-set every loop: updateDashboard swaps in a fresh packet.
+        // Re-set every loop: updateDashboard swaps in a fresh packet.
         robot.telemetry.setPacket(packet);
 
         if (telemetryToggles.dsTelemetry || telemetryToggles.dashboardTelemetry) {
@@ -414,8 +394,7 @@ public abstract class EnhancedOpMode extends OpMode {
             if (!modules.isEmpty()) {
                 robot.telemetry.addSeparator();
                 robot.telemetry.addGroupHeader("MODULES", COLOR_MODULE);
-                List<Module> ordered = telemetryOrderedModules();
-                for (int i = 0; i < ordered.size(); i++) ordered.get(i).telemetry();
+                for (int i = 0; i < modules.size(); i++) modules.get(i).telemetry();
             }
 
             if (telemetryToggles.loopProfile) {
@@ -426,8 +405,7 @@ public abstract class EnhancedOpMode extends OpMode {
                     Map.Entry<String, Double> entry = snapshot.get(i);
                     robot.telemetry.addDashboardData(entry.getKey(), "%.2fms", entry.getValue());
                 }
-                // Single copy-pasteable dashboard value: whole-run per-section avg/peak/count. Rebuilt
-                // rarely — it's ~60 String.formats and, being cumulative, barely moves loop to loop.
+                // Rebuilt rarely: ~60 String.formats, and being cumulative it barely moves loop to loop.
                 if ((loopDumpCounter++ % 25) == 0) {
                     double loopAvg = profiledLoopCount == 0 ? 0 : profiledLoopSumMs / profiledLoopCount;
                     cachedLoopDump = profiler.report(profiledLoopCount, loopAvg, profiledLoopMaxMs);
@@ -475,9 +453,7 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void updateDashboard() {
-        // Only send a frame carrying BOTH the routed telemetry data and the overlay. Sending one without
-        // the other blanks that half for a frame, which reads as flicker; skipping the send entirely
-        // just leaves the previous complete frame up.
+        // Send only frames carrying both telemetry and overlay; one without the other blanks that half (flicker).
         int every = Math.max(1, dashboardEveryNTelemetryFrames);
         if (!telemetryRenderedThisLoop || (every > 1 && (dashboardLoopCounter++ % every) != 0)) {
             // Fresh packet discards draws accumulated this loop, which would otherwise pile up across skipped loops.

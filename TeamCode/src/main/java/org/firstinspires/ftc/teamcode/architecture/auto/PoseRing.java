@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.architecture.auto;
 
 import com.pedropathing.math.Pose;
 
-/** Fixed-capacity ring of recent robot positions; the oldest is dropped once it is full. */
 public final class PoseRing {
     private static final long RECORD_INTERVAL_NS = 50_000_000L;
 

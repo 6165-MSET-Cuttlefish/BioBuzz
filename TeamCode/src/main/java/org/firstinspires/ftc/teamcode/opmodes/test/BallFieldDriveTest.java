@@ -23,10 +23,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Field-frame ball tracking on raw mecanum + a bare Pinpoint, deliberately without the framework.
- * "Field" positions are relative to the robot's pose at init, not true field coordinates.
- */
+/** Deliberately framework-free; "field" positions are relative to the robot's pose at init. */
 @TeleOp(name = "Ball Field Drive", group = "Test")
 public class BallFieldDriveTest extends LinearOpMode {
 
@@ -105,10 +102,8 @@ public class BallFieldDriveTest extends LinearOpMode {
 
         telemetry.addData("Pinpoint status", pinpoint.getDeviceStatus());
         RobotStateHistory.Sample now = robotHistory.newest();
-        if (now != null) {
-            telemetry.addData("Robot (in, deg)", "(%.1f, %.1f) @ %.0f",
-                    now.x, now.y, Math.toDegrees(now.heading));
-        }
+        telemetry.addData("Robot (in, deg)", "(%.1f, %.1f) @ %.0f",
+                now.x, now.y, Math.toDegrees(now.heading));
         telemetry.addData("FPS (pipeline's own count)", "%.1f", frame.fps);
         telemetry.addData("Pipeline (ms)", session.webcam().getPipelineTimeMs());
         telemetry.addData("Overhead (ms)", session.webcam().getOverheadTimeMs());

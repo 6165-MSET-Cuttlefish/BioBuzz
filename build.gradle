@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.application' version '8.13.2' apply false
-    // Sloth hot-reload deployment tasks (assembleSloth, dexSloth, deploySloth, etc.).
     id 'dev.frozenmilk.sinister.sloth.load' version '0.3.2' apply false
 }
 

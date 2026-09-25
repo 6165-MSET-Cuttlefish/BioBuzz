@@ -12,7 +12,6 @@ import java.util.function.DoubleSupplier;
  * is true, every supplier reads neutral so inactive layers are physically present but silent.
  */
 public final class LayerGamepad {
-    private final Gamepad gamepad;
     private boolean atRest = false;
 
     private final List<EdgeBooleanSupplier> boolSuppliers = new ArrayList<>();
@@ -28,13 +27,10 @@ public final class LayerGamepad {
     public final EdgeBooleanSupplier leftStickButton, rightStickButton;
     public final EdgeBooleanSupplier guide, start, back;
 
-    public final EdgeBooleanSupplier touchpad, touchpadFinger1, touchpadFinger2;
+    public final EdgeBooleanSupplier touchpad;
     public final CachedDoubleSupplier touchpadFinger1X, touchpadFinger1Y;
-    public final CachedDoubleSupplier touchpadFinger2X, touchpadFinger2Y;
 
     public LayerGamepad(Gamepad gamepad) {
-        this.gamepad = gamepad;
-
         leftStickX  = doubleSupplier(() -> atRest ? 0.0 : gamepad.left_stick_x);
         leftStickY  = doubleSupplier(() -> atRest ? 0.0 : gamepad.left_stick_y);
         rightStickX = doubleSupplier(() -> atRest ? 0.0 : gamepad.right_stick_x);
@@ -63,12 +59,8 @@ public final class LayerGamepad {
         back  = boolSupplier(() -> !atRest && gamepad.back);
 
         touchpad         = boolSupplier(() -> !atRest && gamepad.touchpad);
-        touchpadFinger1  = boolSupplier(() -> !atRest && gamepad.touchpad_finger_1);
-        touchpadFinger2  = boolSupplier(() -> !atRest && gamepad.touchpad_finger_2);
         touchpadFinger1X = doubleSupplier(() -> atRest ? 0.0 : gamepad.touchpad_finger_1_x);
         touchpadFinger1Y = doubleSupplier(() -> atRest ? 0.0 : gamepad.touchpad_finger_1_y);
-        touchpadFinger2X = doubleSupplier(() -> atRest ? 0.0 : gamepad.touchpad_finger_2_x);
-        touchpadFinger2Y = doubleSupplier(() -> atRest ? 0.0 : gamepad.touchpad_finger_2_y);
     }
 
     private EdgeBooleanSupplier boolSupplier(BooleanSupplier source) {
@@ -90,10 +82,6 @@ public final class LayerGamepad {
         if (wasAtRest && !atRest) primeAllSuppliers();
     }
 
-    public boolean isAtRest() {
-        return atRest;
-    }
-
     public void invalidateAll() {
         for (int i = 0; i < boolSuppliers.size(); i++) boolSuppliers.get(i).invalidate();
         for (int i = 0; i < doubleSuppliers.size(); i++) doubleSuppliers.get(i).invalidate();
@@ -102,10 +90,5 @@ public final class LayerGamepad {
     private void primeAllSuppliers() {
         for (int i = 0; i < boolSuppliers.size(); i++) boolSuppliers.get(i).primeToCurrentState();
         for (int i = 0; i < doubleSuppliers.size(); i++) doubleSuppliers.get(i).primeToCurrentState();
-    }
-
-    /** Escape hatch for SDK fields not wrapped here. */
-    public Gamepad getRawGamepad() {
-        return gamepad;
     }
 }

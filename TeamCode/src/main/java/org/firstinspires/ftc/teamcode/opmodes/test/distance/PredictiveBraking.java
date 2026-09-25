@@ -3,171 +3,58 @@ package org.firstinspires.ftc.teamcode.opmodes.test.distance;
 import com.acmerobotics.dashboard.config.Config;
 
 /**
- * Scales a requested drive power down as the robot nears an obstacle, so holding full speed at a
- * wall decelerates smoothly and settles on {@link Tuning#stopDistanceCm} instead of colliding.
- *
- * Sensor-agnostic on purpose — which distance sensor we end up on isn't decided yet, so this takes
- * a {@link DistanceReader} lambda instead of a concrete sensor type. See
- * {@link PredictiveBrakingUltrasonicTest} and {@link PredictiveBrakingLaserTest}.
- *
- * <h2>Why "predictive"</h2>
- * The distance reading is always stale — the MB1242 only produces a new sample every ~100 ms, and
- * at 150 cm/s the robot covers 15 cm in that time. Braking on the raw reading therefore always
- * brakes late by roughly one sample period, which no amount of curve tuning can fix. So closing
- * speed is estimated by differentiating successive readings, and every decision is made on a
- * corrected distance rather than on what the sensor last said. Two separate corrections apply, and
- * conflating them is what makes this thing miss its target:
- * <ol>
- *   <li>{@link #getCurrentDistanceCm()} — the reading minus its own age
- *       ({@link Tuning#sensorLatencySeconds} plus the measured time it has sat unchanged). This
- *       recovers where the robot is <em>now</em>. It is a measurement fix, not a preference.</li>
- *   <li>{@link #getPredictedDistanceCm()} — that, minus {@link Tuning#stopLeadSeconds} of further
- *       travel, covering motor response plus the coast after power is cut. This is where the robot
- *       ends up if the brakes go on this instant, and it is what the stop triggers on.</li>
- * </ol>
- *
- * <h2>Why it still won't be exact, and what fixes that</h2>
- * Coast distance depends on battery charge, floor grip and robot weight, so no open-loop lead time
- * lands on the target every run. {@link Tuning#settleToleranceCm} closes the loop: once stopped, the
- * robot creeps in or backs out until the reading actually sits on {@link Tuning#stopDistanceCm}.
- * That, not the curve, is what guarantees the final position.
- *
- * <h2>The kinematic law ({@link Tuning#useKinematicLaw}, the default)</h2>
- * Rather than reacting to each reading, this solves for where the brake has to start and then flies
- * the stop on its own physics. Distance and speed are dead-reckoned every loop
- * ({@link #getModelDistanceCm()}), and once braking, speed follows
- * {@link Tuning#brakingDecelCmPerSec2} instead of the sensor — the differentiated reading lags by
- * more than the whole stop takes, so during the one manoeuvre that matters it reports a speed the
- * robot no longer has. Readings only trim drift, weighted by {@link Tuning#sensorTrust}.
- * <pre>
- *   stoppingDistance = v·reactionSeconds + v² / (2·brakingDecel)   // brake here
- *   targetSpeed(d)   = sqrt(2·brakingDecel·(d - stopDistanceCm))   // taper to here
- *   ceiling          = targetSpeed / topSpeedCmPerSec
- * </pre>
- * Both lines come from the same constant, so the trigger and the taper agree by construction. The
- * payoff is that stopping distance now scales with v² as it physically must: one tune holds across
- * approach speeds, where a distance-keyed curve can only ever be right at one of them.
- *
- * <h3>Measuring brakingDecelCmPerSec2</h3>
- * Don't guess it. Drive at a known speed (read {@code closing cm/s} while cruising), cut power, and
- * measure the coast in cm. Then {@code a = v² / (2·coast)} — 150 cm/s stopping in 75 cm is 150 cm/s².
- * Too low and it brakes absurdly early; too high and it brakes late and overshoots.
- *
- * <h2>The legacy exponential curve ({@code useKinematicLaw = false})</h2>
- * Full requested power all the way in to {@link Tuning#fullPowerAboveCm}. Inside that, power decays
- * exponentially from {@link Tuning#powerAtThreshold} down to zero at {@link Tuning#stopDistanceCm}:
- * <pre>
- *   t       = (predicted - stopDistanceCm) / (fullPowerAboveCm - stopDistanceCm)  // 1 at threshold, 0 at stop
- *   shape   = (exp(decelRate * t) - 1) / (exp(decelRate) - 1)                     // 1 at threshold, 0 at stop
- *   ceiling = minCreepPower + (powerAtThreshold - minCreepPower) * shape
- * </pre>
- * {@link Tuning#decelRate} is the only shape knob:
- * <ul>
- *   <li>→0 — straight linear ramp from powerAtThreshold to zero.</li>
- *   <li>2 — power falls off quickly just inside the threshold, then eases into a slower approach.</li>
- *   <li>5+ — power collapses almost immediately at the threshold, then a long crawl in.</li>
- * </ul>
- * So raise decelRate to shed speed harder and sooner after the threshold, lower it toward zero for
- * an even ramp. Where braking <em>begins</em> is fullPowerAboveCm; decelRate only controls the
- * shape between there and the stop.
- *
- * <h2>If it overshoots</h2>
- * Under the kinematic law an overshoot means the modelled deceleration is optimistic: lower
- * {@link Tuning#brakingDecelCmPerSec2} so it allows itself more room, or raise
- * {@link Tuning#reactionSeconds} if the miss is roughly constant rather than growing with speed.
- * Under the legacy curve the knob is {@link Tuning#stopLeadSeconds}. Either way the settle trim
- * still lands the final position; the tuning only decides how gracefully it arrives.
- *
- * Apart from the reverse pulse and the settle trim this only pulls power down. It never adds power
- * to an approach and never touches a negative (backing away) request, so the driver can always
- * reverse out of a corner.
+ * Caps approach power so the robot settles on {@link Tuning#stopDistanceCm} instead of hitting the
+ * obstacle. Readings are stale by a whole ping, so it brakes on a dead-reckoned model (kinematic law)
+ * or on the reading aged forward (legacy curve), then the settle trim closes the loop at rest.
+ * Measure {@link Tuning#brakingDecelCmPerSec2} as v² / (2·coast) from a power-cut coast at a known
+ * closing speed. On overshoot, lower it, or raise {@link Tuning#reactionSeconds} if the miss is constant
+ * across speeds; under the legacy curve raise {@link Tuning#stopLeadSeconds}.
  */
 public class PredictiveBraking {
 
     public interface DistanceReader {
-        /** Latest distance reading, in centimeters. Return {@link Double#NaN} for an invalid read. */
+        /** Return {@link Double#NaN} for an invalid read. */
         double getDistanceCm();
     }
 
-    // Slothboard registers @Config classes by getSimpleName(), which for a nested class is just
-    // "Tuning" — every nested Tuning in the project would collide on one key and all but one would
-    // vanish from the dashboard. Nested @Config classes must carry an explicit unique name.
     @Config("Braking Law")
     public static class Tuning {
-        /** Standoff the robot should settle on. Power is hard-zeroed at or inside this. */
         public static double stopDistanceCm = 25;
-        /** Full requested power at any distance beyond this. Braking only happens inside it. */
+        /** Legacy curve: full power beyond this, exponential decay inside it. */
         public static double fullPowerAboveCm = 80;
-        /** Power the instant the robot crosses fullPowerAboveCm — the top of the decay curve. */
         public static double powerAtThreshold = 0.9;
-        /** Exponential steepness inside the threshold. Higher sheds speed sooner. See class javadoc. */
+        /** Legacy curve steepness: ~0 is a linear ramp, higher sheds speed sooner after the threshold. */
         public static double decelRate = 2.0;
-        /**
-         * Fixed delay between the echo bouncing and the value arriving here — the driver's ping/wait
-         * cycle. Time the value then sat unchanged is measured, not guessed, and added on top.
-         */
+        /** The driver's fixed ping/wait delay; the time a value then sits unchanged is measured on top. */
         public static double sensorLatencySeconds = 0.10;
-        /**
-         * Travel time the stop is brought forward by, covering motor response plus the coast after
-         * power is cut. This is the overshoot knob: raise it if the robot stops past the target.
-         */
+        /** Legacy curve: travel time the stop is brought forward by (motor response plus coast). */
         public static double stopLeadSeconds = 0.15;
-        /** Low-pass on the closing-speed estimate, 0-1. Lower is smoother but laggier. */
+        /** Low-pass on the closing-speed estimate, 0-1. */
         public static double velocityFilter = 0.4;
-        /** Power floor inside the braking zone — below this the drivetrain stalls instead of creeping in. */
+        /** Power floor inside the braking zone, below which the drivetrain stalls. */
         public static double minCreepPower = 0.10;
-        /** Once stopped, stay stopped, instead of creeping and re-braking around the target. */
         public static boolean latchOnStop = true;
-        /**
-         * After stopping, creep in or back out until the reading is within this of stopDistanceCm.
-         * This is what actually guarantees the final position — the open-loop approach can only ever
-         * get close, since coast distance varies with battery, floor and load. 0 disables.
-         */
+        /** At rest, creep in or out until within this of stopDistanceCm; 0 disables. */
         public static double settleToleranceCm = 3;
-        /** Power for the settle creep. Must be above the drivetrain's breakaway friction to do anything. */
         public static double settlePower = 0.18;
-        /**
-         * Reverse power pulsed at the stop distance to kill momentum the coast-down can't. 0 disables
-         * (pure coast). This is the only knob that shortens the stop itself rather than moving where
-         * the slowdown begins.
-         */
+        /** Reverse power pulsed at the stop distance to kill momentum; 0 disables. */
         public static double reverseBrakePower = 0;
-        /** Skip the reverse pulse when already closing slower than this — coasting settles it. */
         public static double reverseBrakeMinClosingCmPerSec = 15;
-        /** Hard cap on a reverse pulse, so a bad velocity estimate can't drive the robot backwards. */
         public static int reverseBrakeMaxMs = 250;
-        /**
-         * Power commanded when the robot has stalled short of the stop distance — the creep floor is
-         * a fraction of full power and a heavy robot can sit below its own breakaway friction there.
-         * 0 disables the escape.
-         */
+        /** Power when stalled short of the stop, since minCreepPower may sit below breakaway friction; 0 disables. */
         public static double antiStallPower = 0.25;
-        /** Distance stops changing for this long inside the braking zone and we call it a stall. */
         public static int stallTimeoutMs = 400;
-        /**
-         * Use the kinematic brake-point law instead of the distance-keyed exponential curve. The
-         * curve prescribes the same power at the same distance whatever the speed, so it can only be
-         * right at one approach speed; this solves for where the brake must start.
-         */
+        /** Solve for the brake point from speed instead of the legacy distance-keyed curve. */
         public static boolean useKinematicLaw = true;
-        /**
-         * Deceleration the drivetrain actually achieves braking, cm/s². The one number the stopping
-         * distance is solved from — measure it (see class javadoc) rather than guessing.
-         */
         public static double brakingDecelCmPerSec2 = 150;
-        /** Speed at full power, cm/s. Converts a target speed back into a motor power. */
+        /** Speed at full power; converts a target speed into a motor power. */
         public static double topSpeedCmPerSec = 150;
-        /** Dead time between commanding the brake and the robot actually slowing. */
+        /** Dead time between commanding the brake and the robot slowing. */
         public static double reactionSeconds = 0.12;
-        /**
-         * How hard a fresh reading pulls the dead-reckoned position back, 0-1. Low: the model coasts
-         * on its own physics through the brake and the lagged sensor only trims drift. 1 would hand
-         * control back to the delayed reading, which is the problem this exists to avoid.
-         */
+        /** How hard a fresh reading pulls the dead-reckoned model, 0-1; 1 brakes on the lagged reading. */
         public static double sensorTrust = 0.15;
-        /** Readings below this are sensor noise, not "on top of the wall." */
         public static double minValidCm = 2;
-        /** Readings at or beyond this are out of the sensor's useful range — treated as no obstacle. */
+        /** At or beyond this there is treated as no obstacle. */
         public static double maxValidCm = 400;
         public static boolean enabled = true;
     }
@@ -196,33 +83,27 @@ public class PredictiveBraking {
         this.reader = reader;
     }
 
-    /** Poll the sensor. Call once per loop, before {@link #clampApproachPower}. */
+    /** Call once per loop, before {@link #clampApproachPower}. */
     public void read() {
         double d = reader.getDistanceCm();
         if (Double.isNaN(d) || d < Tuning.minValidCm) {
-            // A bad single sample keeps the last good distance rather than snapping to 0, so one
-            // flaky read can't slam the brakes on for a loop.
             return;
         }
 
-        // Only differentiate when the value actually moved. A ping/wait/read sensor republishes the
-        // same number every loop between pings, so differentiating per-loop would read as "velocity
-        // zero" most loops and then spike on the loop the sample lands.
-        if (!Double.isNaN(lastSampleCm) && d != lastSampleCm) {
+        // Differentiate only changed readings: a pinging sensor repeats one value between pings.
+        boolean freshSample = Double.isNaN(lastSampleCm) || d != lastSampleCm;
+        if (freshSample && !Double.isNaN(lastSampleCm)) {
             double dtSec = (System.nanoTime() - lastSampleNanos) / 1e9;
             if (dtSec > 0) {
                 double instantaneous = (lastSampleCm - d) / dtSec;
                 closingVelocityCmPerSec += Tuning.velocityFilter * (instantaneous - closingVelocityCmPerSec);
             }
         }
-        boolean freshSample = Double.isNaN(lastSampleCm) || d != lastSampleCm;
         if (freshSample) {
             lastSampleCm = d;
             lastSampleNanos = System.nanoTime();
         } else if (isStalled()) {
-            // The estimate is only refreshed by a *changed* reading, so a robot that has stopped
-            // would otherwise keep the closing speed it had when it was still moving — inflating the
-            // prediction and hiding the stall from the escape below.
+            // Only a changed reading refreshes the estimate, so a stopped robot would keep its old speed.
             closingVelocityCmPerSec = 0;
         }
 
@@ -230,12 +111,7 @@ public class PredictiveBraking {
         updateModel(freshSample);
     }
 
-    /**
-     * Dead-reckons distance and speed forward every loop. While braking, speed follows
-     * {@link Tuning#brakingDecelCmPerSec2} rather than the sensor: the differentiated reading lags
-     * by more than the whole stop takes, so during the one manoeuvre that matters it describes a
-     * speed the robot no longer has. Physics propagates at loop rate; the sensor only trims drift.
-     */
+    // While braking, speed follows brakingDecelCmPerSec2: the differentiated reading lags by more than the whole stop.
     private void updateModel(boolean freshSample) {
         long now = System.nanoTime();
         double dtSec = lastUpdateNanos == 0 ? 0 : (now - lastUpdateNanos) / 1e9;
@@ -256,25 +132,20 @@ public class PredictiveBraking {
         modelDistanceCm = Math.max(0, modelDistanceCm - modelVelocityCmPerSec * dtSec);
 
         if (freshSample) {
-            // The sample describes where the robot was one fixed pipeline delay ago, so age it
-            // forward on the model's own speed before comparing — otherwise every correction would
-            // drag the estimate backwards by exactly the lag we are trying to cancel.
+            // Age the sample forward by the sensor latency, or each correction drags the model back by that lag.
             double impliedNow = lastSampleCm - modelVelocityCmPerSec * Tuning.sensorLatencySeconds;
             modelDistanceCm += Tuning.sensorTrust * (impliedNow - modelDistanceCm);
         }
     }
 
-    /** Dead-reckoned distance to the obstacle — the value the kinematic law actually brakes on. */
     public double getModelDistanceCm() {
         return modelDistanceCm;
     }
 
-    /** Dead-reckoned closing speed. Follows the decel model through a brake, not the lagging sensor. */
     public double getModelVelocityCmPerSec() {
         return modelVelocityCmPerSec;
     }
 
-    /** Distance needed to stop from the current modelled speed, reaction dead time included. */
     public double getStoppingDistanceCm() {
         double v = modelVelocityCmPerSec;
         if (v <= 0 || Tuning.brakingDecelCmPerSec2 <= 0) {
@@ -288,12 +159,10 @@ public class PredictiveBraking {
                 && (System.nanoTime() - lastSampleNanos) / 1e6 >= Tuning.stallTimeoutMs;
     }
 
-    /** Raw latest distance, in cm — as the sensor reported it, staleness included. */
     public double getDistanceCm() {
         return lastDistanceCm;
     }
 
-    /** Age of the newest reading: the driver's fixed ping/wait plus however long it has sat unchanged. */
     private double sampleAgeSec() {
         if (lastSampleNanos == 0) {
             return Tuning.sensorLatencySeconds;
@@ -301,21 +170,16 @@ public class PredictiveBraking {
         return Tuning.sensorLatencySeconds + (System.nanoTime() - lastSampleNanos) / 1e9;
     }
 
-    /**
-     * Best estimate of where the robot is <em>now</em>, correcting the reading for its own age. The
-     * raw reading always lags reality while closing, which is why braking on it undershoots the
-     * target by roughly one sample period's travel.
-     */
+    /** The reading corrected for its own age. */
     public double getCurrentDistanceCm() {
         return Math.max(0, lastDistanceCm - closingVelocityCmPerSec * sampleAgeSec());
     }
 
-    /** Estimated closing speed in cm/s. Positive means approaching the obstacle. */
+    /** Positive means approaching. */
     public double getClosingVelocityCmPerSec() {
         return closingVelocityCmPerSec;
     }
 
-    /** Where the robot will be by the time a power change issued now has taken effect, in cm. */
     public double getPredictedDistanceCm() {
         return Math.max(0, getCurrentDistanceCm() - closingVelocityCmPerSec * Tuning.stopLeadSeconds);
     }
@@ -329,17 +193,14 @@ public class PredictiveBraking {
                 : getPredictedDistanceCm() < Tuning.fullPowerAboveCm;
     }
 
-    /** Distance-keyed reference used by whichever law is active. */
     private double controlDistanceCm() {
         return Tuning.useKinematicLaw ? modelDistanceCm : getPredictedDistanceCm();
     }
 
-    /** True once the stop distance has been reached and {@link Tuning#latchOnStop} is holding it there. */
     public boolean isStopped() {
         return stopped;
     }
 
-    /** Release the stop latch so the robot may approach again. */
     public void resetStop() {
         stopped = false;
         reverseBraking = false;
@@ -347,11 +208,7 @@ public class PredictiveBraking {
         modelValid = false;
     }
 
-    /**
-     * The power ceiling the curve imposes right now, ignoring what the driver asked for. Telemetry
-     * only — unlike {@link #clampApproachPower} this touches neither the stop latch nor the reverse
-     * pulse timer, so reading it can't perturb what the robot does.
-     */
+    /** Telemetry only: unlike {@link #clampApproachPower} it leaves the stop latch and reverse pulse alone. */
     public double getPowerCeiling() {
         if (!Tuning.enabled || lastDistanceCm >= Tuning.maxValidCm) {
             return 1.0;
@@ -369,10 +226,7 @@ public class PredictiveBraking {
         return Math.max(curveCeiling(control), stallEscapePower());
     }
 
-    /**
-     * Clamps a requested power toward this sensor's facing direction (positive = approaching).
-     * Negative power (driving away) passes through unchanged.
-     */
+    /** Positive power approaches the obstacle; negative passes through unchanged. */
     public double clampApproachPower(double requestedPower) {
         if (!Tuning.enabled || requestedPower <= 0 || lastDistanceCm >= Tuning.maxValidCm) {
             return requestedPower;
@@ -380,13 +234,11 @@ public class PredictiveBraking {
 
         double control = controlDistanceCm();
 
-        if (control <= Tuning.stopDistanceCm) {
+        boolean atStop = control <= Tuning.stopDistanceCm;
+        if (atStop) {
             stopped = Tuning.latchOnStop;
-            brakeEngaged = false;
-            double pulse = reverseBrakePulse();
-            return pulse != 0 ? pulse : settleCorrection();
         }
-        if (stopped) {
+        if (atStop || stopped) {
             brakeEngaged = false;
             double pulse = reverseBrakePulse();
             return pulse != 0 ? pulse : settleCorrection();
@@ -394,8 +246,7 @@ public class PredictiveBraking {
         reverseBraking = false;
 
         if (Tuning.useKinematicLaw) {
-            // Latching rather than re-deciding each loop: once braking, the modelled speed is falling,
-            // so the brake point would test further and further away and the brake would chatter off.
+            // Latched: as the modelled speed falls the brake point recedes, so re-deciding would chatter.
             brakeEngaged |= control - Tuning.stopDistanceCm <= getStoppingDistanceCm();
             if (!brakeEngaged) {
                 return requestedPower;
@@ -410,11 +261,6 @@ public class PredictiveBraking {
         return Math.min(requestedPower, Math.max(curveCeiling(control), stallEscapePower()));
     }
 
-    /**
-     * Fastest the robot may be going at this distance and still stop on target, converted to a power
-     * via {@link Tuning#topSpeedCmPerSec}. v = sqrt(2·a·d) is the same kinematics as the brake point,
-     * so the taper and the trigger agree by construction instead of being tuned against each other.
-     */
     private static double kinematicCeiling(double controlDistanceCm) {
         double remaining = controlDistanceCm - Tuning.stopDistanceCm;
         if (remaining <= 0 || Tuning.topSpeedCmPerSec <= 0) {
@@ -425,24 +271,11 @@ public class PredictiveBraking {
         return Math.max(Tuning.minCreepPower, Math.min(1.0, ceiling));
     }
 
-    /**
-     * True only once the robot has actually come to rest: the reading has stopped changing and the
-     * model agrees there is no speed left.
-     */
     private boolean isAtRest() {
         return isStalled() && Math.abs(modelVelocityCmPerSec) < REST_SPEED_CM_PER_SEC;
     }
 
-    /**
-     * Closed-loop trim once the robot has stopped: creep whichever way lands on stopDistanceCm.
-     *
-     * Gated on {@link #isAtRest()} because it acts on the raw reading. That reading still shows the
-     * pre-brake distance for one sensor delay after the brake starts, so running this while still
-     * moving would command *forward* power exactly when the brake is due and power the robot through
-     * its own stop — an overshoot on every run, regardless of how well the brake itself is tuned.
-     * Once at rest the reading is no longer stale and driving to it is what makes the final position
-     * independent of how good the coast estimate was.
-     */
+    // Gated on isAtRest(): while moving the raw reading is stale and would drive the robot through its own stop.
     private double settleCorrection() {
         if (Tuning.settleToleranceCm <= 0 || Tuning.settlePower <= 0 || !isAtRest()) {
             return 0;
@@ -455,16 +288,10 @@ public class PredictiveBraking {
         return error > 0 ? power : -power;
     }
 
-    /** True while the settle trim is creeping toward the target rather than holding still. */
     public boolean isSettling() {
         return stopped && settleCorrection() != 0;
     }
 
-    /**
-     * Extra power to break a stall short of the stop distance. The curve floors at minCreepPower,
-     * which is not necessarily enough to move the robot; without this the approach can die a few cm
-     * out and the latch never fires.
-     */
     private double stallEscapePower() {
         if (Tuning.antiStallPower <= 0 || !isAtRest()) {
             return 0;
@@ -472,7 +299,6 @@ public class PredictiveBraking {
         return Math.min(1.0, Tuning.antiStallPower);
     }
 
-    /** True while the anti-stall escape is overriding the curve's power floor. */
     public boolean isStallEscaping() {
         return stallEscapePower() > 0 && !stopped && lastDistanceCm > Tuning.stopDistanceCm;
     }
@@ -484,11 +310,7 @@ public class PredictiveBraking {
         return Math.max(Tuning.minCreepPower, Math.min(1.0, ceiling));
     }
 
-    /**
-     * Reverse power for this loop, or 0 to coast. The pulse is time-boxed rather than run until the
-     * velocity estimate reads zero: that estimate only refreshes on a fresh sensor sample, so waiting
-     * on it would keep driving backwards through every loop in between.
-     */
+    // Time-boxed, not run until the speed estimate reads zero: that only refreshes on a new sample.
     private double reverseBrakePulse() {
         if (Tuning.reverseBrakePower <= 0) {
             reverseBraking = false;
@@ -507,14 +329,12 @@ public class PredictiveBraking {
         return -Math.min(1.0, Tuning.reverseBrakePower);
     }
 
-    /** True while a reverse-brake pulse is actively driving the robot backwards. */
     public boolean isReverseBraking() {
         return reverseBraking
                 && Tuning.reverseBrakePower > 0
                 && (System.nanoTime() - reverseBrakeStartNanos) / 1e6 < Tuning.reverseBrakeMaxMs;
     }
 
-    /** Maps t (1 at the braking threshold, 0 at the stop distance) onto the same 1..0 range. */
     private static double decayShape(double t) {
         double k = Tuning.decelRate;
         if (Math.abs(k) < 1e-6) {

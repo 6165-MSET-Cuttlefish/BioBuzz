@@ -26,15 +26,11 @@ public final class FieldBall {
 
     public double speed() { return Math.hypot(vx, vy); }
 
-    public double headingRad() { return Math.atan2(vy, vx); }
-
-    public double headingDeg() { return Math.toDegrees(headingRad()); }
+    public double headingDeg() { return Math.toDegrees(Math.atan2(vy, vx)); }
 
     public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIn; }
 
     public boolean visible() { return visible; }
-
-    public Pose pose() { return new Pose(x, y); }
 
     /** Constant-velocity extrapolation; balls on carpet decelerate, so keep the horizon short. */
     public Pose predict(double seconds) {
@@ -44,8 +40,6 @@ public final class FieldBall {
     public double distanceTo(double fieldX, double fieldY) {
         return Math.hypot(x - fieldX, y - fieldY);
     }
-
-    public double distanceTo(Pose pose) { return distanceTo(pose.x(), pose.y()); }
 
     @Override
     public String toString() {

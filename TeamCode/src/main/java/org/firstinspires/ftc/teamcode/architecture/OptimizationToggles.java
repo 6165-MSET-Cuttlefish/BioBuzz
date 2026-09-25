@@ -18,9 +18,6 @@ public final class OptimizationToggles {
     /** Skip format + Item allocation on telemetry calls when both backends are off. */
     public static boolean telemetryLazyFormat = true;
 
-    /** Sort modules once at init. Only safe when Module.telemetryOrder() values don't change at runtime. */
-    public static boolean telemetrySortModulesOnce = true;
-
     public static boolean profilerEnabled = true;
 
     /** loopProfile default, read at class load — not live like the rest of this class. */

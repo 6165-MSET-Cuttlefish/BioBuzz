@@ -11,25 +11,15 @@ public class EnhancedServo implements Servo, PwmControl {
     private final ServoImplEx servo;
     private final WriteCache cache = new WriteCache();
 
-    public EnhancedServo(ServoImplEx servo) {
-        this.servo = servo;
+    public EnhancedServo(HardwareMap hardwareMap, String name) {
+        this.servo = hardwareMap.get(ServoImplEx.class, name);
         // Servo position range is 0..1, not the WriteCache default of -1..1.
         cache.min = 0.0;
         cache.max = 1.0;
     }
 
-    public EnhancedServo(HardwareMap hardwareMap, String name) {
-        this(hardwareMap.get(ServoImplEx.class, name));
-    }
-
     public EnhancedServo withCachingTolerance(double tolerance) {
-        setCachingTolerance(tolerance);
-        return this;
-    }
-
-    public EnhancedServo withPositionBounds(double min, double max) {
-        cache.min = min;
-        cache.max = max;
+        cache.tolerance = Math.max(0.0, Math.min(1.0, tolerance));
         return this;
     }
 
@@ -42,20 +32,6 @@ public class EnhancedServo implements Servo, PwmControl {
         }
     }
 
-    /** Bypasses the write cache. Test-only. */
-    public void setPositionRaw(double position) {
-        double corrected = cache.clamp(position);
-        cache.store(corrected);
-        servo.setPosition(corrected);
-    }
-
-    public void setCachingTolerance(double tolerance) {
-        cache.tolerance = Math.max(0.0, Math.min(1.0, tolerance));
-    }
-
-    public double getCachingTolerance() { return cache.tolerance; }
-    /** Raw device; writing position through it bypasses the write cache and leaves it stale. */
-    public ServoImplEx getUnderlying() { return servo; }
     public double getCachedPosition() { return cache.cached; }
 
     @Override public ServoController getController() { return servo.getController(); }

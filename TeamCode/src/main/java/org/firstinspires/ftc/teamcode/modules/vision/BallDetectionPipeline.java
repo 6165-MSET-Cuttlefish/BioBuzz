@@ -53,7 +53,7 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
 
     @Config("BallVisionDisplay")
     public static class Tuning {
-        public static DisplayMode displayMode = DisplayMode.MASK;
+        public static DisplayMode displayMode = DisplayMode.BOX;
         public static boolean drawVelocity = true;
         public static double velocityArrowSeconds = 0.5;
     }
@@ -71,11 +71,8 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
 
     /** Immutable per-frame results, published from the camera thread. */
     public static final class Frame {
-        public static final Frame EMPTY = new Frame(
-                Collections.<BallDetection>emptyList(), Collections.<TrackedBall>emptyList(),
-                0, 0, 0, 0, 0);
+        public static final Frame EMPTY = new Frame(Collections.<TrackedBall>emptyList(), 0, 0, 0, 0, 0);
 
-        public final List<BallDetection> detections;
         public final List<TrackedBall> balls;
         public final int roiCount;
         public final int rejectedColor;
@@ -83,9 +80,8 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         public final double fps;
         public final double timestampSeconds;
 
-        Frame(List<BallDetection> detections, List<TrackedBall> balls, int roiCount,
+        Frame(List<TrackedBall> balls, int roiCount,
               int rejectedColor, int rejectedOverlap, double fps, double timestampSeconds) {
-            this.detections = Collections.unmodifiableList(detections);
             this.balls = Collections.unmodifiableList(balls);
             this.roiCount = roiCount;
             this.rejectedColor = rejectedColor;
@@ -188,7 +184,7 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         List<BallDetection> detections = projectToGround(circles);
         List<TrackedBall> balls = tracker.update(detections, timestamp);
 
-        latest = new Frame(detections, balls, searchRegions.size(),
+        latest = new Frame(balls, searchRegions.size(),
                 rejectedColorCount, rejectedOverlapCount, fps, timestamp);
 
         return render(input, detections, balls, mode);
@@ -575,10 +571,8 @@ public class BallDetectionPipeline extends TimestampedOpenCvPipeline {
         detectionEnabled = enabled;
         latest = Frame.EMPTY;
         // Stale tracks would match whatever is in frame now and derive velocity across the unseen gap.
-        resetTracking();
+        trackerResetRequested = true;
     }
-
-    public void resetTracking() { trackerResetRequested = true; }
 
     private static List<Point> perspectiveTransform(List<Point> points, Mat transform) {
         MatOfPoint2f src = new MatOfPoint2f();
