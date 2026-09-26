@@ -11,8 +11,8 @@ Upload this file from the Limelight web UI as a Python pipeline (Input tab, pipe
 pipeline 4. Pipeline 0 is DECODE's AprilTags, pipeline 3 the Hough detector.
 
 Areas are in pixels of a CALIBRATION_SIZE frame, so the gates hold at any streaming resolution.
-H_ARRAY is the webcam's and must be recalibrated for the Limelight's lens with eocvsim/homography
-before the inches mean anything.
+The UNDISTORT, CALIBRATION_SIZE and H_ARRAY block comes from eocvsim/homography; with UNDISTORT set,
+contact points are undistorted with the lens calibration before the homography.
 
 llpython, 32 doubles, the same layout as ball_detection_snapscript.py but SCRIPT_ID 6166:
     0        SCRIPT_ID, so the hub can reject the wrong pipeline
@@ -36,13 +36,23 @@ MAX_BALLS = 10  # (32 llpython slots - 2 header) // 3 per ball
 DISPLAY_MODE = "OVERLAY"  # "OVERLAY" for detections on the camera image, "MASK" to tune HSV gates
 DRAW_OVERLAY = True
 
-# The resolution H_ARRAY was calibrated at, not necessarily the one the Limelight streams.
+# eocvsim/homography prints these three together; UNDISTORT says whether H_ARRAY was fitted to
+# undistorted pixels. CALIBRATION_SIZE is the resolution it was fitted at, not necessarily the stream's.
+UNDISTORT = True
 CALIBRATION_SIZE = (640, 480)
 H_ARRAY = (
-    (-6.8658673540e-02, -1.4582606197e-02, 2.5633211718e+01),
-    (-8.0700352292e-04, -2.1452449123e-01, 6.3092382406e+01),
-    (-1.8726593163e-04, -7.7392061899e-03, 1.0000000000e+00),
+    (-2.6841966324e-03,  6.1716769530e-01, -2.5580869842e+02),
+    ( 3.6853564516e-01,  1.4183988356e-03, -1.2023581344e+02),
+    (-9.9174180375e-04, -2.2138964489e-02,  1.0000000000e+00),
 )
+
+# The Limelight 3A's lens calibration (latest.cal).
+LENS_CALIBRATION_SIZE = (1280, 960)
+LENS_FX, LENS_FY = 1213.9165101673461, 1215.7599736077275
+LENS_CX, LENS_CY = 619.8522235104792, 480.21530891255276
+LENS_DIST = (0.18211160674758384, -0.5403918861880735, 0.004010036343230011,
+             -0.00029924580297112217, 0.4039037424946443)  # k1, k2, p1, p2, k3; resolution-independent
+UNDISTORT_ITERATIONS = 20
 
 MIN_AREA_PX = 350.0
 MAX_AREA_PX = 16000.0
@@ -55,7 +65,7 @@ EXPECT_AREA_PX = 3000.0
 FILL_COST_WEIGHT = 4.0
 
 MAX_SPLIT_BALLS = 8  # per blob
-SPLIT_SUPPRESS_SCALE = 0.7  # blanked radius / found radius; lower finds overlapping balls, higher fewer ghosts
+SPLIT_SUPPRESS_SCALE = 0.75  # blanked radius / found radius; lower finds overlapping balls, higher fewer ghosts
 SPLIT_MIN_OPEN_EDGE = 0.5  # fraction of a split circle's rim that must border background
 EDGE_RING_GAP_PX = 3
 EDGE_SAMPLES = 36
@@ -101,6 +111,10 @@ BALL_TYPES = (
 _H = np.array(H_ARRAY, np.float64)
 _H_INV = np.linalg.inv(_H)
 NO_CONTOUR = np.array([[]])
+_K = (LENS_FX * CALIBRATION_SIZE[0] / LENS_CALIBRATION_SIZE[0],
+      LENS_FY * CALIBRATION_SIZE[1] / LENS_CALIBRATION_SIZE[1],
+      LENS_CX * CALIBRATION_SIZE[0] / LENS_CALIBRATION_SIZE[0],
+      LENS_CY * CALIBRATION_SIZE[1] / LENS_CALIBRATION_SIZE[1])
 
 # Module globals persist between frames; the FPS estimate lives here.
 _fps = 0.0
@@ -159,9 +173,48 @@ def _split(ball, contour, area_scale):
     return found
 
 
+def _distortion(x, y):
+    """Radial factor and tangential dx, dy at normalized (x, y), OpenCV's 5-coefficient model."""
+    k1, k2, p1, p2, k3 = LENS_DIST
+    r2 = x * x + y * y
+    return (1 + r2 * (k1 + r2 * (k2 + r2 * k3)),
+            2 * p1 * x * y + p2 * (r2 + 2 * x * x),
+            p1 * (r2 + 2 * y * y) + 2 * p2 * x * y)
+
+
+def _undistort(points):
+    """(n, 2) CALIBRATION_SIZE pixels; the same fixed-point inversion as eocvsim/homography."""
+    if not UNDISTORT:
+        return points
+    fx, fy, cx, cy = _K
+    xd = (points[:, 0] - cx) / fx
+    yd = (points[:, 1] - cy) / fy
+    x, y = xd, yd
+    for _ in range(UNDISTORT_ITERATIONS):
+        radial, dx, dy = _distortion(x, y)
+        x = (xd - dx) / radial
+        y = (yd - dy) / radial
+    return np.stack((x * fx + cx, y * fy + cy), axis=1)
+
+
+def _distort(points):
+    if not UNDISTORT:
+        return points
+    fx, fy, cx, cy = _K
+    x = (points[:, 0] - cx) / fx
+    y = (points[:, 1] - cy) / fy
+    radial, dx, dy = _distortion(x, y)
+    return np.stack(((x * radial + dx) * fx + cx, (y * radial + dy) * fy + cy), axis=1)
+
+
+def _origin_px():
+    """Raw CALIBRATION_SIZE pixel of ground (0, 0)."""
+    return _distort(cv2.perspectiveTransform(np.zeros((1, 1, 2)), _H_INV).reshape(1, 2))[0]
+
+
 def _to_ground(balls, scale_x, scale_y):
-    contacts = np.array([[[b[1] * scale_x, (b[2] + b[3]) * scale_y]] for b in balls], np.float32)
-    return cv2.perspectiveTransform(contacts, _H).reshape(-1, 2)
+    contacts = np.array([[b[1] * scale_x, (b[2] + b[3]) * scale_y] for b in balls], np.float64)
+    return cv2.perspectiveTransform(_undistort(contacts).reshape(-1, 1, 2), _H).reshape(-1, 2)
 
 
 def _label(image, text, origin, color, scale=0.5, thickness=1):
@@ -184,7 +237,7 @@ def _draw_overlay(image, balls, ground, order, best, scale_x, scale_y):
                   ground[i][0], ground[i][1], area, fill),
                (center[0] + r + 6, center[1] + r), ball.draw)
 
-    origin = cv2.perspectiveTransform(np.array([[[0.0, 0.0]]], np.float32), _H_INV).reshape(2)
+    origin = _origin_px()
     ox, oy = int(origin[0] / scale_x), int(origin[1] / scale_y)
     cv2.line(image, (ox - 10, oy), (ox + 10, oy), MAGENTA, 2)
     cv2.line(image, (ox, oy - 10), (ox, oy + 10), MAGENTA, 2)
