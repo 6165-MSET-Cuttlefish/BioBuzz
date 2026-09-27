@@ -8,7 +8,7 @@ FTC team 6165 MSET Cuttlefish's 2026–27 **BIOBUZZ™** season repository. The 
 
 Game-specific code (field coordinates, scoring logic, mechanism modules) goes under `biobuzz/`, `modules/`, and `opmodes/`. `decode/` is last season's DECODE robot code, trimmed to what exercises the architecture (shooter, turret, basic intake and transfer); it reuses BioBuzz's `modules/Drivetrain`, so a Drivetrain change reaches Decode Tele too, and nothing outside `decode/` depends on it. Nothing game-specific goes under `architecture/`, which stays portable to the next season. Field constants come from the game manual, not guesses.
 
-Besides the Gradle and repo files, the top level holds only `TeamCode/` (the app), `limelight/` (code that runs on the Limelight, not in the APK), `scripts/` (vendored-code refresh scripts) and `docs/`. New files go in one of these, and new Java files in an existing package.
+Besides the Gradle and repo files, the top level holds only `TeamCode/` (the app), `limelight/` (code that runs on the Limelight, not in the APK), `scripts/` (vendored-code refresh scripts) and `docs/`. `docs/paths/` holds each auto's path as a visualizer.pedropathing.com `.pp` file named after its OpMode; load it with the visualizer's top-bar "Load trajectory from a .pp file" button, and re-export it whenever the auto's poses change. New files go in one of these, and new Java files in an existing package.
 
 ## Keep this file fresh
 
