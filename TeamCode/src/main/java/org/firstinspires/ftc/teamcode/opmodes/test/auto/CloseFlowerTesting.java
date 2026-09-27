@@ -26,18 +26,22 @@ public class CloseFlowerTesting extends LinearOpMode {
 
     private final Pose start = poseFactory.of(56, 8, 90);
     private final Pose path1 = poseFactory.of(14.9769, 46.9989, 180);
-    private final Pose point2 = poseFactory.of(46.9748, 130.0998, 87.3431);
-    private final Pose point2Control1 = poseFactory.of(46.0861, 107.8866, 0);
-    private final Pose point3 = poseFactory.of(47.0588, 119.9926, 90.4764);
-    private final Pose point4 = poseFactory.of(12.8193, 116.458, -126.4199);
-    private final Pose point4Control1 = poseFactory.of(32.1145, 132.7542, 0);
-    private final Pose point4Control2 = poseFactory.of(24.7069, 132.6712, 0);
-    private final Pose point5 = poseFactory.of(12.8172, 99.8613, -90.0073);
-    private final Pose point6 = poseFactory.of(20.8141, 11.6828, 175.3979);
-    private final Pose point6Control1 = poseFactory.of(30.1901, 90.5672, 0);
+    private final Pose path1Control1 = poseFactory.of(56, 23, 0);
+    private final Pose path1Control2 = poseFactory.of(34.9769, 46.9989, 0);
+    private final Pose point2Turn = poseFactory.of(29.0321, 76.6058, 65.7039);
+    private final Pose point2TurnControl1 = poseFactory.of(23.0138, 63.2743, 0);
+    private final Pose point2 = poseFactory.of(46.9748, 130.0998, 90.4762);
+    private final Pose point2Control1 = poseFactory.of(47.087, 116.6002, 0);
+    private final Pose point3 = poseFactory.of(47.0588, 119.9926, 90.4762);
+    private final Pose point4 = poseFactory.of(12.8193, 116.458, -90.0072);
+    private final Pose point4Control1 = poseFactory.of(46.9508, 132.9922, 0);
+    private final Pose point4Control2 = poseFactory.of(12.8213, 132.458, 0);
+    private final Pose point5 = poseFactory.of(12.8172, 99.8613, -90.0072);
+    private final Pose point6 = poseFactory.of(20.8141, 11.6828, -178.1107);
+    private final Pose point6Control1 = poseFactory.of(12.8153, 84.8613, 0);
     private final Pose point6Control2 = poseFactory.of(31.0646, 65.2041, 0);
-    private final Pose point6Control3 = poseFactory.of(38.7353, 9.4086, 0);
-    private final Pose point7 = poseFactory.of(10.8466, 11.354, -178.1108);
+    private final Pose point6Control3 = poseFactory.of(38.8643, 12.2782, 0);
+    private final Pose point7 = poseFactory.of(10.8466, 11.354, -178.1107);
 
     // Autonomous routine
     public Command autoRoutine() {
@@ -80,11 +84,14 @@ public class CloseFlowerTesting extends LinearOpMode {
     }
 
     public Path path1() {
-        return line(start, path1).linear(start, path1);
+        return curve(start, path1Control1, path1Control2, path1).tangent();
     }
 
     public Path path2() {
-        return curve(path1, point2Control1, point2).tangent();
+        // Leaves the left flower still facing it, so the first stretch turns onto the curve's tangent.
+        return path(
+                curve(path1, point2TurnControl1, point2Turn).linear(path1, point2Turn),
+                curve(point2Turn, point2Control1, point2).tangent());
     }
 
     public Path path3() {
