@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * Shape-first: HSV masks only seed ROIs and pick the ball type; HoughCircles fits the outer
  * silhouette, so holes and glare don't break detection. EOCV-Sim's workspace can't import TeamCode,
- * so its constants are separate from modules.vision.BallVisionConstants.
+ * so its constants are separate from the ball SnapScripts'.
  */
 public class PollenDetectionPipeline extends OpenCvPipeline {
 
