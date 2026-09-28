@@ -19,14 +19,15 @@ import java.util.List;
 /**
  * Locks a chessboard homography from full-resolution image pixels to camera-frame ground inches
  * (+X away from the camera, +Y left, origin at the centre of the board's near edge) and prints it
- * for {@code BallVisionConstants.H_ARRAY} and the Limelight SnapScripts.
+ * for {@code BallVisionConstants.H_ARRAY} and the Limelight SnapScripts. The board is the 10x7-square
+ * one in {@code docs/calibration-chessboard-3in-letter.pdf}, laid with its long side pointing away.
  */
 public class HomographyCalculationPipeline extends OpenCvPipeline {
 
     private static final int    GRID_COLS          = 9;
     private static final int    GRID_ROWS          = 6;
     private static final int    EXPECTED_CORNERS   = GRID_COLS * GRID_ROWS;
-    private static final double SQUARE_SIZE_INCHES = 1.0; // measure the print: printers rescale
+    private static final double SQUARE_SIZE_INCHES = 3.0; // measure the print: printers rescale
 
     // SB matches corners independently, so foreshortened far squares don't fail the whole board the
     // way classic findChessboardCorners does. It needs a white border about one square wide.
@@ -107,7 +108,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         }
 
         telemetry.addLine(statusLine);
-        telemetry.addData("Board", "%dx%d inner corners (%dx%d squares), %.2f in squares",
+        telemetry.addData("Board", "%dx%d inner corners (%dx%d squares), %.2f in squares, long side away",
                 GRID_COLS, GRID_ROWS, GRID_COLS + 1, GRID_ROWS + 1, SQUARE_SIZE_INCHES);
         telemetry.addData("Input", "%dx%d, H_ARRAY printed for %dx%d",
                 input.width(), input.height(), OUTPUT_WIDTH_PX, OUTPUT_HEIGHT_PX);
@@ -146,6 +147,11 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
 
         Point[] pixels = corners.toArray();
         for (Point p : pixels) Imgproc.circle(input, p, 3, GRID_COLOR, -1);
+
+        if (!longSideAway(pixels)) {
+            statusLine = "Board is sideways: turn its long side to point away from the camera";
+            return;
+        }
 
         Point[] undistorted = new Point[pixels.length];
         for (int i = 0; i < pixels.length; i++) undistorted[i] = undistort(pixels[i], width, height);
@@ -207,20 +213,29 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         return new Point((x * d[0] + d[1]) * k[0] + k[2], (y * d[0] + d[2]) * k[1] + k[3]);
     }
 
+    // Corners are row-major with GRID_COLS per row, so a row runs along the board's long side.
+    private static Point alongLongSide(Point[] px) {
+        return minus(px[GRID_COLS - 1], px[0]);
+    }
+
+    private static Point alongShortSide(Point[] px) {
+        return minus(px[(GRID_ROWS - 1) * GRID_COLS], px[0]);
+    }
+
+    private static boolean longSideAway(Point[] px) {
+        Point longSide = alongLongSide(px);
+        Point shortSide = alongShortSide(px);
+        return Math.abs(longSide.y) / Math.hypot(longSide.x, longSide.y)
+                >= Math.abs(shortSide.y) / Math.hypot(shortSide.x, shortSide.y);
+    }
+
     /**
-     * Ground inches for each detected corner, whichever corner OpenCV numbered first: the board axis
-     * pointing furthest up the image is +X, the other points left as +Y. Corners are row-major,
-     * GRID_COLS per row.
+     * Ground inches for each detected corner, whichever corner OpenCV numbered first: the long side
+     * is +X, pointing up the image, and the short side is +Y, pointing left.
      */
     private static Point[] groundCorners(Point[] px) {
-        Point alongCols = minus(px[GRID_COLS - 1], px[0]);
-        Point alongRows = minus(px[(GRID_ROWS - 1) * GRID_COLS], px[0]);
-        double colsUp = -alongCols.y / Math.hypot(alongCols.x, alongCols.y);
-        double rowsUp = -alongRows.y / Math.hypot(alongRows.x, alongRows.y);
-
-        boolean forwardAlongCols = Math.abs(colsUp) >= Math.abs(rowsUp);
-        double forwardSign = Math.signum(forwardAlongCols ? colsUp : rowsUp);
-        double leftSign = (forwardAlongCols ? alongRows.x : alongCols.x) < 0 ? 1 : -1;
+        double forwardSign = alongLongSide(px).y < 0 ? 1 : -1;
+        double leftSign = alongShortSide(px).x < 0 ? 1 : -1;
 
         double[] x = new double[px.length];
         double[] y = new double[px.length];
@@ -228,8 +243,8 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         for (int i = 0; i < px.length; i++) {
             int col = i % GRID_COLS;
             int row = i / GRID_COLS;
-            x[i] = forwardSign * (forwardAlongCols ? col : row) * SQUARE_SIZE_INCHES;
-            y[i] = leftSign * (forwardAlongCols ? row : col) * SQUARE_SIZE_INCHES;
+            x[i] = forwardSign * col * SQUARE_SIZE_INCHES;
+            y[i] = leftSign * row * SQUARE_SIZE_INCHES;
             minX = Math.min(minX, x[i]);
             minY = Math.min(minY, y[i]);
             maxY = Math.max(maxY, y[i]);
@@ -295,7 +310,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
                                 width, height, OUTPUT_WIDTH_PX, OUTPUT_HEIGHT_PX)
                         : "";
         String report = String.format(
-                "fit error %.3f in RMS, %.3f in max (over ~0.05 means bad corners or a warped print)%n"
+                "fit error %.3f in RMS, %.3f in max (over ~0.15 means bad corners or a warped or misjoined print)%n"
                         + "board spans x 0 to %.1f in; expect error to grow well beyond that%n"
                         + "square size assumed %.3f in: measure the print%n",
                 Math.sqrt(sumSq / fit.length), maxErr, maxX, SQUARE_SIZE_INCHES)
