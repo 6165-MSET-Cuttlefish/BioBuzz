@@ -8,7 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Camera-thread only. Tight pass against predicted positions, then a looser pass against last-known
+ * Single-threaded. Tight pass against predicted positions, then a looser pass against last-known
  * positions so a jittery detection reacquires its track instead of forking a duplicate.
  */
 public final class BallTracker {
@@ -122,8 +122,8 @@ public final class BallTracker {
 
     private static final class Track {
         final int id;
-        final BallVisionConstants.BallType type;
-        double x, y, vx, vy, radiusPx;
+        final BallType type;
+        double x, y, vx, vy;
         int hits = 1;
         int misses = 0;
         boolean visible = true;
@@ -133,7 +133,6 @@ public final class BallTracker {
             this.type = seed.type;
             this.x = seed.cameraX;
             this.y = seed.cameraY;
-            this.radiusPx = seed.imageRadius;
         }
 
         double predictedX(double dt) { return x + vx * dt; }
@@ -154,7 +153,6 @@ public final class BallTracker {
             }
             x = predictedX + Tuning.positionSmoothing * residualX;
             y = predictedY + Tuning.positionSmoothing * residualY;
-            radiusPx += Tuning.positionSmoothing * (detection.imageRadius - radiusPx);
             hits++;
             misses = 0;
             visible = true;
@@ -172,7 +170,7 @@ public final class BallTracker {
         }
 
         TrackedBall snapshot() {
-            return new TrackedBall(id, type, x, y, vx, vy, radiusPx, visible);
+            return new TrackedBall(id, type, x, y, vx, vy, visible);
         }
     }
 }

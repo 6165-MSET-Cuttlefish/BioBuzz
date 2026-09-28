@@ -1,16 +1,15 @@
 """Ball-detection SnapScript for the Limelight 3A — finds Pollen and red/blue Nectar.
 
-A port of modules/vision/BallDetectionPipeline. Each circle's ground contact point (cx, cy + r) goes
-through a homography to camera-frame ground inches, so the numbers mean what BallDetection's
-cameraX/cameraY mean and BallFieldTransform can make them field-relative. There is no tracking here:
-every frame's detections stand alone, with no ids and no velocities.
+Each circle's ground contact point (cx, cy + r) goes through a homography to camera-frame ground
+inches, so the numbers mean what BallDetection's cameraX/cameraY mean and BallFieldTransform can make
+them field-relative. There is no tracking here: every frame's detections stand alone, and
+modules/vision/LimelightBallSource tracks them on the hub.
 
 Upload this file from the Limelight web UI as a Python pipeline (Input tab, pipeline type Python) to
 pipeline 3. Pipeline 0 is DECODE's AprilTags, and only one pipeline runs at a time.
 
-H_ARRAY is the webcam's, copied from BallVisionConstants; replace it with the UNDISTORT,
-CALIBRATION_SIZE and H_ARRAY block eocvsim/homography prints from a Limelight image. Contact points are
-scaled to CALIBRATION_SIZE, then undistorted with the lens calibration when UNDISTORT is set, so the
+H_ARRAY is still the old webcam's; replace it with the UNDISTORT, CALIBRATION_SIZE and H_ARRAY block
+eocvsim/homography prints from a Limelight image. Contact points are scaled to CALIBRATION_SIZE, then undistorted with the lens calibration when UNDISTORT is set, so the
 Limelight's streaming resolution need not match the calibration's.
 
 llpython, 32 doubles:
@@ -52,7 +51,7 @@ LENS_DIST = (0.18211160674758384, -0.5403918861880735, 0.004010036343230011,
              -0.00029924580297112217, 0.4039037424946443)  # k1, k2, p1, p2, k3; resolution-independent
 UNDISTORT_ITERATIONS = 20
 
-# BallVisionConstants.Detection
+# Detection
 HOUGH_DP = 1.2
 HOUGH_CANNY = 80.0
 HOUGH_ACCUMULATOR = 22.0
@@ -62,7 +61,7 @@ MIN_COLOR_FILL = 0.30
 MIN_CENTER_SEPARATION = 0.7
 MASK_CIRCLE_MIN_FILL = 0.60
 
-# BallVisionConstants, structural
+# Structural
 REFERENCE_BALL_DIAMETER_IN = 2.8
 DETECTION_SCALE = 0.5
 ROI_CLOSE_KERNEL_SIZE = (9, 9)

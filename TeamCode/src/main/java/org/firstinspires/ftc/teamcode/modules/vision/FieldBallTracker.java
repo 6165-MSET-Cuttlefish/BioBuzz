@@ -91,7 +91,7 @@ public final class FieldBallTracker {
 
     private static final class Known {
         final int id;
-        final BallVisionConstants.BallType type;
+        final BallType type;
         double x, y, vx, vy;
         double lastSeenSeconds;
         boolean visible;

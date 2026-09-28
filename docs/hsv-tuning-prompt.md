@@ -2,14 +2,13 @@
 
 Paste this whole file (instructions + your photos) to a vision-capable AI whenever you need to
 (re)derive HSV thresholds for Pollen or Nectar — a new venue's lighting, a new ball batch, or
-adding a ball type this file doesn't cover yet. The output slots directly into
-`TeamCode/src/main/java/org/firstinspires/ftc/teamcode/modules/vision/BallVisionConstants.java`.
+adding a ball type this file doesn't cover yet. The output slots directly into the `BALL_TYPES`
+tuple of `limelight/ball_detection_snapscript.py` (and `ball_contour_snapscript.py`, which shares it).
 
 Treat the numbers it gives you as new **defaults** to paste in, not a final answer — confirm them
-live against the real webcam using `Ball Vision` (`opmodes/test/BallVisionTest`) with
-`BallVisionDisplay.displayMode` set to `MASK` on FtcDashboard, which paints each type's mask in its
+live in the Limelight web editor with `DISPLAY_MODE = "MASK"`, which paints each type's mask in its
 own colour so you can see directly what each threshold is and isn't catching. Photos analyzed
-offline are a starting point; the real camera's sensor, compression, and lighting are the ground
+offline are a starting point; the Limelight's sensor, compression, and lighting are the ground
 truth.
 
 ---
@@ -53,16 +52,11 @@ Sample the glare band from the bright/blown-out patch on the ball's surface spec
 from the main colour band — don't average them together into one sample set, or you'll get numbers
 that describe neither region well.
 
-**Note on red's hue**: OpenCV hue wraps at the 0/179 seam, and red's true hue sits right next to it —
-but `RedNectarHsv` only has one `hLow/hHigh` band, the same shape as Pollen and Blue. If your sampled
-red pixels cluster near just one end (e.g., all near 179, or all near 0), report that single band the
-same way as the others. If they genuinely span **both** ends — some pixels near 0, some near 179,
-meaning the colour truly straddles the wrap and one band can't cover it — say so explicitly rather
-than reporting only whichever end has more samples: the current code has no second band for red, so
-covering a real two-sided spread needs a second hue band added to `RedNectarHsv` (e.g. `hLow2/hHigh2`)
-and matching extra `applyRange(out, false, ...)` calls in the `NECTAR_RED` case of
-`BallDetectionPipeline.buildColorMask` (the colour band, and the glare band if it straddles too)
-before the fix is usable, not just new numbers.
+**Note on red's hue**: OpenCV hue wraps at the 0/179 seam, and red's true hue sits right next to it.
+A ball type takes any number of hue ranges, each with the same saturation, value and glare bounds.
+If your sampled red pixels cluster near just one end (e.g., all near 179, or all near 0), report one
+hue range. If they genuinely span **both** ends, report two, one ending at 179 and one starting at 0,
+rather than one range that only covers whichever end has more samples.
 
 ### 3. How to sample pixels from the photos
 
@@ -94,44 +88,27 @@ sensor noise spike) will blow a bound out needlessly. Instead:
    percentile** of your sampled values as the core range.
 2. Pad **outward**: hue ±2–4, saturation/value floors down by ~10–15, saturation/value ceilings up
    to 255 unless something meaningful caps them. This mask only has to seed a region-of-interest for
-   a Hough circle search — the actual shape validation happens downstream, so it's fine, even
+   the circle search — the actual shape validation happens downstream, so it's fine, even
    correct, for these bounds to stay loose rather than tight. Erring wide costs a little extra
    compute; erring narrow costs missed balls.
 3. Clamp everything into legal ranges: H ∈ [0,179], S/V ∈ [0,255].
 
 ### 5. Output format — match this exactly
 
-Report one block per ball type, in this literal Java-field form, so it can be pasted straight into
-`BallVisionConstants.java` (only the ball type(s) I actually gave you photos for):
+Report one line per ball type (only the type(s) I actually gave you photos for), in this literal
+Python form: the four arguments that follow the label in that type's `BallType(...)` entry of
+`BALL_TYPES`, so they can be pasted straight over the old ones.
 
-```java
-// Pollen
-public static int hLow = <>, hHigh = <>;
-public static int sLow = <>, sHigh = <>;
-public static int vLow = <>, vHigh = <>;
-public static int glareSHigh = <>, glareVLow = <>;
+```python
+# Pollen:      hue ranges, (sLow, sHigh), (vLow, vHigh), (glareSHigh, glareVLow)
+((<>, <>),), (<>, <>), (<>, <>), (<>, <>)
+# Red Nectar:  one hue range, or two if the samples straddle the 0/179 wrap
+((<>, <>), (<>, <>)), (<>, <>), (<>, <>), (<>, <>)
+# Blue Nectar
+((<>, <>),), (<>, <>), (<>, <>), (<>, <>)
 ```
 
-```java
-// Red Nectar
-public static int hLow = <>, hHigh = <>;
-public static int sLow = <>, sHigh = <>;
-public static int vLow = <>, vHigh = <>;
-public static int glareSHigh = <>, glareVLow = <>;
-```
-
-(Only if your samples genuinely span both ends of the hue wrap — see the note in section 2 — report
-that separately as a flagged limitation instead of squeezing it into the block above.)
-
-```java
-// Blue Nectar
-public static int hLow = <>, hHigh = <>;
-public static int sLow = <>, sHigh = <>;
-public static int vLow = <>, vHigh = <>;
-public static int glareSHigh = <>, glareVLow = <>;
-```
-
-After each block, also report, as plain numbers (not Java), so I can sanity-check your work:
+After each line, also report, as plain numbers (not Python), so I can sanity-check your work:
 
 - How many photos and roughly how many sampled pixels went into that type's colour band and glare
   band separately.
@@ -145,10 +122,10 @@ After each block, also report, as plain numbers (not Java), so I can sanity-chec
 
 For the result to transfer to the real robot instead of just describing your photos:
 
-- Photos should come from (or closely resemble) the actual competition webcam feed, not a phone
-  camera — a different sensor's colour science shifts hue/saturation in ways no amount of careful
-  sampling fixes. If `WebcamControls` is running in manual mode with a specific `exposureMs` and
-  `whiteBalanceK`, photos taken under different settings won't match what the pipeline actually sees.
+- Photos should come from (or closely resemble) the actual Limelight 3A feed, not a phone camera — a
+  different sensor's colour science shifts hue/saturation in ways no amount of careful sampling
+  fixes. Photos taken at a different exposure, gain or white balance than the ball pipeline's Input
+  tab won't match what the pipeline actually sees.
 - Include photos at multiple distances/angles and, ideally, multiple lighting conditions — a
   threshold derived from one ideal, close-up, evenly-lit photo will be too narrow for a ball
   half-shadowed across the field under gym lighting.

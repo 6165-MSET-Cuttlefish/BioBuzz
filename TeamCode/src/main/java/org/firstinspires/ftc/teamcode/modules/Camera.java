@@ -6,13 +6,12 @@ import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
-import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
+import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
 import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
 import org.opencv.core.Point;
@@ -22,8 +21,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * {@link #getBalls()} is camera-relative (robot motion included); {@link #getFieldBalls()} is
- * field-relative and stays empty until {@link #withFollower} is called.
+ * Balls from the Limelight's ball SnapScript. {@link #getBalls()} is camera-relative (robot motion
+ * included); {@link #getFieldBalls()} is field-relative and stays empty until {@link #withFollower} is called.
  */
 @Config
 public class Camera extends Module {
@@ -34,27 +33,23 @@ public class Camera extends Module {
     public static double defaultLookaheadSeconds = 0.25;
     public static double staleFrameSeconds = 0.5;
 
-    public static final String WEBCAM_NAME = "nerdDetector";
-
     public enum VisionState implements State {
         ENABLED,
         DISABLED
     }
 
-    private final HardwareMap hardwareMap;
-    private final BallDetectionPipeline pipeline = new BallDetectionPipeline();
+    private final LimelightBallSource source;
     private final RobotStateHistory robotHistory = new RobotStateHistory();
     private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
 
-    private WebcamSession session;
     private Follower follower;
-    private BallDetectionPipeline.Frame frame = BallDetectionPipeline.Frame.EMPTY;
+    private LimelightBallSource.Frame frame = LimelightBallSource.Frame.EMPTY;
     private List<FieldBall> fieldBalls = Collections.emptyList();
     private double lastFieldBallFrameTimestamp = -1;
     private double previousReadSeconds = Double.NaN;
 
     public Camera(HardwareMap hardwareMap) {
-        this.hardwareMap = hardwareMap;
+        source = new LimelightBallSource(hardwareMap);
     }
 
     public Camera withFollower(Follower follower) {
@@ -71,16 +66,13 @@ public class Camera extends Module {
     }
 
     @Override
-    public void init() {
-        // Not in the constructor: open failures report through telemetry, which a Module only gets at init.
-        session = new WebcamSession(hardwareMap, getTelemetry(), WEBCAM_NAME, pipeline);
-    }
-
-    @Override
     protected void read() {
-        frame = pipeline.latest();
-        // In read(), not write(): exposure/gain tuning must apply during init, when writes are held back.
-        session.update();
+        if (isInAny(VisionState.ENABLED)) {
+            source.update();
+        } else if (source.latest() != LimelightBallSource.Frame.EMPTY) {
+            source.reset();
+        }
+        frame = source.latest();
         updateFieldBalls();
     }
 
@@ -109,13 +101,11 @@ public class Camera extends Module {
     }
 
     @Override
-    protected void write() {
-        pipeline.setDetectionEnabled(isInAny(VisionState.ENABLED));
-    }
+    protected void write() {}
 
     @Override
     public void stop() {
-        if (session != null) session.close();
+        source.stop();
     }
 
     public List<TrackedBall> getBalls() {
@@ -214,9 +204,8 @@ public class Camera extends Module {
             logDashboard("Vision", getState(VisionState.class));
             logDashboard("FPS", "%.1f", frame.fps);
             logDashboard("Balls", frame.balls.size());
-            log("ROIs searched", frame.roiCount);
-            log("Rejected (color)", frame.rejectedColor);
-            log("Rejected (overlap)", frame.rejectedOverlap);
+            log("Detections", frame.detectionCount);
+            log("Latency (ms)", "%.0f", frame.latencyMs);
             if (isFrameStale()) log("Frame", "STALE (%.2fs)", getFrameAgeSeconds());
         }
         if (ballTelemetry) {

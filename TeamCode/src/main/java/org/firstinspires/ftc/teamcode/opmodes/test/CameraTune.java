@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.modules.Camera;
+import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.opencv.core.Mat;
@@ -17,7 +17,7 @@ public class CameraTune extends LinearOpMode {
 
     @Override
     public void runOpMode() {
-        session = new WebcamSession(hardwareMap, telemetry, Camera.WEBCAM_NAME, new PassThrough());
+        session = new WebcamSession(hardwareMap, telemetry, CellTipCamera.WEBCAM_NAME, new PassThrough());
 
         while (opModeInInit()) pump();
         while (opModeIsActive()) pump();

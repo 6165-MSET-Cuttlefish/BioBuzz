@@ -14,6 +14,8 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 @Config
 public class CellTipCamera extends Module {
 
+    public static final String WEBCAM_NAME = "nerdDetector";
+
     public static long maxStalenessMs = 250;
     public static double checkTipTimeoutMs = 10000;
 
@@ -51,7 +53,7 @@ public class CellTipCamera extends Module {
         pipeline = new CellTipPipeline(alliance.name(), CLUSTER_LABELS,
                 alliance == AllianceColor.BLUE ? BLUE_CLUSTERS : RED_CLUSTERS);
         // Not in the constructor: open failures report through telemetry, which a Module only gets at init.
-        session = new WebcamSession(hardwareMap, getTelemetry(), Camera.WEBCAM_NAME, pipeline);
+        session = new WebcamSession(hardwareMap, getTelemetry(), WEBCAM_NAME, pipeline);
     }
 
     @Override
@@ -99,7 +101,7 @@ public class CellTipCamera extends Module {
         }
         if (!fresh) {
             log("Cell", Double.isNaN(stalenessMs)
-                    ? "NO VERDICT (no frames from " + Camera.WEBCAM_NAME + ")"
+                    ? "NO VERDICT (no frames from " + WEBCAM_NAME + ")"
                     : String.format("NO VERDICT (staleness %.0fms)", stalenessMs));
             return;
         }

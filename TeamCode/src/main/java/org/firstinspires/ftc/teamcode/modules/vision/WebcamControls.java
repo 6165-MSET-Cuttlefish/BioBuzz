@@ -20,7 +20,6 @@ public class WebcamControls {
     public static int exposureMs = 8;
     // Raw device units, clamped to the camera's range.
     public static int gain = 0;
-    // BallVisionConstants' HSV bands were tuned at this value.
     public static int whiteBalanceK = 3250;
 
     private final OpenCvWebcam webcam;

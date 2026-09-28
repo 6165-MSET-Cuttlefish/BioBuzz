@@ -6,14 +6,14 @@ import com.pedropathing.math.Pose;
 public final class FieldBall {
 
     public final int id;
-    public final BallVisionConstants.BallType type;
+    public final BallType type;
     public final double x;
     public final double y;
     public final double vx;
     public final double vy;
     private final boolean visible;
 
-    FieldBall(int id, BallVisionConstants.BallType type, double x, double y, double vx, double vy,
+    FieldBall(int id, BallType type, double x, double y, double vx, double vy,
               boolean visible) {
         this.id = id;
         this.type = type;

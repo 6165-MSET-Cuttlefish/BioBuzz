@@ -1,7 +1,6 @@
 package org.firstinspires.ftc.teamcode.opmodes.test;
 
 import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
@@ -12,9 +11,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
-import org.firstinspires.ftc.teamcode.modules.Camera;
-import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
-import org.firstinspires.ftc.teamcode.modules.vision.BallDetectionPipeline;
+import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
@@ -26,11 +23,6 @@ import java.util.List;
 /** Deliberately framework-free; "field" positions are relative to the robot's pose at init. */
 @TeleOp(name = "Ball Field Drive", group = "Test")
 public class BallFieldDriveTest extends LinearOpMode {
-
-    @Config("BallFieldDrive")
-    public static class Tuning {
-        public static boolean cameraStreamEnabled = true;
-    }
 
     private static final String PINPOINT_NAME = "pinpoint";
 
@@ -45,11 +37,10 @@ public class BallFieldDriveTest extends LinearOpMode {
     private GoBildaPinpointDriver pinpoint;
     private DcMotorEx fl, bl, fr, br;
 
-    private WebcamSession session;
-    private BallDetectionPipeline pipeline;
+    private LimelightBallSource source;
     private final RobotStateHistory robotHistory = new RobotStateHistory();
     private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
-    // The loop outruns the camera; only transform + track on a new frame.
+    // The loop outruns the Limelight; only transform + track on a new frame.
     private double lastFieldBallFrameTimestamp = -1;
     private List<FieldBall> fieldBalls = Collections.emptyList();
 
@@ -72,8 +63,7 @@ public class BallFieldDriveTest extends LinearOpMode {
         pinpoint.setEncoderDirections(X_POD_DIRECTION, Y_POD_DIRECTION);
         pinpoint.resetPosAndIMU(); // robot must be stationary (IMU recalibration)
 
-        pipeline = new BallDetectionPipeline();
-        session = new WebcamSession(hardwareMap, telemetry, Camera.WEBCAM_NAME, pipeline);
+        source = new LimelightBallSource(hardwareMap);
 
         while (opModeInInit()) pump(false);
         while (opModeIsActive()) pump(true);
@@ -82,17 +72,16 @@ public class BallFieldDriveTest extends LinearOpMode {
         bl.setPower(0);
         fr.setPower(0);
         br.setPower(0);
-        session.close();
+        source.stop();
     }
 
     private void pump(boolean drive) {
         pinpoint.update();
         recordRobotState();
-        session.update();
-        session.setCameraStreamEnabled(Tuning.cameraStreamEnabled);
+        source.update();
         if (drive) driveFromGamepad();
 
-        BallDetectionPipeline.Frame frame = pipeline.latest();
+        LimelightBallSource.Frame frame = source.latest();
         if (frame.timestampSeconds != lastFieldBallFrameTimestamp) {
             lastFieldBallFrameTimestamp = frame.timestampSeconds;
             RobotStateHistory.Sample captureState = robotHistory.sampleAt(frame.timestampSeconds);
@@ -104,11 +93,8 @@ public class BallFieldDriveTest extends LinearOpMode {
         RobotStateHistory.Sample now = robotHistory.newest();
         telemetry.addData("Robot (in, deg)", "(%.1f, %.1f) @ %.0f",
                 now.x, now.y, Math.toDegrees(now.heading));
-        telemetry.addData("FPS (pipeline's own count)", "%.1f", frame.fps);
-        telemetry.addData("Pipeline (ms)", session.webcam().getPipelineTimeMs());
-        telemetry.addData("Overhead (ms)", session.webcam().getOverheadTimeMs());
-        telemetry.addData("Total frame (ms)", session.webcam().getTotalFrameTimeMs());
-        telemetry.addData("Camera stream", Tuning.cameraStreamEnabled ? "ON" : "OFF");
+        telemetry.addData("Limelight FPS", "%.1f", frame.fps);
+        telemetry.addData("Latency (ms)", "%.0f", frame.latencyMs);
         telemetry.addData("Balls", fieldBalls.size());
         int shown = 0;
         for (FieldBall ball : fieldBalls) {

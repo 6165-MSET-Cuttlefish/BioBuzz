@@ -6,23 +6,20 @@ import org.opencv.core.Point;
 public final class TrackedBall {
 
     public final int id;
-    public final BallVisionConstants.BallType type;
+    public final BallType type;
     public final double x;
     public final double y;
     public final double vx;
     public final double vy;
-    public final double radiusPx;
     public final boolean visible;
 
-    TrackedBall(int id, BallVisionConstants.BallType type, double x, double y, double vx, double vy,
-                double radiusPx, boolean visible) {
+    TrackedBall(int id, BallType type, double x, double y, double vx, double vy, boolean visible) {
         this.id = id;
         this.type = type;
         this.x = x;
         this.y = y;
         this.vx = vx;
         this.vy = vy;
-        this.radiusPx = radiusPx;
         this.visible = visible;
     }
 

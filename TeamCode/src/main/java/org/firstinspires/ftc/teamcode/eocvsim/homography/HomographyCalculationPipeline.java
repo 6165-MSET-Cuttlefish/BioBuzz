@@ -19,8 +19,8 @@ import java.util.List;
 /**
  * Locks a chessboard homography from full-resolution image pixels to camera-frame ground inches
  * (+X away from the camera, +Y left, origin at the centre of the board's near edge) and prints it
- * for {@code BallVisionConstants.H_ARRAY} and the Limelight SnapScripts. The board is the 10x7-square
- * one in {@code docs/calibration-chessboard-3in-letter.pdf}, laid with its long side pointing away.
+ * for the Limelight SnapScripts. The board is the 10x7-square one in
+ * {@code docs/calibration-chessboard-3in-letter.pdf}, laid with its long side pointing away.
  */
 public class HomographyCalculationPipeline extends OpenCvPipeline {
 
@@ -44,8 +44,8 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     private static final int OUTPUT_WIDTH_PX  = 640;
     private static final int OUTPUT_HEIGHT_PX = 480;
 
-    // The Limelight 3A's lens calibration (latest.cal). False for the webcam, which has none: the
-    // printed H_ARRAY then maps raw pixels, as BallVisionConstants expects.
+    // The Limelight 3A's lens calibration (latest.cal). False for a camera without one: the
+    // printed H_ARRAY then maps raw pixels.
     private static final boolean  UNDISTORT                  = true;
     private static final double   LENS_CALIBRATION_WIDTH_PX  = 1280;
     private static final double   LENS_CALIBRATION_HEIGHT_PX = 960;
