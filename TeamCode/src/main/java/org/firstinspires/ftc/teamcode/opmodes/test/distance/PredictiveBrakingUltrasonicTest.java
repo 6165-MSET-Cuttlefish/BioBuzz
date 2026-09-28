@@ -27,7 +27,7 @@ public class PredictiveBrakingUltrasonicTest extends OpMode {
         public static double wheelTestPower = 0.2;
         public static double driveSpeed = 1.0;
 
-        // Copied from BettaConstants.drivetrainConfig; wheelTest confirms them.
+        // Copied from BettaConstants.mecanum; wheelTest confirms them.
         public static boolean reverseFrontLeft  = true;
         public static boolean reverseBackLeft   = true;
         public static boolean reverseFrontRight = false;
