@@ -14,7 +14,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 @Config
 public class CellTipCamera extends Module {
 
-    public static final String WEBCAM_NAME = "nerdDetector";
+    public static final String WEBCAM_NAME = "ballDetector";
 
     public static long maxStalenessMs = 250;
     public static double checkTipTimeoutMs = 10000;
@@ -52,13 +52,13 @@ public class CellTipCamera extends Module {
         alliance = Context.allianceColor;
         pipeline = new CellTipPipeline(alliance.name(), CLUSTER_LABELS,
                 alliance == AllianceColor.BLUE ? BLUE_CLUSTERS : RED_CLUSTERS);
-        // Not in the constructor: open failures report through telemetry, which a Module only gets at init.
-        session = new WebcamSession(hardwareMap, getTelemetry(), WEBCAM_NAME, pipeline);
+        session = new WebcamSession(hardwareMap, WEBCAM_NAME, pipeline);
     }
 
     @Override
     protected void read() {
-        // In read(), not write(): exposure/gain tuning must apply during init, when writes are held back.
+        // In read(), not write(): exposure/gain tuning and the on/off state must apply during init, when writes are held back.
+        pipeline.setEnabled(isInAny(VisionState.ENABLED));
         session.update();
         CellTipPipeline.Verdict verdict = pipeline.latest();
         stalenessMs = verdict.timestampSeconds == 0
@@ -69,14 +69,15 @@ public class CellTipCamera extends Module {
     }
 
     @Override
-    protected void write() {
-        pipeline.setEnabled(isInAny(VisionState.ENABLED));
-    }
+    protected void write() {}
 
     @Override
     public void stop() {
-        if (session != null) session.close();
-        if (pipeline != null) pipeline.release();
+        try {
+            if (session != null) session.close();
+        } finally {
+            if (pipeline != null) pipeline.release();
+        }
     }
 
     /** Fixed at init from {@link Context#allianceColor}. */

@@ -67,6 +67,8 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
     // Never write into input: it is EasyOpenCV's persistent decode buffer.
     private final Mat display = new Mat();
     private final MatOfPoint quad = new MatOfPoint();
+    // Guards detector: release() can run while a frame is mid-detection if closing the camera failed.
+    private final Object detectorLock = new Object();
     private long detector;
     private float appliedDecimation;
 
@@ -89,6 +91,13 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
 
     @Override
     public Mat processFrame(Mat input, long captureTimeNanos) {
+        synchronized (detectorLock) {
+            if (detector == 0) return input;
+            return detect(input, captureTimeNanos);
+        }
+    }
+
+    private Mat detect(Mat input, long captureTimeNanos) {
         if (!enabled) {
             tipped = true;
             pendingSince = Double.NaN;
@@ -148,11 +157,13 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
         latest = Verdict.NONE;
     }
 
-    /** Call only once the camera has stopped streaming. */
+    /** Frames that arrive afterwards pass through undetected. */
     public void release() {
-        if (detector == 0) return;
-        AprilTagDetectorJNI.releaseApriltagDetector(detector);
-        detector = 0;
+        synchronized (detectorLock) {
+            if (detector == 0) return;
+            AprilTagDetectorJNI.releaseApriltagDetector(detector);
+            detector = 0;
+        }
     }
 
     private int clusterOf(int id) {

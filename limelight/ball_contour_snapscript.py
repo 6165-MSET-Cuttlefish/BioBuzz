@@ -1,20 +1,22 @@
 """Contour-gated ball-detection SnapScript for the Limelight 3A — finds Pollen and red/blue Nectar.
 
-ball_detection_snapscript.py's HSV masks with its Hough stage replaced by contour work. Every colour
-blob is first split with a distance transform: its deepest point is the centre of the largest circle
-that fits, which is taken, blanked out, and repeated until what is left is too small for a ball. A
-blob that splits into two or more circles is a group of touching balls. Otherwise it is one ball if
-its area, bounding-box aspect (w / h) and fill (contour area / box area) are all in range, drawn as
-its enclosing circle. There is no tracking and no overlap suppression; the types' hues don't overlap.
+HSV masks per ball type, then contour work. Every colour blob is first split with a distance
+transform: its deepest point is the centre of the largest circle that fits, which is taken, blanked
+out, and repeated until what is left is too small for a ball. A blob that splits into two or more
+circles is a group of touching balls. Otherwise it is one ball if its area, bounding-box aspect
+(w / h) and fill (contour area / box area) are all in range, drawn as its enclosing circle. A ball
+whose ground contact is at or above the horizon (which is also every point behind the camera) or
+farther than MAX_RANGE_IN from the (0,0) crosshair is dropped. There is no tracking and no overlap
+suppression; the types' hues don't overlap.
 
 Upload this file from the Limelight web UI as a Python pipeline (Input tab, pipeline type Python) to
-pipeline 4. Pipeline 0 is DECODE's AprilTags, pipeline 3 the Hough detector.
+pipeline 4. Pipeline 0 is DECODE's AprilTags.
 
 Areas are in pixels of a CALIBRATION_SIZE frame, so the gates hold at any streaming resolution.
 The UNDISTORT, CALIBRATION_SIZE and H_ARRAY block comes from eocvsim/homography; with UNDISTORT set,
 contact points are undistorted with the lens calibration before the homography.
 
-llpython, 32 doubles, the same layout as ball_detection_snapscript.py but SCRIPT_ID 6166:
+llpython, 32 doubles:
     0        SCRIPT_ID, so the hub can reject the wrong pipeline
     1        ball count N, 0 to MAX_BALLS
     2 + 3i   type code: 1 Pollen, 2 red Nectar, 3 blue Nectar
@@ -64,6 +66,9 @@ MAX_FILL = 1.3
 EXPECT_AREA_PX = 3000.0
 FILL_COST_WEIGHT = 4.0
 
+MAX_RANGE_IN = 96.0  # from the (0,0) crosshair; H_ARRAY's error grows past the calibration board's far edge
+HORIZON_MARGIN = 1e-6  # |w| below this is at the horizon, where ground distance blows up
+
 MAX_SPLIT_BALLS = 8  # per blob
 SPLIT_SUPPRESS_SCALE = 0.75  # blanked radius / found radius; lower finds overlapping balls, higher fewer ghosts
 SPLIT_MIN_OPEN_EDGE = 0.5  # fraction of a split circle's rim that must border background
@@ -110,6 +115,9 @@ BALL_TYPES = (
 
 _H = np.array(H_ARRAY, np.float64)
 _H_INV = np.linalg.inv(_H)
+# Ground (0,0) images to pixel p = _H_INV[:, 2] / _H_INV[2, 2], and _H @ p has w = 1 / _H_INV[2, 2]: every
+# real ground point shares that sign of w, and a pixel whose w has the other sign is above the horizon.
+_GROUND_W_SIGN = 1.0 if _H_INV[2, 2] > 0 else -1.0
 NO_CONTOUR = np.array([[]])
 _K = (LENS_FX * CALIBRATION_SIZE[0] / LENS_CALIBRATION_SIZE[0],
       LENS_FY * CALIBRATION_SIZE[1] / LENS_CALIBRATION_SIZE[1],
@@ -213,8 +221,15 @@ def _origin_px():
 
 
 def _to_ground(balls, scale_x, scale_y):
+    """Ground (x, y) per ball, and whether it is below the horizon and within MAX_RANGE_IN."""
     contacts = np.array([[b[1] * scale_x, (b[2] + b[3]) * scale_y] for b in balls], np.float64)
-    return cv2.perspectiveTransform(_undistort(contacts).reshape(-1, 1, 2), _H).reshape(-1, 2)
+    pixels = _undistort(contacts)
+    projected = np.dot(np.hstack((pixels, np.ones((len(pixels), 1)))), _H.T)
+    w = projected[:, 2] * _GROUND_W_SIGN
+    below_horizon = w > HORIZON_MARGIN
+    ground = projected[:, :2] / np.where(below_horizon, projected[:, 2], 1.0)[:, None]
+    valid = below_horizon & (np.hypot(ground[:, 0], ground[:, 1]) <= MAX_RANGE_IN)
+    return ground, valid
 
 
 def _label(image, text, origin, color, scale=0.5, thickness=1):
@@ -280,7 +295,12 @@ def runPipeline(image, llrobot):
                     circles = [single]
             balls.extend(circles)
 
-    ground = _to_ground(balls, scale_x, scale_y) if balls else []
+    if balls:
+        ground, valid = _to_ground(balls, scale_x, scale_y)
+        balls = [b for b, keep in zip(balls, valid) if keep]
+        ground = ground[valid]
+    else:
+        ground = []
     # Nearest first, so the ones the llpython budget drops are the far ones.
     order = sorted(range(len(balls)), key=lambda i: math.hypot(ground[i][0], ground[i][1]))
     best = min(range(len(balls)), key=lambda i: balls[i][6]) if balls else None

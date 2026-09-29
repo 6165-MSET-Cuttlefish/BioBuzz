@@ -23,6 +23,8 @@ import java.util.List;
 /**
  * Balls from the Limelight's ball SnapScript. {@link #getBalls()} is camera-relative (robot motion
  * included); {@link #getFieldBalls()} is field-relative and stays empty until {@link #withFollower} is called.
+ * Once the Limelight stops sending frames or faults ({@link #isFrameStale()}, {@link #limelightProblem()}),
+ * getBalls() empties and every field ball reads not visible until it is forgotten.
  */
 @Config
 public class Camera extends Module {
@@ -31,7 +33,6 @@ public class Camera extends Module {
     public static boolean ballTelemetry = true;
 
     public static double defaultLookaheadSeconds = 0.25;
-    public static double staleFrameSeconds = 0.5;
 
     public enum VisionState implements State {
         ENABLED,
@@ -45,7 +46,6 @@ public class Camera extends Module {
     private Follower follower;
     private LimelightBallSource.Frame frame = LimelightBallSource.Frame.EMPTY;
     private List<FieldBall> fieldBalls = Collections.emptyList();
-    private double lastFieldBallFrameTimestamp = -1;
     private double previousReadSeconds = Double.NaN;
 
     public Camera(HardwareMap hardwareMap) {
@@ -67,16 +67,17 @@ public class Camera extends Module {
 
     @Override
     protected void read() {
+        boolean newFrame = false;
         if (isInAny(VisionState.ENABLED)) {
-            source.update();
-        } else if (source.latest() != LimelightBallSource.Frame.EMPTY) {
-            source.reset();
+            newFrame = source.update();
+        } else {
+            source.idle();
         }
         frame = source.latest();
-        updateFieldBalls();
+        updateFieldBalls(newFrame);
     }
 
-    private void updateFieldBalls() {
+    private void updateFieldBalls(boolean newFrame) {
         if (follower == null) {
             fieldBalls = Collections.emptyList();
             return;
@@ -91,13 +92,13 @@ public class Camera extends Module {
                     velocity.vx, velocity.vy, velocity.omega, previousReadSeconds));
         }
         previousReadSeconds = now;
-        if (frame.timestampSeconds == lastFieldBallFrameTimestamp) return;
-        lastFieldBallFrameTimestamp = frame.timestampSeconds;
-
-        // The frame is tens of ms old: transform with the robot state at capture time, not now.
-        RobotStateHistory.Sample captureState = robotHistory.sampleAt(frame.timestampSeconds);
-        List<FieldBall> freshFieldBalls = BallFieldTransform.toField(frame.balls, captureState);
-        fieldBalls = fieldBallTracker.update(freshFieldBalls, nowSeconds());
+        if (newFrame) {
+            // The frame is tens of ms old: transform with the robot state at capture time, not now.
+            RobotStateHistory.Sample captureState = robotHistory.sampleAt(frame.timestampSeconds);
+            fieldBalls = fieldBallTracker.update(BallFieldTransform.toField(frame.balls, captureState), now);
+        } else if (frame.stale) {
+            fieldBalls = fieldBallTracker.update(Collections.<FieldBall>emptyList(), now);
+        }
     }
 
     @Override
@@ -135,7 +136,7 @@ public class Camera extends Module {
     }
 
     public Point getPredictedBallPosition(TrackedBall ball, double lookaheadSeconds) {
-        return ball.predict(lookaheadSeconds + getFrameAgeSeconds());
+        return ball.predict(lookaheadSeconds + predictionAgeSeconds());
     }
 
     public boolean hasRobotState() {
@@ -182,20 +183,34 @@ public class Camera extends Module {
     }
 
     public Pose getPredictedFieldPosition(FieldBall ball, double lookaheadSeconds) {
-        return ball.predict(lookaheadSeconds + getFrameAgeSeconds());
+        return ball.predict(lookaheadSeconds + predictionAgeSeconds());
     }
 
+    /** Infinite before the first frame and after vision is disabled. */
     public double getFrameAgeSeconds() {
-        if (frame.timestampSeconds == 0) return 0;
-        return nowSeconds() - frame.timestampSeconds;
+        return frame.ageSeconds();
+    }
+
+    private double predictionAgeSeconds() {
+        double age = getFrameAgeSeconds();
+        if (Double.isInfinite(age)) {
+            throw new IllegalStateException("Camera has no Limelight frame to predict from (none yet, or vision disabled)");
+        }
+        return age;
     }
 
     private static double nowSeconds() {
         return System.nanoTime() * 1e-9;
     }
 
+    /** No live Limelight frame: none yet, vision disabled, a Limelight fault, or none new for {@code LimelightBalls → staleFrameSeconds}. */
     public boolean isFrameStale() {
-        return frame.timestampSeconds == 0 || getFrameAgeSeconds() > staleFrameSeconds;
+        return frame.stale;
+    }
+
+    /** Why the Limelight is unusable (also shown as the {@code Limelight} fault), or null while healthy or DISABLED. */
+    public String limelightProblem() {
+        return source.problem();
     }
 
     @Override
@@ -206,7 +221,12 @@ public class Camera extends Module {
             logDashboard("Balls", frame.balls.size());
             log("Detections", frame.detectionCount);
             log("Latency (ms)", "%.0f", frame.latencyMs);
-            if (isFrameStale()) log("Frame", "STALE (%.2fs)", getFrameAgeSeconds());
+            if (limelightProblem() != null) {
+                log("Frame", "STALE (Limelight fault)");
+            } else if (isFrameStale()) {
+                double age = getFrameAgeSeconds();
+                log("Frame", Double.isInfinite(age) ? "STALE (no frame)" : String.format("STALE (%.2fs)", age));
+            }
         }
         if (ballTelemetry) {
             if (hasRobotState()) {

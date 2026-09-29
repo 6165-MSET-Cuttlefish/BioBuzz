@@ -32,9 +32,7 @@ public class DecodeTele extends DecodeOpMode {
 
     private boolean slowMode = false;
 
-    private final long[] lastGamepad1RumbleMs = {0};
     private final long[] lastGamepad2RumbleMs = {0};
-    private String pendingRelocalizeStatus = null;
 
     private LayerGamepad d1;
     private LayerGamepad d2;
@@ -56,14 +54,15 @@ public class DecodeTele extends DecodeOpMode {
 
     @Override
     protected void initialize() {
-        Turret.isAuto = false;
         setupGamepads();
         resetOffsets();
     }
 
+    // Only the pose resets act in INIT; every other input is sampled so a press made in INIT is spent by START.
     @Override
     protected void initializeLoop() {
-        updateInputs();
+        invalidateInputs();
+        poseResetControls();
     }
 
     @Override
@@ -89,7 +88,6 @@ public class DecodeTele extends DecodeOpMode {
         getProfiler().leaveSection("tele.drive", stamp);
     }
 
-    // Emitted here, not from gameLoop: dashboard data added before updateTelemetry() lands in the already-sent packet.
     @Override
     protected void telemetry() {
         long stamp = getProfiler().enterSection();
@@ -97,15 +95,25 @@ public class DecodeTele extends DecodeOpMode {
         robot.telemetry.addGroupHeader("CONTROLS", COLOR_BLUE);
         robot.telemetry.addData("Slow Mode", slowMode ? "75%" : "OFF");
         robot.telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
-        if (pendingRelocalizeStatus != null) {
-            addDSLarge("Relocalize", pendingRelocalizeStatus);
-            pendingRelocalizeStatus = null;
-        }
         getProfiler().leaveSection("tele.controlsTelemetry", stamp);
     }
 
     private void updateInputs() {
         long stamp = getProfiler().enterSection();
+        invalidateInputs();
+        getProfiler().leaveSection("tele.invalidateInputs", stamp);
+
+        stamp = getProfiler().enterSection();
+        poseResetControls();
+        d1Controls();
+        getProfiler().leaveSection("tele.d1Controls", stamp);
+
+        stamp = getProfiler().enterSection();
+        d2Controls();
+        getProfiler().leaveSection("tele.d2Controls", stamp);
+    }
+
+    private void invalidateInputs() {
         d1.invalidateAll();
         d2.invalidateAll();
         d1Lt.invalidate();
@@ -116,15 +124,6 @@ public class DecodeTele extends DecodeOpMode {
         d2RsDown.invalidate();
         d2RsRight.invalidate();
         d2RsLeft.invalidate();
-        getProfiler().leaveSection("tele.invalidateInputs", stamp);
-
-        stamp = getProfiler().enterSection();
-        d1Controls();
-        getProfiler().leaveSection("tele.d1Controls", stamp);
-
-        stamp = getProfiler().enterSection();
-        d2Controls();
-        getProfiler().leaveSection("tele.d2Controls", stamp);
     }
 
     private void rumble(Gamepad gamepad, long[] lastRumbleMs, int durationMs) {
@@ -186,29 +185,20 @@ public class DecodeTele extends DecodeOpMode {
         if (d1Lt.wasJustPressed()) {
             slowMode = !slowMode;
         }
+    }
 
-        boolean allHeld = d1.rightBumper.getValue() && d1.leftBumper.getValue()
-                && d1.rightTrigger.getValue() > 0.1 && d1.leftTrigger.getValue() > 0.1;
-
-        if (allHeld) {
-            if (d1.b.getValue()) {
-                Context.allianceColor = AllianceColor.RED;
-            } else if (d1.x.getValue()) {
-                Context.allianceColor = AllianceColor.BLUE;
-            }
-        } else {
-            if (d1.x.wasJustPressed()) {
-                resetPoseAndOffsets(new Pose(8.875, 9, Math.toRadians(180)));
-            }
-            if (d1.b.wasJustPressed()) {
-                resetPoseAndOffsets(new Pose(141.5 - 8.875, 9, Math.toRadians(0)));
-            }
-            if (d1.y.wasJustPressed()) {
-                resetPoseAndOffsets(new Pose(141.5 / 2, 8, Math.toRadians(90)));
-            }
-            if (d1.dpadDown.wasJustPressed()) {
-                resetPoseAndOffsets(new Pose(141.5 / 2, 141.5 - 8.875, Math.toRadians(90)));
-            }
+    private void poseResetControls() {
+        if (d1.x.wasJustPressed()) {
+            resetPoseAndOffsets(new Pose(8.875, 9, Math.toRadians(180)));
+        }
+        if (d1.b.wasJustPressed()) {
+            resetPoseAndOffsets(new Pose(141.5 - 8.875, 9, Math.toRadians(0)));
+        }
+        if (d1.y.wasJustPressed()) {
+            resetPoseAndOffsets(new Pose(141.5 / 2, 8, Math.toRadians(90)));
+        }
+        if (d1.dpadDown.wasJustPressed()) {
+            resetPoseAndOffsets(new Pose(141.5 / 2, 141.5 - 8.875, Math.toRadians(90)));
         }
     }
 
@@ -302,10 +292,6 @@ public class DecodeTele extends DecodeOpMode {
                     ? Turret.TurretState.HOLD
                     : Turret.TurretState.AUTOAIM).activate();
         }
-
-        if (d2.dpadLeft.wasJustPressed()) {
-            relocalizeFromLimelight();
-        }
     }
 
     private void resetPoseAndOffsets(Pose pose) {
@@ -325,18 +311,6 @@ public class DecodeTele extends DecodeOpMode {
         } else {
             Turret.teleTurretOffsetClose = 1.8;
             Turret.teleTurretOffsetFar = 4.5;
-        }
-    }
-
-    private void relocalizeFromLimelight() {
-        Pose relocalizedPose = robot.turret.getRelocalizedRobotPoseFromLimelight();
-        if (relocalizedPose != null) {
-            // Pose only; the shooter/turret tuning offsets are deliberately kept.
-            robot.follower.setPose(new Pose(relocalizedPose.x(), relocalizedPose.y(), robot.follower.pose().heading()));
-            rumble(gamepad1, lastGamepad1RumbleMs, 200);
-            pendingRelocalizeStatus = "SUCCESS";
-        } else {
-            pendingRelocalizeStatus = String.valueOf(robot.turret.getRelocalizationStatus());
         }
     }
 

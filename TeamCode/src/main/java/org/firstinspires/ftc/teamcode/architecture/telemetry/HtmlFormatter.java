@@ -11,6 +11,7 @@ public final class HtmlFormatter {
     public static final String COLOR_RED    = "#ef5350";
     public static final String COLOR_BLUE   = "#448aff";
     public static final String COLOR_GRAY   = "#9e9e9e";
+    public static final String COLOR_FAULT  = "#ff1744";
 
     // Count of <big>/<small> wraps htmlSize applies, not a point size.
     public static final int FONT_SMALL   = -1;

@@ -20,7 +20,6 @@
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
             <RevColorSensorV3 name="frontRightColor" bus="0" port="1" /> <!-- Physical port 0 -->
             <RevColorSensorV3 name="frontLeftColor" bus="1" port="0" /> <!-- Physical port 1 -->
-            <MaxSonarI2CXL name="sonar" bus="2" port="0" /> <!-- Physical port 2 -->
             <RevColorSensorV3 name="middleBackColor" bus="3" port="0" /> <!-- Physical port 3 -->
         </LynxModule>
         <LynxModule name="Expansion Hub 2" port="2">
@@ -46,6 +45,6 @@
             <goBILDAPinpoint name="pinpoint" bus="3" port="0" /> <!-- Physical port 3 -->
         </LynxModule>
     </LynxUsbDevice>
-    <Webcam name="nerdDetector" serialNumber="UC852" /> <!-- OV9782 -->
+    <Webcam name="ballDetector" serialNumber="UC852" /> <!-- OV9782 -->
     <EthernetDevice name="limelight" serialNumber="EthernetOverUsb:eth0:172.29.0.22" port="0" ipAddress="172.29.0.1" />
 </Robot>

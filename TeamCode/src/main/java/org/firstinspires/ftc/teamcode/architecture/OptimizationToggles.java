@@ -7,15 +7,17 @@ import com.acmerobotics.dashboard.config.Config;
 public final class OptimizationToggles {
     private OptimizationToggles() {}
 
-    public static int dashboardEveryNTelemetryFrames = 1;
+    /** Milliseconds slothboard's sender sleeps between batches of queued packets (its own default is 100). */
+    public static int dashboardTransmissionIntervalMs = 20;
+
+    /** Minimum milliseconds between Driver Station telemetry sends (the SDK's own default is 250); DS lines are built only when one is due. */
+    public static int dsTransmissionIntervalMs = 250;
 
     public static boolean dashboardSkipFieldImage = false;
     public static boolean dashboardSkipGrid = false;
     public static boolean dashboardSkipPoseHistory = false;
 
-    public static int telemetryEveryNLoops = 1;
-
-    /** Skip format + Item allocation on telemetry calls when both backends are off. */
+    /** Skip format + Item allocation on telemetry calls outside a DS frame while dashboard telemetry is off. */
     public static boolean telemetryLazyFormat = true;
 
     public static boolean profilerEnabled = true;

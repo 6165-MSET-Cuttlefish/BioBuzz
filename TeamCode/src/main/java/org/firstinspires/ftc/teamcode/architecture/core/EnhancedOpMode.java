@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.PoseRing;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.LoopProfiler;
@@ -50,16 +51,15 @@ public abstract class EnhancedOpMode extends OpMode {
     private double profiledLoopSumMs = 0;
     private double profiledLoopMaxMs = 0;
     private int voltageLoopCounter = 0;
-    private int dashboardLoopCounter = 0;
-    private int telemetryLoopCounter = 0;
 
     private final List<Module> modules = new ArrayList<>();
     private long lastCurrentReadLoop = Long.MIN_VALUE;
     private int initializedModuleCount = 0;
+    // Modules whose initStates() has been entered; only these can have commanded hardware.
+    private int initStartedModuleCount = 0;
     private double cachedTotalCurrent = 0.0;
     private VoltageSensor voltageSensor;
     private double voltage = 12.0;
-    private boolean telemetryRenderedThisLoop = false;
     private int loopDumpCounter = 0;
     private String cachedLoopDump = "";
 
@@ -89,11 +89,23 @@ public abstract class EnhancedOpMode extends OpMode {
 
     protected void dashboardOverlay(Canvas overlay) {}
 
+    // Once a hook throws, the SDK calls no further hooks (stop() included), so each one runs the safe-state pass itself before rethrowing.
     @Override
     public final void init() {
+        try {
+            runInit();
+        } catch (Throwable t) {
+            safeStatePass(t);
+            throw t;
+        }
+    }
+
+    private void runInit() {
         // Statics outlive an OpMode; Ivy's Scheduler even survives a Sloth reload.
         State.clearModuleBindings();
+        Faults.reset();
         Scheduler.reset();
+        FieldConfig.clearSymmetry();
 
         configureBulkCaching();
         voltageSensor = hardwareMap.voltageSensor.iterator().next();
@@ -116,10 +128,22 @@ public abstract class EnhancedOpMode extends OpMode {
         field = new FieldMapRenderer(73, 74);
         field.drawFieldLayout();
         field.snapshot();
+
+        // Not first in this frame (init lines came earlier), but shown on the SDK's post-init send rather than ~250 ms later.
+        addFaultTelemetry();
     }
 
     @Override
     public final void init_loop() {
+        try {
+            runInitLoop();
+        } catch (Throwable t) {
+            safeStatePass(t);
+            throw t;
+        }
+    }
+
+    private void runInitLoop() {
         runPipelineHead(shouldReadDuringInit());
 
         initializeLoop();
@@ -147,12 +171,19 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void start() {
+        try {
+            runStart();
+        } catch (Throwable t) {
+            safeStatePass(t);
+            throw t;
+        }
+    }
+
+    private void runStart() {
         gameTimer.reset();
         clearBulkCaches();
         // Reset throttle counters so the first match loop samples fresh instead of inheriting the init loop's mid-cycle phase.
         voltageLoopCounter = 0;
-        telemetryLoopCounter = 0;
-        dashboardLoopCounter = 0;
         loopsSinceFieldRender = Integer.MAX_VALUE;
         lastCurrentReadLoop = Long.MIN_VALUE;
         // Drop init-phase timings so the first match loops don't average them into loop time.
@@ -170,6 +201,15 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void loop() {
+        try {
+            runLoop();
+        } catch (Throwable t) {
+            safeStatePass(t);
+            throw t;
+        }
+    }
+
+    private void runLoop() {
         runPipelineHead(true);
 
         gameLoop();
@@ -194,43 +234,47 @@ public abstract class EnhancedOpMode extends OpMode {
 
     @Override
     public final void stop() {
+        Throwable failure = safeStatePass(null);
+        failure = attempt(failure, this::onEnd);
+        if (failure instanceof RuntimeException) throw (RuntimeException) failure;
+        if (failure instanceof Error) throw (Error) failure;
+        if (failure != null) throw new IllegalStateException(failure);
+    }
+
+    /** Every step runs even if an earlier one throws; returns the first failure, later ones attached to it as suppressed. */
+    private Throwable safeStatePass(Throwable failure) {
         // reset() drops every command without running its end() hook, so hardware safe-state must live in Module.stop().
-        Scheduler.reset();
-        // Every stop step runs even if one throws; the first Throwable is rethrown.
-        Throwable first = null;
-        // Follower.stop() only changes mode; Pedro writes its drive motors on the next update(), which never comes.
+        failure = attempt(failure, Scheduler::reset);
         if (robot != null) {
-            try {
-                robot.follower.stop();
-            } catch (Throwable t) {
-                first = t;
-            }
-            try {
-                robot.follower.drivetrain.stop();
-            } catch (Throwable t) {
-                if (first == null) first = t;
-            }
+            // Follower.stop() only changes mode; Pedro writes its drive motors on the next update(), which never comes.
+            failure = attempt(failure, () -> robot.follower.stop());
+            failure = attempt(failure, () -> robot.follower.drivetrain.stop());
         }
-        for (int i = 0; i < modules.size(); i++) {
-            try {
-                modules.get(i).stop();
-            } catch (Throwable t) {
-                if (first == null) first = t;
-            }
+        for (int i = 0; i < initStartedModuleCount; i++) {
+            Module m = modules.get(i);
+            failure = attempt(failure, m::stop);
         }
+        return failure;
+    }
+
+    private static Throwable attempt(Throwable failure, Runnable step) {
         try {
-            onEnd();
+            step.run();
         } catch (Throwable t) {
-            if (first == null) first = t;
+            if (failure == null) return t;
+            if (t != failure) failure.addSuppressed(t);
         }
-        if (first != null) {
-            if (first instanceof RuntimeException) throw (RuntimeException) first;
-            throw (Error) first;
-        }
+        return failure;
     }
 
     private void runPipelineHead(boolean read) {
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
+        robot.telemetry.syncDsTransmissionInterval();
+        robot.telemetry.beginLoop();
+        // Not set in init(): init-time dashboard lines go through the adapter, which the SDK's post-init update() sends.
+        robot.telemetry.setPacket(packet);
+        // Here, before any other line, so faults lead the frame; ones raised later this loop show next loop.
+        addFaultTelemetry();
 
         profiler.enabled = profilerEnabled;
         profiler.start();
@@ -309,6 +353,7 @@ public abstract class EnhancedOpMode extends OpMode {
         // Idempotent via initializedModuleCount: this runs twice (before and after initialize()) and must not re-init a module.
         for (int i = initializedModuleCount; i < modules.size(); i++) {
             Module m = modules.get(i);
+            initStartedModuleCount = i + 1;
             m.setTelemetry(robot.telemetry);
             m.initStates();
             m.init();
@@ -373,18 +418,8 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void updateTelemetry() {
-        int every = Math.max(1, telemetryEveryNLoops);
-        if (every > 1 && (telemetryLoopCounter++ % every) != 0) {
-            // Skip the frame build; the SDK's post-loop update() sends nothing to the dashboard while a packet is set.
-            telemetryRenderedThisLoop = false;
-            return;
-        }
-        telemetryRenderedThisLoop = true;
-
-        // Re-set every loop: updateDashboard swaps in a fresh packet.
-        robot.telemetry.setPacket(packet);
-
-        if (telemetryToggles.dsTelemetry || telemetryToggles.dashboardTelemetry) {
+        boolean dsFrame = robot.telemetry.isDSFrame();
+        if (dsFrame || telemetryToggles.dashboardTelemetry) {
             Pose currentPose = robot.follower.pose();
             addStatusTelemetry(currentPose);
 
@@ -413,7 +448,7 @@ public abstract class EnhancedOpMode extends OpMode {
                 robot.telemetry.addDashboardData("LOOP_DUMP", cachedLoopDump);
             }
 
-            renderFieldMap(currentPose);
+            if (dsFrame) renderFieldMap(currentPose);
         }
 
         telemetry();
@@ -421,8 +456,6 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void renderFieldMap(Pose fieldPose) {
-        // Only sink is addDSLine (a no-op when DS telemetry is off) — skip the whole render then.
-        if (!telemetryToggles.dsTelemetry) return;
         double fx = fieldPose.x();
         double fy = fieldPose.y();
         double fh = fieldPose.heading();
@@ -453,13 +486,14 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void updateDashboard() {
-        // Send only frames carrying both telemetry and overlay; one without the other blanks that half (flicker).
-        int every = Math.max(1, dashboardEveryNTelemetryFrames);
-        if (!telemetryRenderedThisLoop || (every > 1 && (dashboardLoopCounter++ % every) != 0)) {
-            // Fresh packet discards draws accumulated this loop, which would otherwise pile up across skipped loops.
-            packet = newPacket();
-            return;
+        // Thread.sleep() on slothboard's sender thread throws on a negative interval and kills dashboard telemetry silently.
+        if (dashboardTransmissionIntervalMs < 0) {
+            throw new IllegalArgumentException("OptimizationToggles.dashboardTransmissionIntervalMs must be >= 0, was "
+                    + dashboardTransmissionIntervalMs);
         }
+        FtcDashboard dashboard = FtcDashboard.getInstance();
+        // Re-applied every loop: slothboard resets it to its default at every OpMode init.
+        dashboard.setTelemetryTransmissionInterval(dashboardTransmissionIntervalMs);
 
         Canvas overlay = packet.fieldOverlay();
 
@@ -478,9 +512,32 @@ public abstract class EnhancedOpMode extends OpMode {
         }
 
         dashboardOverlay(overlay);
+        drawFaultOverlay(overlay);
 
-        FtcDashboard.getInstance().sendTelemetryPacket(packet);
+        // Swap before queueing: slothboard serializes queued packets on its own thread while telemetry writes go on (SDK post-loop update() too).
+        TelemetryPacket queued = packet;
         packet = newPacket();
+        robot.telemetry.setPacket(packet);
+        dashboard.sendTelemetryPacket(queued);
+    }
+
+    private void addFaultTelemetry() {
+        List<Faults.Fault> faults = Faults.active();
+        for (int i = 0; i < faults.size(); i++) {
+            Faults.Fault f = faults.get(i);
+            robot.telemetry.addFault(f.key, f.message);
+        }
+    }
+
+    private static void drawFaultOverlay(Canvas overlay) {
+        List<Faults.Fault> faults = Faults.active();
+        if (faults.isEmpty()) return;
+        overlay.setAlpha(1);
+        overlay.setFill(COLOR_FAULT);
+        for (int i = 0; i < faults.size(); i++) {
+            // Page frame: 144 x 144 from the top-left corner, y down, untouched by setTranslation/setRotation.
+            overlay.fillText("FAULT " + faults.get(i), 2, 7 + 6 * i, "bold 5px sans-serif", 0, true);
+        }
     }
 
     private void addStatusTelemetry(Pose currentPose) {
@@ -536,4 +593,9 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     public final LoopProfiler getProfiler() { return profiler; }
+
+    protected final void raiseFault(String key, String message) { Faults.raise(key, message); }
+    protected final void clearFault(String key) { Faults.clear(key); }
+    public final boolean hasFault(String key) { return Faults.has(key); }
+    public final List<Faults.Fault> activeFaults() { return Faults.active(); }
 }

@@ -23,4 +23,9 @@ public class RobotActions {
                 .requiring(cellTip);
         return Groups.race(watch, Commands.waitMs(CellTipCamera.checkTipTimeoutMs));
     }
+
+    /** Plans from the balls in view each time it starts; wrap it in a timeout like any auto step. */
+    public BallCollection collectBalls(BallCollection.Settings settings) {
+        return new BallCollection(robot.follower, robot.drivetrain, robot.camera, settings);
+    }
 }

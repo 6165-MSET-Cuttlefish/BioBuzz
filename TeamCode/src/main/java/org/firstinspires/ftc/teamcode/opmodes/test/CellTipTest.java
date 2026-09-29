@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
 @TeleOp(name = "Cell Tip Test", group = "Test")
@@ -21,6 +22,8 @@ public class CellTipTest extends BioBuzzOpMode {
 
     @Override
     protected void initialize() {
+        // Not needed here, and disabled it never polls the Limelight, which may not run the ball script on this bot.
+        if (!Camera.VisionState.DISABLED.activate()) throw new IllegalStateException("Camera didn't take DISABLED");
         watch = robot.actions.checkTip();
     }
 

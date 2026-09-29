@@ -6,15 +6,21 @@ import org.firstinspires.ftc.robotcore.external.Func;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.*;
+import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.dsTransmissionIntervalMs;
 import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.telemetryLazyFormat;
 
 /**
  * Fan-out telemetry: structure (headers, separators, raw-HTML rows) goes to both screens as the same
  * HTML, data rows stay plain on the dashboard so its graph view keeps numbers, and the braille field
  * map is Driver Station only.
+ *
+ * <p>Driver Station writes are accepted only in a DS frame: a loop in which {@link #beginLoop()} found the
+ * SDK's transmission interval elapsed. On other loops they are dropped, since the SDK would not send them.
  */
 public class DualTelemetry implements Telemetry {
     private final Telemetry dsTelemetry;
@@ -24,6 +30,11 @@ public class DualTelemetry implements Telemetry {
     private boolean enableDashboardTelemetry = true;
     private boolean dsFormatApplied = false;
     private boolean dashFormatApplied = false;
+    // Open until the first update() so writes made during init() reach the SDK's post-init update().
+    private boolean dsFrameOpen = true;
+    private boolean dsEverSent = false;
+    private long lastDSSendNs;
+    private int appliedDsIntervalMs = -1;
     private final ArrayDeque<String> packetLog = new ArrayDeque<>();
     private int packetLogCapacity = 9;
     private Log.DisplayOrder packetLogOrder = Log.DisplayOrder.OLDEST_FIRST;
@@ -59,16 +70,45 @@ public class DualTelemetry implements Telemetry {
         enableDashboardTelemetry = dash;
     }
 
+    /**
+     * Applies OptimizationToggles.dsTransmissionIntervalMs to the Driver Station when it changed since the last call,
+     * so a direct {@link #setMsTransmissionInterval} holds until the toggle is edited.
+     */
+    public void syncDsTransmissionInterval() {
+        int interval = dsTransmissionIntervalMs;
+        if (interval == appliedDsIntervalMs) return;
+        if (interval < 0) {
+            throw new IllegalArgumentException("OptimizationToggles.dsTransmissionIntervalMs must be >= 0, was " + interval);
+        }
+        dsTelemetry.setMsTransmissionInterval(interval);
+        appliedDsIntervalMs = interval;
+    }
+
+    /**
+     * Opens a DS frame when the SDK will transmit: TelemetryImpl sends an update() only once more than
+     * getMsTransmissionInterval() ms have passed since its last send. Timed from our confirmed send, which follows
+     * the SDK's timer reset, so ours never elapses first.
+     */
+    public void beginLoop() {
+        dsFrameOpen = enableDSTelemetry
+                && (!dsEverSent || (System.nanoTime() - lastDSSendNs) / 1e6 > dsTelemetry.getMsTransmissionInterval());
+    }
+
+    /** True in a loop whose DS lines will be transmitted; gate DS-only work on it. */
+    public boolean isDSFrame() {
+        return dsFrameOpen && enableDSTelemetry;
+    }
+
     /** Dashboard data goes into this packet so one frame carries data and overlay; null restores the adapter. */
     public void setPacket(TelemetryPacket packet) { this.packet = packet; }
 
     private boolean noSinkEnabled() {
-        return telemetryLazyFormat && !enableDSTelemetry && !enableDashboardTelemetry;
+        return telemetryLazyFormat && !isDSFrame() && !enableDashboardTelemetry;
     }
 
     private Item emit(String caption, Object value, boolean ds, boolean dash) {
         if (noSinkEnabled()) return EMPTY_ITEM;
-        Item dsItem = ds && enableDSTelemetry
+        Item dsItem = ds && isDSFrame()
                 ? dsTelemetry.addData(fmtCaption(caption), fmtValue(value))
                 : null;
         Item dashItem = null;
@@ -105,22 +145,32 @@ public class DualTelemetry implements Telemetry {
 
     public void addGroupHeader(String groupName, String color) {
         String header = htmlBold(htmlColorSize(color, FONT_LARGE, htmlEscape(groupName)));
-        if (enableDSTelemetry) dsTelemetry.addLine(header);
+        if (isDSFrame()) dsTelemetry.addLine(header);
         dashAddLine(header);
     }
 
     public void addSeparator() {
-        if (enableDSTelemetry) dsTelemetry.addLine(SEPARATOR_HTML);
+        if (isDSFrame()) dsTelemetry.addLine(SEPARATOR_HTML);
         dashAddLine(SEPARATOR_HTML);
     }
 
     public void addModuleHeader(String moduleName, String stateString) {
-        if (enableDSTelemetry) {
+        if (isDSFrame()) {
             dsTelemetry.addData(
                     htmlColor(COLOR_MODULE, htmlBold(htmlEscape(moduleName))),
                     htmlColor(COLOR_STATE, htmlEscape(stateString)));
         }
         emit(moduleName, stateString, false, true);
+    }
+
+    /** Driver Station: one big red line. Dashboard: plain keyed row {@code FAULT <key>}. */
+    public void addFault(String key, String message) {
+        if (isDSFrame()) {
+            dsTelemetry.addLine(htmlBold(htmlColor(COLOR_FAULT,
+                    htmlSize(FONT_XLARGE, "FAULT " + htmlEscape(key))
+                            + htmlSize(FONT_LARGE, ": " + htmlEscape(message)))));
+        }
+        emit("FAULT " + key, message, false, true);
     }
 
     public DualTelemetry addDSData(String caption, Object value) {
@@ -136,12 +186,12 @@ public class DualTelemetry implements Telemetry {
     // DS only: the dashboard's HTML sanitizer has no <pre>, so the braille field map would render
     // unwrapped as one run-together line.
     public DualTelemetry addDSLine(String value) {
-        if (enableDSTelemetry) dsTelemetry.addLine(value);
+        if (isDSFrame()) dsTelemetry.addLine(value);
         return this;
     }
 
     public DualTelemetry addRawHtml(String caption, String htmlValue) {
-        if (enableDSTelemetry) dsTelemetry.addData(fmtCaption(caption), htmlValue);
+        if (isDSFrame()) dsTelemetry.addData(fmtCaption(caption), htmlValue);
         // A bare line, not put(): keyed data reaches the graph view, and markup is not a number.
         dashAddLine(caption + ": " + htmlValue);
         return this;
@@ -173,7 +223,7 @@ public class DualTelemetry implements Telemetry {
     public <T> Item addData(String caption, Func<T> valueProducer) {
         if (noSinkEnabled()) return EMPTY_ITEM;
         Func<String> htmlProducer = () -> fmtValue(valueProducer.value());
-        Item dsItem = enableDSTelemetry
+        Item dsItem = isDSFrame()
                 ? dsTelemetry.addData(fmtCaption(caption), htmlProducer)
                 : null;
         Item dashItem = null;
@@ -188,7 +238,7 @@ public class DualTelemetry implements Telemetry {
     public <T> Item addData(String caption, String format, Func<T> valueProducer) {
         if (noSinkEnabled()) return EMPTY_ITEM;
         Func<String> htmlProducer = () -> fmtValue(String.format(format, valueProducer.value()));
-        Item dsItem = enableDSTelemetry
+        Item dsItem = isDSFrame()
                 ? dsTelemetry.addData(fmtCaption(caption), htmlProducer)
                 : null;
         Item dashItem = null;
@@ -209,7 +259,8 @@ public class DualTelemetry implements Telemetry {
             dashItem = wrapper.dash;
         }
         boolean ds = enableDSTelemetry && dsItem != null && dsTelemetry.removeItem(dsItem);
-        boolean dash = enableDashboardTelemetry && dashItem != null && dashTelemetry.removeItem(dashItem);
+        boolean dash = enableDashboardTelemetry && dashItem != null
+                && (dashItem instanceof PacketLineItem ? ((PacketLineItem) dashItem).remove() : dashTelemetry.removeItem(dashItem));
         return ds || dash;
     }
 
@@ -269,15 +320,27 @@ public class DualTelemetry implements Telemetry {
         if (enableDashboardTelemetry) dashTelemetry.speak(text, languageCode, countryCode);
     }
 
+    /** Closes the DS frame, so the SDK's own post-loop update() is a DS no-op and cannot re-send a stale frame. */
     @Override
     public boolean update() {
         ensureDisplayFormats();
-        if (!enableDSTelemetry && !enableDashboardTelemetry) return true;
-        boolean ds = enableDSTelemetry && dsTelemetry.update();
+        boolean ds = false;
+        if (isDSFrame()) {
+            ds = dsTelemetry.update();
+            // A false return means the SDK held the lines; the frame stays due and is rebuilt fresh next loop.
+            if (ds) {
+                dsEverSent = true;
+                lastDSSendNs = System.nanoTime();
+            }
+        }
+        dsFrameOpen = false;
+        if (!enableDashboardTelemetry) return ds;
         // EnhancedOpMode sends the shared packet.
-        if (enableDashboardTelemetry && packet != null) replayLog(packet);
-        boolean dash = enableDashboardTelemetry && (packet != null || dashTelemetry.update());
-        return ds || dash;
+        if (packet != null) {
+            replayLog(packet);
+            return true;
+        }
+        return dashTelemetry.update() || ds;
     }
 
     // Like the adapter's LogAdapter.saveTo: the client shows the log of the newest packet carrying one, so every packet must.
@@ -289,16 +352,22 @@ public class DualTelemetry implements Telemetry {
 
     @Override
     public Line addLine() {
-        Line dsLine = enableDSTelemetry ? dsTelemetry.addLine() : null;
-        Line dashLine = enableDashboardTelemetry ? dashTelemetry.addLine() : null;
-        return new EnhancedLine(dsLine, dashLine);
+        Line dsLine = isDSFrame() ? dsTelemetry.addLine() : null;
+        return new EnhancedLine(dsLine, dashLine(null));
     }
 
     @Override
     public Line addLine(String lineCaption) {
-        Line dsLine = enableDSTelemetry ? dsTelemetry.addLine(lineCaption) : null;
-        Line dashLine = enableDashboardTelemetry ? dashTelemetry.addLine(lineCaption) : null;
-        return new EnhancedLine(dsLine, dashLine);
+        Line dsLine = isDSFrame() ? dsTelemetry.addLine(lineCaption) : null;
+        return new EnhancedLine(dsLine, dashLine(lineCaption));
+    }
+
+    // On the packet path the adapter is never sent, so the line has to be written into the packet itself.
+    @Nullable
+    private Line dashLine(@Nullable String lineCaption) {
+        if (!enableDashboardTelemetry) return null;
+        if (packet != null) return new PacketLine(packet, lineCaption == null ? "" : lineCaption);
+        return lineCaption == null ? dashTelemetry.addLine() : dashTelemetry.addLine(lineCaption);
     }
 
     @Override
@@ -311,7 +380,8 @@ public class DualTelemetry implements Telemetry {
             dashLine = wrapper.dash;
         }
         boolean ds = enableDSTelemetry && dsLine != null && dsTelemetry.removeLine(dsLine);
-        boolean dash = enableDashboardTelemetry && dashLine != null && dashTelemetry.removeLine(dashLine);
+        boolean dash = enableDashboardTelemetry && dashLine != null
+                && (dashLine instanceof PacketLine ? ((PacketLine) dashLine).remove() : dashTelemetry.removeLine(dashLine));
         return ds || dash;
     }
 
@@ -328,17 +398,15 @@ public class DualTelemetry implements Telemetry {
         if (enableDashboardTelemetry) dashTelemetry.setAutoClear(autoClear);
     }
 
+    /** The Driver Station's; the dashboard's is OptimizationToggles.dashboardTransmissionIntervalMs. */
     @Override
     public int getMsTransmissionInterval() {
-        if (enableDSTelemetry) return dsTelemetry.getMsTransmissionInterval();
-        if (enableDashboardTelemetry) return dashTelemetry.getMsTransmissionInterval();
-        return 0;
+        return dsTelemetry.getMsTransmissionInterval();
     }
 
     @Override
     public void setMsTransmissionInterval(int interval) {
-        if (enableDSTelemetry) dsTelemetry.setMsTransmissionInterval(interval);
-        if (enableDashboardTelemetry) dashTelemetry.setMsTransmissionInterval(interval);
+        dsTelemetry.setMsTransmissionInterval(interval);
     }
 
     @Override
@@ -507,6 +575,125 @@ public class DualTelemetry implements Telemetry {
             Item dsItem = ds != null ? ds.addData(caption, format, valueProducer) : null;
             Item dashItem = dash != null ? dash.addData(caption, format, valueProducer) : null;
             return new EnhancedItem(dsItem, dashItem);
+        }
+    }
+
+    /** One packet row, rendered like the adapter's lines: the caption, then each item as caption: value. */
+    private final class PacketLine implements Line {
+        private final TelemetryPacket owner;
+        private final TelemetryPacket.Item row;
+        private final String caption;
+        private final List<PacketLineItem> items = new ArrayList<>();
+
+        PacketLine(TelemetryPacket owner, String caption) {
+            this.owner = owner;
+            this.caption = caption;
+            row = owner.addItem(caption);
+        }
+
+        Item add(String itemCaption, Object value) {
+            PacketLineItem item = new PacketLineItem(this, itemCaption, value);
+            items.add(item);
+            render();
+            return item;
+        }
+
+        // put() would add a row of its own; putData() only feeds the graph and CSV views.
+        void render() {
+            StringBuilder text = new StringBuilder(caption);
+            for (int i = 0; i < items.size(); i++) {
+                PacketLineItem item = items.get(i);
+                if (i > 0) text.append(dashTelemetry.getItemSeparator());
+                text.append(item.caption).append(dashTelemetry.getCaptionValueSeparator()).append(item.value);
+                owner.putData(item.caption, item.value);
+            }
+            row.setValue(text.toString());
+        }
+
+        boolean remove() {
+            return owner.getItems().remove(row);
+        }
+
+        boolean remove(PacketLineItem item) {
+            if (!items.remove(item)) return false;
+            render();
+            return true;
+        }
+
+        @Override
+        public Item addData(String caption, String format, Object... args) {
+            return add(caption, String.format(format, args));
+        }
+
+        @Override
+        public Item addData(String caption, Object value) {
+            return add(caption, value);
+        }
+
+        @Override
+        public <T> Item addData(String caption, Func<T> valueProducer) {
+            return add(caption, valueProducer.value());
+        }
+
+        @Override
+        public <T> Item addData(String caption, String format, Func<T> valueProducer) {
+            return add(caption, String.format(format, valueProducer.value()));
+        }
+    }
+
+    /** Producers are resolved once: the packet is rebuilt every loop, so there is nothing to retain. */
+    private static final class PacketLineItem implements Item {
+        private final PacketLine line;
+        private String caption;
+        private String value;
+
+        PacketLineItem(PacketLine line, String caption, Object value) {
+            this.line = line;
+            this.caption = caption;
+            this.value = String.valueOf(value);
+        }
+
+        boolean remove() {
+            return line.remove(this);
+        }
+
+        private Item set(Object newValue) {
+            value = String.valueOf(newValue);
+            line.render();
+            return this;
+        }
+
+        @Override public String getCaption() { return caption; }
+
+        @Override
+        public Item setCaption(String caption) {
+            this.caption = caption;
+            line.render();
+            return this;
+        }
+
+        @Override public Item setValue(String format, Object... args) { return set(String.format(format, args)); }
+
+        @Override public Item setValue(Object value) { return set(value); }
+
+        @Override public <T> Item setValue(Func<T> valueProducer) { return set(valueProducer.value()); }
+
+        @Override public <T> Item setValue(String format, Func<T> valueProducer) {
+            return set(String.format(format, valueProducer.value()));
+        }
+
+        @Override public Item setRetained(@Nullable Boolean retained) { return this; }
+
+        @Override public boolean isRetained() { return false; }
+
+        @Override public Item addData(String caption, String format, Object... args) { return line.addData(caption, format, args); }
+
+        @Override public Item addData(String caption, Object value) { return line.addData(caption, value); }
+
+        @Override public <T> Item addData(String caption, Func<T> valueProducer) { return line.addData(caption, valueProducer); }
+
+        @Override public <T> Item addData(String caption, String format, Func<T> valueProducer) {
+            return line.addData(caption, format, valueProducer);
         }
     }
 

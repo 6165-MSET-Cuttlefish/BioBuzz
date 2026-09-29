@@ -9,9 +9,10 @@ import java.util.List;
 import java.util.PriorityQueue;
 
 /**
- * Shortest obstacle-avoiding polyline between two points: a visibility graph over points sampled around each
- * obstacle's clearance-inflated circle, searched with Dijkstra. Close to exact bitangents with enough samples,
- * and well under a millisecond for a handful of obstacles.
+ * Shortest obstacle-avoiding polyline between two points inside a keep-in region: a visibility graph over points
+ * sampled around each obstacle's clearance-inflated circle, searched with Dijkstra. Close to exact bitangents with
+ * enough samples, and well under a millisecond for a handful of obstacles. The region is convex, so a hop between
+ * two points inside it stays inside.
  */
 @Config
 public final class VisibilityGraphPlanner {
@@ -33,24 +34,25 @@ public final class VisibilityGraphPlanner {
 
     /**
      * The waypoints start at {@code start}, keeping its heading, and end at {@code goal}'s position; every
-     * later waypoint faces along the hop arriving at it. Null if no route exists.
+     * later waypoint faces along the hop arriving at it. Null if either end is outside {@code keepIn} or no
+     * route inside it exists.
      */
-    public static Leg planPath(Pose start, Pose goal, List<Obstacle> obstacles, double clearance) {
+    public static Leg planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance) {
+        if (!keepIn.contains(start) || !keepIn.contains(goal)) return null;
         final int startNode = 0;
         final int goalNode = 1;
         List<double[]> nodes = new ArrayList<>();
         nodes.add(new double[]{start.x(), start.y()});
         nodes.add(new double[]{goal.x(), goal.y()});
 
-        double field = FieldConfig.fieldWidthInches;
         for (Obstacle o : obstacles) {
             double placementRadius = o.radius + clearance + boundaryMarginIn;
             for (int i = 0; i < pointsPerObstacle; i++) {
                 double angle = 2 * Math.PI * i / pointsPerObstacle;
-                double px = o.x + placementRadius * Math.cos(angle);
-                double py = o.y + placementRadius * Math.sin(angle);
-                if (px < 0 || px > field || py < 0 || py > field) continue;
-                if (insideAnyOther(px, py, obstacles, o, clearance)) continue;
+                // Clamped onto the region's edge rather than dropped, so a route can squeeze past an obstacle near a wall.
+                double px = Math.max(keepIn.minX, Math.min(keepIn.maxX, o.x + placementRadius * Math.cos(angle)));
+                double py = Math.max(keepIn.minY, Math.min(keepIn.maxY, o.y + placementRadius * Math.sin(angle)));
+                if (insideAny(px, py, obstacles, clearance)) continue;
                 nodes.add(new double[]{px, py});
             }
         }
@@ -103,11 +105,9 @@ public final class VisibilityGraphPlanner {
         return new Leg(waypoints, dist[goalNode]);
     }
 
-    private static boolean insideAnyOther(double px, double py, List<Obstacle> obstacles,
-                                          Obstacle self, double clearance) {
-        for (Obstacle other : obstacles) {
-            if (other == self) continue;
-            if (Math.hypot(px - other.x, py - other.y) <= other.radius + clearance) return true;
+    private static boolean insideAny(double px, double py, List<Obstacle> obstacles, double clearance) {
+        for (Obstacle o : obstacles) {
+            if (Math.hypot(px - o.x, py - o.y) <= o.radius + clearance) return true;
         }
         return false;
     }

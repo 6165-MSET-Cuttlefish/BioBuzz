@@ -1,15 +1,21 @@
 package org.firstinspires.ftc.teamcode.opmodes.tele;
 
+import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
+@Config("BioBuzz Tele")
 @TeleOp(name = "BioBuzz Tele", group = "A")
 public class BioBuzzTele extends BioBuzzOpMode {
+
+    /** Live, INIT included: off skips all AprilTag work on the webcam. */
+    public static boolean cellTip = true;
 
     private static final double SLOW_MULTIPLIER = 0.75;
 
@@ -21,7 +27,19 @@ public class BioBuzzTele extends BioBuzzOpMode {
     protected void initialize() {
         slowToggle = new EdgeBooleanSupplier(() -> gamepad1.left_trigger > 0.1);
         headingLockToggle = new EdgeBooleanSupplier(() -> gamepad1.left_bumper);
-        CellTipCamera.VisionState.DISABLED.activate();
+        // Ball vision is for autonomous; disabled, the Camera module never polls the Limelight.
+        if (!Camera.VisionState.DISABLED.activate()) throw new IllegalStateException("Camera didn't take DISABLED");
+        applyCellTipFlag();
+    }
+
+    @Override
+    protected void onLoopStart() {
+        applyCellTipFlag();
+    }
+
+    private static void applyCellTipFlag() {
+        CellTipCamera.VisionState state = cellTip ? CellTipCamera.VisionState.ENABLED : CellTipCamera.VisionState.DISABLED;
+        if (!state.activate()) throw new IllegalStateException("CellTipCamera didn't take " + state);
     }
 
     @Override

@@ -22,8 +22,8 @@ public abstract class Robot {
 
     protected Robot(EnhancedOpMode opMode) {
         this.opMode = opMode;
-        opMode.telemetry.setMsTransmissionInterval(100);
         telemetry = new DualTelemetry(opMode.telemetry, FtcDashboard.getInstance().getTelemetry());
+        telemetry.syncDsTransmissionInterval();
 
         follower = createFollower(opMode.hardwareMap);
         // Placeholder pose on every init; nothing carries over.

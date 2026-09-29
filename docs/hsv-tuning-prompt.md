@@ -1,9 +1,11 @@
 # HSV tuning prompt
 
-Paste this whole file (instructions + your photos) to a vision-capable AI whenever you need to
+Paste everything below the line to a vision-capable AI, with your photos, whenever you need to
 (re)derive HSV thresholds for Pollen or Nectar — a new venue's lighting, a new ball batch, or
-adding a ball type this file doesn't cover yet. The output slots directly into the `BALL_TYPES`
-tuple of `limelight/ball_detection_snapscript.py` (and `ball_contour_snapscript.py`, which shares it).
+adding a ball type this file doesn't cover yet. Each line it returns replaces the four arguments
+after the label in that type's `BallType(...)` entry in the `BALL_TYPES` tuple of
+`limelight/ball_contour_snapscript.py`; the code and label before them and the draw colour after stay as they are.
+A new ball type also needs a new code there and in `modules/vision/BallType.java`.
 
 Treat the numbers it gives you as new **defaults** to paste in, not a final answer — confirm them
 live in the Limelight web editor with `DISPLAY_MODE = "MASK"`, which paints each type's mask in its
@@ -13,7 +15,7 @@ truth.
 
 ---
 
-## Instructions (copy from here down)
+## Instructions
 
 You are deriving HSV colour thresholds for an FTC vision pipeline that detects wiffle-ball-style
 game pieces: **Pollen** (yellow, 2.8in) and **Nectar** (red or blue, 3.6in). I will give you one or
@@ -87,10 +89,12 @@ sensor noise spike) will blow a bound out needlessly. Instead:
 1. For each channel (H, S, V) in each population (colour, glare), take roughly the **5th–95th
    percentile** of your sampled values as the core range.
 2. Pad **outward**: hue ±2–4, saturation/value floors down by ~10–15, saturation/value ceilings up
-   to 255 unless something meaningful caps them. This mask only has to seed a region-of-interest for
-   the circle search — the actual shape validation happens downstream, so it's fine, even
-   correct, for these bounds to stay loose rather than tight. Erring wide costs a little extra
-   compute; erring narrow costs missed balls.
+   to 255 unless something meaningful caps them. The mask's blobs are the detections: each blob is
+   split into circles and checked for size, roundness and fill, so a ball whose mask has holes or
+   a ragged edge still passes. Erring narrow costs missed balls; erring wide lets the ball's blob
+   merge with similar-coloured background it touches (carpet, field walls, tape), which then fails
+   the shape checks and loses the ball too. Pad enough to cover the lighting you saw, no further,
+   and call out any background colour in the photos that sits close to the ball's range.
 3. Clamp everything into legal ranges: H ∈ [0,179], S/V ∈ [0,255].
 
 ### 5. Output format — match this exactly

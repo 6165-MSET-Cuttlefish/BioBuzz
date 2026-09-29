@@ -19,7 +19,7 @@ import java.util.List;
 /**
  * Locks a chessboard homography from full-resolution image pixels to camera-frame ground inches
  * (+X away from the camera, +Y left, origin at the centre of the board's near edge) and prints it
- * for the Limelight SnapScripts. The board is the 10x7-square one in
+ * for limelight/ball_contour_snapscript.py. The board is the 10x7-square one in
  * {@code docs/calibration-chessboard-3in-letter.pdf}, laid with its long side pointing away.
  */
 public class HomographyCalculationPipeline extends OpenCvPipeline {
@@ -191,7 +191,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
                 p1 * (r2 + 2 * y * y) + 2 * p2 * x * y };
     }
 
-    // Fixed-point inversion, written out so the Limelight SnapScripts can match it line for line.
+    // Fixed-point inversion, written out so the Limelight SnapScript can match it line for line.
     private static Point undistort(Point p, int width, int height) {
         if (!UNDISTORT) return p;
         double[] k = intrinsics(width, height);
@@ -314,7 +314,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
                         + "board spans x 0 to %.1f in; expect error to grow well beyond that%n"
                         + "square size assumed %.3f in: measure the print%n",
                 Math.sqrt(sumSq / fit.length), maxErr, maxX, SQUARE_SIZE_INCHES)
-                + (UNDISTORT ? String.format("lens undistortion ON (Limelight): for the SnapScripts only%n") : "")
+                + (UNDISTORT ? String.format("lens undistortion ON (Limelight): for the SnapScript only%n") : "")
                 + aspectWarning + String.format("%n")
                 + buildHomographyString(h, width, height);
         return new Calibration(Collections.unmodifiableList(lines), labelPoints, labelTexts, report);

@@ -17,12 +17,14 @@ public class CameraTune extends LinearOpMode {
 
     @Override
     public void runOpMode() {
-        session = new WebcamSession(hardwareMap, telemetry, CellTipCamera.WEBCAM_NAME, new PassThrough());
+        session = new WebcamSession(hardwareMap, CellTipCamera.WEBCAM_NAME, new PassThrough());
 
-        while (opModeInInit()) pump();
-        while (opModeIsActive()) pump();
-
-        session.close();
+        try {
+            while (opModeInInit()) pump();
+            while (opModeIsActive()) pump();
+        } finally {
+            session.close();
+        }
     }
 
     private void pump() {

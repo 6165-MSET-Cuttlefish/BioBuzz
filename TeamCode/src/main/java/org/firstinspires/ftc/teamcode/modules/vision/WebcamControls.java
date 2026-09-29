@@ -22,20 +22,23 @@ public class WebcamControls {
     public static int gain = 0;
     public static int whiteBalanceK = 3250;
 
+    private static final long RETRY_NANOS = TimeUnit.SECONDS.toNanos(1);
+    private static final int UNSET = Integer.MIN_VALUE;
+
     private final OpenCvWebcam webcam;
 
     private boolean lastManual;
-    private int lastExposureMs   = Integer.MIN_VALUE;
-    private int lastGain         = Integer.MIN_VALUE;
-    private int lastWhiteBalance = Integer.MIN_VALUE;
+    private int lastExposureMs   = UNSET;
+    private int lastGain         = UNSET;
+    private int lastWhiteBalance = UNSET;
+    private long exposureRetryAt, gainRetryAt, whiteBalanceRetryAt;
 
     public WebcamControls(OpenCvWebcam webcam) {
         this.webcam = webcam;
         this.lastManual = !manual; // force a mode apply on the first update()
     }
 
-    // Pushes only changed values (each write is a blocking USB transfer); caches a value only once
-    // its set call succeeds, so a write that fails right after a mode switch retries next loop.
+    // Each write is a blocking USB transfer: push only changed values, and retry a rejected one at most once per RETRY_NANOS.
     public void update() {
         boolean modeChanged = manual != lastManual;
         lastManual = manual;
@@ -45,14 +48,25 @@ public class WebcamControls {
             return;
         }
 
+        long now = System.nanoTime();
         if (modeChanged) {
             setModes(ExposureControl.Mode.Manual, WhiteBalanceControl.Mode.MANUAL);
             // The camera resets values on a mode switch.
-            lastExposureMs = lastGain = lastWhiteBalance = Integer.MIN_VALUE;
+            lastExposureMs = lastGain = lastWhiteBalance = UNSET;
+            exposureRetryAt = gainRetryAt = whiteBalanceRetryAt = now;
         }
-        applyExposure();
-        applyGain();
-        applyWhiteBalance();
+        if (exposureMs != lastExposureMs && now - exposureRetryAt >= 0) {
+            if (applyExposure()) lastExposureMs = exposureMs;
+            else exposureRetryAt = now + RETRY_NANOS;
+        }
+        if (gain != lastGain && now - gainRetryAt >= 0) {
+            if (applyGain()) lastGain = gain;
+            else gainRetryAt = now + RETRY_NANOS;
+        }
+        if (whiteBalanceK != lastWhiteBalance && now - whiteBalanceRetryAt >= 0) {
+            if (applyWhiteBalance()) lastWhiteBalance = whiteBalanceK;
+            else whiteBalanceRetryAt = now + RETRY_NANOS;
+        }
     }
 
     private void setModes(ExposureControl.Mode expMode, WhiteBalanceControl.Mode wbMode) {
@@ -66,42 +80,45 @@ public class WebcamControls {
         } catch (Exception ignored) {}
     }
 
-    private void applyExposure() {
-        if (exposureMs == lastExposureMs) return;
+    private boolean applyExposure() {
         try {
             ExposureControl exp = webcam.getExposureControl();
-            if (exp == null) return;
+            if (exp == null) return false;
             long min = exp.getMinExposure(TimeUnit.MILLISECONDS);
             long max = exp.getMaxExposure(TimeUnit.MILLISECONDS);
             long want = exposureMs;
             if (max > min) want = Math.max(min, Math.min(max, want));
-            if (exp.setExposure(want, TimeUnit.MILLISECONDS)) lastExposureMs = exposureMs;
-        } catch (Exception ignored) {}
+            return exp.setExposure(want, TimeUnit.MILLISECONDS);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
-    private void applyGain() {
-        if (gain == lastGain) return;
+    private boolean applyGain() {
         try {
             GainControl g = webcam.getGainControl();
-            if (g == null) return;
+            if (g == null) return false;
             int min = g.getMinGain();
             int max = g.getMaxGain();
             int want = gain;
             if (max > min) want = Math.max(min, Math.min(max, want));
-            if (g.setGain(want)) lastGain = gain;
-        } catch (Exception ignored) {}
+            return g.setGain(want);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
-    private void applyWhiteBalance() {
-        if (whiteBalanceK == lastWhiteBalance) return;
+    private boolean applyWhiteBalance() {
         try {
             WhiteBalanceControl wb = webcam.getWhiteBalanceControl();
-            if (wb == null) return;
+            if (wb == null) return false;
             int min = wb.getMinWhiteBalanceTemperature();
             int max = wb.getMaxWhiteBalanceTemperature();
             int want = whiteBalanceK;
             if (max > min) want = Math.max(min, Math.min(max, want));
-            if (wb.setWhiteBalanceTemperature(want)) lastWhiteBalance = whiteBalanceK;
-        } catch (Exception ignored) {}
+            return wb.setWhiteBalanceTemperature(want);
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 }

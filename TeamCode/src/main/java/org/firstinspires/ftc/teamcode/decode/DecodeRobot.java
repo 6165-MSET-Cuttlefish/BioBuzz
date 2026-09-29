@@ -17,7 +17,6 @@ import org.firstinspires.ftc.teamcode.decode.modules.Magazine;
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 import org.firstinspires.ftc.teamcode.decode.modules.Turret;
 import org.firstinspires.ftc.teamcode.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.CuttleDecodeConstants;
 
 @Config("DecodeRobot")
 public class DecodeRobot extends Robot {
@@ -41,7 +40,7 @@ public class DecodeRobot extends Robot {
 
     @Override
     protected Follower createFollower(HardwareMap hardwareMap) {
-        return CuttleDecodeConstants.create(hardwareMap);
+        return CuttleDrive.createFollower(hardwareMap);
     }
 
     @Override

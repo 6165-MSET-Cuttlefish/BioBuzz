@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
-/** Codes match the ball SnapScripts' llpython type codes. */
+/** Codes match ball_contour_snapscript.py's llpython type codes. */
 public enum BallType {
     POLLEN(1, "Pollen", 2.8),
     NECTAR_RED(2, "Red Nectar", 3.6),

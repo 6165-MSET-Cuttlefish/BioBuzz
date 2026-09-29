@@ -17,12 +17,14 @@ public class TwoMotorTest extends OpMode {
     public static double power = 0;
     public static boolean reverse2 = false;
     DcMotorEx motor1, motor2;
-    String lastName1 = name1, lastName2 = name2;
+    String lastName1, lastName2;
 
     @Override
     public void init() {
         motor1 = hardwareMap.get(DcMotorEx.class, name1);
         motor2 = hardwareMap.get(DcMotorEx.class, name2);
+        lastName1 = name1;
+        lastName2 = name2;
 
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
     }

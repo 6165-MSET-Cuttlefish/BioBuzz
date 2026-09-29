@@ -161,8 +161,8 @@ public class Shooter extends Module {
 
     @Override
     public void stop() {
-        left.setPower(0);
-        right.setPower(0);
+        left.stop();
+        right.stop();
     }
 
     @Override
@@ -277,13 +277,4 @@ public class Shooter extends Module {
         shooterPidController.update(targetVelocityRPM, shooterCurrentVelocityRPM);
         return shooterPidController.calculate();
     }
-
-    public double getLeftShooterCurrent() {
-        return left.getCurrent(CurrentUnit.AMPS);
-    }
-
-    public double getRightShooterCurrent() {
-        return right.getCurrent(CurrentUnit.AMPS);
-    }
-
 }

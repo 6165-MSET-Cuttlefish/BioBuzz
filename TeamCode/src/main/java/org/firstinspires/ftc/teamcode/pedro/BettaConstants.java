@@ -43,7 +43,7 @@ public class BettaConstants {
     public static class ForesightSettings {
         public double primaryForwardP = 0.5101982626923285;
         public double secondaryForwardP = 0.18850462531615828;
-        public double primaryLateralP = 1.0;
+        public double primaryLateralP = 1.1272740084866855;
         public double secondaryLateralP = 0.4164976248195712;
         public double translationalSwitchInches = 2.5;
 

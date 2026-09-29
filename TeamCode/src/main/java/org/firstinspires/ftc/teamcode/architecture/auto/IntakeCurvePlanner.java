@@ -1,17 +1,12 @@
 package org.firstinspires.ftc.teamcode.architecture.auto;
 
 import com.pedropathing.math.Pose;
-import com.pedropathing.math.Vector2D;
-import com.pedropathing.paths.curves.Curve;
-import com.pedropathing.paths.curves.Line;
-import com.pedropathing.paths.curves.bezier.BezierCurve;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** The intake leg's curve: through only the balls a full-width intake doesn't sweep up in passing. */
 public final class IntakeCurvePlanner {
-    private static final int COLLISION_SAMPLES = 60;
     // Keeps neighbouring curve parameters apart so the control-point solve stays well conditioned.
     private static final double MIN_PARAM_GAP = 0.1;
 
@@ -61,17 +56,21 @@ public final class IntakeCurvePlanner {
     }
 
     /**
-     * The lowest-degree Bezier through {@code start} and every stop (at least one): a line for one stop,
-     * otherwise a degree-n curve whose interior control points are solved so it passes through each stop.
+     * The lowest-degree Bezier through every point, in order: a line for two, otherwise a degree-(n-1) curve
+     * whose interior control points are solved so it passes through each point. Neighbouring points must differ.
      */
-    public static Curve buildThroughCurve(Pose start, List<Pose> stops) {
-        int n = stops.size();
-        if (n == 1) return new Line(start, stops.get(0));
+    static Segment through(List<Pose> points) {
+        int n = points.size() - 1;
+        if (n < 1) throw new IllegalArgumentException("a curve needs at least two points");
+        for (int i = 1; i <= n; i++) {
+            if (points.get(i).distance(points.get(i - 1)) < 1e-9) {
+                throw new IllegalArgumentException("coincident neighbouring points " + points.get(i));
+            }
+        }
+        if (n == 1) return new Segment(points.get(0), points.get(1));
 
-        Pose[] points = new Pose[n + 1];
-        points[0] = start;
-        for (int i = 0; i < n; i++) points[i + 1] = stops.get(i);
-        double[] t = chordLengthParams(points);
+        Pose[] p = points.toArray(new Pose[0]);
+        double[] t = chordLengthParams(p);
 
         int m = n - 1;
         double[][] a = new double[m][m];
@@ -81,20 +80,20 @@ public final class IntakeCurvePlanner {
             double ti = t[row + 1];
             double b0 = bernstein(n, 0, ti);
             double bn = bernstein(n, n, ti);
-            xs[row] = points[row + 1].x() - b0 * points[0].x() - bn * points[n].x();
-            ys[row] = points[row + 1].y() - b0 * points[0].y() - bn * points[n].y();
+            xs[row] = p[row + 1].x() - b0 * p[0].x() - bn * p[n].x();
+            ys[row] = p[row + 1].y() - b0 * p[0].y() - bn * p[n].y();
             for (int col = 0; col < m; col++) a[row][col] = bernstein(n, col + 1, ti);
         }
         solve(a, xs, ys);
 
         Pose[] controls = new Pose[n + 1];
-        controls[0] = points[0];
-        controls[n] = points[n];
+        controls[0] = p[0];
+        controls[n] = p[n];
         for (int i = 0; i < m; i++) controls[i + 1] = new Pose(xs[i], ys[i], 0);
-        return new BezierCurve(controls);
+        return new Segment(controls);
     }
 
-    // Chord-length parameters rather than BezierCurve.through's even spacing, which swings unevenly spaced
+    // Chord-length parameters rather than even spacing, which swings unevenly spaced
     // balls into a wider loop than the layout needs.
     private static double[] chordLengthParams(Pose[] points) {
         int n = points.length - 1;
@@ -103,8 +102,9 @@ public final class IntakeCurvePlanner {
         double total = t[n];
         for (int i = 1; i <= n; i++) t[i] = total > 1e-9 ? t[i] / total : (double) i / n;
         t[n] = 1;
-        for (int i = 1; i < n; i++) t[i] = Math.max(t[i], t[i - 1] + MIN_PARAM_GAP);
-        for (int i = n - 1; i >= 1; i--) t[i] = Math.min(t[i], t[i + 1] - MIN_PARAM_GAP);
+        double gap = Math.min(MIN_PARAM_GAP, 0.5 / n);
+        for (int i = 1; i < n; i++) t[i] = Math.max(t[i], t[i - 1] + gap);
+        for (int i = n - 1; i >= 1; i--) t[i] = Math.min(t[i], t[i + 1] - gap);
         return t;
     }
 
@@ -141,16 +141,5 @@ public final class IntakeCurvePlanner {
             xs[r] /= a[r][r];
             ys[r] /= a[r][r];
         }
-    }
-
-    /** Whether the curve passes within {@code clearance} of any obstacle's edge. */
-    public static boolean collides(Curve curve, List<Obstacle> obstacles, double clearance) {
-        for (int s = 0; s <= COLLISION_SAMPLES; s++) {
-            Vector2D p = curve.get((double) s / COLLISION_SAMPLES);
-            for (Obstacle o : obstacles) {
-                if (Math.hypot(p.x() - o.x, p.y() - o.y) <= o.radius + clearance) return true;
-            }
-        }
-        return false;
     }
 }

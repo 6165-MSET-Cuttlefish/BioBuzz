@@ -143,16 +143,21 @@ public abstract class Module {
     public final void setWriteEnabled(boolean enabled) { this.writeEnabled = enabled; }
     public final boolean isWriteEnabled() { return writeEnabled; }
 
+    /** See {@link Faults#raise}; keys are global, not per module. */
+    protected final void raiseFault(String key, String message) { Faults.raise(key, message); }
+    protected final void clearFault(String key) { Faults.clear(key); }
+    public final boolean hasFault(String key) { return Faults.has(key); }
+
     /** Command scheduled once at start(). NOT re-armed later. */
     public final void setStartupCommand(Command command) { this.startupCommand = command; }
     public final Command getStartupCommand() { return startupCommand; }
 
     protected final void logDS(String caption, Object value) {
-        telemetry.addDSData(name + " " + caption, value);
+        if (telemetry.isDSFrame()) telemetry.addDSData(name + " " + caption, value);
     }
 
     protected final void logDS(String caption, String format, Object... args) {
-        telemetry.addDSData(name + " " + caption, format, args);
+        if (telemetry.isDSFrame()) telemetry.addDSData(name + " " + caption, format, args);
     }
 
     protected final void logDashboard(String caption, Object value) {
@@ -168,6 +173,6 @@ public abstract class Module {
     }
 
     protected final void log(String caption, String format, Object... args) {
-        if (telemetryEnabled) telemetry.addData(name + " " + caption, String.format(format, args));
+        if (telemetryEnabled) telemetry.addData(name + " " + caption, format, args);
     }
 }
