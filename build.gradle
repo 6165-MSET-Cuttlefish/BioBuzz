@@ -9,7 +9,7 @@ allprojects {
         google()
         // Sloth runtime and its Sinister dependency.
         maven { url = 'https://repo.dairy.foundation/releases' }
-        // 6165's slothboard build (Dairy tag + team PRs), committed under TeamCode/libs/m2.
+        // 6165's slothboard build (Dairy tag + acme master + the team's open ftc-dashboard PRs), committed under TeamCode/libs/m2.
         maven {
             url = "${rootDir}/TeamCode/libs/m2"
             content { includeGroup 'com.acmerobotics.slothboard' }
