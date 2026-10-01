@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
 import static com.pedropathing.api.Paths.*;
+import com.pedropathing.api.Paths;
 
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.follower.Follower;
@@ -14,10 +15,11 @@ import static com.pedropathing.ivy.groups.Groups.sequential;
 import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.pedropathing.paths.interpolator.Interpolator;
 
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
-@Autonomous(name = "CloseFlowerTesting", group = "Autonomous")
+@Autonomous(name = "AutoPath", group = "Autonomous")
 public class CloseFlowerTesting extends LinearOpMode {
 
     private Follower follower;
@@ -25,34 +27,32 @@ public class CloseFlowerTesting extends LinearOpMode {
     private final PoseFactory poseFactory = PoseFactory.degrees();
 
     private final Pose start = poseFactory.of(56, 8, 90);
-    private final Pose path1 = poseFactory.of(14.9769, 46.9989, 180);
-    private final Pose path1Control1 = poseFactory.of(56, 23, 0);
-    private final Pose path1Control2 = poseFactory.of(34.9769, 46.9989, 0);
-    private final Pose point2Turn = poseFactory.of(29.0321, 76.6058, 65.7039);
-    private final Pose point2TurnControl1 = poseFactory.of(23.0138, 63.2743, 0);
-    private final Pose point2 = poseFactory.of(46.9748, 130.0998, 90.4762);
-    private final Pose point2Control1 = poseFactory.of(47.087, 116.6002, 0);
-    private final Pose point3 = poseFactory.of(47.0588, 119.9926, 90.4762);
-    private final Pose point4 = poseFactory.of(12.8193, 116.458, -90.0072);
-    private final Pose point4Control1 = poseFactory.of(46.9508, 132.9922, 0);
-    private final Pose point4Control2 = poseFactory.of(12.8213, 132.458, 0);
-    private final Pose point5 = poseFactory.of(12.8172, 99.8613, -90.0072);
-    private final Pose point6 = poseFactory.of(20.8141, 11.6828, -178.1107);
-    private final Pose point6Control1 = poseFactory.of(12.8153, 84.8613, 0);
-    private final Pose point6Control2 = poseFactory.of(31.0646, 65.2041, 0);
-    private final Pose point6Control3 = poseFactory.of(38.8643, 12.2782, 0);
-    private final Pose point7 = poseFactory.of(10.8466, 11.354, -178.1107);
+    private final Pose closeFlower = poseFactory.of(14.9769, 46.9989, 179.316);
+    private final Pose closeFlowerControl1 = poseFactory.of(56, 23, 0);
+    private final Pose closeFlowerControl2 = poseFactory.of(34.9769, 46.9989, 0);
+    private final Pose path2turnStart = poseFactory.of(14.9769, 46.9989, 180);
+    private final Pose path2turn = poseFactory.of(29.0321, 76.6058, 65.7039);
+    private final Pose path2turnControl1 = poseFactory.of(23.0138, 63.2743, 0);
+    private final Pose path2 = poseFactory.of(46.9748, 130.0998, 90.091);
+    private final Pose path2Control1 = poseFactory.of(47.087, 116.7758, 0);
+    private final Pose point4 = poseFactory.of(57.0019, 101.165, 270);
+    private final Pose point4Segment1Heading = poseFactory.of(57.0019, 101.165, 90.5);
+    private final Pose point4Segment2Start = poseFactory.of(57.0019, 101.165, 90.5);
+    private final Pose point4Segment2End = poseFactory.of(57.0019, 101.165, 270);
+    private final Pose point5 = poseFactory.of(45.3325, 8.4566, -176.9646);
+    private final Pose point5Control1 = poseFactory.of(61.5713, 0.6836, 0);
+    private final Pose point5Control2 = poseFactory.of(77.8952, 10.2674, 0);
+    private final Pose point6 = poseFactory.of(8.3412, 8.3306, -179.8049);
 
     // Autonomous routine
     public Command autoRoutine() {
         return sequential(
-                follow(follower, path1()),
+                follow(follower, closeFlower()),
+                follow(follower, path2turn()),
                 follow(follower, path2()),
-                follow(follower, path3()),
                 follow(follower, path4()),
                 follow(follower, path5()),
-                follow(follower, path6()),
-                follow(follower, path7())
+                follow(follower, path6())
         );
     }
 
@@ -83,34 +83,27 @@ public class CloseFlowerTesting extends LinearOpMode {
         }
     }
 
-    public Path path1() {
-        return curve(start, path1Control1, path1Control2, path1).tangent();
+    public Path closeFlower() {
+        return Paths.curve(start, closeFlowerControl1, closeFlowerControl2, closeFlower).tangent();
+    }
+
+    public Path path2turn() {
+        return Paths.curve(path2turnStart, path2turnControl1, path2turn).linear(path2turnStart, path2turn);
     }
 
     public Path path2() {
-        // Leaves the left flower still facing it, so the first stretch turns onto the curve's tangent.
-        return path(
-                curve(path1, point2TurnControl1, point2Turn).linear(path1, point2Turn),
-                curve(point2Turn, point2Control1, point2).tangent());
-    }
-
-    public Path path3() {
-        return line(point2, point3).reverseTangent();
+        return Paths.curve(path2turn, path2Control1, path2).tangent();
     }
 
     public Path path4() {
-        return curve(point3, point4Control1, point4Control2, point4).tangent();
+        return Paths.line(path2, point4).heading(Interpolator.piecewise().until(0.5, Interpolator.constant(point4Segment1Heading)).until(1, Interpolator.linear(point4Segment2Start, point4Segment2End)));
     }
 
     public Path path5() {
-        return line(point4, point5).tangent();
+        return Paths.curve(point4, point5Control1, point5Control2, point5).tangent();
     }
 
     public Path path6() {
-        return curve(point5, point6Control1, point6Control2, point6Control3, point6).tangent();
-    }
-
-    public Path path7() {
-        return line(point6, point7).tangent();
+        return Paths.line(point5, point6).tangent();
     }
 }
