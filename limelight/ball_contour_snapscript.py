@@ -9,15 +9,17 @@ whose ground contact is at or above the horizon (which is also every point behin
 farther than MAX_RANGE_IN from the (0,0) crosshair is dropped. There is no tracking and no overlap
 suppression; the types' hues don't overlap.
 
-Upload this file from the Limelight web UI as a Python pipeline (Input tab, pipeline type Python) to
-pipeline 4. Pipeline 0 is DECODE's AprilTags.
+The robot uploads this file and ball_pipeline.vpr to pipeline 4 at every INIT (LimelightBalls →
+syncOnInit), with SCRIPT_ID replaced by a stamp of both files. To tune in the Limelight's web editor,
+turn syncOnInit off first, or the next INIT replaces the edits; it turns back on at every deploySloth
+or app restart, so copy the values back into this file before then.
 
 Areas are in pixels of a CALIBRATION_SIZE frame, so the gates hold at any streaming resolution.
 The UNDISTORT, CALIBRATION_SIZE and H_ARRAY block comes from eocvsim/homography; with UNDISTORT set,
 contact points are undistorted with the lens calibration before the homography.
 
 llpython, 32 doubles:
-    0        SCRIPT_ID, so the hub can reject the wrong pipeline
+    0        SCRIPT_ID (the upload's stamp), so the hub can reject the wrong pipeline or an old copy
     1        ball count N, 0 to MAX_BALLS
     2 + 3i   type code: 1 Pollen, 2 red Nectar, 3 blue Nectar
     3 + 3i   x, camera-frame ground inches

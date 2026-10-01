@@ -13,8 +13,9 @@ import java.util.List;
 
 /**
  * Tracks the detections limelight/ball_contour_snapscript.py packs into llpython. OpMode thread only.
- * A Limelight problem never throws: it raises the {@link #FAULT_KEY} fault with {@link #problem()} and the frame
- * goes stale until the Limelight recovers, which clears it.
+ * After its first poll, and on each {@link Tuning#pipeline} change, {@link LimelightSync} puts the ball pipeline on
+ * the Limelight; the frame is stale until it has. A Limelight problem never throws: it raises the {@link #FAULT_KEY}
+ * fault with {@link #problem()} and the frame goes stale until the Limelight recovers, which clears it.
  */
 public final class LimelightBallSource {
 
@@ -22,6 +23,12 @@ public final class LimelightBallSource {
     public static class Tuning {
         /** The pipeline running ball_contour_snapscript.py. */
         public static int pipeline = 4;
+        /**
+         * Upload limelight/'s ball pipeline and script to {@link #pipeline} at every INIT. Turn off while tuning in
+         * the Limelight's web editor, or the next INIT replaces the edits; it turns back on at every deploySloth or
+         * app restart, so copy edits into limelight/ first. Off, the file's SCRIPT_ID and any stamp are accepted.
+         */
+        public static boolean syncOnInit = true;
         /** With no new Limelight frame for this long, the frame goes stale: no balls, none visible. */
         public static double staleFrameSeconds = 0.25;
         /** No successful poll for this long faults; 250 is the SDK's own isConnected() threshold. */
@@ -33,7 +40,6 @@ public final class LimelightBallSource {
     public static final String LIMELIGHT_NAME = "limelight";
     public static final String FAULT_KEY = "Limelight";
 
-    private static final double CONTOUR_SCRIPT_ID = 6166;
     private static final int NO_PIPELINE = Integer.MIN_VALUE;
     private static final double FPS_SMOOTHING = 0.1;
     private static final int OFFSET_WINDOW = 128;
@@ -75,6 +81,8 @@ public final class LimelightBallSource {
     private Frame latest = Frame.EMPTY;
     private String problem;
     private int pipeline = NO_PIPELINE;
+    private int requested = NO_PIPELINE;
+    private LimelightSync.Request sync;
     private double lastTsMs = Double.NaN;
     private double lastCaptureLimelightSeconds = Double.NaN;
     private double fps = 0;
@@ -84,8 +92,6 @@ public final class LimelightBallSource {
     private boolean polledSinceStart;
     private double startedSeconds = Double.NaN;
     private double mismatchSinceSeconds = Double.NaN;
-    private int rejectedPipeline = NO_PIPELINE;
-    private String switchProblem;
     private String outputProblem;
     private String clockProblem;
 
@@ -122,10 +128,6 @@ public final class LimelightBallSource {
         } else if (Double.isNaN(startedSeconds)) {
             startedSeconds = now;
         }
-        if (Tuning.pipeline == pipeline) {
-            switchProblem = null;
-            rejectedPipeline = NO_PIPELINE;
-        }
 
         boolean fresh = false;
         String found;
@@ -139,9 +141,11 @@ public final class LimelightBallSource {
         }
         polledSinceStart = true;
         found = connectionProblem();
-        if (found == null) {
-            if (Tuning.pipeline != pipeline && Tuning.pipeline != rejectedPipeline) switchPipeline(Tuning.pipeline);
-            found = switchProblem;
+        if (found == null) found = syncProblem();
+        if (found == null && !sync.isDone()) {
+            setProblem(null);
+            goStale();
+            return false;
         }
         if (found == null) {
             LLResult result = limelight.getLatestResult();
@@ -171,6 +175,9 @@ public final class LimelightBallSource {
     /** Why the Limelight is unusable, or null while it is healthy; the {@link #FAULT_KEY} fault carries the same text. */
     public String problem() { return problem; }
 
+    /** True until {@link LimelightSync} has put the requested pipeline on the Limelight. */
+    public boolean isSyncing() { return sync != null && !sync.isDone(); }
+
     /** For a caller that stops calling {@link #update()}: drops the tracks and the fault, and the frame goes {@link Frame#EMPTY}. */
     public void idle() {
         mismatchSinceSeconds = Double.NaN;
@@ -184,6 +191,10 @@ public final class LimelightBallSource {
 
     public void stop() {
         limelight.stop();
+        if (sync != null && !sync.isDone()) {
+            sync.cancel();
+            requested = NO_PIPELINE;
+        }
         setProblem(null);
     }
 
@@ -192,20 +203,26 @@ public final class LimelightBallSource {
         return sinceMs > Tuning.noDataFaultMs ? String.format("no data for %.1f s", sinceMs / 1000.0) : null;
     }
 
-    // Blocks on the SDK's synchronous POST, so it is sent once per requested pipeline and never retried from here.
-    private void switchPipeline(int index) {
-        if (!limelight.pipelineSwitch(index)) {
-            rejectedPipeline = index;
-            switchProblem = String.format("pipeline switch to %d rejected", index);
-            return;
+    // One sync per requested pipeline, never retried from here: a failure stays up until the next INIT or a pipeline change.
+    private String syncProblem() {
+        if (Tuning.pipeline != requested) {
+            if (sync != null) sync.cancel();
+            requested = Tuning.pipeline;
+            pipeline = NO_PIPELINE;
+            mismatchSinceSeconds = Double.NaN;
+            sync = LimelightSync.request(limelight, requested, Tuning.syncOnInit);
         }
-        rejectedPipeline = NO_PIPELINE;
-        switchProblem = null;
-        pipeline = index;
-        lastTsMs = Double.NaN;
-        outputProblem = null;
-        mismatchSinceSeconds = Double.NaN;
-        dropTracks();
+        if (!sync.isDone()) return null;
+        sync.rethrowIfCrashed();
+        if (sync.problem() != null) return sync.problem();
+        if (pipeline != requested) {
+            pipeline = requested;
+            lastTsMs = Double.NaN;
+            outputProblem = null;
+            mismatchSinceSeconds = Double.NaN;
+            dropTracks();
+        }
+        return null;
     }
 
     private boolean accept(LLResult result) {
@@ -251,11 +268,20 @@ public final class LimelightBallSource {
     }
 
     // getPythonOutput() pads to 32 slots with zeros, so a pipeline with no PythonOut reads all zeros.
+    // syncOnInit is read live, so turning it off mid-OpMode accepts a web-editor copy at once.
     private String outputProblem(double[] out) {
-        if (out[0] != CONTOUR_SCRIPT_ID) {
+        boolean uploadOnly = sync.upload && Tuning.syncOnInit;
+        boolean known = out[0] == LimelightSync.STAMP
+                || (!uploadOnly && (out[0] == LimelightSync.FILE_SCRIPT_ID || LimelightSync.isStamp(out[0])));
+        if (!known) {
             if (allZero(out)) return String.format("no script output on pipeline %d (llpython all zeros)", pipeline);
-            return String.format("unknown SCRIPT_ID %s on pipeline %d, want %s",
-                    number(out[0]), pipeline, number(CONTOUR_SCRIPT_ID));
+            if (out[0] == LimelightSync.FILE_SCRIPT_ID) {
+                return String.format("pipeline %d runs a web-editor copy of the ball script (SCRIPT_ID %s, not the "
+                        + "upload's %s); turn LimelightBalls → syncOnInit off while tuning there",
+                        pipeline, number(out[0]), number(LimelightSync.STAMP));
+            }
+            return String.format("unknown SCRIPT_ID %s on pipeline %d, want %s", number(out[0]), pipeline,
+                    number(uploadOnly ? LimelightSync.STAMP : LimelightSync.FILE_SCRIPT_ID));
         }
         int count = (int) out[1];
         if (count != out[1] || count < 0 || 2 + 3 * count > out.length) {

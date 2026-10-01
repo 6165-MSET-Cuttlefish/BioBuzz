@@ -223,6 +223,8 @@ public class Camera extends Module {
             log("Latency (ms)", "%.0f", frame.latencyMs);
             if (limelightProblem() != null) {
                 log("Frame", "STALE (Limelight fault)");
+            } else if (source.isSyncing()) {
+                log("Frame", "STALE (putting the ball pipeline on the Limelight)");
             } else if (isFrameStale()) {
                 double age = getFrameAgeSeconds();
                 log("Frame", Double.isInfinite(age) ? "STALE (no frame)" : String.format("STALE (%.2fs)", age));
