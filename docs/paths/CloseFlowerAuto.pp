@@ -9,7 +9,7 @@
     {
       "id": "line-closeflower-1",
       "color": "#ffc516",
-      "name": "Path 1",
+      "name": "Close Flower",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -80,7 +80,7 @@
       "controlPoints": [
         {
           "x": 47.087,
-          "y": 116.6002
+          "y": 116.77575831265509
         }
       ],
       "heading": {
@@ -91,9 +91,9 @@
       }
     },
     {
-      "id": "line-closeflower-4",
-      "color": "#3b82f6",
-      "name": "Path 3",
+      "id": "line-munigrw7-41wv41",
+      "color": "#BAB677",
+      "name": "",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -101,21 +101,47 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 47.0588,
-        "y": 119.9926
+        "x": 57.001861042183634,
+        "y": 101.1650124069479
       },
       "controlPoints": [],
       "heading": {
-        "type": "tangential",
+        "type": "piecewise",
+        "reverse": true,
+        "degrees": 90.5,
         "startDeg": 0,
         "endDeg": 0,
-        "reverse": true
+        "piecewiseHeading": {
+          "segments": [
+            {
+              "startProgress": 0,
+              "endProgress": 0.5,
+              "interpolationType": "constant",
+              "reversed": false,
+              "continueFromPrevious": false,
+              "parameters": {
+                "degrees": 90.5
+              }
+            },
+            {
+              "startProgress": 0.5,
+              "endProgress": 1,
+              "interpolationType": "linear",
+              "reversed": false,
+              "continueFromPrevious": false,
+              "parameters": {
+                "startDeg": 90.5,
+                "endDeg": 270
+              }
+            }
+          ]
+        }
       }
     },
     {
-      "id": "line-closeflower-5",
-      "color": "#a855f7",
-      "name": "Path 4",
+      "id": "line-munin44t-vnde4d",
+      "color": "#AABC58",
+      "name": "",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -123,30 +149,28 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 12.8193,
-        "y": 116.458
+        "x": 45.33250620347395,
+        "y": 8.456575682382137
       },
       "controlPoints": [
         {
-          "x": 46.9508,
-          "y": 132.9922
+          "x": 61.57133995037221,
+          "y": 0.6836228287841251
         },
         {
-          "x": 12.8213,
-          "y": 132.458
+          "x": 77.89516129032259,
+          "y": 10.267369727047134
         }
       ],
       "heading": {
         "type": "tangential",
-        "startDeg": 0,
-        "endDeg": 0,
         "reverse": false
       }
     },
     {
-      "id": "line-closeflower-6",
-      "color": "#ef4444",
-      "name": "Path 5",
+      "id": "line-muniof4x-vl2dxn",
+      "color": "#A5B85A",
+      "name": "",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -154,71 +178,12 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 12.8172,
-        "y": 99.8613
+        "x": 8.341191066997514,
+        "y": 8.330645161290333
       },
       "controlPoints": [],
       "heading": {
         "type": "tangential",
-        "startDeg": 0,
-        "endDeg": 0,
-        "reverse": false
-      }
-    },
-    {
-      "id": "line-closeflower-7",
-      "color": "#06b6d4",
-      "name": "Path 6",
-      "locked": false,
-      "waitBeforeMs": 0,
-      "waitAfterMs": 0,
-      "waitBeforeName": "",
-      "waitAfterName": "",
-      "kind": "atomic",
-      "endPoint": {
-        "x": 20.8141,
-        "y": 11.6828
-      },
-      "controlPoints": [
-        {
-          "x": 12.8153,
-          "y": 84.8613
-        },
-        {
-          "x": 31.0646,
-          "y": 65.2041
-        },
-        {
-          "x": 38.8643,
-          "y": 12.2782
-        }
-      ],
-      "heading": {
-        "type": "tangential",
-        "startDeg": 0,
-        "endDeg": 0,
-        "reverse": false
-      }
-    },
-    {
-      "id": "line-closeflower-8",
-      "color": "#f97316",
-      "name": "Path 7",
-      "locked": false,
-      "waitBeforeMs": 0,
-      "waitAfterMs": 0,
-      "waitBeforeName": "",
-      "waitAfterName": "",
-      "kind": "atomic",
-      "endPoint": {
-        "x": 10.8466,
-        "y": 11.354
-      },
-      "controlPoints": [],
-      "heading": {
-        "type": "tangential",
-        "startDeg": 0,
-        "endDeg": 0,
         "reverse": false
       }
     }
@@ -296,23 +261,15 @@
     },
     {
       "kind": "path",
-      "lineId": "line-closeflower-4"
+      "lineId": "line-munigrw7-41wv41"
     },
     {
       "kind": "path",
-      "lineId": "line-closeflower-5"
+      "lineId": "line-munin44t-vnde4d"
     },
     {
       "kind": "path",
-      "lineId": "line-closeflower-6"
-    },
-    {
-      "kind": "path",
-      "lineId": "line-closeflower-7"
-    },
-    {
-      "kind": "path",
-      "lineId": "line-closeflower-8"
+      "lineId": "line-muniof4x-vl2dxn"
     }
   ],
   "fieldPoints": [],
@@ -338,7 +295,7 @@
     "showHeadingArrow": false,
     "showCurrentTValue": false,
     "leftPanelWidth": 0,
-    "rightPanelWidth": 587,
+    "rightPanelWidth": 496,
     "headingArrowLength": 50,
     "headingArrowColor": "#ffffff",
     "headingArrowThickness": 2,
@@ -353,5 +310,5 @@
     }
   },
   "version": "1.5.0",
-  "timestamp": "2026-09-27T22:08:57.857Z"
+  "timestamp": "2026-10-01T01:14:21.579Z"
 }
