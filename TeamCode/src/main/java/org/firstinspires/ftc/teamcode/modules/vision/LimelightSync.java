@@ -148,10 +148,10 @@ public final class LimelightSync {
             if (waitForStamp(r, target, System.currentTimeMillis())) return pythonProblem(r, target);
         }
         if (uploads == 0) return String.format("the Limelight never reported park pipeline %d", park);
-        LLResult result = ll.getLatestResult();
-        return String.format("pipeline %d never reported the upload's stamp %d after %d uploads (llpython[0] %s); check "
+        return String.format("pipeline %d never reported the upload's stamp %d after %d upload%s (llpython[0] %s); check "
                         + "the script for errors in the Limelight's web UI, or power-cycle the Limelight",
-                target, (long) STAMP, uploads, result == null ? "none" : String.valueOf(result.getPythonOutput()[0]));
+                target, (long) STAMP, uploads, uploads == 1 ? "" : "s",
+                LimelightBallSource.number(ll.getLatestResult().getPythonOutput()[0]));
     }
 
     private static void check(Request r) throws Cancelled {

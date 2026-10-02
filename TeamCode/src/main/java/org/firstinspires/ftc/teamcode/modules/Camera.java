@@ -208,6 +208,11 @@ public class Camera extends Module {
         return frame.stale;
     }
 
+    /** True while the ball pipeline is still going onto the Limelight after INIT: the frame is stale with no fault. */
+    public boolean isSyncing() {
+        return source.isSyncing();
+    }
+
     /** Why the Limelight is unusable (also shown as the {@code Limelight} fault), or null while healthy or DISABLED. */
     public String limelightProblem() {
         return source.problem();
@@ -223,7 +228,7 @@ public class Camera extends Module {
             log("Latency (ms)", "%.0f", frame.latencyMs);
             if (limelightProblem() != null) {
                 log("Frame", "STALE (Limelight fault)");
-            } else if (source.isSyncing()) {
+            } else if (isSyncing()) {
                 log("Frame", "STALE (putting the ball pipeline on the Limelight)");
             } else if (isFrameStale()) {
                 double age = getFrameAgeSeconds();

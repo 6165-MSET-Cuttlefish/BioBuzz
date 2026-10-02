@@ -175,6 +175,7 @@ public final class BallCollection extends CommandBuilder {
                 status = Status.SKIPPED;
                 detail = String.format("no Limelight frame captured after the start within %.0f ms%s",
                         used.visionWaitMs, limelight != null ? " (Limelight: " + limelight + ")"
+                                : camera.isSyncing() ? " (the ball pipeline was still going onto the Limelight; START later)"
                                 : camera.isFrameStale() ? " (vision is stale)" : "");
             }
             return;

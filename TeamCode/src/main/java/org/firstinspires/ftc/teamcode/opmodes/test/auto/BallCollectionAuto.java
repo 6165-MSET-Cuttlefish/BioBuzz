@@ -106,6 +106,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
 
     static String visionState(Camera camera) {
         if (camera.limelightProblem() != null) return "LIMELIGHT FAULT: " + camera.limelightProblem();
+        if (camera.isSyncing()) return "STALE (putting the ball pipeline on the Limelight; wait before START)";
         if (!camera.isFrameStale()) return "live";
         double age = camera.getFrameAgeSeconds();
         return Double.isInfinite(age) ? "STALE (no frame yet)" : String.format("STALE (%.2f s old)", age);

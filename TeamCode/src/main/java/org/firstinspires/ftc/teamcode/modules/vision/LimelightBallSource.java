@@ -308,7 +308,7 @@ public final class LimelightBallSource {
         return false;
     }
 
-    private static String number(double v) {
+    static String number(double v) {
         return v == Math.rint(v) && !Double.isInfinite(v) ? String.valueOf((long) v) : String.valueOf(v);
     }
 
