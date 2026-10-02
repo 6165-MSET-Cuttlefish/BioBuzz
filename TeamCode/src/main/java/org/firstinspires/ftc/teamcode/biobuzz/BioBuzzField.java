@@ -37,8 +37,8 @@ public final class BioBuzzField {
     }
 
     /**
-     * This alliance's half (G402: columns A-C are RED's during AUTO) for the robot's centre, {@code marginIn} in
-     * from the walls and the centre line. RED's is x in [m, W/2 - m], BLUE's x in [W/2 + m, W - m].
+     * This alliance's half (G402: columns A-C are RED's during AUTO), {@code marginIn} in from the walls and the
+     * centre line; the ball planner keeps the robot's whole footprint inside it. RED's is x in [m, W/2 - m], BLUE's x in [W/2 + m, W - m].
      */
     public static Region ownHalf(double marginIn) {
         double width = FieldConfig.fieldWidthInches;

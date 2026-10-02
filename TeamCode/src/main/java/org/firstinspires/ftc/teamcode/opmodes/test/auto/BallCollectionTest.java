@@ -18,6 +18,7 @@ import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
 import org.firstinspires.ftc.teamcode.architecture.auto.Region;
+import org.firstinspires.ftc.teamcode.architecture.auto.RobotShape;
 import org.firstinspires.ftc.teamcode.architecture.auto.RouteOptimizer;
 import org.firstinspires.ftc.teamcode.architecture.auto.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.auto.RouteRun;
@@ -26,10 +27,12 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
+import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 
 /**
- * Drives through the first {@code ballCount} balls placed on the dashboard and back to the start, staying on this
- * alliance's half and around the HIVE's ground rails. Balls and the start are authored for RED and mapped to BLUE. While idle it
+ * Runs the intake over the first {@code ballCount} balls placed on the dashboard and drives back to the start, the
+ * robot's footprint ({@link RobotGeometry}) staying on this alliance's half and clear of the HIVE's ground rails.
+ * Balls and the start are authored for RED and mapped to BLUE. While idle it
  * re-plans whenever the inputs change; setting {@code run} to 1 drives the plan shown, and setting it to 0 aborts.
  * After a run it re-plans from wherever the robot stopped, so run 0 then 1 goes again from there.
  */
@@ -48,11 +51,10 @@ public class BallCollectionTest extends EnhancedOpMode {
         public static double startY = 72;
         public static double startHeadingDeg = 0;
 
-        /** Robot centre to the walls and the centre line. */
-        public static double wallMarginIn = 9;
-        /** Robot centre to the edge of a HIVE rail. */
-        public static double clearanceIn = 9;
-        public static double intakeWidthIn = 18;
+        /** Least room between the robot's footprint and the walls or the centre line. */
+        public static double wallGapIn = 1;
+        /** Least room between the robot's footprint and a HIVE rail. */
+        public static double railGapIn = 1;
         public static double timeoutMinAvgSpeedIps = 10;
         public static double timeoutMinSec = 4;
         public static double timeoutMaxSec = 15;
@@ -66,7 +68,8 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     private List<Double> plannedConfig;
     private Pose startPose;
-    private Region keepIn;
+    private Region area;
+    private RobotShape shape;
     private Ball[] balls = new Ball[0];
     private List<Obstacle> obstacles = BioBuzzField.hiveRails();
     private RouteOptimizer.Route route;
@@ -143,8 +146,8 @@ public class BallCollectionTest extends EnhancedOpMode {
     // The configured start is configuration, so a bad one throws rather than showing as "no plan".
     private void planFromConfiguredStart() {
         Pose configured = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
-        String problem = RouteOptimizer.poseProblem(configured, BallCollectionRobot.ownHalf(Tuning.wallMarginIn),
-                BioBuzzField.hiveRails(), Tuning.clearanceIn);
+        String problem = RouteOptimizer.poseProblem(configured, RobotGeometry.shape(),
+                BallCollectionRobot.ownHalf(Tuning.wallGapIn), BioBuzzField.hiveRails(), Tuning.railGapIn);
         if (problem != null) throw new IllegalStateException("Ball Collection start pose " + problem);
         robot.follower.setPose(configured);
         planFrom(configured);
@@ -153,7 +156,8 @@ public class BallCollectionTest extends EnhancedOpMode {
     private void planFrom(Pose start) {
         plannedConfig = config();
         startPose = start;
-        keepIn = BallCollectionRobot.ownHalf(Tuning.wallMarginIn);
+        area = BallCollectionRobot.ownHalf(Tuning.wallGapIn);
+        shape = RobotGeometry.shape();
         // Copies, so a dashboard edit mid-route can't move what the running plan was built around.
         Ball[] slots = {Tuning.ball1, Tuning.ball2, Tuning.ball3, Tuning.ball4};
         balls = new Ball[ballCount()];
@@ -167,13 +171,13 @@ public class BallCollectionTest extends EnhancedOpMode {
         plan = null;
         intakeDrawing = null;
         returnDrawing = null;
-        String problem = RouteOptimizer.poseProblem(start, keepIn, obstacles, Tuning.clearanceIn);
+        String problem = RouteOptimizer.poseProblem(start, shape, area, obstacles, Tuning.railGapIn);
         if (problem != null) {
             noPlanReason = "the robot at " + problem;
             return;
         }
-        route = RouteOptimizer.findOptimalRoute(start, balls, start, keepIn, obstacles,
-                Tuning.clearanceIn, Tuning.intakeWidthIn, Tuning.forceSplineOnly);
+        route = RouteOptimizer.findOptimalRoute(start, balls, start, area, obstacles, shape, Tuning.railGapIn,
+                Tuning.forceSplineOnly);
         plan = RoutePathBuilder.build(route);
         intakeDrawing = plan.intake == null ? null : fieldPolyline(plan.intake);
         returnDrawing = plan.back == null ? null : fieldPolyline(plan.back);
@@ -195,7 +199,8 @@ public class BallCollectionTest extends EnhancedOpMode {
             c.add(b.y);
         }
         c.addAll(Arrays.asList(Tuning.startX, Tuning.startY, Tuning.startHeadingDeg,
-                Tuning.wallMarginIn, Tuning.clearanceIn, Tuning.intakeWidthIn, Tuning.forceSplineOnly ? 1.0 : 0.0,
+                Tuning.wallGapIn, Tuning.railGapIn, Tuning.forceSplineOnly ? 1.0 : 0.0,
+                RobotGeometry.lengthIn, RobotGeometry.widthIn, RobotGeometry.intakeOffsetIn, RobotGeometry.intakeWidthIn,
                 (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,
                 FieldConfig.fieldWidthInches, (double) Context.allianceColor.ordinal()));
         return c;
@@ -230,7 +235,7 @@ public class BallCollectionTest extends EnhancedOpMode {
                 : plan == null ? "IDLE (no plan)" : "IDLE (set run=1 to drive)";
         telemetry.addData("State", state);
         if (!refused.isEmpty()) telemetry.addData("Run refused", refused);
-        if (keepIn != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, keepIn);
+        if (area != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, area);
         if (route == null) {
             telemetry.addData("Plan", "none: " + noPlanReason);
             return;
@@ -254,10 +259,24 @@ public class BallCollectionTest extends EnhancedOpMode {
         telemetry.addData("Return path", plan.back == null ? "none (already there)" : describe(plan.returnReroute));
     }
 
+    static void drawFootprint(Canvas overlay, RobotShape shape, Pose centre) {
+        double[][] corners = shape.corners(centre);
+        double[] xs = new double[4];
+        double[] ys = new double[4];
+        for (int i = 0; i < 4; i++) {
+            double[] p = FieldVisualization.toField(corners[0][i], corners[1][i]);
+            xs[i] = p[0];
+            ys[i] = p[1];
+        }
+        overlay.setStroke("#0D47A1");
+        overlay.strokePolygon(xs, ys);
+    }
+
     static String describe(RoutePathBuilder.Reroute reroute) {
         switch (reroute) {
+            case TURN_IN_PLACE: return "direct, with a turn in place";
             case SPLINE: return "spline around a HIVE rail or wall";
-            case POLYLINE: return "straight hops (too tight for a spline)";
+            case POLYLINE: return "hops round a HIVE rail or wall, curved where there is room to turn";
             case FORCED_SPLINE: return "spline THROUGH a HIVE rail (forceSplineOnly)";
             default: return "direct";
         }
@@ -287,13 +306,28 @@ public class BallCollectionTest extends EnhancedOpMode {
         }
     }
 
-    static void drawPlan(Canvas overlay, RoutePathBuilder.Plan plan, double[][] intakeDrawing, double[][] returnDrawing) {
+    /** The centre's path in blue, the intake's in orange, and the footprint where the intake reaches the last ball. */
+    static void drawPlan(Canvas overlay, RoutePathBuilder.Plan plan, double[][] intakeDrawing, double[][] returnDrawing,
+                         RobotShape shape) {
         if (intakeDrawing != null) {
             overlay.setStroke("#2962FF");
             overlay.strokePolyline(intakeDrawing[0], intakeDrawing[1]);
-            double[] end = FieldVisualization.toField(plan.intakeEnd.x(), plan.intakeEnd.y());
-            overlay.setStroke("#0D47A1");
-            overlay.strokeCircle(end[0], end[1], 2.5);
+            double[][] track = plan.intakeTrack;
+            int step = Math.max(1, track[0].length / DRAW_SAMPLES);
+            int n = (track[0].length - 1) / step + 1;
+            double[] xs = new double[n + 1];
+            double[] ys = new double[n + 1];
+            for (int i = 0; i < n; i++) {
+                double[] p = FieldVisualization.toField(track[0][i * step], track[1][i * step]);
+                xs[i] = p[0];
+                ys[i] = p[1];
+            }
+            double[] last = FieldVisualization.toField(track[0][track[0].length - 1], track[1][track[1].length - 1]);
+            xs[n] = last[0];
+            ys[n] = last[1];
+            overlay.setStroke("#FF6D00");
+            overlay.strokePolyline(xs, ys);
+            drawFootprint(overlay, shape, plan.intakeEnd);
         }
         if (returnDrawing != null) {
             overlay.setStroke("#82B1FF");
@@ -303,7 +337,7 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected void dashboardOverlay(Canvas overlay) {
-        if (keepIn != null) drawKeepIn(overlay, keepIn);
+        if (area != null) drawKeepIn(overlay, area);
         drawObstacles(overlay, obstacles);
 
         overlay.setFill("#FFA500");
@@ -311,6 +345,6 @@ public class BallCollectionTest extends EnhancedOpMode {
             double[] p = FieldVisualization.toField(b.x, b.y);
             overlay.fillCircle(p[0], p[1], b.radius);
         }
-        if (plan != null) drawPlan(overlay, plan, intakeDrawing, returnDrawing);
+        if (plan != null) drawPlan(overlay, plan, intakeDrawing, returnDrawing, shape);
     }
 }

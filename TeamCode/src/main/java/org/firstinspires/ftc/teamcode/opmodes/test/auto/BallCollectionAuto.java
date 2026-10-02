@@ -20,6 +20,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
@@ -51,8 +52,8 @@ public class BallCollectionAuto extends BioBuzzOpMode {
     @Override
     protected void initialize() {
         startPose = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
-        String problem = RouteOptimizer.poseProblem(startPose,
-                BioBuzzField.ownHalf(Tuning.collection.wallMarginIn), BioBuzzField.hiveRails(), Tuning.collection.clearanceIn);
+        String problem = RouteOptimizer.poseProblem(startPose, RobotGeometry.shape(),
+                BioBuzzField.ownHalf(Tuning.collection.wallGapIn), BioBuzzField.hiveRails(), Tuning.collection.railGapIn);
         if (problem != null) throw new IllegalStateException("Ball Collection Auto start pose " + problem);
         robot.follower.setPose(startPose);
 
@@ -78,7 +79,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
         if (timedOut) status += String.format(" (auto timed out after %.0f ms)", Tuning.timeoutMs);
         telemetry.addData("Status", status);
         telemetry.addData("Vision", visionState(robot.camera));
-        if (collection.keepIn() != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, collection.keepIn());
+        if (collection.area() != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, collection.area());
         for (BallCollection.Skipped s : collection.skipped()) {
             telemetry.addData("Skipped " + label(s.ball), s.reason);
         }
@@ -115,7 +116,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
 
     @Override
     protected void dashboardOverlay(Canvas overlay) {
-        if (collection.keepIn() != null) BallCollectionTest.drawKeepIn(overlay, collection.keepIn());
+        if (collection.area() != null) BallCollectionTest.drawKeepIn(overlay, collection.area());
         BallCollectionTest.drawObstacles(overlay, collection.obstacles());
         for (FieldBall b : robot.camera.getFieldBalls()) {
             double[] p = FieldVisualization.toField(b.x, b.y);
@@ -135,7 +136,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
             intakeDrawing = plan.intake == null ? null : BallCollectionTest.fieldPolyline(plan.intake);
             returnDrawing = plan.back == null ? null : BallCollectionTest.fieldPolyline(plan.back);
         }
-        BallCollectionTest.drawPlan(overlay, plan, intakeDrawing, returnDrawing);
+        BallCollectionTest.drawPlan(overlay, plan, intakeDrawing, returnDrawing, collection.robot());
     }
 
     private static String color(BallType type) {

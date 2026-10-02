@@ -27,8 +27,8 @@ public class BallCollectionRobot extends Robot {
     protected void initializeGameModules() {}
 
     /**
-     * This alliance's half of the field, {@code marginIn} in from the walls and the centre line, for the robot's
-     * centre: RED's is x in [m, width/2 - m], BLUE's (through {@link FieldPose}) x in [width/2 + m, width - m].
+     * This alliance's half of the field, {@code marginIn} in from the walls and the centre line, where the ball
+     * planner keeps the robot's whole footprint: RED's is x in [m, width/2 - m], BLUE's (through {@link FieldPose}) x in [width/2 + m, width - m].
      */
     static Region ownHalf(double marginIn) {
         double width = FieldConfig.fieldWidthInches;

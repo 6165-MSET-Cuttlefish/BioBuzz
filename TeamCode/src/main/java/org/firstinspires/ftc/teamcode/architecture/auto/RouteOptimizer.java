@@ -7,10 +7,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Picks the order to collect a few balls: tries every order (n! of them, so keep n small) and keeps the
- * shortest drive, scored on the sampled length of the geometry {@link RoutePathBuilder} will drive rather than on
- * straight hops (a greedy nearest-first pick can lock in a bad first ball). Everything stays inside the caller's
- * keep-in region. A ball the route can't reach is dropped and reported rather than voiding the plan.
+ * Picks the order to collect a few balls: tries every order (n! of them, so keep n small) and keeps the cheapest,
+ * scored on the sampled length of the drive {@link RoutePathBuilder} will make plus its turns in place, rather than
+ * on straight hops (a greedy nearest-first pick can lock in a bad first ball). The robot's whole footprint stays
+ * inside the caller's area and clear of the obstacles, and the intake passes over each ball. A ball the route can't
+ * reach is dropped and reported rather than voiding the plan.
  */
 public final class RouteOptimizer {
     public static final int MAX_BALLS = 6;
@@ -34,7 +35,7 @@ public final class RouteOptimizer {
         public final Ball[] order;
         /** Input balls not in {@link #order}, each with why. */
         public final List<Dropped> dropped;
-        /** Sampled drive length in inches. */
+        /** Sampled drive length of the robot's centre, in inches. */
         public final double length;
         final RoutePathBuilder.Shape shape;
 
@@ -48,39 +49,46 @@ public final class RouteOptimizer {
         }
     }
 
-    /** Null if the robot's centre may stand at {@code p}, otherwise why it may not. */
-    public static String poseProblem(Pose p, Region keepIn, List<Obstacle> obstacles, double clearance) {
-        if (!keepIn.contains(p)) return String.format("(%.1f, %.1f) is outside the keep-in region %s", p.x(), p.y(), keepIn);
-        Obstacle o = keepOutContaining(p.x(), p.y(), obstacles, clearance);
-        if (o != null) {
-            return String.format("(%.1f, %.1f) is inside the keep-out of the obstacle %s", p.x(), p.y(), o);
+    /** Null if the robot may stand at {@code p} (its heading included), otherwise why it may not. */
+    public static String poseProblem(Pose p, RobotShape robot, Region area, List<Obstacle> obstacles, double gapIn) {
+        String problem = robot.footprintProblem(p.x(), p.y(), p.heading(), area, obstacles, gapIn);
+        return problem == null ? null : String.format("(%.1f, %.1f) facing %.0f deg puts the robot %s",
+                p.x(), p.y(), Math.toDegrees(p.heading()), problem);
+    }
+
+    /**
+     * Null if some heading puts the intake on a ball of {@code radius} at (x, y), anywhere across it the planner
+     * aims, with the robot's footprint clear; otherwise why none does.
+     */
+    public static String ballProblem(double x, double y, double radius, RobotShape robot, Region area,
+                                     List<Obstacle> obstacles, double gapIn) {
+        if (!area.contains(x, y)) return "outside " + area;
+        double[] sides = RoutePathBuilder.aimSides(robot, radius);
+        for (int i = 0; i < RoutePathBuilder.HEADING_STEPS; i++) {
+            double heading = 2 * Math.PI * i / RoutePathBuilder.HEADING_STEPS;
+            for (double side : sides) {
+                Pose c = robot.centreFor(x, y, heading, side);
+                if (robot.fits(c.x(), c.y(), heading, area, obstacles, gapIn)) return null;
+            }
         }
-        return null;
+        return "out of the intake's reach: every heading puts the robot over a wall, the centre line or an obstacle";
     }
 
     /**
      * Throws if {@code start} or {@code returnPose} fails {@link #poseProblem}, so check that first for a pose
-     * that comes from the robot rather than from configuration.
+     * that comes from the robot rather than from configuration. {@code gapIn} is the least room between the
+     * footprint and an obstacle; {@code area} is where the footprint must stay.
      */
-    public static Route findOptimalRoute(Pose start, Ball[] balls, Pose returnPose, Region keepIn,
-                                         List<Obstacle> obstacles, double clearance, double intakeWidthIn,
+    public static Route findOptimalRoute(Pose start, Ball[] balls, Pose returnPose, Region area,
+                                         List<Obstacle> obstacles, RobotShape robot, double gapIn,
                                          boolean forceSplineOnly) {
-        if (!(clearance >= 0) || !(intakeWidthIn >= 0)) {
-            throw new IllegalArgumentException(String.format(
-                    "clearance (%.1f) and intake width (%.1f) must be >= 0", clearance, intakeWidthIn));
-        }
+        if (!(gapIn >= 0)) throw new IllegalArgumentException(String.format("obstacle gap %.1f in must be >= 0", gapIn));
         if (balls.length > MAX_BALLS) {
             throw new IllegalArgumentException(balls.length + " balls: the order search is n!, so at most " + MAX_BALLS);
         }
-        // An obstacle farther than the clearance from the region can't block anything inside it.
-        List<Obstacle> nearby = new ArrayList<>();
-        for (Obstacle o : obstacles) {
-            if (o.distanceTo(keepIn) <= clearance) nearby.add(o);
-        }
-        obstacles = nearby;
-        String startProblem = poseProblem(start, keepIn, obstacles, clearance);
+        String startProblem = poseProblem(start, robot, area, obstacles, gapIn);
         if (startProblem != null) throw new IllegalArgumentException("start " + startProblem);
-        String returnProblem = poseProblem(returnPose, keepIn, obstacles, clearance);
+        String returnProblem = poseProblem(returnPose, robot, area, obstacles, gapIn);
         if (returnProblem != null) throw new IllegalArgumentException("return pose " + returnProblem);
 
         List<Dropped> dropped = new ArrayList<>();
@@ -89,98 +97,58 @@ public final class RouteOptimizer {
             if (!(Double.isFinite(ball.x) && Double.isFinite(ball.y))) {
                 throw new IllegalArgumentException("ball position is not finite: " + ball);
             }
-            String problem = placementProblem(ball, start, candidates, keepIn, obstacles, clearance);
+            String problem = placementProblem(ball, start, candidates, area, obstacles, robot, gapIn);
             if (problem == null) candidates.add(ball);
             else dropped.add(new Dropped(ball, problem));
         }
 
-        // A leg depends only on its endpoints, so each pair is planned once rather than once per order.
-        // Index k stands for the start.
-        int k = candidates.size();
-        VisibilityGraphPlanner.Leg[][] toBall = new VisibilityGraphPlanner.Leg[k + 1][k];
-        VisibilityGraphPlanner.Leg[] toReturn = new VisibilityGraphPlanner.Leg[k + 1];
-        for (int from = 0; from <= k; from++) {
-            Pose fromPose = from == k ? start : candidates.get(from).toPose();
-            for (int to = 0; to < k; to++) {
-                if (to != from) {
-                    toBall[from][to] = VisibilityGraphPlanner.planPath(fromPose, candidates.get(to).toPose(),
-                            keepIn, obstacles, clearance);
-                }
-            }
-            toReturn[from] = VisibilityGraphPlanner.planPath(fromPose, returnPose, keepIn, obstacles, clearance);
-        }
-        if (toReturn[k] == null) {
-            throw new IllegalArgumentException(String.format(
-                    "no obstacle-free path inside the keep-in region from the start (%.1f, %.1f) to the return pose (%.1f, %.1f)",
-                    start.x(), start.y(), returnPose.x(), returnPose.y()));
-        }
-
-        List<Integer> reachable = new ArrayList<>();
-        for (int i = 0; i < k; i++) {
-            if (toBall[k][i] == null) dropped.add(new Dropped(candidates.get(i), "no obstacle-free path to it from the start"));
-            else if (toReturn[i] == null) dropped.add(new Dropped(candidates.get(i), "no obstacle-free path from it to the return pose"));
-            else reachable.add(i);
-        }
+        Ball[] reachable = candidates.toArray(new Ball[0]);
+        RoutePathBuilder.Planner planner = new RoutePathBuilder.Planner(start, reachable, returnPose, area, obstacles,
+                robot, gapIn, forceSplineOnly);
+        List<Integer> indices = new ArrayList<>();
+        for (int i = 0; i < reachable.length; i++) indices.add(i);
 
         // Most balls first: only when no order through all of them is drivable is one left out.
-        for (int size = reachable.size(); size >= 0; size--) {
+        for (int size = reachable.length; size >= 0; size--) {
             Route best = null;
-            for (List<Integer> subset : subsets(reachable, size)) {
+            double bestCost = Double.POSITIVE_INFINITY;
+            for (List<Integer> subset : subsets(indices, size)) {
                 for (int[] perm : permutations(subset.size())) {
-                    List<VisibilityGraphPlanner.Leg> legs = new ArrayList<>();
+                    int[] order = new int[perm.length];
                     Ball[] ordered = new Ball[perm.length];
-                    int at = k;
                     for (int i = 0; i < perm.length; i++) {
-                        int ball = subset.get(perm[i]);
-                        legs.add(toBall[at][ball]);
-                        ordered[i] = candidates.get(ball);
-                        at = ball;
+                        order[i] = subset.get(perm[i]);
+                        ordered[i] = reachable[order[i]];
                     }
-                    legs.add(toReturn[at]);
-                    if (legs.contains(null)) continue;
-
-                    RoutePathBuilder.Shape shape = RoutePathBuilder.shape(start, ordered, legs, returnPose, keepIn,
-                            obstacles, clearance, intakeWidthIn, forceSplineOnly);
-                    if (shape == null) continue;
-                    if (best == null || shape.length() < best.length) {
-                        best = new Route(start, returnPose, ordered, dropped, shape);
-                    }
+                    RoutePathBuilder.Shape shape = planner.shape(order);
+                    if (shape == null || !(shape.cost() < bestCost)) continue;
+                    bestCost = shape.cost();
+                    best = new Route(start, returnPose, ordered, dropped, shape);
                 }
             }
             if (best != null) {
                 List<Ball> visited = new ArrayList<>();
                 Collections.addAll(visited, best.order);
-                for (int i : reachable) {
-                    Ball ball = candidates.get(i);
+                for (Ball ball : reachable) {
                     if (!visited.contains(ball)) dropped.add(new Dropped(ball, "no drivable order that also visits the others"));
                 }
                 return best;
             }
         }
-        throw new IllegalStateException(String.format(
-                "no drivable return from the start (%.1f, %.1f) to the return pose (%.1f, %.1f) although a graph path exists",
+        throw new IllegalArgumentException(String.format(
+                "no drivable path for the robot from the start (%.1f, %.1f) to the return pose (%.1f, %.1f)",
                 start.x(), start.y(), returnPose.x(), returnPose.y()));
     }
 
-    private static String placementProblem(Ball ball, Pose start, List<Ball> kept, Region keepIn,
-                                           List<Obstacle> obstacles, double clearance) {
-        if (Math.hypot(ball.x - start.x(), ball.y - start.y()) < RoutePathBuilder.COINCIDENT_IN) {
-            return "on the start pose";
-        }
-        if (!keepIn.contains(ball.x, ball.y)) return "outside the keep-in region " + keepIn;
-        Obstacle o = keepOutContaining(ball.x, ball.y, obstacles, clearance);
-        if (o != null) return "inside the keep-out of the obstacle " + o;
+    private static String placementProblem(Ball ball, Pose start, List<Ball> kept, Region area,
+                                           List<Obstacle> obstacles, RobotShape robot, double gapIn) {
+        if (robot.covers(start, ball.x, ball.y)) return "under the robot at the start";
+        String problem = ballProblem(ball.x, ball.y, ball.radius, robot, area, obstacles, gapIn);
+        if (problem != null) return problem;
         for (Ball other : kept) {
             if (Math.hypot(ball.x - other.x, ball.y - other.y) < RoutePathBuilder.COINCIDENT_IN) {
                 return "the same ball as " + other;
             }
-        }
-        return null;
-    }
-
-    private static Obstacle keepOutContaining(double x, double y, List<Obstacle> obstacles, double clearance) {
-        for (Obstacle o : obstacles) {
-            if (o.blocks(x, y, clearance)) return o;
         }
         return null;
     }

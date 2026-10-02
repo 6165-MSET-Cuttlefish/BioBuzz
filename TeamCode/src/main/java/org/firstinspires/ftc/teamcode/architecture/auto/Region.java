@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.architecture.auto;
 
 import com.pedropathing.math.Pose;
 
-/** An axis-aligned rectangle in Pedro field inches that the robot's centre must stay inside. */
+/** An axis-aligned rectangle in Pedro field inches; the caller decides what stays inside it, such as the ball planner's footprint. */
 public final class Region {
     public final double minX;
     public final double maxX;

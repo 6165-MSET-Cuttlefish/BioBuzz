@@ -9,7 +9,8 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.ivy.behaviors.EndCondition;
-import com.pedropathing.paths.Path;
+import com.pedropathing.math.Pose;
+import com.pedropathing.utils.Angle;
 
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 
@@ -17,13 +18,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Drives a {@link RoutePathBuilder.Plan}: the intake leg, then the return, then stops. Each leg gets
- * {@code length / minAvgSpeedIps} seconds, clamped to [minLegSec, maxLegSec]; a leg that runs out of time ends
- * the whole route with the follower stopped, since the next leg was planned from where this one should have
- * ended. {@link #abort} does the same from user code. Run it once, either with {@link #start()} or as
- * {@link #command()} inside a group.
+ * Drives a {@link RoutePathBuilder.Plan} step by step, then stops: each drive to a settled stop, each turn in place
+ * until the heading settles. A drive gets {@code length / minAvgSpeedIps} seconds, clamped to [minLegSec,
+ * maxLegSec], and a turn minLegSec; a step that runs out of time ends the whole route with the follower stopped,
+ * since the next step was planned from where this one should have ended. {@link #abort} does the same from user
+ * code. Run it once, either with {@link #start()} or as {@link #command()} inside a group.
  */
 public final class RouteRun {
+    // Pedro's own hold reports settled 100 ms in, before a long turn is done.
+    private static final double TURN_SETTLED_RAD = Math.toRadians(2);
+    private static final double TURN_STILL_RAD_PER_SEC = Math.toRadians(15);
+
     private final Follower follower;
     private final Command command;
     private String phase = "not started";
@@ -44,11 +49,18 @@ public final class RouteRun {
         }
         this.follower = follower;
         List<Command> steps = new ArrayList<>();
-        if (plan.intake != null) {
-            steps.add(leg("intake", plan.intake, budget(plan.intakeLength, minAvgSpeedIps, minLegSec, maxLegSec)));
-        }
-        if (plan.back != null) {
-            steps.add(leg("return", plan.back, budget(plan.returnLength, minAvgSpeedIps, minLegSec, maxLegSec)));
+        int intakeSteps = 0;
+        for (RoutePathBuilder.Step step : plan.steps) if (step.intake) intakeSteps++;
+        int returnSteps = plan.steps.size() - intakeSteps;
+        int intakeAt = 0;
+        int returnAt = 0;
+        for (RoutePathBuilder.Step step : plan.steps) {
+            String name = step.intake ? String.format("intake %d/%d", ++intakeAt, intakeSteps)
+                    : String.format("return %d/%d", ++returnAt, returnSteps);
+            steps.add(step.path != null
+                    ? leg(name, PathCommands.follow(follower, step.path),
+                            budget(step.length, minAvgSpeedIps, minLegSec, maxLegSec))
+                    : leg(name + " turn", turn(step.turnTo), minLegSec));
         }
         steps.add(PathCommands.stop(follower));
         steps.add(instant(() -> {
@@ -81,21 +93,28 @@ public final class RouteRun {
         return Math.min(maxLegSec, Math.max(minLegSec, lengthIn / minAvgSpeedIps));
     }
 
-    private Command leg(String name, Path path, double seconds) {
+    private Command leg(String name, Command action, double seconds) {
         return sequential(
                 instant(() -> {
                     phase = name;
                     legBudgetSec = seconds;
                     legDeadlineNs = System.nanoTime() + (long) (seconds * 1e9);
                 }),
-                PathCommands.follow(follower, path),
+                action,
                 instant(() -> legDeadlineNs = 0));
+    }
+
+    private Command turn(Pose to) {
+        return sequential(
+                PathCommands.hold(follower, to),
+                waitUntil(() -> Math.abs(Angle.normalizeSigned(follower.pose().heading() - to.heading())) < TURN_SETTLED_RAD
+                        && Math.abs(follower.velocity().omega) < TURN_STILL_RAD_PER_SEC));
     }
 
     private boolean shouldEnd() {
         if (abortRequested) return true;
         if (legDeadlineNs == 0 || System.nanoTime() < legDeadlineNs) return false;
-        abortReason = String.format("%s leg timed out after %.1f s", phase, legBudgetSec);
+        abortReason = String.format("%s timed out after %.1f s", phase, legBudgetSec);
         return true;
     }
 
