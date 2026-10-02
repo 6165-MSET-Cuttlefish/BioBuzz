@@ -2,12 +2,14 @@ package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
 import static com.pedropathing.api.Paths.curve;
 import static com.pedropathing.api.Paths.line;
+import static com.pedropathing.api.Paths.path;
 
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.pedropathing.paths.interpolator.Interpolator;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
+import org.firstinspires.ftc.teamcode.architecture.auto.PathHeadings;
 
 /**
  * The CloseFlower route shared by {@link CloseFlowerAuto} and {@link CloseFlowerLinearAuto}, authored for RED and
@@ -20,7 +22,7 @@ public final class CloseFlowerPaths {
     private final Pose closeFlower = pose(14.9769, 46.9989, 180);
     private final Pose closeFlowerControl1 = point(56, 23);
     private final Pose closeFlowerControl2 = point(34.9769, 46.9989);
-    private final Pose path2Turn = pose(29.0321, 76.6058, 65.7039);
+    private final Pose path2Turn = point(29.0321, 76.6058);
     private final Pose path2TurnControl1 = point(23.0138, 63.2743);
     private final Pose path2 = pose(46.9748, 130.0998, 90.091);
     private final Pose path2Control1 = point(47.087, 116.7758);
@@ -41,19 +43,19 @@ public final class CloseFlowerPaths {
 
     /** The legs in driving order. */
     public Path[] all() {
-        return new Path[] {closeFlower(), path2Turn(), path2(), path4(), path5(), path6()};
+        return new Path[] {closeFlower(), path2(), path4(), path5(), path6()};
     }
 
     public Path closeFlower() {
         return curve(start, closeFlowerControl1, closeFlowerControl2, closeFlower).tangent();
     }
 
-    public Path path2Turn() {
-        return curve(closeFlower, path2TurnControl1, path2Turn).linear(closeFlower, path2Turn);
-    }
-
+    /** Turns off the close flower over the first curve, then follows the tangent through the second without stopping. */
     public Path path2() {
-        return curve(path2Turn, path2Control1, path2).tangent();
+        Path turn = curve(closeFlower, path2TurnControl1, path2Turn);
+        Path whole = path(turn, curve(path2Turn, path2Control1, path2));
+        return PathHeadings.linearThenTangent(
+                whole, PathHeadings.endTangent(closeFlower()), turn.curve.length() / whole.curve.length());
     }
 
     public Path path4() {
