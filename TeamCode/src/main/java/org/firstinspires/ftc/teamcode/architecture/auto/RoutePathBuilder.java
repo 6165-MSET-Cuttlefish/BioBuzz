@@ -16,7 +16,7 @@ import java.util.List;
  * obstacle.
  */
 public final class RoutePathBuilder {
-    /** Points closer than this are one point: Pedro rejects a zero-length line, and a tiny hop has no usable heading. */
+    /** Points closer than this are merged where that stays clear: Pedro rejects a zero-length line, and a tiny hop has little usable heading. */
     public static final double COINCIDENT_IN = 1.0;
 
     private RoutePathBuilder() {}
@@ -134,7 +134,6 @@ public final class RoutePathBuilder {
                 List<Pose> waypoints = new ArrayList<>();
                 waypoints.add(start);
                 for (int i = 0; i < n; i++) appendAfterFirst(waypoints, legs.get(i).waypoints);
-                waypoints = withoutCoincident(waypoints);
                 Detour detour = detour(waypoints, keepIn, obstacles, clearance, forceSplineOnly);
                 if (detour == null) return null;
                 intake = detour.segments;
@@ -153,7 +152,6 @@ public final class RoutePathBuilder {
                 List<Pose> waypoints = new ArrayList<>();
                 waypoints.add(intakeEnd);
                 appendAfterFirst(waypoints, legs.get(n).waypoints);
-                waypoints = withoutCoincident(waypoints);
                 Detour detour = detour(waypoints, keepIn, obstacles, clearance, false);
                 if (detour == null) return null;
                 back = detour.segments;
@@ -173,8 +171,9 @@ public final class RoutePathBuilder {
         }
     }
 
-    private static Detour detour(List<Pose> waypoints, Region keepIn, List<Obstacle> obstacles, double clearance,
+    private static Detour detour(List<Pose> graphWaypoints, Region keepIn, List<Obstacle> obstacles, double clearance,
                                  boolean forceSplineOnly) {
+        List<Pose> waypoints = withoutCoincident(graphWaypoints);
         Segment spline = IntakeCurvePlanner.through(waypoints);
         if (spline.staysClear(keepIn, obstacles, clearance)) {
             return new Detour(Collections.singletonList(spline), Reroute.SPLINE);
@@ -182,13 +181,22 @@ public final class RoutePathBuilder {
         if (forceSplineOnly && spline.staysInside(keepIn)) {
             return new Detour(Collections.singletonList(spline), Reroute.FORCED_SPLINE);
         }
+        List<Segment> hops = clearHops(waypoints, keepIn, obstacles, clearance);
+        // Merging a waypoint into its neighbour moves that hop off its graph edge, which can take it into a keep-out.
+        if (hops == null) hops = clearHops(graphWaypoints, keepIn, obstacles, clearance);
+        return hops == null ? null : new Detour(hops, Reroute.POLYLINE);
+    }
+
+    private static List<Segment> clearHops(List<Pose> waypoints, Region keepIn, List<Obstacle> obstacles,
+                                           double clearance) {
         List<Segment> hops = new ArrayList<>();
         for (int i = 1; i < waypoints.size(); i++) {
+            if (waypoints.get(i).distance(waypoints.get(i - 1)) == 0) continue;
             Segment hop = new Segment(waypoints.get(i - 1), waypoints.get(i));
             if (!hop.staysClear(keepIn, obstacles, clearance)) return null;
             hops.add(hop);
         }
-        return new Detour(hops, Reroute.POLYLINE);
+        return hops;
     }
 
     // Each leg starts where the previous one ended, so its first waypoint is already in the list.

@@ -14,7 +14,6 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
-import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
 import org.firstinspires.ftc.teamcode.architecture.auto.RouteOptimizer;
 import org.firstinspires.ftc.teamcode.architecture.auto.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
@@ -24,8 +23,6 @@ import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
-
-import java.util.Collections;
 
 /**
  * {@link BallCollection} through the framework: built in initialize(), scheduled at START inside a timeout, then
@@ -55,7 +52,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
     protected void initialize() {
         startPose = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
         String problem = RouteOptimizer.poseProblem(startPose,
-                BioBuzzField.ownHalf(Tuning.collection.wallMarginIn), Collections.<Obstacle>emptyList(), 0);
+                BioBuzzField.ownHalf(Tuning.collection.wallMarginIn), BioBuzzField.hiveRails(), Tuning.collection.clearanceIn);
         if (problem != null) throw new IllegalStateException("Ball Collection Auto start pose " + problem);
         robot.follower.setPose(startPose);
 
@@ -119,6 +116,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
     @Override
     protected void dashboardOverlay(Canvas overlay) {
         if (collection.keepIn() != null) BallCollectionTest.drawKeepIn(overlay, collection.keepIn());
+        BallCollectionTest.drawObstacles(overlay, collection.obstacles());
         for (FieldBall b : robot.camera.getFieldBalls()) {
             double[] p = FieldVisualization.toField(b.x, b.y);
             overlay.setStroke(b.visible() ? color(b.type) : "#9E9E9E");

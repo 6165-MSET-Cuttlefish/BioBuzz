@@ -10,14 +10,14 @@ import java.util.PriorityQueue;
 
 /**
  * Shortest obstacle-avoiding polyline between two points inside a keep-in region: a visibility graph over points
- * sampled around each obstacle's clearance-inflated circle, searched with Dijkstra. Close to exact bitangents with
- * enough samples, and well under a millisecond for a handful of obstacles. The region is convex, so a hop between
- * two points inside it stays inside.
+ * sampled around the corners of each obstacle's clearance-inflated outline, searched with Dijkstra. Close to exact
+ * bitangents with enough samples, and well under a millisecond for a handful of obstacles. The region is convex, so
+ * a hop between two points inside it stays inside.
  */
 @Config
 public final class VisibilityGraphPlanner {
-    public static int pointsPerObstacle = 16;
-    // Neighbouring samples are joined by chords, which cut inside the circle the samples sit on.
+    public static int pointsPerCorner = 4;
+    // Neighbouring samples are joined by chords, which cut inside the corner's arc the samples sit on.
     public static double boundaryMarginIn = 1.5;
 
     private VisibilityGraphPlanner() {}
@@ -39,21 +39,31 @@ public final class VisibilityGraphPlanner {
      */
     public static Leg planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance) {
         if (!keepIn.contains(start) || !keepIn.contains(goal)) return null;
+        if (!Obstacle.anyBlocks(obstacles, start.x(), start.y(), goal.x(), goal.y(), clearance)) {
+            List<Pose> direct = new ArrayList<>();
+            direct.add(start);
+            direct.add(new Pose(goal.x(), goal.y(), Math.atan2(goal.y() - start.y(), goal.x() - start.x())));
+            return new Leg(direct, start.distance(goal));
+        }
         final int startNode = 0;
         final int goalNode = 1;
         List<double[]> nodes = new ArrayList<>();
         nodes.add(new double[]{start.x(), start.y()});
         nodes.add(new double[]{goal.x(), goal.y()});
 
+        double placementRadius = clearance + boundaryMarginIn;
+        int perCorner = Math.max(2, pointsPerCorner);
         for (Obstacle o : obstacles) {
-            double placementRadius = o.radius + clearance + boundaryMarginIn;
-            for (int i = 0; i < pointsPerObstacle; i++) {
-                double angle = 2 * Math.PI * i / pointsPerObstacle;
-                // Clamped onto the region's edge rather than dropped, so a route can squeeze past an obstacle near a wall.
-                double px = Math.max(keepIn.minX, Math.min(keepIn.maxX, o.x + placementRadius * Math.cos(angle)));
-                double py = Math.max(keepIn.minY, Math.min(keepIn.maxY, o.y + placementRadius * Math.sin(angle)));
-                if (insideAny(px, py, obstacles, clearance)) continue;
-                nodes.add(new double[]{px, py});
+            double[][] corners = {{o.maxX, o.maxY}, {o.minX, o.maxY}, {o.minX, o.minY}, {o.maxX, o.minY}};
+            for (int corner = 0; corner < corners.length; corner++) {
+                for (int i = 0; i < perCorner; i++) {
+                    double angle = Math.PI / 2 * (corner + (double) i / (perCorner - 1));
+                    // Clamped onto the region's edge rather than dropped, so a route can squeeze past an obstacle near a wall.
+                    double px = Math.max(keepIn.minX, Math.min(keepIn.maxX, corners[corner][0] + placementRadius * Math.cos(angle)));
+                    double py = Math.max(keepIn.minY, Math.min(keepIn.maxY, corners[corner][1] + placementRadius * Math.sin(angle)));
+                    if (insideAny(px, py, obstacles, clearance)) continue;
+                    nodes.add(new double[]{px, py});
+                }
             }
         }
 
@@ -78,7 +88,9 @@ public final class VisibilityGraphPlanner {
                 if (v == u || visited[v]) continue;
                 double[] to = nodes.get(v);
                 if (Obstacle.anyBlocks(obstacles, from[0], from[1], to[0], to[1], clearance)) continue;
-                double alt = dist[u] + Math.hypot(to[0] - from[0], to[1] - from[1]);
+                double ex = to[0] - from[0];
+                double ey = to[1] - from[1];
+                double alt = dist[u] + Math.sqrt(ex * ex + ey * ey);
                 if (alt < dist[v]) {
                     dist[v] = alt;
                     prev[v] = u;
@@ -107,7 +119,7 @@ public final class VisibilityGraphPlanner {
 
     private static boolean insideAny(double px, double py, List<Obstacle> obstacles, double clearance) {
         for (Obstacle o : obstacles) {
-            if (Math.hypot(px - o.x, py - o.y) <= o.radius + clearance) return true;
+            if (o.blocks(px, py, clearance)) return true;
         }
         return false;
     }

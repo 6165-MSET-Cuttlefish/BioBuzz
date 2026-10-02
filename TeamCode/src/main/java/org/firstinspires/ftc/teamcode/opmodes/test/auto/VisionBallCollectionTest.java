@@ -24,10 +24,10 @@ import org.firstinspires.ftc.teamcode.architecture.auto.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
-import org.firstinspires.ftc.teamcode.opmodes.test.auto.BallCollectionTest.ObstacleSlot;
 
 /**
  * Ball Collection with the balls coming from the Limelight instead of the dashboard, on this alliance's half
@@ -51,10 +51,6 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double replanMoveIn = 2;
         public static double replanTurnDeg = 10;
         public static double replanIntervalMs = 250;
-
-        public static ObstacleSlot obstacle1 = new ObstacleSlot(false, 36, 72, 6);
-        public static ObstacleSlot obstacle2 = new ObstacleSlot(false, 36, 36, 6);
-        public static ObstacleSlot obstacle3 = new ObstacleSlot(false, 36, 108, 6);
 
         public static double startX = 20;
         public static double startY = 72;
@@ -95,13 +91,14 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private Pose startPose;
     private Region keepIn;
     private Ball[] balls = new Ball[0];
-    private List<Obstacle> obstacles = new ArrayList<>();
+    private List<Obstacle> obstacles = BioBuzzField.hiveRails();
     private RouteOptimizer.Route route;
     private RoutePathBuilder.Plan plan;
     private String noPlanReason = "waiting for the first plan";
     private double[][] intakeDrawing;
     private double[][] returnDrawing;
     private int skippedOutside;
+    private int skippedRail;
     private int skippedRange;
     private int skippedDriven;
 
@@ -143,7 +140,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private static Pose configuredStart() {
         Pose start = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
         String problem = RouteOptimizer.poseProblem(start, BallCollectionRobot.ownHalf(Tuning.wallMarginIn),
-                ObstacleSlot.toObstacles(obstacleSlots()), Tuning.clearanceIn);
+                BioBuzzField.hiveRails(), Tuning.clearanceIn);
         if (problem != null) throw new IllegalStateException("Vision Ball Collection start pose " + problem);
         return start;
     }
@@ -229,6 +226,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     /** The nearest {@code maxBalls} usable balls, in id order so a reshuffle of distances isn't a change. */
     private List<FieldBall> selectBalls(final Pose robotPose, Region region) {
         skippedOutside = 0;
+        skippedRail = 0;
         skippedRange = 0;
         skippedDriven = 0;
         List<FieldBall> wanted = new ArrayList<>();
@@ -243,6 +241,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             }
             if (!region.contains(ball.x, ball.y)) {
                 skippedOutside++;
+            } else if (nearRail(ball)) {
+                skippedRail++;
             } else if (ball.distanceTo(robotPose.x(), robotPose.y()) > Tuning.maxRangeIn) {
                 skippedRange++;
             } else {
@@ -311,7 +311,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             FieldBall b = selected.get(i);
             balls[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
         }
-        obstacles = ObstacleSlot.toObstacles(obstacleSlots());
+        obstacles = BioBuzzField.hiveRails();
 
         clearPlan("");
         String problem = RouteOptimizer.poseProblem(pose, region, obstacles, Tuning.clearanceIn);
@@ -326,21 +326,24 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         returnDrawing = plan.back == null ? null : BallCollectionTest.fieldPolyline(plan.back);
     }
 
-    private static int maxBalls() {
-        return Math.max(0, Math.min(MAX_BALLS, Tuning.maxBalls));
+    // The planner would drop such a ball anyway, but only after it had taken one of the nearest maxBalls places.
+    private static boolean nearRail(FieldBall ball) {
+        for (Obstacle o : BioBuzzField.hiveRails()) {
+            if (o.blocks(ball.x, ball.y, Tuning.clearanceIn)) return true;
+        }
+        return false;
     }
 
-    private static ObstacleSlot[] obstacleSlots() {
-        return new ObstacleSlot[]{Tuning.obstacle1, Tuning.obstacle2, Tuning.obstacle3};
+    private static int maxBalls() {
+        return Math.max(0, Math.min(MAX_BALLS, Tuning.maxBalls));
     }
 
     private static List<Double> settings() {
         List<Double> c = new ArrayList<>(Arrays.asList(
                 (double) maxBalls(), Tuning.collectPollen ? 1.0 : 0.0, Tuning.collectRedNectar ? 1.0 : 0.0,
                 Tuning.collectBlueNectar ? 1.0 : 0.0, Tuning.includeLastSeen ? 1.0 : 0.0, Tuning.maxRangeIn));
-        for (ObstacleSlot o : obstacleSlots()) o.appendTo(c);
         c.addAll(Arrays.asList(Tuning.wallMarginIn, Tuning.clearanceIn, Tuning.intakeWidthIn,
-                (double) VisibilityGraphPlanner.pointsPerObstacle, VisibilityGraphPlanner.boundaryMarginIn,
+                (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,
                 FieldConfig.fieldWidthInches, (double) Context.allianceColor.ordinal()));
         return c;
     }
@@ -354,8 +357,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         Camera camera = visionRobot.camera;
         if (camera.isFrameStale()) telemetry.addData("Vision", BallCollectionAuto.visionState(camera));
         if (keepIn != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, keepIn);
-        telemetry.addData("Balls", "%d tracked; skipped %d off our half, %d beyond %.0f in, %d on the driven path; planning %d",
-                camera.getFieldBalls().size(), skippedOutside, skippedRange, Tuning.maxRangeIn, skippedDriven,
+        telemetry.addData("Balls", "%d tracked; skipped %d off our half, %d by a HIVE rail, %d beyond %.0f in, %d on the driven path; planning %d",
+                camera.getFieldBalls().size(), skippedOutside, skippedRail, skippedRange, Tuning.maxRangeIn, skippedDriven,
                 balls.length);
         if (route == null) {
             telemetry.addData("Plan", "none: " + noPlanReason);

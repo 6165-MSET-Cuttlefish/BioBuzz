@@ -25,58 +25,24 @@ import org.firstinspires.ftc.teamcode.architecture.auto.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 
 /**
  * Drives through the first {@code ballCount} balls placed on the dashboard and back to the start, staying on this
- * alliance's half. Balls, obstacles and the start are authored for RED and mapped to BLUE. While idle it
+ * alliance's half and around the HIVE's ground rails. Balls and the start are authored for RED and mapped to BLUE. While idle it
  * re-plans whenever the inputs change; setting {@code run} to 1 drives the plan shown, and setting it to 0 aborts.
  * After a run it re-plans from wherever the robot stopped, so run 0 then 1 goes again from there.
  */
 @TeleOp(name = "Ball Collection", group = "Test")
 public class BallCollectionTest extends EnhancedOpMode {
 
-    /** An obstacle a test can switch off; switched off, it is not a keep-out at all. */
-    public static final class ObstacleSlot {
-        public boolean enabled;
-        public double x;
-        public double y;
-        public double radius;
-
-        public ObstacleSlot(boolean enabled, double x, double y, double radius) {
-            this.enabled = enabled;
-            this.x = x;
-            this.y = y;
-            this.radius = radius;
-        }
-
-        static List<Obstacle> toObstacles(ObstacleSlot... slots) {
-            List<Obstacle> obstacles = new ArrayList<>();
-            for (ObstacleSlot s : slots) {
-                if (!s.enabled) continue;
-                Pose p = FieldPose.forAlliance(s.x, s.y, 0);
-                obstacles.add(new Obstacle(p.x(), p.y(), s.radius));
-            }
-            return obstacles;
-        }
-
-        void appendTo(List<Double> config) {
-            config.addAll(Arrays.asList(enabled ? 1.0 : 0.0, x, y, radius));
-        }
-    }
-
     @Config("Ball Collection")
     public static class Tuning {
         public static int ballCount = 3;
-        public static Ball ball1 = new Ball(40, 50, 1.4);
-        public static Ball ball2 = new Ball(48, 92, 1.4);
+        public static Ball ball1 = new Ball(30, 50, 1.4);
+        public static Ball ball2 = new Ball(30, 92, 1.4);
         public static Ball ball3 = new Ball(28, 112, 1.4);
         public static Ball ball4 = new Ball(50, 28, 1.4);
-
-        public static ObstacleSlot obstacle1 = new ObstacleSlot(false, 36, 72, 6);
-        public static ObstacleSlot obstacle2 = new ObstacleSlot(false, 36, 36, 6);
-        public static ObstacleSlot obstacle3 = new ObstacleSlot(false, 36, 108, 6);
-        public static ObstacleSlot obstacle4 = new ObstacleSlot(false, 52, 60, 6);
-        public static ObstacleSlot obstacle5 = new ObstacleSlot(false, 52, 84, 6);
 
         public static double startX = 20;
         public static double startY = 72;
@@ -84,6 +50,7 @@ public class BallCollectionTest extends EnhancedOpMode {
 
         /** Robot centre to the walls and the centre line. */
         public static double wallMarginIn = 9;
+        /** Robot centre to the edge of a HIVE rail. */
         public static double clearanceIn = 9;
         public static double intakeWidthIn = 18;
         public static double timeoutMinAvgSpeedIps = 10;
@@ -101,7 +68,7 @@ public class BallCollectionTest extends EnhancedOpMode {
     private Pose startPose;
     private Region keepIn;
     private Ball[] balls = new Ball[0];
-    private List<Obstacle> obstacles = new ArrayList<>();
+    private List<Obstacle> obstacles = BioBuzzField.hiveRails();
     private RouteOptimizer.Route route;
     private RoutePathBuilder.Plan plan;
     private String noPlanReason = "";
@@ -177,7 +144,7 @@ public class BallCollectionTest extends EnhancedOpMode {
     private void planFromConfiguredStart() {
         Pose configured = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
         String problem = RouteOptimizer.poseProblem(configured, BallCollectionRobot.ownHalf(Tuning.wallMarginIn),
-                ObstacleSlot.toObstacles(obstacleSlots()), Tuning.clearanceIn);
+                BioBuzzField.hiveRails(), Tuning.clearanceIn);
         if (problem != null) throw new IllegalStateException("Ball Collection start pose " + problem);
         robot.follower.setPose(configured);
         planFrom(configured);
@@ -194,7 +161,7 @@ public class BallCollectionTest extends EnhancedOpMode {
             Pose p = FieldPose.forAlliance(slots[i].x, slots[i].y, 0);
             balls[i] = new Ball(p.x(), p.y(), slots[i].radius);
         }
-        obstacles = ObstacleSlot.toObstacles(obstacleSlots());
+        obstacles = BioBuzzField.hiveRails();
 
         route = null;
         plan = null;
@@ -216,10 +183,6 @@ public class BallCollectionTest extends EnhancedOpMode {
         return Math.max(0, Math.min(MAX_BALLS, Tuning.ballCount));
     }
 
-    private static ObstacleSlot[] obstacleSlots() {
-        return new ObstacleSlot[]{Tuning.obstacle1, Tuning.obstacle2, Tuning.obstacle3, Tuning.obstacle4, Tuning.obstacle5};
-    }
-
     private boolean configChanged() {
         return !config().equals(plannedConfig);
     }
@@ -231,10 +194,9 @@ public class BallCollectionTest extends EnhancedOpMode {
             c.add(b.x);
             c.add(b.y);
         }
-        for (ObstacleSlot o : obstacleSlots()) o.appendTo(c);
         c.addAll(Arrays.asList(Tuning.startX, Tuning.startY, Tuning.startHeadingDeg,
                 Tuning.wallMarginIn, Tuning.clearanceIn, Tuning.intakeWidthIn, Tuning.forceSplineOnly ? 1.0 : 0.0,
-                (double) VisibilityGraphPlanner.pointsPerObstacle, VisibilityGraphPlanner.boundaryMarginIn,
+                (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,
                 FieldConfig.fieldWidthInches, (double) Context.allianceColor.ordinal()));
         return c;
     }
@@ -294,9 +256,9 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     static String describe(RoutePathBuilder.Reroute reroute) {
         switch (reroute) {
-            case SPLINE: return "spline around an obstacle or wall";
+            case SPLINE: return "spline around a HIVE rail or wall";
             case POLYLINE: return "straight hops (too tight for a spline)";
-            case FORCED_SPLINE: return "spline THROUGH an obstacle (forceSplineOnly)";
+            case FORCED_SPLINE: return "spline THROUGH a HIVE rail (forceSplineOnly)";
             default: return "direct";
         }
     }
@@ -314,9 +276,14 @@ public class BallCollectionTest extends EnhancedOpMode {
         overlay.setStroke("#CC0000");
         overlay.setFill("#FF000033");
         for (Obstacle o : obstacles) {
-            double[] p = FieldVisualization.toField(o.x, o.y);
-            overlay.fillCircle(p[0], p[1], o.radius);
-            overlay.strokeCircle(p[0], p[1], o.radius);
+            double[] a = FieldVisualization.toField(o.minX, o.minY);
+            double[] b = FieldVisualization.toField(o.maxX, o.minY);
+            double[] c = FieldVisualization.toField(o.maxX, o.maxY);
+            double[] d = FieldVisualization.toField(o.minX, o.maxY);
+            double[] xs = {a[0], b[0], c[0], d[0]};
+            double[] ys = {a[1], b[1], c[1], d[1]};
+            overlay.fillPolygon(xs, ys);
+            overlay.strokePolygon(xs, ys);
         }
     }
 

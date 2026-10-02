@@ -53,8 +53,7 @@ public final class RouteOptimizer {
         if (!keepIn.contains(p)) return String.format("(%.1f, %.1f) is outside the keep-in region %s", p.x(), p.y(), keepIn);
         Obstacle o = keepOutContaining(p.x(), p.y(), obstacles, clearance);
         if (o != null) {
-            return String.format("(%.1f, %.1f) is inside the keep-out of the obstacle at (%.1f, %.1f)",
-                    p.x(), p.y(), o.x, o.y);
+            return String.format("(%.1f, %.1f) is inside the keep-out of the obstacle %s", p.x(), p.y(), o);
         }
         return null;
     }
@@ -73,6 +72,12 @@ public final class RouteOptimizer {
         if (balls.length > MAX_BALLS) {
             throw new IllegalArgumentException(balls.length + " balls: the order search is n!, so at most " + MAX_BALLS);
         }
+        // An obstacle farther than the clearance from the region can't block anything inside it.
+        List<Obstacle> nearby = new ArrayList<>();
+        for (Obstacle o : obstacles) {
+            if (o.distanceTo(keepIn) <= clearance) nearby.add(o);
+        }
+        obstacles = nearby;
         String startProblem = poseProblem(start, keepIn, obstacles, clearance);
         if (startProblem != null) throw new IllegalArgumentException("start " + startProblem);
         String returnProblem = poseProblem(returnPose, keepIn, obstacles, clearance);
@@ -164,7 +169,7 @@ public final class RouteOptimizer {
         }
         if (!keepIn.contains(ball.x, ball.y)) return "outside the keep-in region " + keepIn;
         Obstacle o = keepOutContaining(ball.x, ball.y, obstacles, clearance);
-        if (o != null) return String.format("inside the keep-out of the obstacle at (%.1f, %.1f)", o.x, o.y);
+        if (o != null) return "inside the keep-out of the obstacle " + o;
         for (Ball other : kept) {
             if (Math.hypot(ball.x - other.x, ball.y - other.y) < RoutePathBuilder.COINCIDENT_IN) {
                 return "the same ball as " + other;
@@ -175,7 +180,7 @@ public final class RouteOptimizer {
 
     private static Obstacle keepOutContaining(double x, double y, List<Obstacle> obstacles, double clearance) {
         for (Obstacle o : obstacles) {
-            if (Math.hypot(x - o.x, y - o.y) <= o.radius + clearance) return o;
+            if (o.blocks(x, y, clearance)) return o;
         }
         return null;
     }

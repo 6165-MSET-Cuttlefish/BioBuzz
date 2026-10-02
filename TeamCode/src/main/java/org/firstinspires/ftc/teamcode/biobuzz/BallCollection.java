@@ -25,7 +25,8 @@ import java.util.List;
 /**
  * Autonomous ball collection as one Ivy command, built by {@link RobotActions#collectBalls}. When it starts it
  * waits for a Limelight frame captured after that moment, plans through the nearest balls in view on this
- * alliance's half ({@link BioBuzzField#ownHalf}) within range, drives the plan with {@link RouteRun} and returns
+ * alliance's half ({@link BioBuzzField#ownHalf}) within range and clear of {@link BioBuzzField#hiveRails}, drives
+ * the plan with {@link RouteRun} and returns
  * to where it planned from. It requires the follower and the Drivetrain, whose writes it disables while Pedro
  * drives and restores afterwards. Read {@link #status()} and {@link #detail()} for how it went. With the Limelight
  * faulted when it starts, it ends SKIPPED; a route already driving finishes, since its plan needs no live vision.
@@ -42,6 +43,8 @@ public final class BallCollection extends CommandBuilder {
         public double maxRangeIn = 60;
         /** Robot centre to the walls and the centre line. */
         public double wallMarginIn = 9;
+        /** Robot centre to the edge of a HIVE rail. */
+        public double clearanceIn = 9;
         public double intakeWidthIn = 18;
         /** With no frame captured after the start by then, the command ends SKIPPED without driving. */
         public double visionWaitMs = 1000;
@@ -57,6 +60,7 @@ public final class BallCollection extends CommandBuilder {
             s.maxBalls = maxBalls;
             s.maxRangeIn = maxRangeIn;
             s.wallMarginIn = wallMarginIn;
+            s.clearanceIn = clearanceIn;
             s.intakeWidthIn = intakeWidthIn;
             s.visionWaitMs = visionWaitMs;
             s.timeoutMinAvgSpeedIps = timeoutMinAvgSpeedIps;
@@ -99,8 +103,6 @@ public final class BallCollection extends CommandBuilder {
         }
     }
 
-    private static final List<Obstacle> NO_OBSTACLES = Collections.emptyList();
-
     private final Follower follower;
     private final Drivetrain drivetrain;
     private final Camera camera;
@@ -113,6 +115,7 @@ public final class BallCollection extends CommandBuilder {
     private double visionFromSeconds;
     private boolean restoreWrites;
     private Region keepIn;
+    private List<Obstacle> obstacles = Collections.emptyList();
     private Pose planStart;
     private final List<FieldBall> planned = new ArrayList<>();
     private final List<Skipped> skipped = new ArrayList<>();
@@ -146,6 +149,7 @@ public final class BallCollection extends CommandBuilder {
         startedSeconds = nowSeconds();
         visionFromSeconds = Double.NaN;
         keepIn = BioBuzzField.ownHalf(used.wallMarginIn);
+        obstacles = BioBuzzField.hiveRails();
         planStart = null;
         planned.clear();
         skipped.clear();
@@ -191,7 +195,7 @@ public final class BallCollection extends CommandBuilder {
 
     private void planAndDrive() {
         Pose start = follower.pose();
-        String problem = RouteOptimizer.poseProblem(start, keepIn, NO_OBSTACLES, 0);
+        String problem = RouteOptimizer.poseProblem(start, keepIn, obstacles, used.clearanceIn);
         if (problem != null) {
             status = Status.SKIPPED;
             detail = "the robot at " + problem;
@@ -204,7 +208,7 @@ public final class BallCollection extends CommandBuilder {
             FieldBall b = planned.get(i);
             balls[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
         }
-        route = RouteOptimizer.findOptimalRoute(start, balls, start, keepIn, NO_OBSTACLES, 0,
+        route = RouteOptimizer.findOptimalRoute(start, balls, start, keepIn, obstacles, used.clearanceIn,
                 used.intakeWidthIn, false);
         plan = RoutePathBuilder.build(route);
         run = new RouteRun(follower, plan, used.timeoutMinAvgSpeedIps, used.timeoutMinSec, used.timeoutMaxSec);
@@ -222,6 +226,8 @@ public final class BallCollection extends CommandBuilder {
                 skipped.add(new Skipped(ball, ball.type.label + " not collected"));
             } else if (!keepIn.contains(ball.x, ball.y)) {
                 skipped.add(new Skipped(ball, "off our half " + keepIn));
+            } else if (nearRail(ball)) {
+                skipped.add(new Skipped(ball, String.format("within %.0f in of a HIVE rail", used.clearanceIn)));
             } else if (ball.distanceTo(robot.x(), robot.y()) > used.maxRangeIn) {
                 skipped.add(new Skipped(ball, String.format("beyond %.0f in", used.maxRangeIn)));
             } else {
@@ -237,6 +243,14 @@ public final class BallCollection extends CommandBuilder {
             if (i < used.maxBalls) planned.add(usable.get(i));
             else skipped.add(new Skipped(usable.get(i), "past the nearest " + used.maxBalls));
         }
+    }
+
+    // The planner would drop such a ball anyway, but only after it had taken one of the nearest maxBalls places.
+    private boolean nearRail(FieldBall ball) {
+        for (Obstacle o : obstacles) {
+            if (o.blocks(ball.x, ball.y, used.clearanceIn)) return true;
+        }
+        return false;
     }
 
     private boolean isDone() {
@@ -289,6 +303,11 @@ public final class BallCollection extends CommandBuilder {
     /** The current leg while DRIVING. */
     public String phase() {
         return run == null ? "" : run.phase();
+    }
+
+    /** The HIVE rails the last plan avoided; empty before the first start. */
+    public List<Obstacle> obstacles() {
+        return obstacles;
     }
 
     /** Null before the command starts. */

@@ -51,7 +51,7 @@ final class Segment {
         if (!staysInside(keepIn)) return false;
         for (int i = 0; i < xs.length; i++) {
             for (Obstacle o : obstacles) {
-                if (Math.hypot(xs[i] - o.x, ys[i] - o.y) <= o.radius + clearance) return false;
+                if (o.blocks(xs[i], ys[i], clearance)) return false;
             }
         }
         return true;
