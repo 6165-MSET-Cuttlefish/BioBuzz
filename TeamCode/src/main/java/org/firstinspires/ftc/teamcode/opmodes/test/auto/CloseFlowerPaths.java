@@ -2,11 +2,9 @@ package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
 import static com.pedropathing.api.Paths.curve;
 import static com.pedropathing.api.Paths.line;
-import static com.pedropathing.api.Paths.path;
 
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
-import com.pedropathing.paths.interpolator.Interpolator;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.PathHeadings;
@@ -20,18 +18,18 @@ public final class CloseFlowerPaths {
     public final Pose start = pose(56, 8, 90);
 
     private final Pose closeFlower = pose(14.9769, 46.9989, 180);
-    private final Pose closeFlowerControl1 = point(56, 23);
-    private final Pose closeFlowerControl2 = point(34.9769, 46.9989);
-    private final Pose path2Turn = point(29.0321, 76.6058);
-    private final Pose path2TurnControl1 = point(23.0138, 63.2743);
-    private final Pose path2 = pose(46.9748, 130.0998, 90.091);
-    private final Pose path2Control1 = point(47.087, 116.7758);
-    private final Pose point4Facing = pose(57.0019, 101.165, 90.5);
-    private final Pose point4 = pose(57.0019, 101.165, 270);
-    private final Pose point5 = pose(45.3325, 8.4566, -176.9646);
-    private final Pose point5Control1 = point(61.5713, 0.6836);
-    private final Pose point5Control2 = point(77.8952, 10.2674);
-    private final Pose point6 = pose(8.3412, 8.3306, -179.8049);
+    private final Pose toCloseFlowerControl1 = point(56, 23);
+    private final Pose toCloseFlowerControl2 = point(34.9769, 46.9989);
+    private final Pose farFlower = point(44.0352, 127.1352);
+    private final Pose toFarFlowerControl1 = point(30.8911, 65.9001);
+    private final Pose toFarFlowerControl2 = point(24.5773, 86.0907);
+    private final Pose hive = point(61.3781, 71.1145);
+    private final Pose toHiveControl1 = point(48.4909, 113.2044);
+    private final Pose toHiveControl2 = point(69.2810, 106.5252);
+    private final Pose audienceWall = pose(45.3325, 8.4566, -176.9646);
+    private final Pose toAudienceWallControl1 = point(61.5713, 0.6836);
+    private final Pose toAudienceWallControl2 = point(77.9453, 8.5677);
+    private final Pose corner = pose(8.3412, 8.3306, -179.8049);
 
     private static Pose pose(double x, double y, double headingDeg) {
         return FieldPose.forAlliance(x, y, Math.toRadians(headingDeg));
@@ -43,32 +41,30 @@ public final class CloseFlowerPaths {
 
     /** The legs in driving order. */
     public Path[] all() {
-        return new Path[] {closeFlower(), path2(), path4(), path5(), path6()};
+        return new Path[] {toCloseFlower(), toFarFlower(), toHive(), toAudienceWall(), toCorner()};
     }
 
-    public Path closeFlower() {
-        return curve(start, closeFlowerControl1, closeFlowerControl2, closeFlower).tangent();
+    public Path toCloseFlower() {
+        return curve(start, toCloseFlowerControl1, toCloseFlowerControl2, closeFlower).tangent();
     }
 
-    /** Turns off the close flower over the first curve, then follows the tangent through the second without stopping. */
-    public Path path2() {
-        Path turn = curve(closeFlower, path2TurnControl1, path2Turn);
-        Path whole = path(turn, curve(path2Turn, path2Control1, path2));
-        return PathHeadings.linearThenTangent(
-                whole, PathHeadings.endTangent(closeFlower()), turn.curve.length() / whole.curve.length());
+    public Path toFarFlower() {
+        return PathHeadings.linearThenTangent(curve(closeFlower, toFarFlowerControl1, toFarFlowerControl2, farFlower),
+                PathHeadings.endTangent(toCloseFlower()), 0.3);
     }
 
-    public Path path4() {
-        return line(path2, point4).heading(Interpolator.piecewise()
-                .until(0.5, Interpolator.constant(point4Facing))
-                .until(1, Interpolator.linear(point4Facing, point4)));
+    public Path toHive() {
+        return PathHeadings.holdThenTangent(curve(farFlower, toHiveControl1, toHiveControl2, hive),
+                PathHeadings.endTangent(toFarFlower()), 0.1, 0.4);
     }
 
-    public Path path5() {
-        return curve(point4, point5Control1, point5Control2, point5).tangent();
+    // Its last control point is on the line to the corner, so it arrives facing along toCorner.
+    public Path toAudienceWall() {
+        return PathHeadings.linearThenTangent(curve(hive, toAudienceWallControl1, toAudienceWallControl2, audienceWall),
+                PathHeadings.endTangent(toHive()), 0.2);
     }
 
-    public Path path6() {
-        return line(point5, point6).tangent();
+    public Path toCorner() {
+        return line(audienceWall, corner).tangent();
     }
 }

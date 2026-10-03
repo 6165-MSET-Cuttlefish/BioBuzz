@@ -9,7 +9,7 @@
     {
       "id": "line-closeflower-1",
       "color": "#ffc516",
-      "name": "Close Flower",
+      "name": "To Close Flower",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -40,7 +40,7 @@
     {
       "id": "line-closeflower-2",
       "color": "#84cc16",
-      "name": "Path 2 (turn)",
+      "name": "To Far Flower",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -48,52 +48,52 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 29.0321,
-        "y": 76.6058
+        "x": 44.0352380952381,
+        "y": 127.13523809523811
       },
       "controlPoints": [
         {
-          "x": 23.0138,
-          "y": 63.2743
+          "x": 30.89111958762887,
+          "y": 65.90007319587627
+        },
+        {
+          "x": 24.577319587628867,
+          "y": 86.09072164948454
         }
       ],
       "heading": {
-        "type": "linear",
+        "type": "piecewise",
         "startDeg": 180,
-        "endDeg": 65.7039
-      }
-    },
-    {
-      "id": "line-closeflower-3",
-      "color": "#22c55e",
-      "name": "Path 2",
-      "locked": false,
-      "waitBeforeMs": 0,
-      "waitAfterMs": 0,
-      "waitBeforeName": "",
-      "waitAfterName": "",
-      "kind": "atomic",
-      "endPoint": {
-        "x": 46.9748,
-        "y": 130.0998
-      },
-      "controlPoints": [
-        {
-          "x": 47.087,
-          "y": 116.77575831265509
+        "endDeg": 65.7979,
+        "reverse": false,
+        "piecewiseHeading": {
+          "segments": [
+            {
+              "startProgress": 0,
+              "endProgress": 0.3,
+              "interpolationType": "linear",
+              "reversed": false,
+              "continueFromPrevious": false,
+              "parameters": {
+                "startDeg": 180,
+                "endDeg": 75.2211
+              }
+            },
+            {
+              "startProgress": 0.3,
+              "endProgress": 1,
+              "interpolationType": "tangential",
+              "reversed": false,
+              "continueFromPrevious": false
+            }
+          ]
         }
-      ],
-      "heading": {
-        "type": "tangential",
-        "startDeg": 0,
-        "endDeg": 0,
-        "reverse": false
       }
     },
     {
       "id": "line-munigrw7-41wv41",
       "color": "#BAB677",
-      "name": "",
+      "name": "To Hive",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -101,13 +101,21 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 57.001861042183634,
-        "y": 101.1650124069479
+        "x": 61.37814970197744,
+        "y": 71.11449694303039
       },
-      "controlPoints": [],
+      "controlPoints": [
+        {
+          "x": 48.4908885616102,
+          "y": 113.20438880706922
+        },
+        {
+          "x": 69.281,
+          "y": 106.5252
+        }
+      ],
       "heading": {
         "type": "piecewise",
-        "reverse": true,
         "degrees": 90.5,
         "startDeg": 0,
         "endDeg": 0,
@@ -115,24 +123,31 @@
           "segments": [
             {
               "startProgress": 0,
-              "endProgress": 0.5,
+              "endProgress": 0.1,
               "interpolationType": "constant",
               "reversed": false,
               "continueFromPrevious": false,
               "parameters": {
-                "degrees": 90.5
+                "degrees": 64.6358
               }
             },
             {
-              "startProgress": 0.5,
-              "endProgress": 1,
+              "startProgress": 0.1,
+              "endProgress": 0.4,
               "interpolationType": "linear",
               "reversed": false,
               "continueFromPrevious": false,
               "parameters": {
-                "startDeg": 90.5,
-                "endDeg": 270
+                "startDeg": 64.6358,
+                "endDeg": -59.2652
               }
+            },
+            {
+              "startProgress": 0.4,
+              "endProgress": 1,
+              "interpolationType": "tangential",
+              "reversed": false,
+              "continueFromPrevious": false
             }
           ]
         }
@@ -141,7 +156,7 @@
     {
       "id": "line-munin44t-vnde4d",
       "color": "#AABC58",
-      "name": "",
+      "name": "To Audience Wall",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -158,19 +173,43 @@
           "y": 0.6836228287841251
         },
         {
-          "x": 77.89516129032259,
-          "y": 10.267369727047134
+          "x": 77.9453,
+          "y": 8.5677
         }
       ],
       "heading": {
-        "type": "tangential",
-        "reverse": false
+        "type": "piecewise",
+        "startDeg": -102.581,
+        "endDeg": -87.5481,
+        "reverse": false,
+        "piecewiseHeading": {
+          "segments": [
+            {
+              "startProgress": 0,
+              "endProgress": 0.2,
+              "interpolationType": "linear",
+              "reversed": false,
+              "continueFromPrevious": false,
+              "parameters": {
+                "startDeg": -102.581,
+                "endDeg": -87.5481
+              }
+            },
+            {
+              "startProgress": 0.2,
+              "endProgress": 1,
+              "interpolationType": "tangential",
+              "reversed": false,
+              "continueFromPrevious": false
+            }
+          ]
+        }
       }
     },
     {
       "id": "line-muniof4x-vl2dxn",
       "color": "#A5B85A",
-      "name": "",
+      "name": "To Corner",
       "locked": false,
       "waitBeforeMs": 0,
       "waitAfterMs": 0,
@@ -257,10 +296,6 @@
     },
     {
       "kind": "path",
-      "lineId": "line-closeflower-3"
-    },
-    {
-      "kind": "path",
       "lineId": "line-munigrw7-41wv41"
     },
     {
@@ -275,14 +310,14 @@
   "fieldPoints": [],
   "activePaths": [],
   "settings": {
-    "xVelocity": 75,
-    "yVelocity": 65,
-    "aVelocity": 3.141592653589793,
+    "xVelocity": 73,
+    "yVelocity": 60,
+    "aVelocity": 4.64,
     "kFriction": 0.1,
-    "rWidth": 16,
+    "rWidth": 15,
     "rHeight": 16,
     "safetyMargin": 1,
-    "maxVelocity": 40,
+    "maxVelocity": 73,
     "maxAcceleration": 30,
     "maxDeceleration": 30,
     "fieldMap": "biobuzz.webp",
@@ -310,5 +345,5 @@
     }
   },
   "version": "1.5.0",
-  "timestamp": "2026-10-01T01:14:21.579Z"
+  "timestamp": "2026-10-03T22:49:11.054Z"
 }
