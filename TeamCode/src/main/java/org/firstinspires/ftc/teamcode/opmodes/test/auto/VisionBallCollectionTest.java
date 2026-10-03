@@ -13,7 +13,6 @@ import java.util.List;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
 import org.firstinspires.ftc.teamcode.architecture.auto.Region;
@@ -25,6 +24,7 @@ import org.firstinspires.ftc.teamcode.architecture.auto.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 import org.firstinspires.ftc.teamcode.modules.Camera;
@@ -32,10 +32,11 @@ import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
 /**
- * Ball Collection with the balls coming from the Limelight instead of the dashboard, on this alliance's half
- * only. While idle it re-plans from the robot's pose whenever the nearest {@code maxBalls} usable balls appear,
- * vanish or move, or the robot moves; setting {@code run} to 1 drives exactly the plan shown and returns to where
- * the robot started it, and setting it to 0 aborts. Nothing plans or starts on stale vision or a Limelight fault.
+ * Ball Collection with the balls coming from the Limelight instead of the dashboard, from (0, 0, 0) wherever the robot
+ * stands unless {@code onField} is on. While idle it re-plans from the robot's pose whenever the nearest
+ * {@code maxBalls} usable balls appear, vanish or move, or the robot moves; setting {@code run} to 1 drives exactly the
+ * plan shown and returns to where the robot started it, and setting it to 0 aborts. Nothing plans or starts on stale
+ * vision or a Limelight fault.
  */
 @TeleOp(name = "Vision Ball Collection", group = "Test")
 public class VisionBallCollectionTest extends EnhancedOpMode {
@@ -54,8 +55,9 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double replanTurnDeg = 10;
         public static double replanIntervalMs = 250;
 
-        public static double startX = 20;
-        public static double startY = 72;
+        public static boolean onField = false;
+        public static double startX = 0;
+        public static double startY = 0;
         public static double startHeadingDeg = 0;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
@@ -142,9 +144,10 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     // The configured start is configuration, so a bad one throws rather than showing as "no plan".
     private static Pose configuredStart() {
-        Pose start = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
+        Pose start = BallCollection.configuredPose(Tuning.onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(start, RobotGeometry.shape(),
-                BallCollectionRobot.ownHalf(Tuning.wallGapIn), BioBuzzField.hiveRails(), Tuning.railGapIn);
+                BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn), BallCollection.obstacles(Tuning.onField),
+                Tuning.railGapIn);
         if (problem != null) throw new IllegalStateException("Vision Ball Collection start pose " + problem);
         return start;
     }
@@ -218,7 +221,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             return;
         }
         Pose pose = robot.follower.pose();
-        Region region = BallCollectionRobot.ownHalf(Tuning.wallGapIn);
+        Region region = BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn);
         List<FieldBall> selected = selectBalls(pose, region);
         if (plannedSettings != null && !ballsChanged(selected) && settings().equals(plannedSettings)
                 && !movedSincePlan(pose)) {
@@ -248,7 +251,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             } else if (ball.distanceTo(robotPose.x(), robotPose.y()) > Tuning.maxRangeIn) {
                 skippedRange++;
             } else if (RouteOptimizer.ballProblem(ball.x, ball.y, ball.type.diameterIn / 2, RobotGeometry.shape(),
-                    region, BioBuzzField.hiveRails(), Tuning.railGapIn) != null) {
+                    region, BallCollection.obstacles(Tuning.onField), Tuning.railGapIn) != null) {
                 // The planner would drop it anyway, but only after it had taken one of the nearest maxBalls places.
                 skippedUnreachable++;
             } else {
@@ -318,7 +321,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             FieldBall b = selected.get(i);
             balls[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
         }
-        obstacles = BioBuzzField.hiveRails();
+        obstacles = BallCollection.obstacles(Tuning.onField);
 
         clearPlan("");
         String problem = RouteOptimizer.poseProblem(pose, shape, region, obstacles, Tuning.railGapIn);
@@ -339,7 +342,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private static List<Double> settings() {
         List<Double> c = new ArrayList<>(Arrays.asList(
                 (double) maxBalls(), Tuning.collectPollen ? 1.0 : 0.0, Tuning.collectRedNectar ? 1.0 : 0.0,
-                Tuning.collectBlueNectar ? 1.0 : 0.0, Tuning.includeLastSeen ? 1.0 : 0.0, Tuning.maxRangeIn));
+                Tuning.collectBlueNectar ? 1.0 : 0.0, Tuning.includeLastSeen ? 1.0 : 0.0, Tuning.maxRangeIn,
+                Tuning.onField ? 1.0 : 0.0));
         c.addAll(Arrays.asList(Tuning.wallGapIn, Tuning.railGapIn, RobotGeometry.lengthIn, RobotGeometry.widthIn,
                 RobotGeometry.intakeOffsetIn, RobotGeometry.intakeWidthIn,
                 (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,

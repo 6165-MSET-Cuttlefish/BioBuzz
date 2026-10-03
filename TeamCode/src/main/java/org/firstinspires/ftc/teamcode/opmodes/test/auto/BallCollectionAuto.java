@@ -12,13 +12,11 @@ import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.RouteOptimizer;
 import org.firstinspires.ftc.teamcode.architecture.auto.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
-import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 import org.firstinspires.ftc.teamcode.modules.Camera;
@@ -27,18 +25,23 @@ import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
 /**
  * {@link BallCollection} through the framework: built in initialize(), scheduled at START inside a timeout, then
- * it plans once from the balls in view and drives there and back.
+ * it plans once from the balls in view and drives there and back. Off the field by default ({@code collection.onField}),
+ * starting at (0, 0, 0) wherever the robot stands.
  */
 @Autonomous(name = "Ball Collection Auto", group = "Test")
 public class BallCollectionAuto extends BioBuzzOpMode {
 
     @Config("Ball Collection Auto")
     public static class Tuning {
-        public static double startX = 20;
-        public static double startY = 72;
+        public static double startX = 0;
+        public static double startY = 0;
         public static double startHeadingDeg = 0;
         public static double timeoutMs = 25000;
         public static BallCollection.Settings collection = new BallCollection.Settings();
+
+        static {
+            collection.onField = false;
+        }
     }
 
     private Pose startPose;
@@ -51,9 +54,11 @@ public class BallCollectionAuto extends BioBuzzOpMode {
 
     @Override
     protected void initialize() {
-        startPose = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
+        boolean onField = Tuning.collection.onField;
+        startPose = BallCollection.configuredPose(onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(startPose, RobotGeometry.shape(),
-                BioBuzzField.ownHalf(Tuning.collection.wallGapIn), BioBuzzField.hiveRails(), Tuning.collection.railGapIn);
+                BallCollection.keepIn(onField, Tuning.collection.wallGapIn), BallCollection.obstacles(onField),
+                Tuning.collection.railGapIn);
         if (problem != null) throw new IllegalStateException("Ball Collection Auto start pose " + problem);
         robot.follower.setPose(startPose);
 

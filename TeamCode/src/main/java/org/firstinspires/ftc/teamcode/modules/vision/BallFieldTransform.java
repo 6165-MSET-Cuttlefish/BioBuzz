@@ -11,8 +11,8 @@ public final class BallFieldTransform {
     @Config("CameraMount")
     public static class Mount {
         /** Camera-frame origin (the pipeline's crosshair) from robot center; +X forward, +Y left. */
-        public static double xIn = 29;
-        public static double yIn = 1;
+        public static double xIn = 33.2;
+        public static double yIn = -0.4;
         /** Robot axes to camera-frame axes, CCW. */
         public static double headingDeg = 0;
         /** A chessboard-derived camera frame can come out left-handed, which no rotation fixes. */

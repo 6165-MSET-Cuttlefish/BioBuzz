@@ -7,6 +7,7 @@ import com.pedropathing.ivy.behaviors.EndCondition;
 import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
 import org.firstinspires.ftc.teamcode.architecture.auto.Region;
 import org.firstinspires.ftc.teamcode.architecture.auto.RobotShape;
@@ -46,6 +47,8 @@ public final class BallCollection extends CommandBuilder {
         public double wallGapIn = 1;
         /** Least room between the robot's footprint and a HIVE rail. */
         public double railGapIn = 1;
+        /** Off for testing away from a field, from a pose of (0, 0, 0): no walls, centre line or HIVE rails. */
+        public boolean onField = true;
         /** With no frame captured after the start by then, the command ends SKIPPED without driving. */
         public double visionWaitMs = 1000;
         public double timeoutMinAvgSpeedIps = 10;
@@ -61,6 +64,7 @@ public final class BallCollection extends CommandBuilder {
             s.maxRangeIn = maxRangeIn;
             s.wallGapIn = wallGapIn;
             s.railGapIn = railGapIn;
+            s.onField = onField;
             s.visionWaitMs = visionWaitMs;
             s.timeoutMinAvgSpeedIps = timeoutMinAvgSpeedIps;
             s.timeoutMinSec = timeoutMinSec;
@@ -94,6 +98,23 @@ public final class BallCollection extends CommandBuilder {
     }
 
     public enum Status { NOT_STARTED, WAITING_FOR_VISION, DRIVING, DONE, ABORTED, SKIPPED }
+
+    public static final double OFF_FIELD_REACH_IN = 144;
+
+    public static Region keepIn(boolean onField, double wallGapIn) {
+        if (onField) return BioBuzzField.ownHalf(wallGapIn);
+        return new Region(-OFF_FIELD_REACH_IN, OFF_FIELD_REACH_IN, -OFF_FIELD_REACH_IN, OFF_FIELD_REACH_IN);
+    }
+
+    public static List<Obstacle> obstacles(boolean onField) {
+        return onField ? BioBuzzField.hiveRails() : Collections.<Obstacle>emptyList();
+    }
+
+    /** RED field coordinates mapped to this alliance on the field; as given off it. */
+    public static Pose configuredPose(boolean onField, double x, double y, double headingDeg) {
+        double heading = Math.toRadians(headingDeg);
+        return onField ? FieldPose.forAlliance(x, y, heading) : new Pose(x, y, heading);
+    }
 
     /** A ball seen but not planned, with why. */
     public static final class Skipped {
@@ -152,8 +173,8 @@ public final class BallCollection extends CommandBuilder {
         detail = "";
         startedSeconds = nowSeconds();
         visionFromSeconds = Double.NaN;
-        area = BioBuzzField.ownHalf(used.wallGapIn);
-        obstacles = BioBuzzField.hiveRails();
+        area = keepIn(used.onField, used.wallGapIn);
+        obstacles = obstacles(used.onField);
         robot = RobotGeometry.shape();
         planStart = null;
         planned.clear();
@@ -229,7 +250,7 @@ public final class BallCollection extends CommandBuilder {
             } else if (!used.wants(ball.type)) {
                 skipped.add(new Skipped(ball, ball.type.label + " not collected"));
             } else if (!area.contains(ball.x, ball.y)) {
-                skipped.add(new Skipped(ball, "off our half " + area));
+                skipped.add(new Skipped(ball, (used.onField ? "off our half " : "too far from the start ") + area));
             } else if (ball.distanceTo(from.x(), from.y()) > used.maxRangeIn) {
                 skipped.add(new Skipped(ball, String.format("beyond %.0f in", used.maxRangeIn)));
             } else {

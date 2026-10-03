@@ -45,6 +45,6 @@
             <goBILDAPinpoint name="pinpoint" bus="3" port="0" /> <!-- Physical port 3 -->
         </LynxModule>
     </LynxUsbDevice>
-    <Webcam name="ballDetector" serialNumber="UC852" /> <!-- OV9782 -->
+    <Webcam name="aprilTagDetector" serialNumber="UC852" /> <!-- OV9782 -->
     <EthernetDevice name="limelight" serialNumber="EthernetOverUsb:eth0:172.29.0.22" port="0" ipAddress="172.29.0.1" />
 </Robot>

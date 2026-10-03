@@ -14,7 +14,6 @@ import java.util.List;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
 import org.firstinspires.ftc.teamcode.architecture.auto.Region;
@@ -26,13 +25,15 @@ import org.firstinspires.ftc.teamcode.architecture.auto.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 
 /**
- * Runs the intake over the first {@code ballCount} balls placed on the dashboard and drives back to the start, the
- * robot's footprint ({@link RobotGeometry}) staying on this alliance's half and clear of the HIVE's ground rails.
- * Balls and the start are authored for RED and mapped to BLUE. While idle it
+ * Runs the intake over the first {@code ballCount} balls placed on the dashboard and drives back to the start. With
+ * {@code onField} off, the default, the start is (0, 0, 0) wherever the robot stands and balls are relative to it
+ * (+x ahead, +y left); on, they are RED field coordinates mapped to BLUE and the footprint keeps to this alliance's
+ * half. While idle it
  * re-plans whenever the inputs change; setting {@code run} to 1 drives the plan shown, and setting it to 0 aborts.
  * After a run it re-plans from wherever the robot stopped, so run 0 then 1 goes again from there.
  */
@@ -41,14 +42,15 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     @Config("Ball Collection")
     public static class Tuning {
-        public static int ballCount = 3;
-        public static Ball ball1 = new Ball(30, 50, 1.4);
-        public static Ball ball2 = new Ball(30, 92, 1.4);
-        public static Ball ball3 = new Ball(28, 112, 1.4);
-        public static Ball ball4 = new Ball(50, 28, 1.4);
+        public static int ballCount = 4;
+        public static Ball ball1 = new Ball(24, 0, 1.4);
+        public static Ball ball2 = new Ball(36, 18, 1.4);
+        public static Ball ball3 = new Ball(48, -18, 1.4);
+        public static Ball ball4 = new Ball(60, 6, 1.4);
 
-        public static double startX = 20;
-        public static double startY = 72;
+        public static boolean onField = false;
+        public static double startX = 0;
+        public static double startY = 0;
         public static double startHeadingDeg = 0;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
@@ -145,9 +147,10 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     // The configured start is configuration, so a bad one throws rather than showing as "no plan".
     private void planFromConfiguredStart() {
-        Pose configured = FieldPose.forAlliance(Tuning.startX, Tuning.startY, Math.toRadians(Tuning.startHeadingDeg));
+        Pose configured = BallCollection.configuredPose(Tuning.onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(configured, RobotGeometry.shape(),
-                BallCollectionRobot.ownHalf(Tuning.wallGapIn), BioBuzzField.hiveRails(), Tuning.railGapIn);
+                BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn), BallCollection.obstacles(Tuning.onField),
+                Tuning.railGapIn);
         if (problem != null) throw new IllegalStateException("Ball Collection start pose " + problem);
         robot.follower.setPose(configured);
         planFrom(configured);
@@ -156,16 +159,16 @@ public class BallCollectionTest extends EnhancedOpMode {
     private void planFrom(Pose start) {
         plannedConfig = config();
         startPose = start;
-        area = BallCollectionRobot.ownHalf(Tuning.wallGapIn);
+        area = BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn);
         shape = RobotGeometry.shape();
         // Copies, so a dashboard edit mid-route can't move what the running plan was built around.
         Ball[] slots = {Tuning.ball1, Tuning.ball2, Tuning.ball3, Tuning.ball4};
         balls = new Ball[ballCount()];
         for (int i = 0; i < balls.length; i++) {
-            Pose p = FieldPose.forAlliance(slots[i].x, slots[i].y, 0);
+            Pose p = BallCollection.configuredPose(Tuning.onField, slots[i].x, slots[i].y, 0);
             balls[i] = new Ball(p.x(), p.y(), slots[i].radius);
         }
-        obstacles = BioBuzzField.hiveRails();
+        obstacles = BallCollection.obstacles(Tuning.onField);
 
         route = null;
         plan = null;
@@ -194,6 +197,7 @@ public class BallCollectionTest extends EnhancedOpMode {
     private static List<Double> config() {
         List<Double> c = new ArrayList<>();
         c.add((double) ballCount());
+        c.add(Tuning.onField ? 1.0 : 0.0);
         for (Ball b : new Ball[]{Tuning.ball1, Tuning.ball2, Tuning.ball3, Tuning.ball4}) {
             c.add(b.x);
             c.add(b.y);

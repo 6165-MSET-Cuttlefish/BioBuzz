@@ -14,7 +14,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 @Config
 public class CellTipCamera extends Module {
 
-    public static final String WEBCAM_NAME = "ballDetector";
+    public static final String WEBCAM_NAME = "aprilTagDetector";
 
     public static long maxStalenessMs = 250;
     public static double checkTipTimeoutMs = 10000;
