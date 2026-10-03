@@ -45,13 +45,32 @@ public final class PathHeadings {
      * tangent, and on some {@code Paths.path(a, b)} it throws when the follower starts the path.
      */
     public static Path linearThenTangent(Path path, double startHeading, double switchAt) {
+        return turnOntoTangent(path, startHeading, 0, 0, switchAt, switchParameter(path, switchAt));
+    }
+
+    /** Holds {@code startHeading} until {@code turnFrom}, then turns onto the tangent by {@code switchAt}. */
+    public static Path holdThenTangent(Path path, double startHeading, double turnFrom, double switchAt) {
+        double holdT = switchParameter(path, turnFrom);
         double switchT = switchParameter(path, switchAt);
+        if (!(holdT < switchT)) {
+            throw new IllegalArgumentException(String.format("hold until %s must end before the switch at %s", turnFrom, switchAt));
+        }
+        return turnOntoTangent(path, startHeading, turnFrom, holdT, switchAt, switchT);
+    }
+
+    private static Path turnOntoTangent(Path path, double startHeading, double holdAt, double holdT, double switchAt,
+                                        double switchT) {
         double tangentFrom = Math.min(1, switchT + JOIN_INSET);
         double start = Angle.normalize(startHeading);
         double turn = Angle.error(start, directionAt(path.curve, tangentFrom, tangentFrom, 1));
         return path.heading((curve, t) -> t >= switchT
                 ? directionAt(curve, t, tangentFrom, 1)
-                : Angle.normalize(start + turn * Math.max(0, t) / switchT));
+                : t <= holdT ? start : Angle.normalize(start + turn * turned(curve, t, holdAt, switchAt)));
+    }
+
+    // In distance, not t, as Pedro's linear heading and the visualizer interpolate.
+    private static double turned(Curve curve, double t, double from, double to) {
+        return Math.max(0, Math.min(1, (curve.pathCompletion(t) - from) / (to - from)));
     }
 
     /** Follows the tangent until {@code switchAt}, then turns from it to {@code endHeading} by the end. */
@@ -62,7 +81,7 @@ public final class PathHeadings {
         double turn = Angle.error(start, Angle.normalize(endHeading));
         return path.heading((curve, t) -> t <= switchT
                 ? directionAt(curve, t, 0, tangentTo)
-                : Angle.normalize(start + turn * Math.min(1, (t - switchT) / (1 - switchT))));
+                : Angle.normalize(start + turn * turned(curve, t, switchAt, 1)));
     }
 
     /** The direction at {@code t} held inside {@code from..to}, looking further inside that range where the curve stalls. */
