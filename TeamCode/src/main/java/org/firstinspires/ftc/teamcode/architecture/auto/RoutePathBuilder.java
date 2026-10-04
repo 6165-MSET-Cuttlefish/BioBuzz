@@ -6,6 +6,7 @@ import com.pedropathing.paths.Path;
 import com.pedropathing.utils.Angle;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -13,17 +14,17 @@ import java.util.Map;
 
 /**
  * Turns a visit order into the two drives of a {@link RouteOptimizer.Route}. The intake leg drives forward so the
- * intake passes over every ball: it aims the intake at each essential ball along the direction from the ball
- * before, putting the robot's centre {@link RobotShape#intakeOffsetIn} behind it, and sweeps up the rest on the
- * way. The return then drives back to the return pose and turns to its heading. Every leg tries a smooth curve,
- * then turning in place first, then a detour around the obstacles, and is used only if the robot's whole
- * footprint stays inside the area and clear of every obstacle at every sample.
+ * intake passes over every ball: it aims the intake at each essential ball, putting the robot's centre
+ * {@link RobotShape#intakeOffsetIn} behind it, and sweeps up the rest on the way. The return then drives back to the
+ * return pose. Used only if the robot's whole footprint stays inside the area and clear of every obstacle.
  */
 public final class RoutePathBuilder {
     /** Points closer than this are one point: Pedro rejects a zero-length line, and a tiny hop has no usable heading. */
     public static final double COINCIDENT_IN = 1.0;
     // A turn in place is ranked like driving this far per radian, so a route isn't chosen on length alone.
     static final double TURN_COST_IN_PER_RAD = 10;
+    // A stop part way, braking, settling and speeding up again, is ranked like driving this far.
+    static final double STOP_COST_IN = 36;
     // How far a leg will drive straight out of a tight spot, or into one, to reach room to turn around.
     private static final double MAX_ESCAPE_IN = 36;
     private static final double ESCAPE_STEP_IN = 1;
@@ -39,12 +40,19 @@ public final class RoutePathBuilder {
     // Rounding at the end of a curve leaves the intake a hair short of the ball it was aimed at.
     private static final double HIT_TOLERANCE_IN = 0.01;
     // Sideways over forward motion of a ball relative to the intake as it goes in: 0.75 is about 37 degrees off head-on.
-    private static final double HEAD_ON = 0.75;
+    // 95% of it, because sampling averages over an inch and the search pushes curves right to the limit.
+    private static final double HEAD_ON = 0.95 * 0.75;
     // Joins within this of each other in heading and in direction of travel are driven straight through.
     private static final double SMOOTH_JOIN = Math.toRadians(1);
     // Aiming off the intake's middle keeps the ball's edge this far inside the intake's edge, for the follower's error.
     private static final double SIDE_MARGIN_IN = 1;
     private static final double SIDE_STEP_IN = 0.5;
+    private static final double LAST_SWING = Math.toRadians(30);
+    private static final int CURVATURE_POINTS = 16;
+    // Pointwise curvature a little past the limit can still pass the sampled check, which averages over a sample.
+    private static final double TOO_TIGHT_MARGIN = 1.25;
+    // Coarser than the aiming grid so that visit orders share more hops.
+    private static final int OPTION_STEP = 2;
 
     private RoutePathBuilder() {}
 
@@ -75,6 +83,30 @@ public final class RoutePathBuilder {
 
     private static final Leg STAY = new Leg(Collections.<Segment>emptyList(), Reroute.NONE, 0);
 
+    private static final class Hop {
+        final Segment[] tries;
+        final Ball ball;
+        final double chord;
+        int next;
+        boolean checked;
+
+        Hop(Segment[] tries, Ball ball, double chord) {
+            this.tries = tries;
+            this.ball = ball;
+            this.chord = chord;
+        }
+
+        // The chord until checked is a lower bound, so the search can't pass over a cheaper hop.
+        double cost() {
+            if (next >= tries.length) return Double.POSITIVE_INFINITY;
+            return checked ? tries[next].length() : chord;
+        }
+
+        Segment segment() {
+            return tries[next];
+        }
+    }
+
     /** The geometry chosen for one visit order, before any Pedro path is built. */
     static final class Shape {
         final List<Segment> intake;
@@ -86,10 +118,12 @@ public final class RoutePathBuilder {
         final double intakeLength;
         final double returnLength;
         final double turns;
+        final List<Run> runs;
+        final int stops;
         private final RobotShape robot;
 
         Shape(List<Segment> intake, Reroute intakeReroute, List<Segment> back, Reroute returnReroute, Pose intakeEnd,
-              int essentialStops, double turns, RobotShape robot) {
+              int essentialStops, double turns, RobotShape robot, Pose start, Pose returnPose) {
             this.intake = intake;
             this.intakeReroute = intakeReroute;
             this.back = back;
@@ -100,6 +134,10 @@ public final class RoutePathBuilder {
             this.returnLength = totalLength(back);
             this.turns = turns;
             this.robot = robot;
+            this.runs = runs(start, intake, back, returnPose);
+            int drives = 0;
+            for (Run run : runs) if (run.turnTo == null) drives++;
+            this.stops = Math.max(0, drives - 1);
         }
 
         double length() {
@@ -107,7 +145,18 @@ public final class RoutePathBuilder {
         }
 
         double cost() {
-            return length() + TURN_COST_IN_PER_RAD * turns;
+            return length() + TURN_COST_IN_PER_RAD * turns + STOP_COST_IN * stops;
+        }
+    }
+
+    private static final class Run {
+        final List<Segment> segments = new ArrayList<>();
+        final Pose turnTo;
+        boolean intake;
+        boolean back;
+
+        Run(Pose turnTo) {
+            this.turnTo = turnTo;
         }
     }
 
@@ -124,14 +173,16 @@ public final class RoutePathBuilder {
         public final Pose turnTo;
         /** Sampled length of a drive in inches; 0 for a turn. */
         public final double length;
-        /** Part of the intake leg rather than the return. */
         public final boolean intake;
+        /** A drive that carries on from the last ball covers both this and {@link #intake}. */
+        public final boolean back;
 
-        Step(Path path, Pose turnTo, double length, boolean intake) {
+        Step(Path path, Pose turnTo, double length, boolean intake, boolean back) {
             this.path = path;
             this.turnTo = turnTo;
             this.length = length;
             this.intake = intake;
+            this.back = back;
         }
     }
 
@@ -153,7 +204,7 @@ public final class RoutePathBuilder {
         /** The intake leg then the return, as {@link RouteRun} drives them. */
         public final List<Step> steps;
 
-        Plan(Path intake, Path back, Shape shape, Pose start, Pose returnPose) {
+        Plan(Path intake, Path back, Shape shape) {
             this.intake = intake;
             this.back = back;
             this.intakeEnd = shape.intakeEnd;
@@ -163,46 +214,72 @@ public final class RoutePathBuilder {
             this.intakeLength = shape.intakeLength;
             this.returnLength = shape.returnLength;
             this.intakeTrack = track(shape.intake, shape.robot);
-            this.steps = steps(start.heading(), shape, returnPose);
+            List<Step> steps = new ArrayList<>(shape.runs.size());
+            for (Run run : shape.runs) {
+                steps.add(run.turnTo != null ? new Step(null, run.turnTo, 0, run.intake, run.back)
+                        : new Step(toPath(run.segments), null, totalLength(run.segments), run.intake, run.back));
+            }
+            this.steps = steps;
         }
     }
 
     /** The Pedro paths for exactly the geometry the route was scored on. */
     public static Plan build(RouteOptimizer.Route route) {
         Shape shape = route.shape;
-        return new Plan(toPath(shape.intake), toPath(shape.back), shape, route.start, route.returnPose);
+        return new Plan(toPath(shape.intake), toPath(shape.back), shape);
     }
 
-    private static List<Step> steps(double startHeading, Shape shape, Pose returnPose) {
-        List<Step> steps = new ArrayList<>();
-        double[] heading = {startHeading};
-        addSteps(steps, shape.intake, true, heading);
-        addSteps(steps, shape.back, false, heading);
-        if (!shape.back.isEmpty() && Math.abs(Angle.normalizeSigned(returnPose.heading() - heading[0])) > SMOOTH_JOIN) {
-            steps.add(new Step(null, returnPose, 0, false));
-        }
-        return steps;
-    }
-
-    private static void addSteps(List<Step> steps, List<Segment> segments, boolean intake, double[] heading) {
-        List<Segment> run = new ArrayList<>();
-        for (Segment s : segments) {
-            boolean turn = Math.abs(Angle.normalizeSigned(s.startHeading() - heading[0])) > SMOOTH_JOIN;
-            Segment before = run.isEmpty() ? null : run.get(run.size() - 1);
+    private static List<Run> runs(Pose start, List<Segment> intake, List<Segment> back, Pose returnPose) {
+        List<Run> runs = new ArrayList<>();
+        Run drive = null;
+        double heading = start.heading();
+        Pose at = start;
+        Segment before = null;
+        for (int i = 0; i < intake.size() + back.size(); i++) {
+            boolean inIntake = i < intake.size();
+            Segment s = inIntake ? intake.get(i) : back.get(i - intake.size());
+            boolean turn = Math.abs(Angle.normalizeSigned(s.startHeading() - heading)) > SMOOTH_JOIN;
             boolean swerve = before != null
                     && Math.abs(Angle.normalizeSigned(s.startTravel() - before.endTravel())) > SMOOTH_JOIN;
-            if (turn || swerve) flush(steps, run, intake);
-            if (turn) steps.add(new Step(null, new Pose(s.start().x(), s.start().y(), s.startHeading()), 0, intake));
-            run.add(s);
-            heading[0] = s.endHeading();
+            if (turn || swerve) drive = null;
+            if (turn) runs.add(turn(new Pose(s.start().x(), s.start().y(), s.startHeading()), inIntake));
+            if (drive == null) {
+                drive = new Run(null);
+                runs.add(drive);
+            }
+            drive.segments.add(s);
+            if (inIntake) drive.intake = true;
+            else drive.back = true;
+            heading = s.endHeading();
+            at = s.end();
+            before = s;
         }
-        flush(steps, run, intake);
+        if (Math.abs(Angle.normalizeSigned(returnPose.heading() - heading)) > SMOOTH_JOIN) {
+            runs.add(turn(new Pose(at.x(), at.y(), returnPose.heading()), false));
+        }
+        return runs;
     }
 
-    private static void flush(List<Step> steps, List<Segment> run, boolean intake) {
-        if (run.isEmpty()) return;
-        steps.add(new Step(toPath(run), null, totalLength(run), intake));
-        run.clear();
+    private static int stops(Pose from, boolean moving, List<Segment> segments) {
+        int stops = 0;
+        double heading = from.heading();
+        double travel = from.heading();
+        for (Segment s : segments) {
+            boolean turn = Math.abs(Angle.normalizeSigned(s.startHeading() - heading)) > SMOOTH_JOIN;
+            boolean swerve = Math.abs(Angle.normalizeSigned(s.startTravel() - travel)) > SMOOTH_JOIN;
+            if ((turn || swerve) && moving) stops++;
+            moving = true;
+            heading = s.endHeading();
+            travel = s.endTravel();
+        }
+        return stops;
+    }
+
+    private static Run turn(Pose to, boolean intake) {
+        Run run = new Run(to);
+        run.intake = intake;
+        run.back = !intake;
+        return run;
     }
 
     private static Path toPath(List<Segment> segments) {
@@ -251,29 +328,36 @@ public final class RoutePathBuilder {
             for (int i = 0; i < balls.length; i++) sides[i] = aimSides(robot, balls[i].radius);
         }
 
-        /** Null when no drivable shape visits the balls in {@code order}, given as indices into the planner's balls. */
-        Shape shape(int[] order) {
-            if (order.length == 0) return assemble(order, new int[0]);
+        /** Null when no drivable shape visits the balls in {@code order} for less than {@code budget}. */
+        Shape shape(int[] order, double budget) {
+            if (order.length == 0) return assemble(order, new int[0], budget);
             Ball[] ordered = new Ball[order.length];
             for (int i = 0; i < order.length; i++) ordered[i] = balls[order[i]];
             Pose intake = robot.intakeAt(start);
             int[] essential = IntakeCurvePlanner.essentialStops(intake.x(), intake.y(), ordered, robot.intakeWidthIn);
-            Shape shape = assemble(order, essential);
-            if (shape != null || essential.length == order.length) return shape;
-            // The curve between aimed-at balls bends away from the straight line the sweep was judged on.
             int[] all = new int[order.length];
             for (int i = 0; i < all.length; i++) all[i] = i;
-            return assemble(order, all);
+            // The curve between aimed-at balls bends away from the straight line the sweep was judged on.
+            boolean fewer = essential.length < order.length;
+            Shape smooth = smooth(order, essential, budget);
+            if (smooth == null && fewer) smooth = smooth(order, all, budget);
+            if (smooth != null) budget = smooth.cost();
+            Shape stopping = assemble(order, essential, budget);
+            if (stopping == null && fewer) stopping = assemble(order, all, budget);
+            return stopping != null ? stopping : smooth;
         }
 
-        private Shape assemble(int[] order, int[] essential) {
+        private Shape assemble(int[] order, int[] essential, double budget) {
             List<Leg> chosen = new ArrayList<>(essential.length);
             int previous = START;
             int current = START;
+            double spent = 0;
             for (int index : essential) {
                 int next = order[index];
                 Leg leg = leg(previous, current, next);
                 if (leg == null) return null;
+                spent += leg.cost();
+                if (!(spent < budget)) return null;
                 chosen.add(leg);
                 previous = current;
                 current = next;
@@ -292,7 +376,362 @@ public final class RoutePathBuilder {
                 turns += leg.turns;
             }
             Pose intakeEnd = current == START ? start : centre(previous, current);
-            return new Shape(intake, intakeReroute, back.segments, back.reroute, intakeEnd, essential.length, turns, robot);
+            Shape shape = new Shape(intake, intakeReroute, back.segments, back.reroute, intakeEnd, essential.length, turns,
+                    robot, start, returnPose);
+            return shape.cost() < budget ? shape : null;
+        }
+
+        private Shape smooth(int[] order, int[] essential, double budget) {
+            int m = essential.length;
+            int[] ball = new int[m];
+            for (int k = 0; k < m; k++) ball[k] = order[essential[k]];
+            Pose startIntake = robot.intakeAt(start);
+            int[][] options = new int[m][];
+            for (int k = 0; k < m; k++) {
+                Ball b = balls[ball[k]];
+                double ax = k == 0 ? startIntake.x() : balls[ball[k - 1]].x;
+                double ay = k == 0 ? startIntake.y() : balls[ball[k - 1]].y;
+                Ball next = k + 1 < m ? balls[ball[k + 1]] : null;
+                options[k] = next != null ? headingOptions(ball[k], ax, ay, next.x, next.y, false)
+                        : headingOptions(ball[k], ax, ay, returnPose.x(), returnPose.y(), true);
+                if (options[k].length == 0) return null;
+            }
+
+            int[] departures = departures(ball[0], options[0]);
+            // Hops are checked in full only once the cheapest chain uses them, which can change that chain.
+            while (true) {
+                Chain chain = cheapestChain(ball, options, departures, budget);
+                if (chain == null) return null;
+                boolean settled = true;
+                for (Hop hop : chain.hops) {
+                    if (hop != null && !confirm(hop)) settled = false;
+                }
+                if (settled) return shapeOf(order, essential, chain);
+            }
+        }
+
+        private static final class Chain {
+            final int[] ball;
+            final int[] grid;
+            final int departure;
+            final Hop[] hops;
+            final Leg[] legs;
+            final Leg back;
+
+            Chain(int[] ball, int[] grid, int departure, Hop[] hops, Leg[] legs, Leg back) {
+                this.ball = ball;
+                this.grid = grid;
+                this.departure = departure;
+                this.hops = hops;
+                this.legs = legs;
+                this.back = back;
+            }
+        }
+
+        private Chain cheapestChain(int[] ball, int[][] options, int[] departures, double budget) {
+            int m = ball.length;
+            double[][] cost = new double[m][];
+            int[][] via = new int[m][];
+            Hop[][] hopInto = new Hop[m][];
+            Leg[][] legInto = new Leg[m][];
+            for (int k = 0; k < m; k++) {
+                int states = options[k].length;
+                cost[k] = new double[states];
+                via[k] = new int[states];
+                hopInto[k] = new Hop[states];
+                legInto[k] = new Leg[states];
+                int ways = k == 0 ? departures.length : options[k - 1].length;
+                double[] before = new double[ways];
+                Pose[] from = new Pose[ways];
+                boolean[] stopped = new boolean[ways];
+                for (int i = 0; i < ways; i++) {
+                    from[i] = k == 0 ? start : centreAt(ball[k - 1], options[k - 1][i]);
+                    // A detour can arrive travelling askew of its heading, so whatever follows starts from a stop.
+                    stopped[i] = k > 0 && arrivesAskew(legInto[k - 1][i], from[i]);
+                    before[i] = k == 0 ? startTurn(departures[i]) * TURN_COST_IN_PER_RAD
+                            : cost[k - 1][i] + (stopped[i] ? STOP_COST_IN : 0);
+                }
+                double[][] bound = new double[states][ways];
+                boolean any = false;
+                for (int j = 0; j < states; j++) {
+                    cost[k][j] = Double.POSITIVE_INFINITY;
+                    Pose to = centreAt(ball[k], options[k][j]);
+                    // No leg is shorter than its chord.
+                    double[] floor = bound[j];
+                    Integer[] tryOrder = new Integer[ways];
+                    for (int i = 0; i < ways; i++) {
+                        floor[i] = before[i] + from[i].distance(to);
+                        tryOrder[i] = i;
+                    }
+                    Arrays.sort(tryOrder, (p, q) -> Double.compare(floor[p], floor[q]));
+                    for (int i : tryOrder) {
+                        if (!(floor[i] < Math.min(cost[k][j], budget))) break;
+                        Hop hop = k == 0 ? hop(START, departures[i], ball[0], options[0][j])
+                                : hop(ball[k - 1], options[k - 1][i], ball[k], options[k][j]);
+                        if (before[i] + hop.cost() < cost[k][j]) {
+                            cost[k][j] = before[i] + hop.cost();
+                            via[k][j] = i;
+                            hopInto[k][j] = hop;
+                            any = true;
+                        }
+                    }
+                }
+                // Stopping legs are slow to find: only where no smooth hop reaches the ball, first that works.
+                if (!any) {
+                    for (int j = 0; j < states; j++) {
+                        double[] floor = bound[j];
+                        Integer[] tryOrder = new Integer[k == 0 ? 1 : ways];
+                        for (int i = 0; i < tryOrder.length; i++) tryOrder[i] = i;
+                        Arrays.sort(tryOrder, (p, q) -> Double.compare(floor[p], floor[q]));
+                        for (int i : tryOrder) {
+                            if (!(floor[i] < budget)) break;
+                            Leg leg = k == 0 ? stopLeg(START, -1, ball[0], options[0][j])
+                                    : stopLeg(ball[k - 1], options[k - 1][i], ball[k], options[k][j]);
+                            if (leg == null) continue;
+                            cost[k][j] = before[i] + leg.cost()
+                                    + STOP_COST_IN * stops(from[i], k > 0 && !stopped[i], leg.segments);
+                            via[k][j] = i;
+                            legInto[k][j] = leg;
+                            break;
+                        }
+                    }
+                }
+                boolean affordable = false;
+                for (int j = 0; j < states; j++) affordable |= cost[k][j] < budget;
+                if (!affordable) return null;
+            }
+
+            int last = -1;
+            Leg back = null;
+            double best = budget;
+            for (int j = 0; j < options[m - 1].length; j++) {
+                Pose end = centreAt(ball[m - 1], options[m - 1][j]);
+                if (!(cost[m - 1][j] + end.distance(returnPose) < best)) continue;
+                Leg leg = smoothReturn(ball[m - 1], options[m - 1][j]);
+                if (leg == null) continue;
+                double total = cost[m - 1][j] + leg.cost() + STOP_COST_IN * stops(end, true, leg.segments);
+                if (total < best) {
+                    best = total;
+                    last = j;
+                    back = leg;
+                }
+            }
+            if (last < 0) return null;
+
+            int[] grid = new int[m];
+            Hop[] hops = new Hop[m];
+            Leg[] legs = new Leg[m];
+            int j = last;
+            for (int k = m - 1; k >= 0; k--) {
+                grid[k] = options[k][j];
+                hops[k] = hopInto[k][j];
+                legs[k] = legInto[k][j];
+                j = via[k][j];
+            }
+            return new Chain(ball, grid, departures[j], hops, legs, back);
+        }
+
+        private boolean arrivesAskew(Leg leg, Pose at) {
+            if (leg == null || leg.segments.isEmpty()) return false;
+            Segment last = leg.segments.get(leg.segments.size() - 1);
+            return Math.abs(Angle.normalizeSigned(last.endTravel() - at.heading())) > SMOOTH_JOIN;
+        }
+
+        private Shape shapeOf(int[] order, int[] essential, Chain chain) {
+            int m = chain.ball.length;
+            List<Segment> intake = new ArrayList<>();
+            Reroute intakeReroute = chain.departure < 0 ? Reroute.NONE : Reroute.TURN_IN_PLACE;
+            double turns = startTurn(chain.departure) + chain.back.turns;
+            for (int k = 0; k < m; k++) {
+                if (chain.hops[k] != null) {
+                    intake.add(chain.hops[k].segment());
+                    continue;
+                }
+                Leg leg = chain.legs[k];
+                intake.addAll(leg.segments);
+                if (leg.reroute.compareTo(intakeReroute) > 0) intakeReroute = leg.reroute;
+                turns += leg.turns;
+            }
+            for (int index = 0; index < order.length; index++) {
+                if (Arrays.binarySearch(essential, index) < 0 && !swept(intake, balls[order[index]])) return null;
+            }
+            Pose intakeEnd = centreAt(chain.ball[m - 1], chain.grid[m - 1]);
+            return new Shape(intake, intakeReroute, chain.back.segments, chain.back.reroute, intakeEnd, m, turns, robot,
+                    start, returnPose);
+        }
+
+        private int[] headingOptions(int ball, double ax, double ay, double bx, double by, boolean last) {
+            Ball b = balls[ball];
+            double in = Math.atan2(b.y - ay, b.x - ax);
+            double[] wanted;
+            if (last) {
+                double home = Math.atan2(by - b.y, bx - b.x);
+                wanted = new double[] {in, in + LAST_SWING, in - LAST_SWING, in + Angle.normalizeSigned(home - in) / 2};
+            } else {
+                double across = Math.atan2(by - ay, bx - ax);
+                double out = Math.atan2(by - b.y, bx - b.x);
+                wanted = new double[] {in, across, in + Angle.normalizeSigned(across - in) / 2,
+                        across + Angle.normalizeSigned(out - across) / 2};
+            }
+            int[] grid = new int[wanted.length];
+            int n = 0;
+            for (double heading : wanted) {
+                int g = snapped(heading);
+                boolean seen = false;
+                for (int i = 0; i < n; i++) seen |= grid[i] == g;
+                if (!seen && !Double.isNaN(sideAt(ball, g))) grid[n++] = g;
+            }
+            return Arrays.copyOf(grid, n);
+        }
+
+        // -1 leaves as the robot faces.
+        private int[] departures(int first, int[] arrivals) {
+            if (!robot.canTurnAt(start.x(), start.y(), area, obstacles, gap)) return new int[] {-1};
+            int[] wanted = Arrays.copyOf(arrivals, arrivals.length + 1);
+            wanted[arrivals.length] = gridIndex(Math.atan2(balls[first].y - start.y(), balls[first].x - start.x()));
+            int[] out = new int[wanted.length + 1];
+            int n = 0;
+            out[n++] = -1;
+            for (int g : wanted) {
+                boolean seen = startTurn(g) <= SMOOTH_JOIN;
+                for (int i = 1; i < n; i++) seen |= out[i] == g;
+                if (!seen) out[n++] = g;
+            }
+            return Arrays.copyOf(out, n);
+        }
+
+        private double startTurn(int departure) {
+            return departure < 0 ? 0 : Math.abs(Angle.normalizeSigned(gridHeading(departure) - start.heading()));
+        }
+
+        // NaN where nothing fits; +infinity until computed.
+        private double[][] fitSides;
+
+        private double sideAt(int ball, int grid) {
+            if (fitSides == null) fitSides = new double[balls.length][];
+            if (fitSides[ball] == null) {
+                fitSides[ball] = new double[HEADING_STEPS];
+                Arrays.fill(fitSides[ball], Double.POSITIVE_INFINITY);
+            }
+            if (fitSides[ball][grid] == Double.POSITIVE_INFINITY) {
+                fitSides[ball][grid] = nearestFit(ball, gridHeading(grid));
+            }
+            return fitSides[ball][grid];
+        }
+
+        private Pose[][] centres;
+
+        private Pose centreAt(int ball, int grid) {
+            if (centres == null) centres = new Pose[balls.length][HEADING_STEPS];
+            Pose centre = centres[ball][grid];
+            if (centre == null) {
+                Ball b = balls[ball];
+                double heading = gridHeading(grid);
+                Pose c = robot.centreFor(b.x, b.y, heading, sideAt(ball, grid));
+                centre = centres[ball][grid] = new Pose(c.x(), c.y(), heading);
+            }
+            return centre;
+        }
+
+        private final Map<Long, Hop> hops = new HashMap<>();
+
+        private long hopKey(int from, int fromGrid, int to, int toGrid) {
+            long fromKey = (long) (from + 1) * (HEADING_STEPS + 1) + fromGrid + 1;
+            return (fromKey * balls.length + to) * HEADING_STEPS + toGrid;
+        }
+
+        private Hop hop(int from, int fromGrid, int to, int toGrid) {
+            long key = hopKey(from, fromGrid, to, toGrid);
+            Hop hop = hops.get(key);
+            if (hop != null) return hop;
+            Pose a = from != START ? centreAt(from, fromGrid)
+                    : new Pose(start.x(), start.y(), fromGrid < 0 ? start.heading() : gridHeading(fromGrid));
+            Pose b = centreAt(to, toGrid);
+            double side = Math.abs(sideAt(to, toGrid));
+            List<Segment> tries = new ArrayList<>(HANDLE_REACHES.length);
+            for (double reach : HANDLE_REACHES) {
+                Segment s = hermite(a, a.heading(), b, b.heading(), reach);
+                if (s == null) continue;
+                double[] curvatures = s.cubicCurvatures(CURVATURE_POINTS);
+                if (!tooTight(curvatures) && headOn(curvatures[curvatures.length - 1], side)) tries.add(s);
+            }
+            Collections.sort(tries, (p, q) -> Double.compare(p.roughLength(), q.roughLength()));
+            hop = new Hop(tries.toArray(new Segment[0]), balls[to], a.distance(b));
+            hops.put(key, hop);
+            return hop;
+        }
+
+        // False whenever it does any checking, since the hop's cost then changes.
+        private boolean confirm(Hop hop) {
+            if (hop.checked) return true;
+            while (hop.next < hop.tries.length) {
+                Segment s = hop.tries[hop.next];
+                if (s.fits(robot, area, obstacles, gap) && swept(Collections.singletonList(s), hop.ball)) {
+                    hop.checked = true;
+                    break;
+                }
+                hop.next++;
+            }
+            return false;
+        }
+
+        // Sideways over forward for a ball side inches off centre: curvature x offset / (1 - curvature x side).
+        private boolean headOn(double curvature, double side) {
+            double forward = 1 - curvature * side;
+            return forward > 0 && curvature * robot.intakeOffsetIn <= HEAD_ON * forward;
+        }
+
+        private boolean tooTight(Segment s) {
+            return tooTight(s.cubicCurvatures(CURVATURE_POINTS));
+        }
+
+        private boolean tooTight(double[] curvatures) {
+            for (double c : curvatures) {
+                if (c * Segment.MIN_TURN_RADIUS_IN > TOO_TIGHT_MARGIN) return true;
+            }
+            return false;
+        }
+
+        private final Map<Integer, Leg> smoothReturns = new HashMap<>();
+
+        private Leg smoothReturn(int ball, int grid) {
+            int key = ball * HEADING_STEPS + grid;
+            if (smoothReturns.containsKey(key)) return smoothReturns.get(key);
+            Pose from = centreAt(ball, grid);
+            Leg leg = null;
+            if (from.distance(returnPose) >= COINCIDENT_IN) {
+                double across = Math.atan2(returnPose.y() - from.y(), returnPose.x() - from.x());
+                List<Segment> tries = new ArrayList<>();
+                for (double arriving : new double[] {across, returnPose.heading(), returnPose.heading() + Math.PI}) {
+                    for (double reach : HANDLE_REACHES) {
+                        Segment s = cubic(from, from.heading(), returnPose, arriving, reach, false);
+                        if (s != null && !tooTight(s)) tries.add(s);
+                    }
+                }
+                Collections.sort(tries, (p, q) -> Double.compare(p.roughLength(), q.roughLength()));
+                for (Segment s : tries) {
+                    if (s.fits(robot, area, obstacles, gap)) {
+                        leg = new Leg(Collections.singletonList(s), Reroute.NONE, 0);
+                        break;
+                    }
+                }
+            }
+            if (leg == null) leg = returnFrom(from);
+            smoothReturns.put(key, leg);
+            return leg;
+        }
+
+        private final Map<Long, Leg> stopLegs = new HashMap<>();
+
+        private Leg stopLeg(int from, int fromGrid, int to, int toGrid) {
+            long key = hopKey(from, fromGrid, to, toGrid);
+            if (stopLegs.containsKey(key)) return stopLegs.get(key);
+            Pose a = from == START ? start : centreAt(from, fromGrid);
+            Pose b = centreAt(to, toGrid);
+            Leg leg = hitting(turnFirst(a, b), balls[to]);
+            if (leg == null) leg = hitting(detour(a, b, false), balls[to]);
+            stopLegs.put(key, leg);
+            return leg;
         }
 
         private boolean sweptByAny(List<Leg> chosen, int ball) {
@@ -428,10 +867,21 @@ public final class RoutePathBuilder {
         private Leg returnLeg(int previous, int current) {
             int key = (previous + 1) * (balls.length + 1) + (current + 1);
             if (returns.containsKey(key)) return returns.get(key);
-            Pose from = current == START ? start : centre(previous, current);
+            Leg leg = returnFrom(current == START ? start : centre(previous, current));
+            returns.put(key, leg);
+            return leg;
+        }
+
+        private Leg returnFrom(Pose from) {
             Leg leg;
             if (from.distance(returnPose) < COINCIDENT_IN) {
-                leg = STAY;
+                double turn = Math.abs(Angle.normalizeSigned(returnPose.heading() - from.heading()));
+                if (turn <= SMOOTH_JOIN) leg = STAY;
+                else if (robot.canTurnAt(from.x(), from.y(), area, obstacles, gap)) {
+                    leg = new Leg(Collections.<Segment>emptyList(), Reroute.TURN_IN_PLACE, turn);
+                } else {
+                    leg = detour(from, returnPose, true);
+                }
             } else {
                 Segment turning = Segment.turning(from.heading(), returnPose.heading(), from, returnPose);
                 Segment straight = Segment.turning(from.heading(), from.heading(), from, returnPose);
@@ -443,7 +893,6 @@ public final class RoutePathBuilder {
                                         Math.abs(Angle.normalizeSigned(returnPose.heading() - from.heading()))) : null);
                 if (leg == null) leg = detour(from, returnPose, true);
             }
-            returns.put(key, leg);
             return leg;
         }
 
@@ -469,15 +918,17 @@ public final class RoutePathBuilder {
 
         // Longer handles round off a big change of heading that short ones would take as a cusp.
         private Segment gentlest(Pose from, double leaving, Pose to, double arriving) {
-            Segment best = null;
+            List<Segment> tries = new ArrayList<>(HANDLE_REACHES.length);
             for (double reach : HANDLE_REACHES) {
                 Segment s = hermite(from, leaving, to, arriving, reach);
-                // Ties go to the shorter handle: on a straight leg every reach draws the same line.
-                if (s != null && (best == null || s.length() < best.length() - 1e-9) && s.fits(robot, area, obstacles, gap)) {
-                    best = s;
-                }
+                if (s != null && !tooTight(s)) tries.add(s);
             }
-            return best;
+            // A stable sort, so ties go to the shorter handle: on a straight leg every reach draws the same line.
+            Collections.sort(tries, (p, q) -> Double.compare(p.roughLength(), q.roughLength()));
+            for (Segment s : tries) {
+                if (s.fits(robot, area, obstacles, gap)) return s;
+            }
+            return null;
         }
 
         /**
@@ -693,13 +1144,31 @@ public final class RoutePathBuilder {
 
     /** A cubic from {@code a} leaving at {@code headingA} to {@code b} arriving at {@code headingB}, its handles {@code reach} of the way; null if the ends coincide. */
     private static Segment hermite(Pose a, double headingA, Pose b, double headingB, double reach) {
-        double chord = a.distance(b);
+        return cubic(a, headingA, b, headingB, reach, true);
+    }
+
+    private static Segment cubic(Pose a, double leaving, Pose b, double arriving, double reach, boolean tangent) {
+        double chord = Math.sqrt((b.x() - a.x()) * (b.x() - a.x()) + (b.y() - a.y()) * (b.y() - a.y()));
         if (chord < COINCIDENT_IN) return null;
         reach *= chord;
-        return Segment.tangent(new Pose(a.x(), a.y(), 0),
-                new Pose(a.x() + reach * Math.cos(headingA), a.y() + reach * Math.sin(headingA), 0),
-                new Pose(b.x() - reach * Math.cos(headingB), b.y() - reach * Math.sin(headingB), 0),
-                new Pose(b.x(), b.y(), 0));
+        Pose[] controls = {new Pose(a.x(), a.y(), 0),
+                new Pose(a.x() + reach * Math.cos(leaving), a.y() + reach * Math.sin(leaving), 0),
+                new Pose(b.x() - reach * Math.cos(arriving), b.y() - reach * Math.sin(arriving), 0),
+                new Pose(b.x(), b.y(), 0)};
+        return tangent ? Segment.tangent(controls) : Segment.turning(a.heading(), b.heading(), controls);
+    }
+
+    private static int gridIndex(double heading) {
+        return (int) Math.round(Angle.normalize(heading) / (2 * Math.PI / HEADING_STEPS)) % HEADING_STEPS;
+    }
+
+    private static int snapped(double heading) {
+        return (int) (Math.round(Angle.normalize(heading) / (2 * Math.PI * OPTION_STEP / HEADING_STEPS)) * OPTION_STEP)
+                % HEADING_STEPS;
+    }
+
+    private static double gridHeading(int index) {
+        return 2 * Math.PI * index / HEADING_STEPS;
     }
 
     /** Cubics through every point, tangent at each to the line through its neighbours, and at the ends to the given headings. */

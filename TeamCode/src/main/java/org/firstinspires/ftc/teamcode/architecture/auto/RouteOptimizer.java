@@ -3,15 +3,16 @@ package org.firstinspires.ftc.teamcode.architecture.auto;
 import com.pedropathing.math.Pose;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 /**
  * Picks the order to collect a few balls: tries every order (n! of them, so keep n small) and keeps the cheapest,
- * scored on the sampled length of the drive {@link RoutePathBuilder} will make plus its turns in place, rather than
- * on straight hops (a greedy nearest-first pick can lock in a bad first ball). The robot's whole footprint stays
- * inside the caller's area and clear of the obstacles, and the intake passes over each ball. A ball the route can't
- * reach is dropped and reported rather than voiding the plan.
+ * scored on the sampled length of the drive {@link RoutePathBuilder} will make plus its turns in place and its
+ * stops, rather than on straight hops (a greedy nearest-first pick can lock in a bad first ball). The robot's whole
+ * footprint stays inside the caller's area and clear of the obstacles, and the intake passes over each ball. A ball
+ * the route can't reach is dropped and reported rather than voiding the plan.
  */
 public final class RouteOptimizer {
     public static final int MAX_BALLS = 6;
@@ -110,21 +111,32 @@ public final class RouteOptimizer {
 
         // Most balls first: only when no order through all of them is drivable is one left out.
         for (int size = reachable.length; size >= 0; size--) {
-            Route best = null;
-            double bestCost = Double.POSITIVE_INFINITY;
+            List<int[]> orders = new ArrayList<>();
             for (List<Integer> subset : subsets(indices, size)) {
                 for (int[] perm : permutations(subset.size())) {
                     int[] order = new int[perm.length];
-                    Ball[] ordered = new Ball[perm.length];
-                    for (int i = 0; i < perm.length; i++) {
-                        order[i] = subset.get(perm[i]);
-                        ordered[i] = reachable[order[i]];
-                    }
-                    RoutePathBuilder.Shape shape = planner.shape(order);
-                    if (shape == null || !(shape.cost() < bestCost)) continue;
-                    bestCost = shape.cost();
-                    best = new Route(start, returnPose, ordered, dropped, shape);
+                    for (int i = 0; i < perm.length; i++) order[i] = subset.get(perm[i]);
+                    orders.add(order);
                 }
+            }
+            // Likely-good orders first, so the budget cuts the rest short.
+            final double[] tour = new double[orders.size()];
+            Integer[] byTour = new Integer[orders.size()];
+            for (int i = 0; i < tour.length; i++) {
+                tour[i] = tourLength(start, reachable, orders.get(i), returnPose);
+                byTour[i] = i;
+            }
+            Arrays.sort(byTour, (p, q) -> Double.compare(tour[p], tour[q]));
+            Route best = null;
+            double bestCost = Double.POSITIVE_INFINITY;
+            for (int index : byTour) {
+                int[] order = orders.get(index);
+                RoutePathBuilder.Shape shape = planner.shape(order, bestCost);
+                if (shape == null || !(shape.cost() < bestCost)) continue;
+                Ball[] ordered = new Ball[order.length];
+                for (int i = 0; i < order.length; i++) ordered[i] = reachable[order[i]];
+                bestCost = shape.cost();
+                best = new Route(start, returnPose, ordered, dropped, shape);
             }
             if (best != null) {
                 List<Ball> visited = new ArrayList<>();
@@ -151,6 +163,18 @@ public final class RouteOptimizer {
             }
         }
         return null;
+    }
+
+    private static double tourLength(Pose start, Ball[] balls, int[] order, Pose end) {
+        double total = 0;
+        double x = start.x();
+        double y = start.y();
+        for (int index : order) {
+            total += Math.sqrt((balls[index].x - x) * (balls[index].x - x) + (balls[index].y - y) * (balls[index].y - y));
+            x = balls[index].x;
+            y = balls[index].y;
+        }
+        return total + Math.sqrt((end.x() - x) * (end.x() - x) + (end.y() - y) * (end.y() - y));
     }
 
     private static List<List<Integer>> subsets(List<Integer> items, int size) {

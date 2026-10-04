@@ -49,14 +49,10 @@ public final class RouteRun {
         }
         this.follower = follower;
         List<Command> steps = new ArrayList<>();
-        int intakeSteps = 0;
-        for (RoutePathBuilder.Step step : plan.steps) if (step.intake) intakeSteps++;
-        int returnSteps = plan.steps.size() - intakeSteps;
-        int intakeAt = 0;
-        int returnAt = 0;
+        int at = 0;
         for (RoutePathBuilder.Step step : plan.steps) {
-            String name = step.intake ? String.format("intake %d/%d", ++intakeAt, intakeSteps)
-                    : String.format("return %d/%d", ++returnAt, returnSteps);
+            String name = String.format("step %d/%d, %s", ++at, plan.steps.size(),
+                    step.intake && step.back ? "intake and return" : step.intake ? "intake" : "return");
             steps.add(step.path != null
                     ? leg(name, PathCommands.follow(follower, step.path),
                             budget(step.length, minAvgSpeedIps, minLegSec, maxLegSec))

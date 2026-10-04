@@ -138,6 +138,19 @@ public final class RobotShape {
         return true;
     }
 
+    public boolean canTurnAnywhereIn(double minX, double maxX, double minY, double maxY, Region area,
+                                     List<Obstacle> obstacles, double gap) {
+        double r = turnRadius;
+        if (minX - r < area.minX || maxX + r > area.maxX || minY - r < area.minY || maxY + r > area.maxY) return false;
+        double clearance = r + gap;
+        for (Obstacle o : obstacles) {
+            double dx = Math.max(Math.max(o.minX - maxX, minX - o.maxX), 0);
+            double dy = Math.max(Math.max(o.minY - maxY, minY - o.maxY), 0);
+            if (dx * dx + dy * dy <= clearance * clearance) return false;
+        }
+        return true;
+    }
+
     @Override
     public String toString() {
         return String.format("%.1f x %.1f in, intake %.1f in wide %.1f in ahead", lengthIn, widthIn, intakeWidthIn,

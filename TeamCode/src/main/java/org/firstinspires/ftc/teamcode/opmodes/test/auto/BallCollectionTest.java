@@ -59,7 +59,7 @@ public class BallCollectionTest extends EnhancedOpMode {
         public static double railGapIn = 1;
         public static double timeoutMinAvgSpeedIps = 10;
         public static double timeoutMinSec = 4;
-        public static double timeoutMaxSec = 15;
+        public static double timeoutMaxSec = 30;
         public static boolean forceSplineOnly = false;
         public static int run = 0;
     }

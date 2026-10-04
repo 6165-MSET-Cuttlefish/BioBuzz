@@ -53,7 +53,7 @@ public final class BallCollection extends CommandBuilder {
         public double visionWaitMs = 1000;
         public double timeoutMinAvgSpeedIps = 10;
         public double timeoutMinSec = 4;
-        public double timeoutMaxSec = 15;
+        public double timeoutMaxSec = 30;
 
         Settings copy() {
             Settings s = new Settings();

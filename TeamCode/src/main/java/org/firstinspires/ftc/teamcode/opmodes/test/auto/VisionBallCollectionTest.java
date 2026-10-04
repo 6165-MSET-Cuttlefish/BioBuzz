@@ -66,7 +66,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double railGapIn = 1;
         public static double timeoutMinAvgSpeedIps = 10;
         public static double timeoutMinSec = 4;
-        public static double timeoutMaxSec = 15;
+        public static double timeoutMaxSec = 30;
         public static int run = 0;
     }
 
