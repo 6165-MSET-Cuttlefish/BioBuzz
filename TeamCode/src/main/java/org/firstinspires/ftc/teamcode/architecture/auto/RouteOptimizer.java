@@ -8,11 +8,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Picks the order to collect a few balls: tries every order (n! of them, so keep n small) and keeps the cheapest,
- * scored on the sampled length of the drive {@link RoutePathBuilder} will make plus its turns in place and its
- * stops, rather than on straight hops (a greedy nearest-first pick can lock in a bad first ball). The robot's whole
- * footprint stays inside the caller's area and clear of the obstacles, and the intake passes over each ball. A ball
- * the route can't reach is dropped and reported rather than voiding the plan.
+ * Picks the order to collect a few balls: tries every order (n! of them, so keep n small) and keeps the shortest,
+ * scored on the sampled length of the drive {@link RoutePathBuilder} will make for it rather than on straight hops
+ * (a greedy nearest-first pick can lock in a bad first ball). The robot's whole footprint stays inside the caller's
+ * area and clear of the obstacles, and its centre passes over each ball it must aim at. A ball the route can't reach
+ * is dropped and reported rather than voiding the plan.
  */
 public final class RouteOptimizer {
     public static final int MAX_BALLS = 6;
@@ -58,21 +58,17 @@ public final class RouteOptimizer {
     }
 
     /**
-     * Null if some heading puts the intake on a ball of {@code radius} at (x, y), anywhere across it the planner
-     * aims, with the robot's footprint clear; otherwise why none does.
+     * Null if the robot can stand centred on a ball of {@code radius} at (x, y) at some heading, with its footprint
+     * clear, as the route passes over it; otherwise why it can't.
      */
     public static String ballProblem(double x, double y, double radius, RobotShape robot, Region area,
                                      List<Obstacle> obstacles, double gapIn) {
         if (!area.contains(x, y)) return "outside " + area;
-        double[] sides = RoutePathBuilder.aimSides(robot, radius);
         for (int i = 0; i < RoutePathBuilder.HEADING_STEPS; i++) {
             double heading = 2 * Math.PI * i / RoutePathBuilder.HEADING_STEPS;
-            for (double side : sides) {
-                Pose c = robot.centreFor(x, y, heading, side);
-                if (robot.fits(c.x(), c.y(), heading, area, obstacles, gapIn)) return null;
-            }
+            if (robot.fits(x, y, heading, area, obstacles, gapIn)) return null;
         }
-        return "out of the intake's reach: every heading puts the robot over a wall, the centre line or an obstacle";
+        return "out of reach: every heading over it puts the robot over a wall, the centre line or an obstacle";
     }
 
     /**
@@ -119,23 +115,21 @@ public final class RouteOptimizer {
                     orders.add(order);
                 }
             }
-            // Likely-good orders first, so the budget cuts the rest short.
-            final double[] tour = new double[orders.size()];
-            Integer[] byTour = new Integer[orders.size()];
-            for (int i = 0; i < tour.length; i++) {
-                tour[i] = tourLength(start, reachable, orders.get(i), returnPose);
-                byTour[i] = i;
+            final double[] bound = new double[orders.size()];
+            Integer[] byBound = new Integer[orders.size()];
+            for (int i = 0; i < bound.length; i++) {
+                bound[i] = planner.lowerBound(orders.get(i));
+                byBound[i] = i;
             }
-            Arrays.sort(byTour, (p, q) -> Double.compare(tour[p], tour[q]));
+            Arrays.sort(byBound, (p, q) -> Double.compare(bound[p], bound[q]));
             Route best = null;
-            double bestCost = Double.POSITIVE_INFINITY;
-            for (int index : byTour) {
+            for (int index : byBound) {
+                if (best != null && !(bound[index] < best.length)) break;
                 int[] order = orders.get(index);
-                RoutePathBuilder.Shape shape = planner.shape(order, bestCost);
-                if (shape == null || !(shape.cost() < bestCost)) continue;
+                RoutePathBuilder.Shape shape = planner.shape(order);
+                if (shape == null || (best != null && !(shape.length() < best.length))) continue;
                 Ball[] ordered = new Ball[order.length];
                 for (int i = 0; i < order.length; i++) ordered[i] = reachable[order[i]];
-                bestCost = shape.cost();
                 best = new Route(start, returnPose, ordered, dropped, shape);
             }
             if (best != null) {
@@ -163,18 +157,6 @@ public final class RouteOptimizer {
             }
         }
         return null;
-    }
-
-    private static double tourLength(Pose start, Ball[] balls, int[] order, Pose end) {
-        double total = 0;
-        double x = start.x();
-        double y = start.y();
-        for (int index : order) {
-            total += Math.sqrt((balls[index].x - x) * (balls[index].x - x) + (balls[index].y - y) * (balls[index].y - y));
-            x = balls[index].x;
-            y = balls[index].y;
-        }
-        return total + Math.sqrt((end.x() - x) * (end.x() - x) + (end.y() - y) * (end.y() - y));
     }
 
     private static List<List<Integer>> subsets(List<Integer> items, int size) {

@@ -54,9 +54,9 @@ Pedro Pathing 3:
 
 **Ball routing**
 
-- `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`. It drives the intake over each ball with the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
+- `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`, the spline method of summer-2026's `Spline/Field`: the intake leg is Pedro's spline (`BezierCurve.through`: one Bezier through each point at evenly spaced t) with the robot's centre through each ball the intake doesn't sweep up in passing (`IntakeCurvePlanner`), the return a straight line, and a leg that doesn't fit falls back to that spline, then straight hops, through `VisibilityGraphPlanner` detours. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
 - No alliance mapping: pass mapped field coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles. Bad input throws, so check a robot-sourced start with `RouteOptimizer.poseProblem` first.
-- Pedro switches to the next piece of a compound path as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), so it starts a sharp turn or reversal early. `Plan.steps` splits at every heading or travel-direction jump, and `RouteRun` stops at each split.
+- Pedro switches to the next piece of a compound path as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), so it starts a sharp turn or reversal early. Each drive in `Plan.steps` is one curve or hop, with a turn in place before it wherever the heading jumps, and `RouteRun` stops after each.
 - A curve that stops dead mid-path (a straight cubic with handles the full chord long) makes Pedro's follower throw there.
 - A `RouteRun` runs once, via `start()` or its `command()` in a group, not both; call `abort(reason)` from OpMode code, never inside a command.
 

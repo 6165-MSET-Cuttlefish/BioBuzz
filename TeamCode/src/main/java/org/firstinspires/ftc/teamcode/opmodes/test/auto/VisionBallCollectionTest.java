@@ -32,8 +32,8 @@ import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
 /**
- * Ball Collection with the balls coming from the Limelight instead of the dashboard, from (0, 0, 0) wherever the robot
- * stands unless {@code onField} is on. While idle it re-plans from the robot's pose whenever the nearest
+ * Ball Collection with the balls coming from the Limelight instead of the dashboard, from (70.75, 82.54, 180 deg)
+ * wherever the robot stands unless {@code onField} is on. While idle it re-plans from the robot's pose whenever the nearest
  * {@code maxBalls} usable balls appear, vanish or move, or the robot moves; setting {@code run} to 1 drives exactly the
  * plan shown and returns to where the robot started it, and setting it to 0 aborts. Nothing plans or starts on stale
  * vision or a Limelight fault.
@@ -56,18 +56,39 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double replanIntervalMs = 250;
 
         public static boolean onField = false;
-        public static double startX = 0;
-        public static double startY = 0;
-        public static double startHeadingDeg = 0;
+        public static double startX = 70.75;
+        public static double startY = 82.54;
+        public static double startHeadingDeg = 180;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
         public static double wallGapIn = 1;
-        /** Least room between the robot's footprint and a HIVE rail. */
+        /** Least room between the robot's footprint and a HIVE rail or obstacle. */
         public static double railGapIn = 1;
+        /** In the start pose's frame (RED field coordinates with onField on), on top of the HIVE rails. */
+        public static Box obstacle1 = new Box(true, 40.75, 82.54, 6, 6);
+        public static Box obstacle2 = new Box(false, 40.75, 100, 6, 6);
+        public static Box obstacle3 = new Box(false, 40.75, 65, 6, 6);
         public static double timeoutMinAvgSpeedIps = 10;
         public static double timeoutMinSec = 4;
         public static double timeoutMaxSec = 30;
         public static int run = 0;
+    }
+
+    /** A rectangular obstacle by its centre and size, editable on the dashboard. */
+    public static class Box {
+        public boolean enabled;
+        public double x;
+        public double y;
+        public double sizeXIn;
+        public double sizeYIn;
+
+        public Box(boolean enabled, double x, double y, double sizeXIn, double sizeYIn) {
+            this.enabled = enabled;
+            this.x = x;
+            this.y = y;
+            this.sizeXIn = sizeXIn;
+            this.sizeYIn = sizeYIn;
+        }
     }
 
     // n! visit orders.
@@ -146,8 +167,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private static Pose configuredStart() {
         Pose start = BallCollection.configuredPose(Tuning.onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(start, RobotGeometry.shape(),
-                BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn), BallCollection.obstacles(Tuning.onField),
-                Tuning.railGapIn);
+                BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn), obstacles(), Tuning.railGapIn);
         if (problem != null) throw new IllegalStateException("Vision Ball Collection start pose " + problem);
         return start;
     }
@@ -251,7 +271,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             } else if (ball.distanceTo(robotPose.x(), robotPose.y()) > Tuning.maxRangeIn) {
                 skippedRange++;
             } else if (RouteOptimizer.ballProblem(ball.x, ball.y, ball.type.diameterIn / 2, RobotGeometry.shape(),
-                    region, BallCollection.obstacles(Tuning.onField), Tuning.railGapIn) != null) {
+                    region, obstacles(), Tuning.railGapIn) != null) {
                 // The planner would drop it anyway, but only after it had taken one of the nearest maxBalls places.
                 skippedUnreachable++;
             } else {
@@ -321,7 +341,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             FieldBall b = selected.get(i);
             balls[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
         }
-        obstacles = BallCollection.obstacles(Tuning.onField);
+        obstacles = obstacles();
 
         clearPlan("");
         String problem = RouteOptimizer.poseProblem(pose, shape, region, obstacles, Tuning.railGapIn);
@@ -333,6 +353,18 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         plan = RoutePathBuilder.build(route);
         intakeDrawing = plan.intake == null ? null : BallCollectionTest.fieldPolyline(plan.intake);
         returnDrawing = plan.back == null ? null : BallCollectionTest.fieldPolyline(plan.back);
+    }
+
+    private static List<Obstacle> obstacles() {
+        List<Obstacle> out = new ArrayList<>(BallCollection.obstacles(Tuning.onField));
+        for (Box box : new Box[]{Tuning.obstacle1, Tuning.obstacle2, Tuning.obstacle3}) {
+            if (!box.enabled) continue;
+            Pose a = BallCollection.configuredPose(Tuning.onField, box.x - box.sizeXIn / 2, box.y - box.sizeYIn / 2, 0);
+            Pose b = BallCollection.configuredPose(Tuning.onField, box.x + box.sizeXIn / 2, box.y + box.sizeYIn / 2, 0);
+            out.add(new Obstacle(Math.min(a.x(), b.x()), Math.max(a.x(), b.x()),
+                    Math.min(a.y(), b.y()), Math.max(a.y(), b.y())));
+        }
+        return out;
     }
 
     private static int maxBalls() {
@@ -348,6 +380,9 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
                 RobotGeometry.intakeOffsetIn, RobotGeometry.intakeWidthIn,
                 (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,
                 FieldConfig.fieldWidthInches, (double) Context.allianceColor.ordinal()));
+        for (Box box : new Box[]{Tuning.obstacle1, Tuning.obstacle2, Tuning.obstacle3}) {
+            c.addAll(Arrays.asList(box.enabled ? 1.0 : 0.0, box.x, box.y, box.sizeXIn, box.sizeYIn));
+        }
         return c;
     }
 

@@ -31,10 +31,9 @@ import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 
 /**
  * Runs the intake over the first {@code ballCount} balls placed on the dashboard and drives back to the start. With
- * {@code onField} off, the default, the start is (0, 0, 0) wherever the robot stands and balls are relative to it
- * (+x ahead, +y left); on, they are RED field coordinates mapped to BLUE and the footprint keeps to this alliance's
- * half. While idle it
- * re-plans whenever the inputs change; setting {@code run} to 1 drives the plan shown, and setting it to 0 aborts.
+ * {@code onField} off, the default, the robot stands at the start pose wherever it is and the balls are in that same
+ * frame, with no walls or HIVE rails; on, they are RED field coordinates mapped to BLUE and the footprint keeps to
+ * this alliance's half. While idle it re-plans whenever the inputs change; setting {@code run} to 1 drives the plan shown, and setting it to 0 aborts.
  * After a run it re-plans from wherever the robot stopped, so run 0 then 1 goes again from there.
  */
 @TeleOp(name = "Ball Collection", group = "Test")
@@ -278,9 +277,8 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     static String describe(RoutePathBuilder.Reroute reroute) {
         switch (reroute) {
-            case TURN_IN_PLACE: return "direct, with a turn in place";
-            case SPLINE: return "spline around a HIVE rail or wall";
-            case POLYLINE: return "hops round a HIVE rail or wall, curved where there is room to turn";
+            case SPLINE: return "spline through detours round a HIVE rail or wall";
+            case POLYLINE: return "straight hops round a HIVE rail or wall";
             case FORCED_SPLINE: return "spline THROUGH a HIVE rail (forceSplineOnly)";
             default: return "direct";
         }
@@ -310,7 +308,7 @@ public class BallCollectionTest extends EnhancedOpMode {
         }
     }
 
-    /** The centre's path in blue, the intake's in orange, and the footprint where the intake reaches the last ball. */
+    /** The centre's path in blue, the intake's in orange, and the footprint on the last ball. */
     static void drawPlan(Canvas overlay, RoutePathBuilder.Plan plan, double[][] intakeDrawing, double[][] returnDrawing,
                          RobotShape shape) {
         if (intakeDrawing != null) {
