@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
@@ -26,6 +27,7 @@ public class CameraModuleTest extends EnhancedOpMode {
 
         CameraRobot(EnhancedOpMode opMode) {
             super(opMode);
+            BioBuzzField.configure();
         }
 
         @Override

@@ -32,7 +32,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
 /**
- * Ball Collection with the balls coming from the Limelight instead of the dashboard, from (70.75, 82.54, 180 deg)
+ * Ball Collection with the balls coming from the Limelight instead of the dashboard, from (84, 72, 270 deg)
  * wherever the robot stands unless {@code onField} is on. While idle it re-plans from the robot's pose whenever the nearest
  * {@code maxBalls} usable balls appear, vanish or move, or the robot moves; setting {@code run} to 1 drives exactly the
  * plan shown and returns to where the robot started it, and setting it to 0 aborts. Nothing plans or starts on stale
@@ -56,9 +56,9 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double replanIntervalMs = 250;
 
         public static boolean onField = false;
-        public static double startX = 70.75;
-        public static double startY = 82.54;
-        public static double startHeadingDeg = 180;
+        public static double startX = 84;
+        public static double startY = 72;
+        public static double startHeadingDeg = 270;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
         public static double wallGapIn = 1;

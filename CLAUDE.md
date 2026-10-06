@@ -48,7 +48,7 @@ Pedro Pathing 3:
 **Poses and alliance**
 
 - Author poses for RED with `FieldPose.forAlliance(x, y, heading)`; it maps them to BLUE through `FieldConfig.symmetry()` (BIOBUZZ: a 180° rotation, so a BLUE heading is RED's + π). A bare radian passed to a path isn't mapped.
-- `FieldPose` throws until the symmetry is set, and `EnhancedOpMode` clears it at every INIT: the game's `Robot` constructor calls `FieldConfig.setSymmetry(...)`, a bare SDK OpMode calls it itself.
+- `FieldPose` throws until the symmetry is set, and `EnhancedOpMode` clears it and the dashboard's field image at every INIT: a BIOBUZZ `Robot` constructor calls `BioBuzzField.configure()` (symmetry and image), a bare SDK OpMode calls `FieldConfig.setSymmetry(...)` itself. The image is a render in Pedro's frame, drawn at its real width (141.5 in), so a new one must be too.
 - `Robot` resets the follower to a placeholder pose at every INIT: set the start with `robot.follower.setPose(...)` in `initialize()`, then build paths.
 - `Context.allianceColor` is set only on the dashboard or in `Context.java`, never by an OpMode, and resets on an app restart or Sloth reload.
 
@@ -116,7 +116,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 
 ## Testing
 
-Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Analog Input, `Drivetrain`), webcam `aprilTagDetector` (cell tip), `limelight` (EthernetDevice). `res/xml/` ships `cuttle_decode.xml`, `decode_betta.xml` and webcam-only `camera.xml`. A hub set up from older code names the webcam `ballDetector` or `nerdDetector`: re-activate a shipped config or rename it.
+Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Analog Input, `Drivetrain`), webcam `aprilTagDetector` (cell tip), `limelight` (EthernetDevice). `res/xml/` ships `cuttle_decode.xml`, `betta_decode.xml` and webcam-only `camera.xml`. A hub set up from older code names the webcam `ballDetector` or `nerdDetector`: re-activate a shipped config or rename it.
 
 - **Mock Architecture Test** is the first run after a full install. It drives only with `Mock Auto → enableDrive` on (check motor and odometry directions first), and then finishes only on the floor.
 - **Close Flower** autos: the `toAudienceWall` and `toHive` legs put part of the robot over the centre line (G402).

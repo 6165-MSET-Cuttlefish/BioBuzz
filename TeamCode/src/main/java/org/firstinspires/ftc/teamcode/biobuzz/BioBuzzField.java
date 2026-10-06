@@ -18,6 +18,13 @@ public final class BioBuzzField {
     /** Red's ALLIANCE AREA is on the audience's left wall and blue's on the right; the field is point-symmetric. */
     public static final FieldSymmetry SYMMETRY = FieldSymmetry.ROTATE_180;
 
+    public static final String IMAGE = "/images/biobuzz.png";
+
+    public static void configure() {
+        FieldConfig.setSymmetry(SYMMETRY);
+        FieldConfig.setImage(IMAGE, FieldConfig.fieldWidthInches, 1);
+    }
+
     // Each rail is the foot bar of one A-frame with the feet and legs on it, from FIRST's field CAD, measured from the field's centre.
     private static final double HIVE_RAIL_NEAR_IN = 22.75;
     private static final double HIVE_RAIL_FAR_IN = 24.733;

@@ -3,7 +3,6 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 import com.pedropathing.follower.Follower;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.modules.Camera;
@@ -20,7 +19,7 @@ public class BioBuzzRobot extends Robot {
 
     public BioBuzzRobot(EnhancedOpMode opMode) {
         super(opMode);
-        FieldConfig.setSymmetry(BioBuzzField.SYMMETRY);
+        BioBuzzField.configure();
     }
 
     @Override

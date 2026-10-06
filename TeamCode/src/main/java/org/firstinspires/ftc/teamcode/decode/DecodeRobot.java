@@ -8,6 +8,7 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
@@ -36,6 +37,7 @@ public class DecodeRobot extends Robot {
 
     public DecodeRobot(EnhancedOpMode opMode) {
         super(opMode);
+        FieldConfig.setImage("/images/fieldcoordinates-pedro.png", 144, 0.4);
     }
 
     @Override

@@ -105,7 +105,7 @@ public abstract class EnhancedOpMode extends OpMode {
         State.clearModuleBindings();
         Faults.reset();
         Scheduler.reset();
-        FieldConfig.clearSymmetry();
+        FieldConfig.clear();
 
         configureBulkCaching();
         voltageSensor = hardwareMap.voltageSensor.iterator().next();
@@ -497,13 +497,17 @@ public abstract class EnhancedOpMode extends OpMode {
 
         Canvas overlay = packet.fieldOverlay();
 
-        if (!dashboardSkipFieldImage) {
-            overlay.setAlpha(0.4);
-            overlay.drawImage("/images/fieldcoordinates-pedro.png", 0, 0, 144, 144);
+        String image = FieldConfig.image();
+        double inches = image != null ? FieldConfig.imageInches() : FieldConfig.fieldWidthInches;
+        // The page frame runs down from its top-left corner; Pedro's origin is the field's bottom-left one.
+        double top = 144 - inches;
+        if (!dashboardSkipFieldImage && image != null) {
+            overlay.setAlpha(FieldConfig.imageOpacity());
+            overlay.drawImage(image, 0, top, inches, inches);
             overlay.setAlpha(1);
         }
 
-        if (!dashboardSkipGrid) overlay.drawGrid(0, 0, 144, 144, 7, 7);
+        if (!dashboardSkipGrid) overlay.drawGrid(0, top, inches, inches, 7, 7);
 
         FieldVisualization.drawRobot(overlay, robot.follower.pose());
 

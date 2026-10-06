@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 public class MockRobot extends Robot {
@@ -12,6 +13,7 @@ public class MockRobot extends Robot {
 
     public MockRobot(EnhancedOpMode opMode) {
         super(opMode);
+        BioBuzzField.configure();
     }
 
     @Override
