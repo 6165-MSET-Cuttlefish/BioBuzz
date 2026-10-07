@@ -58,7 +58,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static boolean onField = false;
         public static double startX = 84;
         public static double startY = 72;
-        public static double startHeadingDeg = 270;
+        public static double startHeadingDeg = 90;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
         public static double wallGapIn = 1;
