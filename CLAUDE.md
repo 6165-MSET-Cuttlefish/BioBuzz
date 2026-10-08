@@ -102,6 +102,7 @@ Each loop reads modules and updates the follower before `gameLoop()`, then runs 
 - Build commands in `initialize()` (`StateCommands.set` throws on a state not yet bound) and schedule them in `onStart()` (`start()` resets the scheduler).
 - Requirements are `Module`s, or the `Follower` for every `PathCommands` command; a group requires all its children's. A new command interrupts a running one of equal priority it collides with, so a `StateCommands.set` from `gameLoop()` on any module an auto touches kills the whole auto. Build reactions into the sequence, or give the auto `.setPriority(1)` and the reaction `.setBlockedBehavior(BlockedBehavior.QUEUE)`.
 - `PathCommands.remainingBelow` measures the current leg only.
+- Ivy's `Commands.waitMs` runs on the wall clock, which jumps decades the first time a DS or the RC web page connects after boot: use `PathCommands.waitMs`.
 - Wrap every auto in `PathCommands.timeout`. `opmodes/test/MockAuto` is the reference auto; `opmodes/test/auto/CloseFlowerAuto` is the same on real paths.
 
 ## Tuning

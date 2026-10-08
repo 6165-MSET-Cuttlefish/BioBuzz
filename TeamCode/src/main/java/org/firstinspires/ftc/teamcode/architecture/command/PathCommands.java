@@ -14,6 +14,7 @@ import com.pedropathing.paths.PathSegment;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 
@@ -99,7 +100,14 @@ public final class PathCommands {
     }
 
     public static CommandBuilder timeout(Command command, double ms) {
-        return Groups.race(command, Commands.waitMs(ms));
+        return Groups.race(command, waitMs(ms));
+    }
+
+    public static CommandBuilder waitMs(double ms) {
+        AtomicLong start = new AtomicLong();
+        return Command.build()
+                .setStart(() -> start.set(System.nanoTime()))
+                .setDone(() -> System.nanoTime() - start.get() >= ms * 1e6);
     }
 
     // Interrupted by a timeout, a race, or a newer path command: Pedro would otherwise finish the abandoned path and hold at its end.
