@@ -8,8 +8,10 @@ import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.OpModeManagerImpl;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.RobotLog;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -95,8 +97,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runInit();
         } catch (Throwable t) {
+            reportFailure("init", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -138,8 +141,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runInitLoop();
         } catch (Throwable t) {
+            reportFailure("init_loop", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -174,8 +178,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runStart();
         } catch (Throwable t) {
+            reportFailure("start", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -204,8 +209,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runLoop();
         } catch (Throwable t) {
+            reportFailure("loop", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -236,9 +242,10 @@ public abstract class EnhancedOpMode extends OpMode {
     public final void stop() {
         Throwable failure = safeStatePass(null);
         failure = attempt(failure, this::onEnd);
-        if (failure instanceof RuntimeException) throw (RuntimeException) failure;
-        if (failure instanceof Error) throw (Error) failure;
-        if (failure != null) throw new IllegalStateException(failure);
+        if (failure != null) {
+            reportFailure("stop", failure);
+            throw unchecked(failure);
+        }
     }
 
     /** Every step runs even if an earlier one throws; returns the first failure, later ones attached to it as suppressed. */
@@ -255,6 +262,15 @@ public abstract class EnhancedOpMode extends OpMode {
             failure = attempt(failure, m::stop);
         }
         return failure;
+    }
+
+    private void reportFailure(String hook, Throwable t) {
+        if (t instanceof OpModeManagerImpl.ForceStopException) return;
+        RobotLog.setGlobalErrorMsg(getClass().getSimpleName() + " " + hook + ": " + t);
+    }
+
+    private static RuntimeException unchecked(Throwable t) {
+        return t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
     }
 
     private static Throwable attempt(Throwable failure, Runnable step) {
