@@ -64,7 +64,7 @@ public class CellTipCamera extends Module {
         stalenessMs = verdict.timestampSeconds == 0
                 ? Double.NaN
                 : (System.nanoTime() * 1e-9 - verdict.timestampSeconds) * 1000;
-        fresh = stalenessMs <= maxStalenessMs;
+        fresh = stalenessMs >= 0 && stalenessMs <= maxStalenessMs;
         tipped = fresh && verdict.tipped;
     }
 
