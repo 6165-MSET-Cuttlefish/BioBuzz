@@ -58,6 +58,7 @@ public class Drivetrain extends Module {
     private double flPower, blPower, brPower, frPower;
     private double lastCurrentLimiterMultiplier = 1.0;
     private double lastFloodgateAmps = Double.NaN;
+    private boolean resyncOnWrite;
 
     public Drivetrain(HardwareMap hardwareMap) {
         fl = new EnhancedMotor(hardwareMap, "fl").withCachingTolerance(0.05);
@@ -92,6 +93,7 @@ public class Drivetrain extends Module {
 
     @Override
     protected void read() {
+        if (!isWriteEnabled() || (follower != null && !follower.idle())) resyncOnWrite = true;
     }
 
     @Override
@@ -100,6 +102,11 @@ public class Drivetrain extends Module {
         if (follower != null && !follower.idle()) {
             throw new IllegalStateException("Drivetrain writes are enabled while the follower drives the motors; "
                     + "call drivetrain.setWriteEnabled(false) in follower-driven OpModes");
+        }
+        if (resyncOnWrite) {
+            if (follower != null) follower.drivetrain.stop();
+            stop();
+            resyncOnWrite = false;
         }
         fl.setPower(enableMotors.enableFl ? flPower : 0);
         bl.setPower(enableMotors.enableBl ? blPower : 0);
