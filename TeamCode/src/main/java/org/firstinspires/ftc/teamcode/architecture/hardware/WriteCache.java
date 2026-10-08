@@ -1,8 +1,11 @@
 package org.firstinspires.ftc.teamcode.architecture.hardware;
 
 final class WriteCache {
+    static final long RESEND_NANOS = 250_000_000L;
+
     double tolerance = 0.0;
     double cached = Double.NaN;
+    private long storedNanos;
     double min = -1.0;
     double max = 1.0;
 
@@ -18,7 +21,8 @@ final class WriteCache {
                 || (newValue != 0.0 && cached == 0.0)
                 || (newValue >= max && !(cached >= max))
                 || (newValue <= min && !(cached <= min))
-                || Double.isNaN(cached);
+                || Double.isNaN(cached)
+                || System.nanoTime() - storedNanos > RESEND_NANOS;
     }
 
     double clamp(double value) {
@@ -34,5 +38,6 @@ final class WriteCache {
 
     void store(double value) {
         cached = value;
+        storedNanos = System.nanoTime();
     }
 }

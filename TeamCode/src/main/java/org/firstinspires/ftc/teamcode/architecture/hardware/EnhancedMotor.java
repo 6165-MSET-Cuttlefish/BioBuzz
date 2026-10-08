@@ -14,6 +14,7 @@ public class EnhancedMotor implements DcMotorEx {
     private final DcMotorEx motor;
     private final WriteCache cache = new WriteCache();
     private double cachedVelocity = Double.NaN;
+    private long velocityNanos;
 
     public EnhancedMotor(HardwareMap hardwareMap, String name) {
         this.motor = hardwareMap.get(DcMotorEx.class, name);
@@ -52,14 +53,21 @@ public class EnhancedMotor implements DcMotorEx {
         cache.voltageCompensationEnabled = enabled;
     }
 
-    @Override public void setMotorEnable() { motor.setMotorEnable(); }
-    @Override public void setMotorDisable() { motor.setMotorDisable(); }
+    @Override public void setMotorEnable() {
+        motor.setMotorEnable();
+        clearCaches();
+    }
+    @Override public void setMotorDisable() {
+        motor.setMotorDisable();
+        clearCaches();
+    }
     @Override public boolean isMotorEnabled() { return motor.isMotorEnabled(); }
 
     @Override
     public void setVelocity(double angularRate) {
-        if (angularRate == cachedVelocity) return;
+        if (angularRate == cachedVelocity && System.nanoTime() - velocityNanos <= WriteCache.RESEND_NANOS) return;
         cachedVelocity = angularRate;
+        velocityNanos = System.nanoTime();
         // Velocity write leaves power mode; drop the power cache or an identical setPower() is wrongly suppressed.
         cache.store(Double.NaN);
         motor.setVelocity(angularRate);
@@ -88,7 +96,10 @@ public class EnhancedMotor implements DcMotorEx {
     @Override public boolean isOverCurrent() { return motor.isOverCurrent(); }
 
     @Override public RunMode getMode() { return motor.getMode(); }
-    @Override public void setMode(RunMode mode) { motor.setMode(mode); }
+    @Override public void setMode(RunMode mode) {
+        motor.setMode(mode);
+        clearCaches();
+    }
 
     @Override public MotorConfigurationType getMotorType() { return motor.getMotorType(); }
     @Override public void setMotorType(MotorConfigurationType motorType) { motor.setMotorType(motorType); }
@@ -99,18 +110,28 @@ public class EnhancedMotor implements DcMotorEx {
     @Override public ZeroPowerBehavior getZeroPowerBehavior() { return motor.getZeroPowerBehavior(); }
     @Override public void setZeroPowerBehavior(ZeroPowerBehavior behavior) { motor.setZeroPowerBehavior(behavior); }
 
-    @Override public void setPowerFloat() { motor.setPowerFloat(); }
+    @Override public void setPowerFloat() {
+        motor.setPowerFloat();
+        clearCaches();
+    }
     @Override public boolean getPowerFloat() { return motor.getPowerFloat(); }
 
     @Override public boolean isBusy() { return motor.isBusy(); }
     @Override public int getTargetPosition() { return motor.getTargetPosition(); }
-    @Override public void setTargetPosition(int position) { motor.setTargetPosition(position); }
+    @Override public void setTargetPosition(int position) {
+        motor.setTargetPosition(position);
+        clearCaches();
+    }
     @Override public int getCurrentPosition() { return motor.getCurrentPosition(); }
 
     @Override public Direction getDirection() { return motor.getDirection(); }
     @Override public void setDirection(Direction direction) {
         motor.setDirection(direction);
         // Direction changes what the same number means, not the number; drop both caches to force a re-issue.
+        clearCaches();
+    }
+
+    private void clearCaches() {
         cache.store(Double.NaN);
         cachedVelocity = Double.NaN;
     }

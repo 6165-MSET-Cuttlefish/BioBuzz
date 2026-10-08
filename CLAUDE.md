@@ -95,6 +95,7 @@ Each loop reads modules and updates the follower before `gameLoop()`, then runs 
 - Name nested `@Config` classes (`@Config("Shooter")`): slothboard keys config classes by simple name, so bare nested `Tuning` classes collide and vanish.
 - Telemetry goes in `onTelemetry()`, not `read()`. DS lines outside a DS frame are dropped; gate other DS-only work on `getTelemetry().isDSFrame()`.
 - Safe state lives in `stop()`, never only in a command's `end()` (those don't run at OpMode stop). Use `EnhancedMotor.stop()`, since the write cache can drop `setPower(0)`, and keep it reversible: it can run mid-OpMode with `write()` resuming.
+- `EnhancedMotor` and `EnhancedServo` re-send an unchanged value every 250 ms because the hub can drop a write silently (a hub reset or NACK); keep that in any new write cache.
 - `stop()` can only de-energize: on a normal STOP the SDK has already fail-safed the hubs and silently drops any move, so stow a mechanism at the end of its routine.
 - `EnhancedMotor.setVelocity(double)` is ticks/s, not RPM; `withVoltageCompensation` scales only `setPower`.
 - A State setpoint is dashboard-live only through `bindTunable(state, () -> field)` after `setStates`; a value passed to the enum constructor is read once.
