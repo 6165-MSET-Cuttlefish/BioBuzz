@@ -9,7 +9,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.acmerobotics.slothboard</groupId>
   <artifactId>dashboard</artifactId>
-  <version>0.3.2+0.6.0-6165.5</version>
+  <version>0.3.2+0.6.0-6165.6</version>
   <packaging>aar</packaging>
   <name>FTC Dashboard</name>
   <description>Web dashboard designed for FTC</description>
@@ -35,7 +35,7 @@
     <dependency>
       <groupId>com.acmerobotics.slothboard</groupId>
       <artifactId>core</artifactId>
-      <version>0.3.2+0.6.0-6165.5</version>
+      <version>0.3.2+0.6.0-6165.6</version>
       <scope>compile</scope>
       <exclusions>
         <exclusion>
