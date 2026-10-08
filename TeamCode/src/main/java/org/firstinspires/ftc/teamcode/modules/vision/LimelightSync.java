@@ -3,6 +3,10 @@ package org.firstinspires.ftc.teamcode.modules.vision;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLStatus;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
+import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+
+import java.util.concurrent.Semaphore;
+import java.util.function.BooleanSupplier;
 
 public final class LimelightSync {
     /** What the uploaded copy reports in llpython[0]: a fingerprint of both files, below 2^24. */
@@ -56,6 +60,8 @@ public final class LimelightSync {
 
     private static final class Cancelled extends Exception {}
 
+    private static final Semaphore sender =
+            (Semaphore) OpMode.blackboard.computeIfAbsent("LimelightSync.sender", key -> new Semaphore(1));
     private static final Object lock = new Object();
     private static Request pending;
     private static boolean running;
@@ -114,31 +120,26 @@ public final class LimelightSync {
         Limelight3A ll = r.limelight;
         int target = r.pipeline;
         if (!r.upload) {
-            check(r);
-            if (!ll.pipelineSwitch(target)) return String.format("pipeline switch to %d rejected", target);
+            if (!post(r, () -> ll.pipelineSwitch(target))) return String.format("pipeline switch to %d rejected", target);
             return pythonProblem(r, target);
         }
 
         int park = target == 0 ? 1 : 0;
         int uploads = 0;
         for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
-            check(r);
-            if (!ll.pipelineSwitch(park)) {
+            if (!post(r, () -> ll.pipelineSwitch(park))) {
                 return String.format("pipeline switch to %d (parking before the upload to %d) rejected", park, target);
             }
             if (!waitFor(r, park, System.currentTimeMillis(), SWITCH_WAIT_MS, false)) continue;
             sleep(r, PARK_SETTLE_MS);
-            check(r);
-            if (!ll.uploadPipeline(LimelightFiles.BALL_PIPELINE, target)) {
+            if (!post(r, () -> ll.uploadPipeline(LimelightFiles.BALL_PIPELINE, target))) {
                 return String.format("pipeline upload to %d rejected", target);
             }
-            check(r);
-            if (!ll.uploadPython(LimelightFiles.BALL_SCRIPT, target)) {
+            if (!post(r, () -> ll.uploadPython(LimelightFiles.BALL_SCRIPT, target))) {
                 return String.format("script upload to %d rejected", target);
             }
             uploads++;
-            check(r);
-            if (!ll.pipelineSwitch(target)) return String.format("pipeline switch to %d rejected", target);
+            if (!post(r, () -> ll.pipelineSwitch(target))) return String.format("pipeline switch to %d rejected", target);
             if (waitFor(r, target, System.currentTimeMillis(), LOAD_WAIT_MS, true)) return pythonProblem(r, target);
         }
         if (uploads == 0) return String.format("the Limelight never reported park pipeline %d", park);
@@ -150,6 +151,16 @@ public final class LimelightSync {
 
     private static void check(Request r) throws Cancelled {
         if (r.cancelled) throw new Cancelled();
+    }
+
+    private static boolean post(Request r, BooleanSupplier call) throws InterruptedException, Cancelled {
+        sender.acquire();
+        try {
+            check(r);
+            return call.getAsBoolean();
+        } finally {
+            sender.release();
+        }
     }
 
     private static void sleep(Request r, long ms) throws InterruptedException, Cancelled {
