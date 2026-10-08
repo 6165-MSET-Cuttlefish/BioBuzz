@@ -3,7 +3,7 @@
   "component": {
     "group": "com.acmerobotics.slothboard",
     "module": "core",
-    "version": "0.3.2+0.6.0-6165.4",
+    "version": "0.3.2+0.6.0-6165.5",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -25,8 +25,8 @@
       },
       "files": [
         {
-          "name": "core-0.3.2+0.6.0-6165.4.jar",
-          "url": "core-0.3.2+0.6.0-6165.4.jar",
+          "name": "core-0.3.2+0.6.0-6165.5.jar",
+          "url": "core-0.3.2+0.6.0-6165.5.jar",
           "size": 73454,
           "sha512": "a16469c9a89dda916efb73ec46fe203b660a82fbe6f1554e7d8f1716c3390cd2ece356051b66efc198c6257da6f642b1569e8b4dd7e8d7716852696faa6ba6fd",
           "sha256": "8696e124c8bfb3608be8e098b745ad44e2e2b80f97e26f3a3c7ae7b06e533717",
@@ -55,8 +55,8 @@
       ],
       "files": [
         {
-          "name": "core-0.3.2+0.6.0-6165.4.jar",
-          "url": "core-0.3.2+0.6.0-6165.4.jar",
+          "name": "core-0.3.2+0.6.0-6165.5.jar",
+          "url": "core-0.3.2+0.6.0-6165.5.jar",
           "size": 73454,
           "sha512": "a16469c9a89dda916efb73ec46fe203b660a82fbe6f1554e7d8f1716c3390cd2ece356051b66efc198c6257da6f642b1569e8b4dd7e8d7716852696faa6ba6fd",
           "sha256": "8696e124c8bfb3608be8e098b745ad44e2e2b80f97e26f3a3c7ae7b06e533717",
@@ -75,8 +75,8 @@
       },
       "files": [
         {
-          "name": "core-0.3.2+0.6.0-6165.4-sources.jar",
-          "url": "core-0.3.2+0.6.0-6165.4-sources.jar",
+          "name": "core-0.3.2+0.6.0-6165.5-sources.jar",
+          "url": "core-0.3.2+0.6.0-6165.5-sources.jar",
           "size": 38863,
           "sha512": "b8b7dad35489ad7e8fb634c162c075724eb54b139061a258b6e5b0f26725031294714d80cf9072f5487d51e0be26110789c85f289c07a5e5163ad8a86e0362c6",
           "sha256": "d9f02bd1853ccc44354bb230f2acae70241580405f67976e1554d49a934241cf",
