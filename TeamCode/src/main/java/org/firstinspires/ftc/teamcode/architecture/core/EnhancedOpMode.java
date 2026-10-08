@@ -12,6 +12,8 @@ import com.qualcomm.robotcore.eventloop.opmode.OpModeManagerImpl;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.RobotLog;
+import dev.frozenmilk.sinister.loaders.SlothClassLoader;
+import java.io.File;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -73,6 +75,7 @@ public abstract class EnhancedOpMode extends OpMode {
     private int loopsSinceFieldRender = Integer.MAX_VALUE;
     private AllianceColor cachedAllianceColor;
     private String cachedAllianceHtml;
+    private String runningCode;
 
     protected void initialize() {}
     protected void initializeLoop() {}
@@ -112,6 +115,7 @@ public abstract class EnhancedOpMode extends OpMode {
 
         configureBulkCaching();
         voltageSensor = hardwareMap.voltageSensor.iterator().next();
+        runningCode = describeRunningCode();
 
         robot = createRobot();
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
@@ -558,10 +562,18 @@ public abstract class EnhancedOpMode extends OpMode {
 
     private void addStatusTelemetry(Pose currentPose) {
         robot.telemetry.addGroupHeader("ROBOT STATUS");
+        robot.telemetry.addData("Code", runningCode);
         addAllianceTelemetry();
         robot.telemetry.addData("Robot Position", "X: %.1f, Y: %.1f, Heading: %.1f°",
                 currentPose.x(), currentPose.y(), Math.toDegrees(currentPose.heading()));
         addVoltageCurrentTelemetry();
+    }
+
+    private String describeRunningCode() {
+        ClassLoader loader = getClass().getClassLoader();
+        if (!(loader instanceof SlothClassLoader)) return "installed APK";
+        String path = ((SlothClassLoader) loader).getPath();
+        return path.equals(hardwareMap.appContext.getPackageCodePath()) ? "installed APK" : new File(path).getName();
     }
 
     private void addAllianceTelemetry() {

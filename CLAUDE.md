@@ -20,7 +20,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 IDE run configs are per laptop (`.idea/` isn't committed); set them up per Sloth's README.
 
 - **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, resources, `robotcontroller/internal/`).
-- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (RC screen or DS log) before redeploying or pressing INIT.
+- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (logcat's `Processed Sloth Load`, the RC screen or the DS) before redeploying or pressing INIT. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
 - An old hot-load overriding new code: run the `removeSlothRemote` task alone, after `adb connect 192.168.43.1` (it never connects and silently does nothing without a device).
 - With no adb device connected, deploySloth connects to `192.168.43.1` and runs a bare `adb disconnect` when done; connect first to stay connected. Other address: `load { address = "..." }` in `TeamCode/build.gradle`.
 - The DS app must match the SDK version or it fails inspection.
