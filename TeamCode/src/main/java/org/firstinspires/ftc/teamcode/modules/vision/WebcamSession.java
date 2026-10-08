@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -10,11 +11,13 @@ import org.firstinspires.ftc.robotcore.external.function.Continuation;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.stream.CameraStreamServer;
 import org.firstinspires.ftc.robotcore.external.stream.CameraStreamSource;
+import org.opencv.core.Mat;
 import org.openftc.easyopencv.OpenCvCamera;
 import org.openftc.easyopencv.OpenCvCameraFactory;
 import org.openftc.easyopencv.OpenCvCameraRotation;
 import org.openftc.easyopencv.OpenCvPipeline;
 import org.openftc.easyopencv.OpenCvWebcam;
+import org.openftc.easyopencv.TimestampedOpenCvPipeline;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +40,7 @@ public final class WebcamSession {
     private volatile int openError = NO_ERROR;
     private volatile boolean cameraStreamEnabled = true;
     private volatile boolean closed;
+    private volatile RuntimeException cameraThreadFailure;
 
     public WebcamSession(HardwareMap hardwareMap, String webcamName, OpenCvPipeline pipeline) {
         this.webcamName = webcamName;
@@ -44,7 +48,7 @@ public final class WebcamSession {
         int viewId = hardwareMap.appContext.getResources().getIdentifier(
                 "cameraMonitorViewId", "id", hardwareMap.appContext.getPackageName());
         webcam = OpenCvCameraFactory.getInstance().createWebcam(name, viewId);
-        webcam.setPipeline(pipeline);
+        webcam.setPipeline(new FailureCapture(pipeline));
         frames = new SharedFrameSource(webcam);
         // EasyOpenCV registered the webcam itself as the DS preview source in its constructor.
         CameraStreamServer.getInstance().setSource(frames);
@@ -56,11 +60,15 @@ public final class WebcamSession {
                     webcam.closeCameraDevice();
                     return;
                 }
-                // OV9782 only offers 640x480 in MJPEG, not the default uncompressed YUY2.
-                webcam.startStreaming(WIDTH, HEIGHT, OpenCvCameraRotation.UPRIGHT,
-                        OpenCvWebcam.StreamFormat.MJPEG);
-                if (cameraStreamEnabled) FtcDashboard.getInstance().startCameraStream(frames, DASHBOARD_FPS);
-                controls = new WebcamControls(webcam);
+                try {
+                    // OV9782 only offers 640x480 in MJPEG, not the default uncompressed YUY2.
+                    webcam.startStreaming(WIDTH, HEIGHT, OpenCvCameraRotation.UPRIGHT,
+                            OpenCvWebcam.StreamFormat.MJPEG);
+                    if (cameraStreamEnabled) FtcDashboard.getInstance().startCameraStream(frames, DASHBOARD_FPS);
+                    controls = new WebcamControls(webcam);
+                } catch (RuntimeException e) {
+                    fail(e);
+                }
             }
 
             @Override public void onError(int errorCode) {
@@ -79,6 +87,8 @@ public final class WebcamSession {
             throw new IllegalStateException(webcamName + " failed to open (EasyOpenCV error "
                     + error + " " + describe(error) + ")");
         }
+        RuntimeException failure = cameraThreadFailure;
+        if (failure != null) throw new IllegalStateException(webcamName + " camera thread failed: " + failure, failure);
         WebcamControls c = controls;
         if (c != null) c.update();
     }
@@ -102,6 +112,10 @@ public final class WebcamSession {
         }
     }
 
+    private void fail(RuntimeException e) {
+        if (cameraThreadFailure == null) cameraThreadFailure = e;
+    }
+
     private static String describe(int error) {
         switch (error) {
             case OpenCvCamera.CAMERA_OPEN_ERROR_FAILURE_TO_OPEN_CAMERA_DEVICE:
@@ -110,6 +124,52 @@ public final class WebcamSession {
                 return "POSTMORTEM_OPMODE";
             default:
                 return "unknown";
+        }
+    }
+
+    private final class FailureCapture extends TimestampedOpenCvPipeline {
+        private final OpenCvPipeline pipeline;
+
+        FailureCapture(OpenCvPipeline pipeline) {
+            this.pipeline = pipeline;
+        }
+
+        @Override
+        public void init(Mat firstFrame) {
+            try {
+                pipeline.init(firstFrame);
+            } catch (RuntimeException e) {
+                fail(e);
+            }
+        }
+
+        @Override
+        public Mat processFrame(Mat input, long captureTimeNanos) {
+            if (cameraThreadFailure != null) return input;
+            try {
+                return pipeline instanceof TimestampedOpenCvPipeline
+                        ? ((TimestampedOpenCvPipeline) pipeline).processFrame(input, captureTimeNanos)
+                        : pipeline.processFrame(input);
+            } catch (RuntimeException e) {
+                fail(e);
+                return input;
+            }
+        }
+
+        @Override
+        public void onViewportTapped() {
+            pipeline.onViewportTapped();
+        }
+
+        @Override
+        public Object getUserContextForDrawHook() {
+            return pipeline.getUserContextForDrawHook();
+        }
+
+        @Override
+        public void onDrawFrame(Canvas canvas, int onscreenWidth, int onscreenHeight, float scaleBmpPxToCanvasPx,
+                                float scaleCanvasDensity, Object userContext) {
+            pipeline.onDrawFrame(canvas, onscreenWidth, onscreenHeight, scaleBmpPxToCanvasPx, scaleCanvasDensity, userContext);
         }
     }
 
