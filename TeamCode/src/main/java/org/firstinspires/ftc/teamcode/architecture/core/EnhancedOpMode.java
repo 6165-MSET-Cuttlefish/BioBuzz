@@ -117,6 +117,7 @@ public abstract class EnhancedOpMode extends OpMode {
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
         telemetry = robot.telemetry;
         packet = newPacket();
+        robot.telemetry.setPacket(packet);
 
         autoDiscoverModules();
         initModules();
@@ -131,9 +132,6 @@ public abstract class EnhancedOpMode extends OpMode {
         field = new FieldMapRenderer(73, 74);
         field.drawFieldLayout();
         field.snapshot();
-
-        // Not first in this frame (init lines came earlier), but shown on the SDK's post-init send rather than ~250 ms later.
-        addFaultTelemetry();
     }
 
     @Override
@@ -287,8 +285,6 @@ public abstract class EnhancedOpMode extends OpMode {
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
         robot.telemetry.syncDsTransmissionInterval();
         robot.telemetry.beginLoop();
-        // Not set in init(): init-time dashboard lines go through the adapter, which the SDK's post-init update() sends.
-        robot.telemetry.setPacket(packet);
         // Here, before any other line, so faults lead the frame; ones raised later this loop show next loop.
         addFaultTelemetry();
 
