@@ -127,6 +127,8 @@ Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Anal
 - **Close Flower** autos: the `toAudienceWall` and `toHive` legs put part of the robot over the centre line (G402).
 - **Ball Collection Auto** reads its start pose and `collection` settings at INIT; wait for its `Vision` line to read live before START, or it skips while the INIT sync is still uploading.
 - **Decode Tele** starts at a placeholder pose: reset it with gamepad1 before trusting the odometry-only turret aim.
+- **OctoQuad** (`octoquad/`, I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver supports FW 3.1, so a MK2 needs no `OctoQuadFWv3` driver from DigitalChickenLabs' repo (whose README still says otherwise). Calibrate with the Deadwheel and Heading Scalar calibrators, then set them on the dashboard in OctoQuad Localizer Test (gamepad1 A applies them, recalibrating the IMU: keep the robot still). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after every such reset, code must not drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and must drop data whose `crcOk` is false.
+- **Pinpoint Localizer Test** (`pinpoint/`) keeps its own copy of the Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`. Dashboard edits apply on gamepad1 A, which recalibrates the IMU (keep the robot still).
 - Single devices: the dashboard's Hardware View. An isolated module test extends `OpMode`, not `EnhancedOpMode`.
 
 **Known issues**, unmeasured on a Control Hub: `WebcamSession.close()` runs synchronously in `stop()` and may overrun the SDK's stop watchdog; the route planner's cost on the hub and its re-plan hysteresis.
