@@ -91,7 +91,7 @@ dependencies {
 
     implementation 'dev.frozenmilk.sinister:Sloth:0.3.2'
     // 6165 slothboard build from TeamCode/libs/m2; the version prefix must match the Sloth version.
-    implementation 'com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.5'
+    implementation 'com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.6'
 }
 
 // limelight/'s ball pipeline and SnapScript as Java constants, so deploySloth carries them as well as Run.

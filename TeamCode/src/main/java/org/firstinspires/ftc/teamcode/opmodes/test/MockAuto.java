@@ -9,7 +9,7 @@ import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import static com.pedropathing.ivy.commands.Commands.instant;
-import static com.pedropathing.ivy.commands.Commands.waitMs;
+import static org.firstinspires.ftc.teamcode.architecture.command.PathCommands.waitMs;
 import static com.pedropathing.ivy.groups.Groups.race;
 import static com.pedropathing.ivy.groups.Groups.sequential;
 

@@ -30,7 +30,6 @@ public class DualTelemetry implements Telemetry {
     private boolean enableDashboardTelemetry = true;
     private boolean dsFormatApplied = false;
     private boolean dashFormatApplied = false;
-    // Open until the first update() so writes made during init() reach the SDK's post-init update().
     private boolean dsFrameOpen = true;
     private boolean dsEverSent = false;
     private long lastDSSendNs;

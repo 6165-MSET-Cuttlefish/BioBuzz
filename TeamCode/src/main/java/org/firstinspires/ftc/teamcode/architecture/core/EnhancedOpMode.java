@@ -8,8 +8,12 @@ import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.OpModeManagerImpl;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.RobotLog;
+import dev.frozenmilk.sinister.loaders.SlothClassLoader;
+import java.io.File;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -71,6 +75,7 @@ public abstract class EnhancedOpMode extends OpMode {
     private int loopsSinceFieldRender = Integer.MAX_VALUE;
     private AllianceColor cachedAllianceColor;
     private String cachedAllianceHtml;
+    private String runningCode;
 
     protected void initialize() {}
     protected void initializeLoop() {}
@@ -95,8 +100,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runInit();
         } catch (Throwable t) {
+            reportFailure("init", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -109,11 +115,13 @@ public abstract class EnhancedOpMode extends OpMode {
 
         configureBulkCaching();
         voltageSensor = hardwareMap.voltageSensor.iterator().next();
+        runningCode = describeRunningCode();
 
         robot = createRobot();
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
         telemetry = robot.telemetry;
         packet = newPacket();
+        robot.telemetry.setPacket(packet);
 
         autoDiscoverModules();
         initModules();
@@ -128,9 +136,6 @@ public abstract class EnhancedOpMode extends OpMode {
         field = new FieldMapRenderer(73, 74);
         field.drawFieldLayout();
         field.snapshot();
-
-        // Not first in this frame (init lines came earlier), but shown on the SDK's post-init send rather than ~250 ms later.
-        addFaultTelemetry();
     }
 
     @Override
@@ -138,8 +143,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runInitLoop();
         } catch (Throwable t) {
+            reportFailure("init_loop", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -174,8 +180,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runStart();
         } catch (Throwable t) {
+            reportFailure("start", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -204,8 +211,9 @@ public abstract class EnhancedOpMode extends OpMode {
         try {
             runLoop();
         } catch (Throwable t) {
+            reportFailure("loop", t);
             safeStatePass(t);
-            throw t;
+            throw unchecked(t);
         }
     }
 
@@ -236,9 +244,10 @@ public abstract class EnhancedOpMode extends OpMode {
     public final void stop() {
         Throwable failure = safeStatePass(null);
         failure = attempt(failure, this::onEnd);
-        if (failure instanceof RuntimeException) throw (RuntimeException) failure;
-        if (failure instanceof Error) throw (Error) failure;
-        if (failure != null) throw new IllegalStateException(failure);
+        if (failure != null) {
+            reportFailure("stop", failure);
+            throw unchecked(failure);
+        }
     }
 
     /** Every step runs even if an earlier one throws; returns the first failure, later ones attached to it as suppressed. */
@@ -257,6 +266,15 @@ public abstract class EnhancedOpMode extends OpMode {
         return failure;
     }
 
+    private void reportFailure(String hook, Throwable t) {
+        if (t instanceof OpModeManagerImpl.ForceStopException) return;
+        RobotLog.setGlobalErrorMsg(getClass().getSimpleName() + " " + hook + ": " + t);
+    }
+
+    private static RuntimeException unchecked(Throwable t) {
+        return t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
+    }
+
     private static Throwable attempt(Throwable failure, Runnable step) {
         try {
             step.run();
@@ -271,8 +289,6 @@ public abstract class EnhancedOpMode extends OpMode {
         robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
         robot.telemetry.syncDsTransmissionInterval();
         robot.telemetry.beginLoop();
-        // Not set in init(): init-time dashboard lines go through the adapter, which the SDK's post-init update() sends.
-        robot.telemetry.setPacket(packet);
         // Here, before any other line, so faults lead the frame; ones raised later this loop show next loop.
         addFaultTelemetry();
 
@@ -546,10 +562,18 @@ public abstract class EnhancedOpMode extends OpMode {
 
     private void addStatusTelemetry(Pose currentPose) {
         robot.telemetry.addGroupHeader("ROBOT STATUS");
+        robot.telemetry.addData("Code", runningCode);
         addAllianceTelemetry();
         robot.telemetry.addData("Robot Position", "X: %.1f, Y: %.1f, Heading: %.1f°",
                 currentPose.x(), currentPose.y(), Math.toDegrees(currentPose.heading()));
         addVoltageCurrentTelemetry();
+    }
+
+    private String describeRunningCode() {
+        ClassLoader loader = getClass().getClassLoader();
+        if (!(loader instanceof SlothClassLoader)) return "installed APK";
+        String path = ((SlothClassLoader) loader).getPath();
+        return path.equals(hardwareMap.appContext.getPackageCodePath()) ? "installed APK" : new File(path).getName();
     }
 
     private void addAllianceTelemetry() {

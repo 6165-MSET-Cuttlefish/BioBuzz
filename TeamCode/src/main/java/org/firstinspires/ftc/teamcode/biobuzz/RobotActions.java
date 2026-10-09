@@ -2,9 +2,9 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
-import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.ivy.groups.Groups;
 
+import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
 public class RobotActions {
@@ -21,7 +21,7 @@ public class RobotActions {
         Command watch = Command.build()
                 .setDone(cellTip::isTipped)
                 .requiring(cellTip);
-        return Groups.race(watch, Commands.waitMs(CellTipCamera.checkTipTimeoutMs));
+        return Groups.race(watch, PathCommands.waitMs(CellTipCamera.checkTipTimeoutMs));
     }
 
     /** Plans from the balls in view each time it starts; wrap it in a timeout like any auto step. */

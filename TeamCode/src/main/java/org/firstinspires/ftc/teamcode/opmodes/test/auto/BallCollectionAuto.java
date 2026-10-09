@@ -1,6 +1,6 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
-import static com.pedropathing.ivy.commands.Commands.waitMs;
+import static org.firstinspires.ftc.teamcode.architecture.command.PathCommands.waitMs;
 import static com.pedropathing.ivy.groups.Groups.race;
 
 import com.acmerobotics.dashboard.canvas.Canvas;

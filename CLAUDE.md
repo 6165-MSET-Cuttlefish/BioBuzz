@@ -19,10 +19,11 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 IDE run configs are per laptop (`.idea/` isn't committed); set them up per Sloth's README.
 
-- **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, resources, `robotcontroller/internal/`).
-- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (RC screen or DS log) before redeploying or pressing INIT.
+- **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/` such as field images, `robotcontroller/internal/`).
+- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (logcat's `Processed Sloth Load`, the RC screen or the DS) before redeploying or pressing INIT. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
+- A deploySloth replaces every `HardwareDevice` object, so state kept in one (e.g. the Limelight poll rate) doesn't carry across it.
 - An old hot-load overriding new code: run the `removeSlothRemote` task alone, after `adb connect 192.168.43.1` (it never connects and silently does nothing without a device).
-- With no adb device connected, deploySloth connects to `192.168.43.1` and runs a bare `adb disconnect` when done; connect first to stay connected. Other address: `load { address = "..." }` in `TeamCode/build.gradle`.
+- With no adb device connected, deploySloth connects to `192.168.43.1` and runs a bare `adb disconnect` when done; connect first to stay connected. Other address: `load { address = "..." }` in `TeamCode/build.gradle`. With more than one adb device, set `ANDROID_SERIAL` for it.
 - The DS app must match the SDK version or it fails inspection.
 - No unit tests. Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK).
 
@@ -31,6 +32,7 @@ IDE run configs are per laptop (`.idea/` isn't committed); set them up per Sloth
 - Sloth, the `dev.frozenmilk.sinister.sloth.load` plugin and slothboard's `{sloth}` version prefix must match; slothboard pins Sloth strictly.
 - slothboard is the committed `TeamCode/libs/m2/`, built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`. To bump: tag a new build there, replace the six files and the version string. Keep `exclude group: 'com.acmerobotics.dashboard'` (same Java packages).
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
+- A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
 Pedro Pathing 3:
 
@@ -84,6 +86,7 @@ Each loop reads modules and updates the follower before `gameLoop()`, then runs 
 
 - Telemetry lines go in `telemetry()`, field drawing in `dashboardOverlay(Canvas)`. Never call `telemetry.update()` in an `EnhancedOpMode`: it closes the DS frame and later DS lines are dropped. Dashboard values stay plain text (no `HtmlFormatter`) so the graph view can plot them.
 - On `stop()` or a throwing hook, the framework resets the scheduler, stops the follower and its motors, and calls `stop()` on every Module whose `initStates()` began, half-initialized ones included. `onEnd()` runs only on a normal stop.
+- A crash shows on the dashboard's Error line until the next INIT. The SDK only logs it, so a bare OpMode's crash shows only in logcat and the dashboard's Error view, and an `Error` (e.g. `StackOverflowError`) thrown from a bare OpMode kills the RC app.
 - Keep dashboard telemetry fast (`OptimizationToggles.dashboardTransmissionIntervalMs`) and the loop profile on: the team tunes on the dashboard.
 
 ## Module pattern
@@ -92,6 +95,7 @@ Each loop reads modules and updates the follower before `gameLoop()`, then runs 
 - Name nested `@Config` classes (`@Config("Shooter")`): slothboard keys config classes by simple name, so bare nested `Tuning` classes collide and vanish.
 - Telemetry goes in `onTelemetry()`, not `read()`. DS lines outside a DS frame are dropped; gate other DS-only work on `getTelemetry().isDSFrame()`.
 - Safe state lives in `stop()`, never only in a command's `end()` (those don't run at OpMode stop). Use `EnhancedMotor.stop()`, since the write cache can drop `setPower(0)`, and keep it reversible: it can run mid-OpMode with `write()` resuming.
+- `stop()` can only de-energize: on a normal STOP the SDK has already fail-safed the hubs and silently drops any move, so stow a mechanism at the end of its routine.
 - `EnhancedMotor.setVelocity(double)` is ticks/s, not RPM; `withVoltageCompensation` scales only `setPower`.
 - A State setpoint is dashboard-live only through `bindTunable(state, () -> field)` after `setStates`; a value passed to the enum constructor is read once.
 
@@ -101,6 +105,7 @@ Each loop reads modules and updates the follower before `gameLoop()`, then runs 
 - Build commands in `initialize()` (`StateCommands.set` throws on a state not yet bound) and schedule them in `onStart()` (`start()` resets the scheduler).
 - Requirements are `Module`s, or the `Follower` for every `PathCommands` command; a group requires all its children's. A new command interrupts a running one of equal priority it collides with, so a `StateCommands.set` from `gameLoop()` on any module an auto touches kills the whole auto. Build reactions into the sequence, or give the auto `.setPriority(1)` and the reaction `.setBlockedBehavior(BlockedBehavior.QUEUE)`.
 - `PathCommands.remainingBelow` measures the current leg only.
+- Ivy's `Commands.waitMs` runs on the wall clock, which jumps decades the first time a DS or the RC web page connects after boot: use `PathCommands.waitMs`.
 - Wrap every auto in `PathCommands.timeout`. `opmodes/test/MockAuto` is the reference auto; `opmodes/test/auto/CloseFlowerAuto` is the same on real paths.
 
 ## Tuning
@@ -112,7 +117,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **Homography** (`eocvsim/homography`): print `docs/calibration-chessboard-3in-letter.pdf`, set `SQUARE_SIZE_INCHES` to the measured square, lay it flat and square to the robot with the long side away, and check the locked 6 in grid with a tape measure. A new homography moves the (0,0) crosshair, so redo `Mount` in the same change.
 - **`BallFieldTransform.Mount`** (committed for the Betta bot's Limelight): `xIn`/`yIn` is the offset from the Pinpoint offsets' origin to the overlay's (0,0) crosshair. To check it, run Camera Module Test with the robot still and a ball on the centreline at two distances: a constant Y or X error is `yIn` or `xIn`, a Y error growing with distance is `headingDeg`, a left ball reading negative Y means flip `mirrorY`, and a growing X error means redo the homography. Turning in place, a still ball that traces a circle means `xIn`/`yIn` is off.
 
-**AutoTune**: join the robot wifi and open `http://192.168.43.1:10158` (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, pasting each block into `BettaConstants`' matching `*Settings`; re-run after any drivetrain, wheel or pod change. Tests drives 48 in whatever its Distance field says, so clear a 48 × 48 in area. A `@Tuner` method in `pedro/Tuning.java` must be static, take no arguments and declare exactly `Procedure` as its return type, or the RC app breaks at boot.
+**AutoTune**: join the robot wifi and open `http://192.168.43.1:10158` (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, pasting each block into `BettaConstants`' matching `*Settings`; re-run after any drivetrain, wheel or pod change. deploySloth doesn't reach a procedure that's already running: finish or close it first. Tests drives 48 in whatever its Distance field says, so clear a 48 × 48 in area. A `@Tuner` method in `pedro/Tuning.java` must be static, take no arguments and declare exactly `Procedure` as its return type, or the RC app breaks at boot.
 
 ## Testing
 
