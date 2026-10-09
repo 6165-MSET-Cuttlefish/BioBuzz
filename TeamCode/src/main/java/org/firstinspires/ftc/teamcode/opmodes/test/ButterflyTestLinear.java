@@ -17,10 +17,10 @@ public class ButterflyTestLinear extends LinearOpMode {
     private DcMotorEx frontLeft, frontRight, backLeft, backRight;
     private Servo leftShifter, rightShifter;
 
-    public static double LeftUpPos = 0.52;
-    public static double LeftDownPos = 0.45;
-    public static double RightUpPos  = 0.5;
-    public static double RightDownPos = 0.56;
+    public static double LeftUpPos = 0.54;
+    public static double LeftDownPos = 0.49;
+    public static double RightUpPos  = 0.44;
+    public static double RightDownPos = 0.48;
     public static double speedLimit = 2;
 
     private boolean tractionMode = false;
