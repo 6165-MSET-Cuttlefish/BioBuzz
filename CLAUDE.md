@@ -132,7 +132,7 @@ Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Anal
 - **Pinpoint Localizer Test** (`pinpoint/`) keeps its own copy of the Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`. Dashboard edits apply on gamepad1 A, which recalibrates the IMU (keep the robot still).
 - Single devices: the dashboard's Hardware View. An isolated module test extends `OpMode`, not `EnhancedOpMode`.
 
-**Known issues**, unmeasured on a Control Hub: `WebcamSession.close()` runs synchronously in `stop()` and may overrun the SDK's stop watchdog; the route planner's cost on the hub and its re-plan hysteresis.
+**Control Hub bench** (`opmodes/test/bench/`, `Bench: *`): after a full install run `python3 scripts/bench/run_bench.py` (see `scripts/bench/README.md`). Known issues awaiting its numbers: `WebcamSession.close()` runs synchronously in `stop()` and may overrun the SDK's stop watchdog; the route planner's cost on the hub and its re-plan hysteresis are unmeasured.
 
 ## Conventions
 

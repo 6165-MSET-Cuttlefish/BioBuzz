@@ -31,3 +31,5 @@ captures/
 .claude/
 
 __pycache__/
+
+bench-results/
