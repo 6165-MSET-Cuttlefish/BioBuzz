@@ -20,7 +20,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 IDE run configs are per laptop (`.idea/` isn't committed); set them up per Sloth's README.
 
 - **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/` such as field images, `robotcontroller/internal/`).
-- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (logcat's `Processed Sloth Load`, the RC screen or the DS) before redeploying or pressing INIT. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
+- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (logcat's `Processed Sloth Load`, the RC screen or the DS; about 5 s after it returns) before redeploying or pressing INIT: an INIT sooner restarts the app or never runs. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
 - A deploySloth replaces every `HardwareDevice` object, so state kept in one (e.g. the Limelight poll rate) doesn't carry across it.
 - An old hot-load overriding new code: run the `removeSlothRemote` task alone, after `adb connect 192.168.43.1` (it never connects and silently does nothing without a device).
 - With no adb device connected, deploySloth connects to `192.168.43.1` and runs a bare `adb disconnect` when done; connect first to stay connected. Other address: `load { address = "..." }` in `TeamCode/build.gradle`. With more than one adb device, set `ANDROID_SERIAL` for it.
@@ -132,7 +132,7 @@ Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Anal
 - **Pinpoint Localizer Test** (`pinpoint/`) keeps its own copy of the Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`. Dashboard edits apply on gamepad1 A, which recalibrates the IMU (keep the robot still).
 - Single devices: the dashboard's Hardware View. An isolated module test extends `OpMode`, not `EnhancedOpMode`.
 
-**Control Hub bench** (`opmodes/test/bench/`, `Bench: *`): after a full install run `python3 scripts/bench/run_bench.py` (see `scripts/bench/README.md`). Known issues awaiting its numbers: `WebcamSession.close()` runs synchronously in `stop()` and may overrun the SDK's stop watchdog; the route planner's cost on the hub and its re-plan hysteresis are unmeasured.
+**Control Hub bench** (`opmodes/test/bench/`, `Bench: *`): after a full install run `python3 scripts/bench/run_bench.py` (see `scripts/bench/README.md`). Its measurements and what to design around (planner time, Expansion Hub and I2C costs, Pinpoint vs OctoQuad, Limelight latency, the stop window) are in `docs/hub-bench-findings.md`: read it before changing those, and update it after a rerun.
 
 ## Conventions
 
