@@ -122,7 +122,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 
 ## Testing
 
-Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Analog Input, `Drivetrain`), webcam `aprilTagDetector` (cell tip), `limelight` (EthernetDevice). `res/xml/` ships `cuttle_decode.xml`, `betta_decode.xml`, webcam-only `camera.xml` and analog-only `laser_rangefinder.xml`. A hub set up from older code names the webcam `ballDetector` or `nerdDetector`: re-activate a shipped config or rename it.
+Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Analog Input, `Drivetrain`), webcam `aprilTagDetector` (cell tip), `limelight` (EthernetDevice). `res/xml/` ships `cuttle_decode.xml`, `betta_decode.xml`, webcam-only `camera.xml`, `laser_rangefinder.xml` (rangefinders on analog, transfer motors) and `laser_rangefinder_i2c.xml` (rangefinder `Laser` on I2C bus 1). A hub set up from older code names the webcam `ballDetector` or `nerdDetector`: re-activate a shipped config or rename it.
 
 - **Mock Architecture Test** is the first run after a full install. It drives only with `Mock Auto → enableDrive` on (check motor and odometry directions first), and then finishes only on the floor.
 - **Close Flower** autos: the `toAudienceWall` and `toHive` legs put part of the robot over the centre line (G402).
@@ -130,7 +130,8 @@ Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Anal
 - **Decode Tele** starts at a placeholder pose: reset it with gamepad1 before trusting the odometry-only turret aim.
 - **OctoQuad** (`octoquad/`, I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver supports FW 3.1, so a MK2 needs no `OctoQuadFWv3` driver from DigitalChickenLabs' repo (whose README still says otherwise). Calibrate with the Deadwheel and Heading Scalar calibrators, then set them on the dashboard in OctoQuad Localizer Test (gamepad1 A applies them, recalibrating the IMU: keep the robot still). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after every such reset, code must not drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and must drop data whose `crcOk` is false.
 - **Pinpoint Localizer Test** (`pinpoint/`) keeps its own copy of the Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`. Dashboard edits apply on gamepad1 A, which recalibrates the IMU (keep the robot still).
-- **Laser Rangefinder Test** reads two Brushland rangefinders as Analog Inputs `analog0`/`analog1`. Set the sensor's analog output over I2C first, then match `maxRangeMm` to its analog upper bound.
+- **Laser Rangefinder Test** reads two Brushland rangefinders as Analog Inputs `analog0`/`analog1`. Switch the sensor to analog first with Configure Laser Rangefinder (on `laser_rangefinder_i2c.xml`), then match `maxRangeMm` to its `analogHighMm`. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta).
+- **Transfer Count Test** counts a ball on the rangefinder dropping below `ballBelowMm` and re-arms only above `emptyAboveMm`. Turning `run` on resets the count; at `stopAtCount` it turns `run` off.
 - Single devices: the dashboard's Hardware View. An isolated module test extends `OpMode`, not `EnhancedOpMode`.
 
 **Control Hub bench** (`opmodes/test/bench/`, `Bench: *`): after a full install run `python3 scripts/bench/run_bench.py` (see `scripts/bench/README.md`). Its measurements and what to design around (planner time, Expansion Hub and I2C costs, Pinpoint vs OctoQuad, Limelight latency, the stop window) are in `docs/hub-bench-findings.md`: read it before changing those, and update it after a rerun.
