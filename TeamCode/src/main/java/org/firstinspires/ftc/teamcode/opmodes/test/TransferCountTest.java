@@ -83,5 +83,8 @@ public class TransferCountTest extends OpMode {
         telemetry.addData("Distance Sensor 2 (mm)", distanceMm2);
         telemetry.addData("Ball in sensor", ballInSensor);
         telemetry.addData("Running", run);
+        telemetry.addData("Low Threshold", ballBelowMm);
+        telemetry.addData("High Threshold", emptyAboveMm);
+        telemetry.update();
     }
 }
