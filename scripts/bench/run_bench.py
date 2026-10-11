@@ -250,30 +250,41 @@ OCTOQUAD_BUS = 2
 OCTOQUAD_ABSENT_BUS = 3
 OCTOQUAD_ABSENT_WAIT_S = 10
 OCTOQUAD_ABSENT_EXPECT_S = 5
-OCTOQUAD_SEED_PENDING = ("a start pose set in initialize() moved by START + 3 s on Pedro's OctoQuadLocalizer with the "
-                         "OctoQuad at rest: Pedro's setPose sends whole millimetres (under 0.04 in lost), so more than that "
-                         "means the OctoQuad didn't keep the pose setLocalizerPose sent or its IMU heading drifted at rest, "
-                         "and every auto sets the pose only in INIT, so they'd all start their first path from a pose the "
-                         "robot isn't at. A PASS means only that this INIT sequence keeps the pose. No fix is in flight")
-OCTOQUAD_VALID_PENDING = ("a localizer read failed its CRC or reported a status other than RUNNING with the OctoQuad plugged "
-                          "in and at rest: Pedro's OctoQuadLocalizer skips such a read without a word and keeps the last "
-                          "pose, so on the robot those loops drive on a stale pose; statusChanges says when and which "
-                          "status. No fix is in flight")
-OCTOQUAD_CRASHED = ("Bench: OctoQuad crashed (see the error); at INIT that means Pedro's OctoQuadLocalizer constructor, "
-                    "or the bench's own setup, threw while the follower was built")
-OCTOQUAD_HUNG = ("Bench: OctoQuad never finished INIT: Pedro's OctoQuadLocalizer constructor waits with no timeout for the "
-                 "OctoQuad to report RUNNING, so one whose IMU never finishes calibrating, or an MK1 with no IMU "
-                 "(FAULT_NO_IMU), hangs INIT with no message; the runner's STOP got it out (see the step's log)")
-OCTOQUAD_DROPOUT_PENDING = ("Pedro's OctoQuadLocalizer drops a read that fails its CRC or isn't RUNNING without a word and "
-                            "keeps the last pose, and nothing in the framework reads the OctoQuad's status, so with its "
-                            "cable out the follower drives on a frozen pose with no fault and no error. No fix is in flight")
-OCTOQUAD_ABSENT_PENDING = ("Pedro's OctoQuadLocalizer constructor waits for the OctoQuad to report RUNNING in a loop with "
-                           "no timeout and no STOP check, so with nothing answering on its I2C port (an unplugged or loose "
-                           "cable), or an MK1 that reports FAULT_NO_IMU, INIT hangs with no message until STOP; the STOP "
-                           "line says how the SDK got out of it. No fix is in flight")
-OCTOQUAD_ABSENT_RETURNED = ("Pedro's OctoQuadLocalizer was built with nothing on the bus and INIT carried on with no "
-                            "error: its update() keeps the last pose whenever a read isn't valid, so a robot with its "
-                            "OctoQuad unplugged would sit on its start pose with no fault")
+OCTOQUAD_ABSENT_HOLD_S = 6
+OCTOQUAD_ABSENT_CREATE_MS = 1000
+OCTOQUAD_FAULT_KEY = "OctoQuad"
+OCTOQUAD_GUARD_PREFIX = 'octoquad "'
+OCTOQUAD_SEED_PENDING = ("a start pose set in initialize() moved by START + 3 s on GuardedOctoQuadLocalizer with the "
+                         "OctoQuad at rest: it sends whole millimetres (under 0.04 in lost), and a pose set before RUNNING "
+                         "is sent when RUNNING first arrives, so more than that means the OctoQuad didn't keep the pose "
+                         "setLocalizerPose sent or its IMU heading drifted at rest, "
+                         "and every auto sets the pose only in INIT, so they'd all start their first path from a pose "
+                         "the robot isn't at. A PASS means only that this INIT sequence keeps the pose")
+OCTOQUAD_VALID_PENDING = ("a localizer read failed its CRC or reported a status other than RUNNING after the first RUNNING "
+                          "read, with the OctoQuad plugged in and at rest: GuardedOctoQuadLocalizer keeps the last pose "
+                          "through up to 250 ms of such reads and then stops the OpMode, so on the robot those loops drive "
+                          "on a stale pose; statusChanges says when and which status")
+OCTOQUAD_CRASHED = ("Bench: OctoQuad crashed (see the error): at INIT, GuardedOctoQuadLocalizer's setup or the bench's "
+                    "own setup threw while the follower was built; at START, the OctoQuad wasn't RUNNING within 3 s of "
+                    "its reset")
+OCTOQUAD_HUNG = ("Bench: OctoQuad never finished INIT: GuardedOctoQuadLocalizer doesn't wait for RUNNING in INIT, so "
+                 "something else blocked it; the runner's STOP got it out (see the step's log)")
+OCTOQUAD_DROPOUT_PENDING = ("with its cable out, the OpMode neither stopped nor raised a fault: GuardedOctoQuadLocalizer "
+                            "stops the OpMode after 250 ms without a valid read once it has been RUNNING, so without that "
+                            "the follower drives on a frozen pose with no error")
+OCTOQUAD_ABSENT_HUNG = ("building the follower with nothing on the OctoQuad's bus took longer than it should: "
+                        "GuardedOctoQuadLocalizer sends its setup and returns without waiting for RUNNING, so a slow build "
+                        "means the I2C writes to the missing device block, or the guard is not the localizer in use")
+OCTOQUAD_ABSENT_NO_FAULT = ("with nothing answering on the OctoQuad's I2C port, INIT didn't show the OctoQuad fault in time: "
+                            "GuardedOctoQuadLocalizer raises it 3 s after its reset (or at once on FAULT_NO_IMU), and "
+                            "EnhancedOpMode shows it first on every DS and dashboard frame, so a driver would not see why "
+                            "the robot won't localize")
+OCTOQUAD_ABSENT_SLOW = ("with the OctoQuad fault up, INIT loops were slow or missing: before RUNNING, "
+                        "GuardedOctoQuadLocalizer polls only the status byte (one I2C read, no CRC-error logging), so a "
+                        "slow loop here means the guard does more per loop than that while the OctoQuad is missing")
+OCTOQUAD_ABSENT_STARTED = ("START with the OctoQuad not running didn't stop the OpMode with an error naming it: "
+                           "EnhancedOpMode's start waits for GuardedOctoQuadLocalizer to report RUNNING and throws its "
+                           "message when it can't, so without that an auto would follow paths on a pose that never moves")
 
 EXPANSION_MAX_ADDRESS = 10
 EXPANSION_COMMANDS = ("inputVoltage", "bulkData", "current")
@@ -3258,10 +3269,10 @@ class Runner:
 
     def _octoquad_seed(self, o, res):
         info, seed, cost = res.get("info") or {}, res.get("seed") or {}, res.get("readCostMs") or {}
-        s = [f"## Bench: OctoQuad (Pedro's OctoQuadLocalizer on Control Hub I2C bus {OCTOQUAD_BUS}, follower idle)\n",
+        s = [f"## Bench: OctoQuad (GuardedOctoQuadLocalizer on Control Hub I2C bus {OCTOQUAD_BUS}, follower idle)\n",
              f"- chip id {fmt_chip(res.get('chipId'))}, firmware {res.get('firmware')}; status right after the localizer "
-             f"was built {info.get('statusAfterCreate')} ({info.get('createMs')} ms to build, Pedro's wait for RUNNING "
-             f"included); heading axis {info.get('headingAxis')}",
+             f"was built {info.get('statusAfterCreate')} ({info.get('createMs')} ms to build; the guard doesn't wait for "
+             f"RUNNING, so statusChanges says when it came); heading axis {info.get('headingAxis')}",
              f"- parameters sent through Pedro: {info.get('params')}",
              f"- read cost before the localizer was built: readLocalizerData {fmt(cost.get('readLocalizerData'))}; "
              f"readLocalizerDataAndAllEncoderData {fmt(cost.get('readLocalizerDataAndAllEncoderData'))}; "
@@ -3289,7 +3300,7 @@ class Runner:
                    f"worst {offset} in / {turn} deg over {seed.get('loops')} loops; final status {res.get('finalStatus')}"
                    + (f"; error {o['errorMessage']!r}" if o["crashed"] else ""), stuck or OCTOQUAD_SEED_PENDING)
         crc, invalid = res.get("crcFailures"), res.get("invalidLoops")
-        self.check("octoquad: every loop's localizer read was valid (CRC ok and RUNNING) after the localizer was built",
+        self.check("octoquad: every loop's localizer read was valid (CRC ok and RUNNING) after the first RUNNING read",
                    stuck is None and bool(seed.get("loops")) and crc == 0 and invalid == 0,
                    f"{crc} CRC failures and {invalid} invalid loops over {seed.get('loops')} loops; loops per status "
                    f"{res.get('statusLoops')}", stuck or OCTOQUAD_VALID_PENDING)
@@ -3332,7 +3343,7 @@ class Runner:
         bad, silent = d.get("badLoops") or 0, d.get("silentBadLoops") or 0
         error = o.get("errorMessage") or ""
         ended_itself = "stopSecondsRunnerSide" not in o
-        stopped = ended_itself and "octoquad" in error.lower()
+        stopped = ended_itself and OCTOQUAD_GUARD_PREFIX in error.lower()
         self.summary += [
             "## OctoQuad unplug and replug (Bench: OctoQuad, dropout mode)\n",
             f"- first invalid read at {d.get('firstInvalidMs')} ms: status {d.get('firstInvalidStatus')}, CRC ok "
@@ -3362,71 +3373,52 @@ class Runner:
     def run_octoquad_absent(self):
         opmode, step = "Bench: OctoQuad Absent", "octoquad_absent"
         self.activate_config(CONFIG_OCTOQUAD_ABSENT, self.main_config(octoquad_bus=OCTOQUAD_ABSENT_BUS))
-        self.wait_idle()
-        self.adb.bench_shell(f"rm -f {self.adb.bench_dir()}/{step}.json {self.adb.bench_dir()}/{step}.json.tmp")
-        self.adb.push_json({}, "params.json", self.out / "logs" / "params.json")
-        hub_t0 = self.adb.hub_time()
-        self.adb.mark(f"begin {step}")
-        outcome = {"step": step, "opmode": opmode, "params": {}, "pidBefore": self.step_pid()}
-        self.begin_watch(opmode, hub_t0)
-        self.dash.reset_telemetry()
-        t_init = time.monotonic()
-        self.dash.send({"type": "INIT_OP_MODE", "opModeName": opmode})
-        self.dash.wait_until(lambda: self._status_is(opmode) or self.crashed(), 30, f"{opmode} to INIT",
-                             poll_status_every=0.5, tick=self.adb_crash_tick)
-        outcome["doneSeconds"] = self.wait_or_crash(lambda: self.dash.done_line is not None, OCTOQUAD_ABSENT_WAIT_S)
-        outcome["doneLine"] = self.dash.done_line
-        crashed = self.crashed()
-        if crashed:
-            outcome["crashSignal"] = self.watch["crashSignal"]
-            outcome["crashSeenSeconds"] = round(self.watch["crashAt"] - t_init, 2)
-        else:
-            try:
-                self._stop(opmode, outcome)
-            except ProtocolError:
-                raise
-            except BenchError as e:
-                outcome["stillStuck"] = str(e)
-                self.log(f"!! {opmode} is still stuck after STOP ({e}); force-stopping the Robot Controller app and "
-                         "starting it again")
-                self.adb.run("shell", f"am force-stop {RC_PACKAGE}; am start -n {RC_LAUNCHER}", check=False)
-                outcome["restartedDuringStop"] = True
-                self.wait_restart(f"force-stopping {opmode}")
-        self._finish(outcome, step, hub_t0, crashed=crashed, expect_crash=True, stop=False)
+        watch = FaultWatch(OCTOQUAD_FAULT_KEY)
+        self.dash.packet_hook = watch.on_packet
+        try:
+            o = self.run_opmode(opmode, step, init_hold=OCTOQUAD_ABSENT_HOLD_S, expect_crash=True,
+                                timeout=OCTOQUAD_ABSENT_WAIT_S, timeout_ok=True, result_files=[step])
+        finally:
+            self.dash.packet_hook = None
         res = self.pull(step, required=False) or {}
-        markers = outcome.get("logMarkers") or []
-        if crashed:
-            stopped = "not needed: INIT had already ended"
-        elif "stillStuck" in outcome:
-            stopped = "still stuck after STOP, so the runner force-stopped the app"
-        elif outcome.get("restartedDuringStop") or outcome.get("appRestarted"):
-            stopped = "the app restarted"
-        elif outcome["doneSeconds"] is None:
-            stopped = (f"the SDK force-stopped it, still in INIT {SDK_STOP_WINDOW_MS} ms after STOP, without restarting "
-                       "the app")
+        self.results[step]["faultWatch"] = watch.summary()
+        err = o.get("errorMessage") or ""
+        create_ms, fault_ms, fault_message = res.get("createMs"), res.get("faultMs"), res.get("faultMessage") or ""
+        faulted = res.get("initLoopFaultedMs") or {}
+        after_start = o.get("crashSeenAfterStartSeconds")
+        self.check(f"octoquad absent: building the localizer returns within {OCTOQUAD_ABSENT_CREATE_MS} ms",
+                   create_ms is not None and create_ms <= OCTOQUAD_ABSENT_CREATE_MS,
+                   f"{create_ms} ms; INIT seen after {o.get('initSeenSeconds')} s", OCTOQUAD_ABSENT_HUNG)
+        self.check(f"octoquad absent: the {OCTOQUAD_FAULT_KEY} fault is raised in INIT within "
+                   f"{OCTOQUAD_ABSENT_EXPECT_S} s and names the OctoQuad",
+                   fault_ms is not None and fault_ms <= OCTOQUAD_ABSENT_EXPECT_S * 1000
+                   and OCTOQUAD_GUARD_PREFIX in fault_message.lower(),
+                   f"after {fault_ms} ms: {fault_message!r}", OCTOQUAD_ABSENT_NO_FAULT)
+        self.check("octoquad absent: INIT keeps looping with the fault up",
+                   faulted.get("count", 0) > 0 and faulted.get("p95", float("inf")) <= 50
+                   and faulted.get("max", float("inf")) <= 500,
+                   f"INIT loop with the fault up {fmt(faulted)}", OCTOQUAD_ABSENT_SLOW)
+        if o.get("dashboardSilent") or watch.bench_packets == 0:
+            dashboard = ("dashboard row check not measured: "
+                         f"{o.get('dashboardSilent') or 'no bench packets reached the runner'}")
         else:
-            stopped = "the OpMode stopped"
-        err = outcome.get("errorMessage") or ""
-        seconds = outcome.get("crashSeenSeconds")
-        stop_s = outcome.get("stopSecondsRunnerSide")
-        init = (f"failed after {seconds} s: {err!r}" if crashed
-                else f"BENCH DONE after {outcome['doneSeconds']:.1f} s: {outcome['doneLine']!r}"
-                if outcome["doneSeconds"] is not None
-                else f"no BENCH DONE and no error within {OCTOQUAD_ABSENT_WAIT_S} s")
-        self.check(f"octoquad absent: INIT fails within {OCTOQUAD_ABSENT_EXPECT_S} s with an error naming the OctoQuad",
-                   crashed and seconds is not None and seconds <= OCTOQUAD_ABSENT_EXPECT_S and "octoquad" in err.lower(),
-                   f"INIT {init}; STOP: {stopped}",
-                   OCTOQUAD_ABSENT_RETURNED if res.get("returned") is True else OCTOQUAD_ABSENT_PENDING)
+            dashboard = (f"FAULT row first in {watch.fault_first} of {watch.with_fault} packets that carry it "
+                         f"({watch.bench_packets} bench packets)")
+            self.check("octoquad absent: the FAULT row leads every dashboard packet that carries it",
+                       watch.with_fault > 0 and watch.fault_first == watch.with_fault,
+                       f"{dashboard}; not first: {watch.fault_not_first}", OCTOQUAD_ABSENT_NO_FAULT)
+        self.check("octoquad absent: START stops the OpMode with an error naming the OctoQuad",
+                   o["crashed"] and after_start is not None and OCTOQUAD_GUARD_PREFIX in err.lower(),
+                   f"crashed {o['crashed']}, {after_start} s after START: {err!r}", OCTOQUAD_ABSENT_STARTED)
         self.summary += [
-            "## Bench: OctoQuad Absent (Pedro's OctoQuadLocalizer with nothing on the bus)\n",
+            "## Bench: OctoQuad Absent (GuardedOctoQuadLocalizer with nothing on the bus)\n",
             f"- config line on the Control Hub: `{octoquad_tag(OCTOQUAD_ABSENT_BUS)}`; chip id read there "
             f"{fmt_chip(res.get('chipId'))}",
-            f"- result file: constructing {res.get('constructing')}, returned {res.get('returned')}, build "
-            f"{res.get('createMs')} ms, status after it {res.get('statusAfterCreate')}",
-            f"- INIT: {init}",
-            f"- STOP: {stopped}; runner STOP to idle {round(stop_s, 2) if stop_s is not None else None} s; app restarted "
-            f"{outcome.get('appRestarted')}" + ("" if crashed else f"; error after STOP {err!r}")
-            + f"; stuck markers {len(markers)}" + (f", e.g. {markers[0][-160:]!r}" if markers else "") + "\n"]
+            f"- localizer built in {create_ms} ms; fault after {fault_ms} ms ({res.get('initLoopsBeforeFault')} INIT "
+            f"loops): {fault_message!r}; INIT loop with the fault up {fmt(faulted)}",
+            f"- {dashboard}",
+            f"- START after {OCTOQUAD_ABSENT_HOLD_S} s in INIT: crashed {o['crashed']}, {after_start} s after START: "
+            f"{err!r}\n"]
 
     def run_expansion(self):
         address = self.expansion
@@ -3988,7 +3980,7 @@ def parse_args(argv):
                    help="Bench: Pinpoint (firmware, status, INIT start pose; dropout with --interactive), or Bench: "
                         "Pinpoint Absent when none answers")
     p.add_argument("--octoquad", action="store_true",
-                   help="Bench: OctoQuad (Pedro's OctoQuadLocalizer on Control Hub I2C bus 2: read cost, valid reads, INIT "
+                   help="Bench: OctoQuad (GuardedOctoQuadLocalizer on Control Hub I2C bus 2: read cost, valid reads, INIT "
                         "start pose; dropout with --interactive) and Bench: OctoQuad Absent (nothing on I2C bus 3)")
     p.add_argument("--expansion", action="store_true",
                    help="Bench: Expansion Hub (the same Lynx commands and odometry reads on each hub; needs an Expansion "

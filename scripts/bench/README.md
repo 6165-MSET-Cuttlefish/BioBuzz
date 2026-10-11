@@ -77,8 +77,8 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Failure Path | nothing | a hook throwing in each lifecycle stage: which `stop()`s run, Suppressed failures, the dashboard Error line |
 | Bench: Clock | nothing | `PathCommands.timeout` (15 s) against wall-clock jumps |
 | Bench: Pinpoint, Pinpoint Absent | a Pinpoint / none | firmware, status, and whether a start pose set in INIT survives the IMU recalibration / the follower building without one |
-| Bench: OctoQuad | an OctoQuad | read costs, status changes, CRC failures, start-pose survival |
-| Bench: OctoQuad Absent | an empty I2C bus 3 | INIT with an `octoquad` configured and nothing answering |
+| Bench: OctoQuad | an OctoQuad | GuardedOctoQuadLocalizer's read costs, status changes, CRC failures after the first RUNNING read, start-pose survival |
+| Bench: OctoQuad Absent | an empty I2C bus 3 | GuardedOctoQuadLocalizer with an `octoquad` configured and nothing answering: builds within 1 s, the `OctoQuad` fault raised in INIT within 5 s, INIT keeps looping, START throws naming the OctoQuad |
 | Bench: Expansion Hub | an Expansion Hub | the same Lynx commands and odometry reads on each hub |
 | Bench: Write Recovery | nothing | EnhancedMotor and EnhancedServo reach the hub again within 500 ms of a `failSafe()` |
 | Bench: Drive Handover | nothing | `fl`'s SDK power matches Drivetrain's command from the 2nd loop after Pedro hands back |
@@ -135,5 +135,4 @@ bench folder. It measures how often each analog value refreshes and what a polle
   lock after 600 s, and times each load from the hub's logcat after its `BENCH sloth pushed <run>` mark.
 - The gamepad benches take their phase from gamepad2's right trigger (phase / 100) and a message counter on its left
   trigger, so an all-zero rest state leaves the phase alone; phase 99 ends the bench.
-- Bench: OctoQuad Absent hangs in `createRobot()` before its first packet, so the runner drives it outside
-  `run_opmode()`, which would take that silence for dead telemetry and restart the app.
+- Bench: OctoQuad Absent holds INIT 6 s, then STARTs, expecting the guard's OctoQuad error.

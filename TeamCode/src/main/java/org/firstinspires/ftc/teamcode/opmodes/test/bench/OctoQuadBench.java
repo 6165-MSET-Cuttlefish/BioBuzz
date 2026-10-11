@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ public class OctoQuadBench extends EnhancedOpMode {
     private BenchReport report;
     private String mode;
     private OctoQuad octoQuad;
+    private GuardedOctoQuadLocalizer guard;
     private OctoQuad.LocalizerDataBlock localizerData;
     private boolean present;
     private long createStartNs;
@@ -39,6 +41,7 @@ public class OctoQuadBench extends EnhancedOpMode {
     private boolean finished;
     private boolean observed;
     private boolean lastValid;
+    private boolean seenValid;
     private OctoQuad.LocalizerStatus lastStatus;
     private String lastLabel;
     private long crcFailures;
@@ -79,7 +82,8 @@ public class OctoQuadBench extends EnhancedOpMode {
         createStartNs = System.nanoTime();
         OctoQuadSetup.OctoQuadRobot octoQuadRobot = new OctoQuadSetup.OctoQuadRobot(this);
         createdNs = System.nanoTime();
-        localizerData = OctoQuadSetup.localizerData(octoQuadRobot.follower);
+        guard = OctoQuadSetup.guard(octoQuadRobot.follower);
+        localizerData = guard.lastRead();
         return octoQuadRobot;
     }
 
@@ -145,6 +149,7 @@ public class OctoQuadBench extends EnhancedOpMode {
     protected void onStart() {
         startNs = System.nanoTime();
         running = true;
+        lastLoopNs = 0;
         if (!present) return;
         Pose pose = robot.follower.pose();
         seed.put("offsetAtStartIn", pose.distance(SEED));
@@ -168,15 +173,16 @@ public class OctoQuadBench extends EnhancedOpMode {
         boolean crcOk = localizerData.crcOk;
         boolean valid = localizerData.isDataValid();
         double msSinceCreate = (System.nanoTime() - createdNs) / 1e6;
-        String label = crcOk ? status.name() : status.name() + " CRC";
+        String label = status == null ? "polled " + guard.status() : crcOk ? status.name() : status + " CRC";
         if (!label.equals(lastLabel)) {
             statusChanges.add(new Object[] {msSinceCreate, label, running ? "running" : "init"});
             lastLabel = label;
         }
         Integer count = statusLoops.get(label);
         statusLoops.put(label, count == null ? 1 : count + 1);
-        if (!crcOk) crcFailures++;
-        if (!valid) invalidLoops++;
+        if (valid) seenValid = true;
+        if (seenValid && !crcOk) crcFailures++;
+        if (seenValid && !valid) invalidLoops++;
         lastStatus = status;
         lastValid = valid;
         observed = true;
@@ -207,7 +213,7 @@ public class OctoQuadBench extends EnhancedOpMode {
                 if (firstBadPose == null) {
                     firstBadPose = pose;
                     dropout.put("firstInvalidMs", (System.nanoTime() - startNs) / 1e6);
-                    dropout.put("firstInvalidStatus", status.name());
+                    dropout.put("firstInvalidStatus", String.valueOf(status));
                     dropout.put("firstInvalidCrcOk", crcOk);
                     dropout.put("firstInvalidPose", pose.toString());
                     dropout.put("lastValidPose", String.valueOf(lastValidPose));
@@ -262,7 +268,7 @@ public class OctoQuadBench extends EnhancedOpMode {
         report.addTo(telemetry);
         telemetry.addData(BenchReport.KEY_LOOP, loops);
         if (observed) {
-            telemetry.addData(KEY_STATUS, lastStatus.name());
+            telemetry.addData(KEY_STATUS, String.valueOf(lastStatus));
             telemetry.addData(KEY_VALID, String.valueOf(lastValid));
         }
         if (running && present && mode.equals("dropout") && !finished) {
