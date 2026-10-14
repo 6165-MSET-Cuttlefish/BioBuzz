@@ -13,7 +13,7 @@ public class LaserRangefinderTest extends LinearOpMode {
     public static String pin0Name = "analog0";
     public static String pin1Name = "analog1";
     // Must match the analog bounds the sensor was configured with over I2C.
-    public static double maxRangeMm = 4000;
+    public static double maxRangeMm = 1300;
 
     @Override
     public void runOpMode() {

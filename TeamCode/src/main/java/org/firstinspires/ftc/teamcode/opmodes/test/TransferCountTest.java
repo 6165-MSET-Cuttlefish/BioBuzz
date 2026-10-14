@@ -28,8 +28,10 @@ public class TransferCountTest extends OpMode {
     public static int stopAtCount = 2;
     public static double motor1Power = 0;
     public static double motor2Power = 1;
-    public static double threshold = -40;
+    public static double threshold1 = -30;
+    public static double threshold2 = -30;
     public static double highestmm1;
+    public static double highestmm2;
     private ElapsedTime runtime = new ElapsedTime();
     private ElapsedTime stawp = new ElapsedTime();
     public static boolean resetCount = false;
@@ -62,6 +64,7 @@ public class TransferCountTest extends OpMode {
         pastmm1 = sensor1.getVoltage() / 3.3 * maxRangeMm;
         pastmm2 = sensor2.getVoltage() / 3.3 * maxRangeMm;
         highestmm1 = sensor1.getVoltage() / 3.3 * maxRangeMm;
+        highestmm1 = sensor2.getVoltage() / 3.3 * maxRangeMm;
 
 
     }
@@ -72,19 +75,27 @@ public class TransferCountTest extends OpMode {
         double distanceMm1 = sensor1.getVoltage() / 3.3 * maxRangeMm;
         double distanceMm2 = sensor2.getVoltage() / 3.3 * maxRangeMm;
 
-        if (!ballInSensor && (distanceMm1 < ballBelowMmLow || distanceMm2 < ballBelowMmLow)) {
+        if (!ballInSensor && (distanceMm1 - highestmm1 < threshold1 || distanceMm2 - highestmm2 < threshold2)) {
             stawp.reset();
             ballInSensor = true;
             count++;
             if (distanceMm1 < ballBelowMmLow) {
                 sensingSensor = 1;
+                highestmm1 = distanceMm1;
             }
             else {
                 sensingSensor = 2;
+                highestmm2 = distanceMm2;
             }
         }
-        if (ballInSensor && stawp.milliseconds() > idealtime && ((sensingSensor == 1 && distanceMm1 > emptyAboveMmLow) || (sensingSensor == 2 && distanceMm2 > emptyAboveMmLow))) {
+        if (ballInSensor && (stawp.milliseconds() > idealtime) && ((sensingSensor == 1 && distanceMm1 > emptyAboveMmLow && distanceMm1 > pastmm1) || (sensingSensor == 2 && distanceMm2 > emptyAboveMmLow && distanceMm2 > pastmm2))) {
             ballInSensor = false;
+            if (sensingSensor == 1 && distanceMm1 > highestmm1) {
+                highestmm1 = distanceMm1;
+            }
+            else if (sensingSensor == 2 && distanceMm2 >highestmm2) {
+                highestmm2 = distanceMm2;
+            }
         }
 
 
