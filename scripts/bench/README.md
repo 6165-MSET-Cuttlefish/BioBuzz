@@ -194,6 +194,17 @@ config leaves the hub untouched.
 The OpModes also run by hand from the dashboard, but they expect the runner's hardware config and write their
 results only to the hub.
 
+**Bench: Analog Poll** is the one the runner doesn't run. Run it by hand with `laser_rangefinder.xml` active and the
+two rangefinders plugged in; it commands no motor. It takes about 80 s after START, then the Driver Station and the
+dashboard show its summary; everything else stays in `analog_poll.json` in the hub's bench folder. First, how often
+each analog value changes when read back to back: each rangefinder through its own GetADC command, the hub's battery
+and 5 V monitors (inputs the rangefinder's update rate doesn't limit, so their interval is the hub's own refresh),
+and both rangefinders from bulk reads. Then a stand-in robot loop (a MANUAL bulk read of both rangefinders, 0, 6 or
+8 GetADC commands standing in for odometry and drive writes, and 2.7 ms of CPU for telemetry, sized to the idle,
+OctoQuad-driving and Pinpoint-driving loops) with no poller, a 10 ms poller thread doing one bulk read, and one doing
+two GetADC reads: each loop's mean period against no poller, and new rangefinder values per second in the loop alone
+against the poller.
+
 ## Notes for changing the bench
 
 - Which config is active comes from the hub, not from the config lists slothboard broadcasts: a restart can drop
