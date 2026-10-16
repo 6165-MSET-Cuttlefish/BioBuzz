@@ -47,8 +47,8 @@ final class OctoQuadSetup {
             c.encoderResolutionUnit.set(DistanceUnit.MM);
             c.ticksPerUnit.set(OctoQuadLocalizerTest.ticksPerMmX);
             c.offsetUnits.set(DistanceUnit.MM);
-            c.xPodOffset.set(-OctoQuadLocalizerTest.tcpOffsetMmX);
-            c.yPodOffset.set(-OctoQuadLocalizerTest.tcpOffsetMmY);
+            c.xPodOffset.set(-OctoQuadLocalizerTest.tcpOffsetMmY);
+            c.yPodOffset.set(-OctoQuadLocalizerTest.tcpOffsetMmX);
             c.globalDistanceUnit.set(DistanceUnit.INCH);
             c.headingScalar.set(OctoQuadLocalizerTest.imuHeadingScalar);
             c.localizerVelocityIntervalMS.set(OctoQuadLocalizerTest.velocityIntervalMs);

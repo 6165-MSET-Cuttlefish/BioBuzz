@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.architecture.auto;
 import com.pedropathing.math.Vector2D;
 import com.pedropathing.paths.Path;
 import com.pedropathing.paths.curves.Curve;
+import com.pedropathing.paths.interpolator.Interpolator;
 import com.pedropathing.utils.Angle;
 
 /**
@@ -41,8 +42,6 @@ public final class PathHeadings {
 
     /**
      * Turns from {@code startHeading} onto the tangent by {@code switchAt}, then follows the tangent to the end.
-     * Not built on {@code Interpolator.piecewise()}: in Pedro 3.0.1 its tangent piece replays the whole curve's
-     * tangent, and on some {@code Paths.path(a, b)} it throws when the follower starts the path.
      */
     public static Path linearThenTangent(Path path, double startHeading, double switchAt) {
         return turnOntoTangent(path, startHeading, 0, 0, switchAt, switchParameter(path, switchAt));
@@ -63,9 +62,9 @@ public final class PathHeadings {
         double tangentFrom = Math.min(1, switchT + JOIN_INSET);
         double start = Angle.normalize(startHeading);
         double turn = Angle.error(start, directionAt(path.curve, tangentFrom, tangentFrom, 1));
-        return path.heading((curve, t) -> t >= switchT
+        return path.heading(Interpolator.geometric((curve, t) -> t >= switchT
                 ? directionAt(curve, t, tangentFrom, 1)
-                : t <= holdT ? start : Angle.normalize(start + turn * turned(curve, t, holdAt, switchAt)));
+                : t <= holdT ? start : Angle.normalize(start + turn * turned(curve, t, holdAt, switchAt))));
     }
 
     // In distance, not t, as Pedro's linear heading and the visualizer interpolate.
@@ -79,9 +78,9 @@ public final class PathHeadings {
         double tangentTo = Math.max(0, switchT - JOIN_INSET);
         double start = directionAt(path.curve, tangentTo, 0, tangentTo);
         double turn = Angle.error(start, Angle.normalize(endHeading));
-        return path.heading((curve, t) -> t <= switchT
+        return path.heading(Interpolator.geometric((curve, t) -> t <= switchT
                 ? directionAt(curve, t, 0, tangentTo)
-                : Angle.normalize(start + turn * turned(curve, t, switchAt, 1)));
+                : Angle.normalize(start + turn * turned(curve, t, switchAt, 1))));
     }
 
     /** The direction at {@code t} held inside {@code from..to}, looking further inside that range where the curve stalls. */

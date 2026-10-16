@@ -29,7 +29,6 @@ public final class PathCommands {
                     f.holdEnd.set(true);
                     f.follow(path);
                 })
-                // isBusy() only clears from calculateHold, which runs only while holdEnd puts the follower in HOLD.
                 .setDone(() -> f.atParametricEnd() && !f.isBusy())
                 .setEnd(stopIfInterrupted(f))
                 .requiring(f)
