@@ -2,8 +2,8 @@
 
 FTC team 6165 MSET Cuttlefish, 2026–2027 season.
 
-Single-module Android app on FTC SDK 12.0.0, Pedro Pathing 3.0.2, Sloth hot reload, and slothboard.
+Single-module Android app on the FTC SDK, Pedro Pathing, Sloth hot reload and slothboard.
 
-Requires JDK 17 (the Gradle daemon is pinned to it) and Android Studio Narwhal 3 Feature Drop or newer. Deploy with the **TeamCode** run configuration (full install) and **deploySloth** (hot reload); `CLAUDE.md` describes their setup, the framework, and the conventions.
+Requires JDK 17 (the Gradle daemon is pinned to it) and Android Studio Narwhal 3 Feature Drop or newer. Deploy with the **TeamCode** run configuration (full install) or **deploySloth** (hot reload), set up per Sloth's README; `CLAUDE.md` covers when to use each, the framework and the conventions.
 
-The Control Hub bench (loop-time and hardware-path measurements on a bare hub) is in `scripts/bench/README.md`.
+Control Hub bench: `scripts/bench/README.md`.

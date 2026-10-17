@@ -8,7 +8,7 @@ FTC 6165 MSET Cuttlefish, 2026–27 BIOBUZZ season.
 - The top level holds only Gradle and repo files, `TeamCode/`, `limelight/` (runs on the Limelight), `scripts/` and `docs/`.
 - No BioBuzz robot yet: everything runs on the Betta bot (a sister team's DECODE bot, `pedro/BettaConstants`).
 - `decode/` is last season's code for 6165's Cuttle bot only (`cuttle_decode.xml`). It shares `modules/Drivetrain`.
-- Automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
+- In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
 
 ## Keep this file fresh
@@ -19,30 +19,29 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 IDE run configs are per laptop (`.idea/` isn't committed); set them up per Sloth's README.
 
-- **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/` such as field images, `robotcontroller/internal/`).
-- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load; wait for the load (logcat's `Processed Sloth Load`, the RC screen or the DS; about 5 s after it returns) before redeploying or pressing INIT: an INIT sooner restarts the app or never runs. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
-- The hub's clock restarts near 1970 at every boot until a browser opens `http://192.168.43.1:8080`. While it reads earlier than the APK's install time (`adb shell dumpsys package com.qualcomm.ftcrobotcontroller | grep lastUpdateTime`), Sloth deletes each load at the next app restart (`removing outdated sloth load`) and the installed APK's code runs.
+- **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/internal/`).
+- **deploySloth** (hot reload): everything else. It returns when the push ends, not the load: wait for logcat's `Processed Sloth Load` (or the RC screen or DS; about 5 s) before redeploying or pressing INIT, or the app restarts or the INIT never runs. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
+- The hub's clock boots near 1970 until a DS connects or a browser opens `http://192.168.43.1:8080`. While it reads earlier than the APK's install time, Sloth deletes each load at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs.
 - A deploySloth replaces every `HardwareDevice` object, so state kept in one (e.g. the Limelight poll rate) doesn't carry across it.
 - An old hot-load overriding new code: run the `removeSlothRemote` task alone, after `adb connect 192.168.43.1` (it never connects and silently does nothing without a device).
-- With no adb device connected, deploySloth connects to `192.168.43.1` and runs a bare `adb disconnect` when done; connect first to stay connected. Other address: `load { address = "..." }` in `TeamCode/build.gradle`. With more than one adb device, set `ANDROID_SERIAL` for it.
-- The DS app must match the SDK version or it fails inspection.
+- With no adb device connected, deploySloth connects to `192.168.43.1` and ends with a bare `adb disconnect`, dropping every Wi-Fi adb connection: `adb connect` first to stay connected. With more than one adb device, set `ANDROID_SERIAL`.
 - No unit tests. Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK).
 
 ## Dependencies
 
 - Sloth, the `dev.frozenmilk.sinister.sloth.load` plugin and slothboard's `{sloth}` version prefix must match; slothboard pins Sloth strictly.
-- slothboard is the committed `TeamCode/libs/m2/`, built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`. To bump: tag a new build there, replace the six files and the version string. Keep `exclude group: 'com.acmerobotics.dashboard'` (same Java packages).
+- slothboard is the committed `TeamCode/libs/m2/`, built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`. To bump: tag a new build there, replace those files and the version string. Keep `exclude group: 'com.acmerobotics.dashboard'` (same Java packages).
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
 Pedro Pathing 3:
 
 - `Pose.heading()` is in [0, 2π).
-- Every `Paths` path needs a heading interpolator; a missing one compiles and throws when the leg starts.
+- Every `Paths` path needs a heading interpolator; a missing one compiles and throws only at run time.
 - `BezierCurve.length()` (so `parameter()`, `remainingDistance()`) can under-report S-curves and loops down to the chord: never use it for timeouts or scoring. `PathCommands.followUntilRemaining` hands over early on such curves.
 - `follow`/`followThrough` brake at the end; legs keep speed through a join only as segments of one `Paths.path(...)` or via a `followUntilRemaining` handover before braking.
 - A heading jump over 11.25° at a join gives turning priority over driving; `architecture/auto/PathHeadings` gives headings that avoid it.
-- A heading lambda passed to `path.heading(...)` gets path completion, not the curve's `t` (a `piecewise` piece gets completion within that piece); wrap it in `Interpolator.geometric(...)` to get `t`, as `PathHeadings` does, since the bare lambda still compiles. `reverse()` drops `geometric`, so `reverseTangent()` and `facingPoint(...).reverse()` are wrong on Bezier curves. To turn onto a tangent use `PathHeadings.linearThenTangent`/`holdThenTangent`/`tangentThenLinear`.
+- A lambda passed to `path.heading(...)` gets path completion, not the curve's `t` (per piece inside `piecewise`); wrap it in `Interpolator.geometric(...)` to get `t`. `reverse()` drops `geometric`, so `reverseTangent()` and `facingPoint(...).reverse()` are wrong on Bezier curves: turn onto a tangent with `PathHeadings.linearThenTangent`/`holdThenTangent`/`tangentThenLinear`.
 
 ## Framework layout
 
@@ -50,53 +49,52 @@ Pedro Pathing 3:
 
 **Poses and alliance**
 
-- Author poses for RED with `FieldPose.forAlliance(x, y, heading)`; it maps them to BLUE through `FieldConfig.symmetry()` (BIOBUZZ: a 180° rotation, so a BLUE heading is RED's + π). A bare radian passed to a path isn't mapped.
-- `FieldPose` throws until the symmetry is set, and `EnhancedOpMode` clears it and the dashboard's field image at every INIT: a BIOBUZZ `Robot` constructor calls `BioBuzzField.configure()` (symmetry and image), a bare SDK OpMode calls `FieldConfig.setSymmetry(...)` itself. The image is a render in Pedro's frame, drawn at its real width (141.5 in), so a new one must be too.
+- Author poses for RED with `FieldPose.forAlliance(x, y, heading)`; it maps them to BLUE through `FieldConfig.symmetry()`. A bare radian passed to a path isn't mapped.
+- `FieldPose` throws until the symmetry is set, and `EnhancedOpMode` clears it and the dashboard's field image at every INIT: a BIOBUZZ `Robot` constructor calls `BioBuzzField.configure()`, a bare SDK OpMode calls `FieldConfig.setSymmetry(...)` itself. The field image is a render in Pedro's frame drawn at `FieldConfig.fieldWidthInches`; a new one must match.
 - `Robot` resets the follower to a placeholder pose at every INIT: set the start with `robot.follower.setPose(...)` in `initialize()`, then build paths.
 - `Context.allianceColor` is set only on the dashboard or in `Context.java`, never by an OpMode, and resets on an app restart or Sloth reload.
 
 **Ball routing**
 
-- `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`, the spline method of summer-2026's `Spline/Field`: the intake leg is Pedro's spline (`BezierCurve.through`: one Bezier through each point at evenly spaced t) with the robot's centre through each ball the intake doesn't sweep up in passing (`IntakeCurvePlanner`), the return a straight line, and a leg that doesn't fit falls back to that spline, then straight hops, through `VisibilityGraphPlanner` detours. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
+- Planner: `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
 - No alliance mapping: pass mapped field coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles. Bad input throws, so check a robot-sourced start with `RouteOptimizer.poseProblem` first.
-- Pedro switches to the next piece of a compound path as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), so it starts a sharp turn or reversal early. Each drive in `Plan.steps` is one curve or hop, with a turn in place before it wherever the heading jumps, and `RouteRun` stops after each.
+- Pedro switches to the next piece of a compound path as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting sharp turns and reversals early, so don't merge `Plan.steps` into one compound path.
 - A curve that stops dead mid-path (a straight cubic with handles the full chord long) makes Pedro's follower throw there.
-- A `RouteRun` runs once, via `start()` or its `command()` in a group, not both; call `abort(reason)` from OpMode code, never inside a command.
 
-**Faults** (`core/Faults`) are named, recoverable errors, for the Limelight only (see Fail fast). Keys are global and cleared at every INIT. `EnhancedOpMode` shows them; a bare `OpMode`/`LinearOpMode` must show them itself.
+**Faults** (`core/Faults`) are named, recoverable errors, for the Limelight only (see Fail fast). Keys are global and cleared at every `EnhancedOpMode` INIT, which also shows them; a bare `OpMode`/`LinearOpMode` must show them itself.
 
 **Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision activates `Camera.VisionState.DISABLED` in `initialize()`.
 
-**Drivetrain** needs `withFollower(follower)`, or field-centric drive and heading lock throw and `write()` stops guarding against Pedro. With it, `write()` throws while the follower isn't idle (both drive the same motors): an OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
+**Drivetrain** needs `withFollower(follower)`: without it, field-centric drive and heading lock throw and `write()` silently stops guarding against Pedro. An OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
 
-**Ball collection** (`RobotActions.collectBalls`) plans from the balls in view when it starts, waiting only `visionWaitMs` for a fresh frame, so a START during the INIT Limelight sync can end it SKIPPED. `onField` off tests away from a field (start pose (0, 0, 0), no walls or HIVE rails); `BallCollection.keepIn`/`obstacles`/`configuredPose` give other OpModes the same switch.
+**Ball collection** (`RobotActions.collectBalls`) waits only `visionWaitMs` for a fresh frame, so a START during the INIT Limelight sync can end it SKIPPED. `BallCollection.keepIn`/`obstacles`/`configuredPose` give other OpModes its `onField` switch.
 
-**Vision** (`modules/vision/`). `TrackedBall` is camera-relative, so a still ball moves when the robot does; `FieldBall` is field-relative. While `Camera.isFrameStale()`, field balls stay at their last position with `visible()` false until `forgetAfterSeconds`: check `visible()` before chasing one.
+**Vision** (`modules/vision/`). `TrackedBall` is camera-relative, `FieldBall` field-relative. A stale field ball keeps its last position with `visible()` false: check `visible()` before chasing one.
 
-**Ball detection** is `limelight/ball_contour_snapscript.py` plus `ball_pipeline.vpr`, baked into the generated `LimelightFiles` (so deploySloth carries edits) with the uploaded `SCRIPT_ID` replaced by a stamp. While `syncOnInit` is on, `LimelightSync` uploads both at every INIT and waits for the stamp; the Limelight loads a script only on switching to its pipeline. SnapScripts get the raw image: paste `eocvsim/homography`'s whole Python block into the script, and after a lens recalibration update `LENS_*` in both the script and `HomographyCalculationPipeline`.
+**Ball detection** is `limelight/ball_contour_snapscript.py` plus `ball_pipeline.vpr`, compiled into the generated `LimelightFiles` (so deploySloth carries edits) and uploaded at every INIT by `LimelightSync` while `syncOnInit` is on. SnapScripts get the raw image: paste `eocvsim/homography`'s whole Python block into the script, and after a lens recalibration update `LENS_*` in both the script and `HomographyCalculationPipeline`.
 
 **Limelight faults.** A Limelight problem raises the `Limelight` fault and stales the frame until it recovers (`Camera.limelightProblem()` says why); a web-editor copy of the script faults unless `syncOnInit` is off. The sync isn't retried: a failed sync, or the Limelight landing on another pipeline (reboot, web-UI switch), faults until the next INIT.
 
-**Cell tip** (`CellTipCamera`). An empty frame reads tipped, so a camera pointed away looks like a tipped cell. Mount the webcam image-upright, facing the launch direction (an upright tag shows roll ≈ 0 on the stream overlay). Tag ids come from `Context.allianceColor` at module init, so set the alliance before INIT. Never call `CellTipCamera.stop()` yourself: it's irreversible.
+**Cell tip** (`CellTipCamera`). Mount the webcam image-upright, facing the launch direction (an upright tag shows roll ≈ 0 on the stream overlay); a camera pointed away reads tipped. Set the alliance before INIT (tag ids are read then). Never call `CellTipCamera.stop()` yourself: it's irreversible.
 
 ## OpMode lifecycle
 
-`init()` runs `createRobot()`, each module's `initStates()` then `init()`, `initialize()`, then a second module pass for Modules created in `initialize()`. Modules are found through fields reachable from the OpMode and `robot`, never locals.
+Modules are found through fields reachable from the OpMode and `robot` (a second pass catches ones created in `initialize()`), never locals.
 
-Each loop reads modules and updates the follower before `gameLoop()`, then runs Ivy commands, then writes. In INIT, `initializeLoop()` replaces `gameLoop()` and writes stay off unless `shouldWriteDuringInit()`, but the follower and scheduler still run: a follow, hold or path command before `onStart()` drives the robot in INIT.
+In INIT, `initializeLoop()` replaces `gameLoop()` and module writes stay off unless `shouldWriteDuringInit()`, but the follower and Ivy scheduler still run: a follow, hold or path command scheduled before `onStart()` drives the robot in INIT.
 
 - Telemetry lines go in `telemetry()`, field drawing in `dashboardOverlay(Canvas)`. Never call `telemetry.update()` in an `EnhancedOpMode`: it closes the DS frame and later DS lines are dropped. Dashboard values stay plain text (no `HtmlFormatter`) so the graph view can plot them.
-- On `stop()` or a throwing hook, the framework resets the scheduler, stops the follower and its motors, and calls `stop()` on every Module whose `initStates()` began, half-initialized ones included. `onEnd()` runs only on a normal stop.
+- On `stop()` or a throwing hook, every Module whose `initStates()` began gets `stop()`, half-initialized ones included; `onEnd()` runs only on a normal stop.
 - A crash shows on the dashboard's Error line until the next INIT. The SDK only logs it, so a bare OpMode's crash shows only in logcat and the dashboard's Error view, and an `Error` (e.g. `StackOverflowError`) thrown from a bare OpMode kills the RC app.
 - Keep dashboard telemetry fast (`OptimizationToggles.dashboardTransmissionIntervalMs`) and the loop profile on: the team tunes on the dashboard.
 
 ## Module pattern
 
-- Don't touch states in a Module's constructor: they bind in `initStates()`, and `activate()` on an unbound state silently returns false.
+- Don't touch states in a Module's constructor: they bind in `initStates()`, and `activate()` on an unbound state just returns false.
 - Name nested `@Config` classes (`@Config("Shooter")`): slothboard keys config classes by simple name, so bare nested `Tuning` classes collide and vanish.
 - Telemetry goes in `onTelemetry()`, not `read()`. DS lines outside a DS frame are dropped; gate other DS-only work on `getTelemetry().isDSFrame()`.
 - Safe state lives in `stop()`, never only in a command's `end()` (those don't run at OpMode stop). Use `EnhancedMotor.stop()`, since the write cache can drop `setPower(0)`, and keep it reversible: it can run mid-OpMode with `write()` resuming.
-- `EnhancedMotor` and `EnhancedServo` re-send an unchanged value every 250 ms because the hub can drop a write silently (a hub reset or NACK); keep that in any new write cache.
+- `EnhancedMotor` and `EnhancedServo` periodically re-send an unchanged value because the hub can drop a write silently (a hub reset or NACK); keep that in any new write cache.
 - `stop()` can only de-energize: on a normal STOP the SDK has already fail-safed the hubs and silently drops any move, so stow a mechanism at the end of its routine.
 - `EnhancedMotor.setVelocity(double)` is ticks/s, not RPM; `withVoltageCompensation` scales only `setPower`.
 - A State setpoint is dashboard-live only through `bindTunable(state, () -> field)` after `setStates`; a value passed to the enum constructor is read once.
@@ -105,50 +103,48 @@ Each loop reads modules and updates the follower before `gameLoop()`, then runs 
 
 - Never call `Scheduler.execute()` or `Scheduler.reset()` in an `EnhancedOpMode`; the framework does (a bare `LinearOpMode` does both itself).
 - Build commands in `initialize()` (`StateCommands.set` throws on a state not yet bound) and schedule them in `onStart()` (`start()` resets the scheduler).
-- Requirements are `Module`s, or the `Follower` for every `PathCommands` command; a group requires all its children's. A new command interrupts a running one of equal priority it collides with, so a `StateCommands.set` from `gameLoop()` on any module an auto touches kills the whole auto. Build reactions into the sequence, or give the auto `.setPriority(1)` and the reaction `.setBlockedBehavior(BlockedBehavior.QUEUE)`.
+- Requirements are `Module`s, or the `Follower` for every `PathCommands` command but `waitMs`; a group requires all its children's. A new command interrupts a running one of equal priority it collides with, so a `StateCommands.set` from `gameLoop()` on any module an auto touches kills the whole auto. Build reactions into the sequence, or give the auto `.setPriority(1)` and the reaction `.setBlockedBehavior(BlockedBehavior.QUEUE)`.
 - `PathCommands.remainingBelow` measures the current leg only.
 - Ivy's `Commands.waitMs` runs on the wall clock, which jumps decades the first time a DS or the RC web page connects after boot: use `PathCommands.waitMs`.
-- Wrap every auto in `PathCommands.timeout`. `opmodes/test/MockAuto` is the reference auto; `opmodes/test/auto/CloseFlowerAuto` is the same on real paths.
+- Race every auto against `PathCommands.waitMs` (`PathCommands.timeout` does it; build the `race` by hand to know whether it fired). `opmodes/test/MockAuto` is the reference auto; `opmodes/test/auto/CloseFlowerAuto` is the same on real paths.
 
 ## Tuning
 
 Dashboard edits are lost on deploySloth or an app restart: copy kept values into the source.
 
 - **Pedro** (`BettaConstants`, tuned with AutoTune): Foresight's P and FF gains apply live, the rest at the next INIT. Keep the robot still for the first second of INIT while the Pinpoint recalibrates its IMU.
-- **Ball colours and gates** are the constants atop the SnapScript. Tune them in the Limelight web editor with `LimelightBalls → syncOnInit` off, or the next INIT overwrites the edits, then copy them into the file. Pipeline settings (exposure, gain, resolution) live in `limelight/ball_pipeline.vpr`: save the web UI's pipeline download over it, or the next synced INIT reverts them.
-- **Homography** (`eocvsim/homography`): print `docs/calibration-chessboard-3in-letter.pdf`, set `SQUARE_SIZE_INCHES` to the measured square, lay it flat and square to the robot with the long side away, and check the locked 6 in grid with a tape measure. A new homography moves the (0,0) crosshair, so redo `Mount` in the same change.
-- **`BallFieldTransform.Mount`** (committed for the Betta bot's Limelight): `xIn`/`yIn` is the offset from the Pinpoint offsets' origin to the overlay's (0,0) crosshair. To check it, run Camera Module Test with the robot still and a ball on the centreline at two distances: a constant Y or X error is `yIn` or `xIn`, a Y error growing with distance is `headingDeg`, a left ball reading negative Y means flip `mirrorY`, and a growing X error means redo the homography. Turning in place, a still ball that traces a circle means `xIn`/`yIn` is off.
+- **Ball colours and gates** are the constants atop the SnapScript (`docs/hsv-tuning-prompt.md` derives starting HSV ranges from photos). Tune them in the Limelight web editor with `LimelightBalls → syncOnInit` off, or the next INIT overwrites the edits, then copy them into the file. Pipeline settings (exposure, gain, resolution) live in `limelight/ball_pipeline.vpr`: save the web UI's pipeline download over it, or the next synced INIT reverts them.
+- **Homography** (`eocvsim/homography`): lay the board flat and square to the robot and check the locked 6 in grid with a tape measure. A new one moves the (0,0) crosshair, so redo `Mount` in the same change.
+- **`BallFieldTransform.Mount`** (committed for the Betta bot's Limelight): `xIn`/`yIn` run from the Pinpoint offsets' origin to the (0,0) crosshair. Check it with Camera Module Test, robot still, a ball on the centreline at two distances: a constant X or Y error is `xIn`/`yIn`, a Y error growing with distance is `headingDeg`, a left ball reading negative Y means flip `mirrorY`, a growing X error means redo the homography. Turning in place, a still ball tracing a circle means `xIn`/`yIn` is off.
 
-**AutoTune**: join the robot wifi and open `http://192.168.43.1:10158` (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, pasting each block into `BettaConstants`' matching `*Settings`; re-run after any drivetrain, wheel or pod change. deploySloth doesn't reach a procedure that's already running: finish or close it first. Tests drives its Distance field (48 in by default), so clear a Distance × Distance area. A `@Tuner` method in `pedro/Tuning.java` must be static, take no arguments and declare exactly `Procedure` as its return type, or the RC app breaks at boot.
+**AutoTune**: `http://192.168.43.1:10158` on the robot wifi (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, copying each result into the matching `BettaConstants.*Settings` field (the printed code block is Quickstart-shaped: don't paste it); re-run after any drivetrain, wheel or pod change. deploySloth doesn't reach a running procedure: close it first. Tests drives within a Distance × Distance area: clear it. A `@Tuner` method in `pedro/Tuning.java` must be static, take no arguments and return exactly `Procedure`, or the RC app breaks at boot.
 
 ## Testing
 
-Device names: `fl` `bl` `fr` `br` `pinpoint` (every follower), `floodgate` (Analog Input, `Drivetrain`), webcam `aprilTagDetector` (cell tip), `limelight` (EthernetDevice). `res/xml/` ships `cuttle_decode.xml`, `betta_decode.xml`, webcam-only `camera.xml`, `laser_rangefinder.xml` (rangefinders on analog, transfer motors), `laser_rangefinder_i2c.xml` (rangefinder `Laser` on I2C bus 1) and `shooter.xml` (Shooter Test: `flywheel` on motor port 0 with the Through Bore in its encoder port, `hood` on servo port 0). A hub set up from older code names the webcam `ballDetector` or `nerdDetector`: re-activate a shipped config or rename it.
+Hardware configs ship in `res/xml/`; `limelight` is an EthernetDevice.
 
 - **Mock Architecture Test** is the first run after a full install. It drives only with `Mock Auto → enableDrive` on (check motor and odometry directions first), and then finishes only on the floor.
 - **Close Flower** autos: the `toAudienceWall` and `toHive` legs put part of the robot over the centre line (G402).
-- **Ball Collection Auto** reads its start pose and `collection` settings at INIT; wait for its `Vision` line to read live before START, or it skips while the INIT sync is still uploading.
-- **Decode Tele** starts at a placeholder pose: reset it with gamepad1 before trusting the odometry-only turret aim.
-- **OctoQuad** (`octoquad/`, I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver supports FW 3.1, so a MK2 needs no `OctoQuadFWv3` driver from DigitalChickenLabs' repo (whose README still says otherwise). Calibrate with the Deadwheel and Heading Scalar calibrators, then set them on the dashboard in OctoQuad Localizer Test (gamepad1 A applies them, recalibrating the IMU: keep the robot still). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after every such reset, code must not drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and must drop data whose `crcOk` is false. Pedro's `OctoQuadConfig` takes Pinpoint-style offsets (`xPodOffset` is the forward pod's sideways offset, `yPodOffset` the strafe pod's forward offset) and sends `-yPodOffset` as the SDK's `tcpOffsetMM_X` and `-xPodOffset` as `tcpOffsetMM_Y`.
-- **Pinpoint Localizer Test** (`pinpoint/`) keeps its own copy of the Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`. Dashboard edits apply on gamepad1 A, which recalibrates the IMU (keep the robot still).
-- **Laser Rangefinder Test** reads two Brushland rangefinders as Analog Inputs `analog0`/`analog1`. Switch the sensor to analog first with Configure Laser Rangefinder (on `laser_rangefinder_i2c.xml`), which also writes the distance mode, timing and an ROI centred on the sensor's optical centre before the pins go analog, then match `maxRangeMm` to its `analogHighMm`. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta); an INIT then shows `Answering on I2C` true (a silent sensor reads all zeros, so `Pin0`/`Pin1` at 0 alone proves nothing).
-- **Transfer Count Test** counts balls with two rangefinders along the ball's path, `analog0` (A) upstream of `analog1` (B), close enough that one ball covers both at once. It counts +1 each time A − B rises through `diffThreshold`, which each ball's trailing edge (or the gap behind it) does once on leaving A, so balls only travel A to B and must start with the chute clear. Tune it from the dashboard graph of `A - B (mm)`. `resetCount` zeroes the count; with `reset` on, `stopAtCount` sets `motor1Power` to 0.
-- **Transfer Thread Count Test** is the same setup with the rule re-arming only once A − B falls `hysteresisMm` below the threshold. `Count (thread)` is `modules/TransferCounter`, a background thread bulk-reading both ports every `pollMs`; `Count (loop)` is the same rule at the `loopMs` loop rate, for comparison. `runThread` (read at INIT) off measures the loop without the thread. With `reset` on, the thread count reaching `stopAtCount` sets `motor1Power` to 0 on the next loop, since only the OpMode thread writes motors.
-- **`TransferCounter`** is the only code that reads the hub from a thread. The hub's ADC refreshes about every 10 ms (Bench: Analog Poll: every channel, the battery and 5 V monitors included, changes at p50 ~10.5 ms and never under ~9 ms), so a poll faster than ~5 ms gains nothing and costs the main loop bus time (one ~2.5 ms bulk read per poll, sharing the hub's USB lock): a 10 ms poller added nothing to an idle loop but 2.6 ms to a 13.9 ms OctoQuad-driving loop and 3.7 ms to a 16.5 ms Pinpoint one (`docs/hub-bench-findings.md`). The rangefinder itself only updates once per timing budget (Configure Laser Rangefinder's 20 ms is 50 Hz); faster changes are ADC noise. Any thread that reads the hub follows the same rules:
+- **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
+- **OctoQuad** (`octoquad/`, I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver handles MK2 firmware 3.1; don't add DigitalChickenLabs' `OctoQuadFWv3` driver. Calibrate with the Deadwheel and Heading Scalar calibrators, then enter the results on the dashboard in OctoQuad Localizer Test (gamepad1 A applies them). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after each reset, don't drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and drop data whose `crcOk` is false. Pedro's `OctoQuadConfig` takes Pinpoint-style offsets (`xPodOffset`: the forward pod's sideways offset; `yPodOffset`: the strafe pod's forward offset) and sends `-yPodOffset` as the SDK's `tcpOffsetMM_X` and `-xPodOffset` as `tcpOffsetMM_Y`.
+- **Pinpoint Localizer Test** (`pinpoint/`) keeps its own Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`, which is in inches.
+- **Laser rangefinders** (Brushland, Analog Inputs `analog0`/`analog1`): switch a sensor to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, and set every reader's `maxRangeMm` to its `analogHighMm` or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta); trust `Answering on I2C`, not `Pin0`/`Pin1` (a silent sensor reads 0).
+- **Transfer Count Test** / **Transfer Thread Count Test**: `analog0` (A) sits upstream of `analog1` (B), close enough that one ball covers both; balls must only travel A to B and start with the chute clear. Tune `diffThreshold` on the dashboard graph of `A - B (mm)`.
+- **Hub-reading threads.** `modules/TransferCounter` and Bench: Analog Poll's poller are the only code reading the hub from a thread. The hub's ADC refreshes only about every 10 ms and each poll costs the main loop bus time, so a poll faster than ~5 ms gains nothing (`docs/hub-bench-findings.md`). Any thread that reads the hub:
   - Call `start()` on the OpMode thread and `stop()` from the OpMode's stop, not `Module.stop()`, which also runs mid-OpMode.
   - Loop only while the OpMode thread `isAlive()`: after a crash no OpMode hook runs (EnhancedOpMode skips `onEnd()`), so that is the only stop signal.
   - Stop with a volatile flag and `join`, never `interrupt()`: the SDK's `MessageKeyedLock.release` calls `lockInterruptibly()`, so an interrupt mid-command can leave the hub's USB lock held until it's abandoned after 500 ms, stalling every thread's hub commands.
   - Catch `Throwable` into a volatile field and rethrow it on the OpMode thread.
   - Read with its own `LynxGetBulkInputDataCommand` (analog in mV), never through `AnalogInput` or `clearBulkCache()`: the MANUAL bulk cache is shared across threads.
   - No writes or telemetry from the thread.
-- **Shooter Test** spins `flywheel` and sets the `hood` servo from the dashboard, reading RPM from a REV Through Bore (8192 counts/rev) on the motor port named `encoderName` (default the flywheel's own port). RPM comes from encoder position over `rpmWindowMs`, because the hub's 16-bit velocity overflows above about 240 RPM at 8192 counts/rev. With `targetRpm` 0 it runs `power` open loop and shows power / RPM, the `kV` to start from; with `targetRpm` set it runs `kV`·target + `kP`·error, clipped to 0..1. Check that RPM reads positive spinning forward (`reverseEncoder`) before setting `targetRpm`.
-- Single devices: the dashboard's Hardware View. An isolated module test extends `OpMode`, not `EnhancedOpMode`.
+- **Shooter Test**: Through Bore velocity comes from position over `rpmWindowMs`, because the hub's 16-bit velocity wraps above about 240 RPM at 8192 counts/rev; any flywheel code reading one must do the same. Check RPM reads positive spinning forward (`reverseEncoder`) before setting `targetRpm`: reversed, the closed loop goes to full power.
+- Single devices: the dashboard's Hardware View. An isolated module test extends `OpMode`; one that needs the follower uses `EnhancedOpMode` with a minimal `Robot` (Camera Module Test).
 
-**Control Hub bench** (`opmodes/test/bench/`, `Bench: *`): after a full install run `python3 scripts/bench/run_bench.py` (see `scripts/bench/README.md`). Its measurements and what to design around (planner time, Expansion Hub and I2C costs, Pinpoint vs OctoQuad, Limelight latency, the stop window) are in `docs/hub-bench-findings.md`: read it before changing those, and update it after a rerun. Bench: Analog Poll is run by hand, not by the runner (see the README).
+**Control Hub bench** (`opmodes/test/bench/`, `Bench: *`): usage in `scripts/bench/README.md`; results and what to design around in `docs/hub-bench-findings.md`. Read it before changing the planner, hub or I2C traffic, odometry, Limelight or stop paths, and update it after a rerun.
 
 ## Conventions
 
-- Don't change `JavaVersion.VERSION_1_8`, `targetSdkVersion 28` (both SDK-pinned), `compileSdk`, `minSdkVersion` or `ndkVersion` without a reason; `versionCode`/`versionName` follow the SDK version.
+- Don't change `JavaVersion.VERSION_1_8`, `targetSdkVersion 28` (both SDK-pinned), `compileSdk`, `minSdkVersion` or `ndkVersion` without a reason. Every DS app must match the SDK version (a mismatch fails inspection); an SDK bump also bumps `versionCode`/`versionName`.
 - Comments: none by default, in any language; only a one-line WHY a competent reader would otherwise get wrong. Usage notes go in this file.
 - Never hand-edit vendored `robotcontroller/internal/*`, `architecture/prism/*` or `pedro/procedures/*`. Refresh the last two with their `scripts/update-*.sh`, one commit each, plus any Pedro bump the Quickstart made in `TeamCode/build.gradle`.
 - Fail fast: no catch to keep a loop alive, no silent fallback, no optional devices (`hardwareMap.get`, never `tryGet`); numeric guards and try/finally are fine. The only exceptions: `WebcamControls` ignores unsupported UVC controls, Limelight problems raise the `Limelight` fault instead of throwing while Limelight-dependent actions fall back, and the vendored `pedro/procedures/*` tuners use `tryGet` upstream.
