@@ -95,26 +95,27 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
   - The poller's rate (100–250 Hz) doesn't change the frame rate.
 - **Webcam controls:** `WebcamControls.update()` with a write (exposure or gain) blocks for 72 / 87 / 87. Write them
   only in INIT or when they change.
-- **Analog refresh and poller threads** (Bench: Analog Poll, run by hand on 2026-10-14 with `laser_rangefinder.xml`):
-  - The hub refreshes every ADC channel about every 10 ms. Back-to-back reads saw a new value every 10.4–10.8 ms
+- **Analog refresh and poller threads** (Bench: Analog Poll, run by hand with `laser_rangefinder.xml`: 10 ms on
+  2026-10-14, then 5, 7 and 10 ms on 2026-10-16 with both rangefinders plugged in):
+  - The hub refreshes every ADC channel about every 10 ms. Back-to-back reads saw a new value every 9.7–11.1 ms
     (p50), never under about 9 ms, on both rangefinders, the battery monitor and the 5 V monitor, through GetADC or
     bulk reads. Hub ADC noise changes the reading at most refreshes, so this can't show the rangefinder's own update
-    rate; its timing budget during the run wasn't recorded.
-  - A poller thread every 10 ms against a stand-in loop (MANUAL bulk read, 0, 6 or 8 GetADC commands for odometry and
-    drive writes, 2.7 ms of CPU), loop period mean / p95:
+    rate; its timing budget during the runs wasn't recorded.
+  - A poller thread doing one bulk read per poll against a stand-in loop (MANUAL bulk read, 0, 6 or 8 GetADC commands
+    for odometry and drive writes, 2.7 ms of CPU), mean loop period added over the same run's no-poller loop:
 
-    | loop | no poller | one bulk read per poll | two GetADC reads per poll |
+    | loop (no poller) | 10 ms poll | 7 ms poll | 5 ms poll |
     |---|---|---|---|
-    | idle | 6.6 / 7.3 | 6.7 / 7.8 | 6.7 / 7.6 |
-    | OctoQuad driving | 13.9 / 16.4 | 16.5 / 19.4 | 17.7 / 22.8 |
-    | Pinpoint driving | 16.5 / 19.5 | 20.2 / 24.2 | 21.0 / 26.0 |
+    | idle (6.4–6.5) | +0.3 | +0.6 | +0.4 |
+    | OctoQuad driving (13.8–14.0) | +3.0 | +3.4 | +6.6 |
+    | Pinpoint driving (16.4–16.9) | +3.2 | +4.4 | +8.7 |
 
-  - New `analog0` values per second: the loop alone 72 idle, 59 OctoQuad driving, 50 Pinpoint driving; the bulk
-    poller about 70 in all three.
-  - The poller kept its 10 ms schedule (p99 10.2) even in the Pinpoint loop, where its bulk read took 2.52 / 3.77 /
-    7.31.
-  - So each poll delays a busy loop by about 1.6–1.8 ms. Extrapolated, not measured: a 5 ms poller would take those
-    loops to about 20 and 26 ms.
+    The 2026-10-14 10 ms run agreed (+2.6 and +3.7 driving). Two GetADC reads per poll cost more than one bulk read
+    at every rate (+3.6–3.8 at 10 ms, +9.8–11.8 at 5 ms, driving).
+  - New `analog0` values per second while driving: the loop alone 59–71; the poller 97–99 at 5, 7 and 10 ms alike.
+    A 10 ms poller already sees almost every refresh, so polling faster only costs loop time.
+  - The poller kept its schedule at every rate (p99 within 0.9 ms of the period); its bulk read took 2.0–2.7 ms
+    (p50) under load.
 
 ## Hub costs (Control Hub, bulk caching off unless noted)
 
