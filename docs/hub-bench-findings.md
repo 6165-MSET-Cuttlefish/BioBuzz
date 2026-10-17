@@ -100,7 +100,7 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
   - The hub refreshes every ADC channel about every 10 ms. Back-to-back reads saw a new value every 9.7–11.1 ms
     (p50), never under about 9 ms, on both rangefinders, the battery monitor and the 5 V monitor, through GetADC or
     bulk reads. Hub ADC noise changes the reading at most refreshes, so this can't show the rangefinder's own update
-    rate; its timing budget during the runs wasn't recorded.
+    rate. Both were at a 20 ms timing budget (50 Hz) in every run.
   - A poller thread doing one bulk read per poll against a stand-in loop (MANUAL bulk read, 0, 6 or 8 GetADC commands
     for odometry and drive writes, 2.7 ms of CPU), mean loop period added over the same run's no-poller loop:
 
