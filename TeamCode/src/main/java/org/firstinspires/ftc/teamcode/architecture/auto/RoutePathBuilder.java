@@ -214,9 +214,13 @@ public final class RoutePathBuilder {
             if (order.length == 0) {
                 intake = new Leg(Collections.<Segment>emptyList(), Reroute.NONE);
             } else {
-                int[] stops = IntakeCurvePlanner.essentialStops(start.x(), start.y(), ordered, robot.intakeWidthIn);
-                essential = stops.length;
-                intake = intakeLeg(order, ordered, stops);
+                List<Integer> stops = new ArrayList<>();
+                for (int s : IntakeCurvePlanner.essentialStops(start.x(), start.y(), ordered, robot.intakeWidthIn)) {
+                    stops.add(s);
+                }
+                Segment direct = directIntake(ordered, stops);
+                essential = stops.size();
+                intake = intakeLeg(order, direct);
                 if (intake == null) return null;
             }
 
@@ -233,10 +237,39 @@ public final class RoutePathBuilder {
             return new Shape(intake, back, intakeEnd, essential, moves, robot);
         }
 
-        private Leg intakeLeg(int[] order, Ball[] ordered, int[] stops) {
-            List<Pose> stopPoses = new ArrayList<>(stops.length);
-            for (int s : stops) stopPoses.add(ordered[s].toPose());
-            Segment direct = Segment.tangent(IntakeCurvePlanner.throughCurve(start, stopPoses));
+        // The spline bends away from the chords essentialStops tested, so each ball it no longer sweeps up becomes a stop.
+        private Segment directIntake(Ball[] ordered, List<Integer> stops) {
+            while (true) {
+                List<Pose> stopPoses = new ArrayList<>(stops.size());
+                for (int s : stops) stopPoses.add(ordered[s].toPose());
+                Segment direct = Segment.tangent(IntakeCurvePlanner.throughCurve(start, stopPoses));
+                int missed = firstMissed(direct, ordered, stops);
+                if (missed < 0) return direct;
+                int at = 0;
+                while (stops.get(at) < missed) at++;
+                stops.add(at, missed);
+            }
+        }
+
+        private int firstMissed(Segment direct, Ball[] ordered, List<Integer> stops) {
+            double[][] track = track(Collections.singletonList(direct), robot);
+            for (int i = 0; i < ordered.length; i++) {
+                if (!stops.contains(i) && !underTrack(track, ordered[i].x, ordered[i].y)) return i;
+            }
+            return -1;
+        }
+
+        private boolean underTrack(double[][] track, double x, double y) {
+            double reach = robot.intakeWidthIn / 2;
+            for (int k = 1; k < track[0].length; k++) {
+                if (distanceToSegment(x, y, track[0][k - 1], track[1][k - 1], track[0][k], track[1][k]) <= reach) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private Leg intakeLeg(int[] order, Segment direct) {
             if (direct.fits(robot, area, obstacles, gap)) return new Leg(Collections.singletonList(direct), Reroute.NONE);
 
             // Detours always go through every ball: safety over the few inches the intake's width would save.
@@ -345,6 +378,14 @@ public final class RoutePathBuilder {
             }
         }
         return track;
+    }
+
+    private static double distanceToSegment(double x, double y, double ax, double ay, double bx, double by) {
+        double dx = bx - ax;
+        double dy = by - ay;
+        double lenSq = dx * dx + dy * dy;
+        double t = lenSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / lenSq));
+        return Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
     }
 
     private static void addDistinct(List<Pose> points, Pose p) {
