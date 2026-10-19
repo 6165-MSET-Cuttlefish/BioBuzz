@@ -12,8 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class TransferCounter {
     private static final long JOIN_TIMEOUT_MS = 250;
     private static final double ADC_FULL_SCALE_MV = 3300;
-    // The hub refreshes its ADC about every 10 ms (p10 9.3 ms); a gap longer than this can skip a refresh.
-    private static final long LATE_POLL_NS = 9_000_000L;
+    private static final long LATE_POLL_MARGIN_NS = 2_000_000L;
 
     public static final class Edge {
         private boolean armed;
@@ -56,6 +55,7 @@ public final class TransferCounter {
     private final int portB;
     private final double maxRangeMm;
     private final long periodNs;
+    private final long latePollNs;
     private final AtomicInteger count = new AtomicInteger();
     private volatile double thresholdMm;
     private volatile double hysteresisMm;
@@ -83,6 +83,7 @@ public final class TransferCounter {
         if (!(periodMs > 0)) throw new IllegalArgumentException("periodMs must be positive, was " + periodMs);
         this.maxRangeMm = maxRangeMm;
         this.periodNs = (long) (periodMs * 1e6);
+        this.latePollNs = periodNs + LATE_POLL_MARGIN_NS;
     }
 
     private static int portOn(LynxModule module, AnalogInput input) {
@@ -131,6 +132,10 @@ public final class TransferCounter {
         count.set(0);
     }
 
+    public double latePollMs() {
+        return latePollNs / 1e6;
+    }
+
     public Stats stats() {
         check();
         return stats;
@@ -166,7 +171,7 @@ public final class TransferCounter {
                 if (polls > 0) {
                     long gap = t1 - lastPollNs;
                     maxGapNs = Math.max(maxGapNs, gap);
-                    if (gap > LATE_POLL_NS) latePolls++;
+                    if (gap > latePollNs) latePolls++;
                     if (mvA != lastMvA) newValues++;
                 }
                 lastPollNs = t1;

@@ -24,7 +24,7 @@ public class TransferThreadCountTest extends OpMode {
     public static double diffThreshold = 25;
     public static double hysteresisMm = 10;
     public static boolean runThread = true;
-    public static double pollMs = 5;
+    public static double pollMs = 10;
     public static double loopMs = 20;
     public static int stopAtCount = 2;
     public static double motor1Power = 0;
@@ -101,7 +101,7 @@ public class TransferThreadCountTest extends OpMode {
                 telemetry.addData("A - B thread (mm)", s.mmA - s.mmB);
                 telemetry.addData("poll Hz", s.polls / s.seconds);
                 telemetry.addData("new A values/s", s.newValues / s.seconds);
-                telemetry.addData("late polls (>9 ms)", s.latePolls);
+                telemetry.addData(String.format("late polls (>%.1f ms)", counter.latePollMs()), s.latePolls);
                 telemetry.addData("max poll gap (ms)", s.maxGapMs);
                 telemetry.addData("bulk read mean (ms)", s.meanCommandMs);
             }
