@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 
 import com.acmerobotics.dashboard.config.Config;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.RobotShape;
+import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
 
 /**
  * The robot's footprint and intake as the ball planner sees them, in inches: the Betta bot, the test robot until the

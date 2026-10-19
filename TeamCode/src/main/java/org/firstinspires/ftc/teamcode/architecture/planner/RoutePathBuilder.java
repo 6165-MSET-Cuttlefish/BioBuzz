@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.architecture.auto;
+package org.firstinspires.ftc.teamcode.architecture.planner;
 
 import com.pedropathing.api.Paths;
 import com.pedropathing.math.Pose;
@@ -99,15 +99,12 @@ public final class RoutePathBuilder {
         /** Sampled length of a drive in inches; 0 for a turn. */
         public final double length;
         public final boolean intake;
-        /** Always the opposite of {@link #intake}. */
-        public final boolean back;
 
         Step(Path path, Pose turnTo, double length, boolean intake) {
             this.path = path;
             this.turnTo = turnTo;
             this.length = length;
             this.intake = intake;
-            this.back = !intake;
         }
     }
 

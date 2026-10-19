@@ -2,13 +2,13 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.pedropathing.math.Pose;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
-import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
-import org.firstinspires.ftc.teamcode.architecture.auto.Region;
-import org.firstinspires.ftc.teamcode.architecture.auto.RobotShape;
-import org.firstinspires.ftc.teamcode.architecture.auto.RouteOptimizer;
-import org.firstinspires.ftc.teamcode.architecture.auto.RoutePathBuilder;
+import org.firstinspires.ftc.teamcode.architecture.planner.Ball;
+import org.firstinspires.ftc.teamcode.architecture.planner.Obstacle;
+import org.firstinspires.ftc.teamcode.architecture.planner.Region;
+import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
+import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
+import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 
 import java.util.ArrayList;

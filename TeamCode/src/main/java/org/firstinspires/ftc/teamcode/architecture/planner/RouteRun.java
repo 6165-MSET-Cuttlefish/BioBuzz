@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.architecture.auto;
+package org.firstinspires.ftc.teamcode.architecture.planner;
 
 import static com.pedropathing.ivy.commands.Commands.instant;
 import static com.pedropathing.ivy.commands.Commands.waitUntil;
@@ -52,7 +52,7 @@ public final class RouteRun {
         int at = 0;
         for (RoutePathBuilder.Step step : plan.steps) {
             String name = String.format("step %d/%d, %s", ++at, plan.steps.size(),
-                    step.intake && step.back ? "intake and return" : step.intake ? "intake" : "return");
+                    step.intake ? "intake" : "return");
             steps.add(step.path != null
                     ? leg(name, PathCommands.follow(follower, step.path),
                             budget(step.length, minAvgSpeedIps, minLegSec, maxLegSec))

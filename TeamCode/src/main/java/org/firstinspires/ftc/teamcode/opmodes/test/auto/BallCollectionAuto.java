@@ -11,11 +11,11 @@ import com.pedropathing.ivy.behaviors.EndCondition;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.Ball;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
-import org.firstinspires.ftc.teamcode.architecture.auto.RouteOptimizer;
-import org.firstinspires.ftc.teamcode.architecture.auto.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
+import org.firstinspires.ftc.teamcode.architecture.planner.Ball;
+import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
+import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;

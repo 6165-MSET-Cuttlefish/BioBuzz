@@ -5,7 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.octoquad.OctoQuadLocalizerTest;
+import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 
 @TeleOp(name = "Bench: OctoQuad Absent", group = "Test")
 public class OctoQuadAbsentBench extends EnhancedOpMode {

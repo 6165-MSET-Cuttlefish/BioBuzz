@@ -45,7 +45,7 @@ Pedro Pathing 3:
 
 ## Framework layout
 
-`architecture/` is the portable framework; `auto/` holds field geometry, alliance mapping and the ball planner, and `command/` the Ivy factories (`StateCommands`, `PathCommands`). A `Robot` subclass's `createFollower(HardwareMap)` and `initializeGameModules()` run inside `Robot`'s constructor, before the subclass's field initializers.
+`architecture/` is the portable framework; `auto/` holds field geometry and alliance mapping, `planner/` the ball planner, and `command/` the Ivy factories (`StateCommands`, `PathCommands`). A `Robot` subclass's `createFollower(HardwareMap)` and `initializeGameModules()` run inside `Robot`'s constructor, before the subclass's field initializers.
 
 **Poses and alliance**
 
@@ -56,7 +56,7 @@ Pedro Pathing 3:
 
 **Ball routing**
 
-- Planner: `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
+- Planner (`architecture/planner/`): `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
 - No alliance mapping: pass mapped field coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles. Bad input throws, so check a robot-sourced start with `RouteOptimizer.poseProblem` first.
 - Pedro switches to the next piece of a compound path as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting sharp turns and reversals early, so don't merge `Plan.steps` into one compound path.
 - A curve that stops dead mid-path (a straight cubic with handles the full chord long) makes Pedro's follower throw there.
@@ -126,8 +126,8 @@ Hardware configs ship in `res/xml/`; `limelight` is an EthernetDevice.
 - **Mock Architecture Test** is the first run after a full install. It drives only with `Mock Auto → enableDrive` on (check motor and odometry directions first), and then finishes only on the floor.
 - **Close Flower** autos: the `toAudienceWall` and `toHive` legs put part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
-- **OctoQuad** (`octoquad/`, I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver handles MK2 firmware 3.1; don't add DigitalChickenLabs' `OctoQuadFWv3` driver. Calibrate with the Deadwheel and Heading Scalar calibrators, then enter the results on the dashboard in OctoQuad Localizer Test (gamepad1 A applies them). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after each reset, don't drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and drop data whose `crcOk` is false. Pedro's `OctoQuadConfig` takes Pinpoint-style offsets (`xPodOffset`: the forward pod's sideways offset; `yPodOffset`: the strafe pod's forward offset) and sends `-yPodOffset` as the SDK's `tcpOffsetMM_X` and `-xPodOffset` as `tcpOffsetMM_Y`.
-- **Pinpoint Localizer Test** (`pinpoint/`) keeps its own Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`, which is in inches.
+- **OctoQuad** (I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver handles MK2 firmware 3.1; don't add DigitalChickenLabs' `OctoQuadFWv3` driver. Calibrate with the Deadwheel and Heading Scalar calibrators (`octoquad/`), then enter the results on the dashboard in OctoQuad Localizer Test (`opmodes/test/`; gamepad1 A applies them). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after each reset, don't drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and drop data whose `crcOk` is false. Pedro's `OctoQuadConfig` takes Pinpoint-style offsets (`xPodOffset`: the forward pod's sideways offset; `yPodOffset`: the strafe pod's forward offset) and sends `-yPodOffset` as the SDK's `tcpOffsetMM_X` and `-xPodOffset` as `tcpOffsetMM_Y`.
+- **Pinpoint Localizer Test** (`opmodes/test/`) keeps its own Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`, which is in inches.
 - **Laser rangefinders** (Brushland, Analog Inputs `analog0`/`analog1`): switch a sensor to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, and set every reader's `maxRangeMm` to its `analogHighMm` or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta); trust `Answering on I2C`, not `Pin0`/`Pin1` (a silent sensor reads 0).
 - **Transfer Count Test** / **Transfer Thread Count Test**: `analog0` (A) sits upstream of `analog1` (B), close enough that one ball covers both; balls must only travel A to B and start with the chute clear. Tune `diffThreshold` on the dashboard graph of `A - B (mm)`.
 - **Hub-reading threads.** `modules/TransferCounter` and Bench: Analog Poll's poller are the only code reading the hub from a thread. The hub's ADC refreshes about every 10 ms and a 10 ms poller already sees almost every refresh, so poll at 10 ms: 5 ms sees no more and more than doubles what the poller costs a driving loop (`docs/hub-bench-findings.md`). Any thread that reads the hub:

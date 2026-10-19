@@ -5,8 +5,8 @@ import com.pedropathing.math.Pose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldSymmetry;
-import org.firstinspires.ftc.teamcode.architecture.auto.Obstacle;
-import org.firstinspires.ftc.teamcode.architecture.auto.Region;
+import org.firstinspires.ftc.teamcode.architecture.planner.Obstacle;
+import org.firstinspires.ftc.teamcode.architecture.planner.Region;
 
 import java.util.Arrays;
 import java.util.List;

@@ -8,7 +8,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.VoltageUnit;
-import org.firstinspires.ftc.teamcode.octoquad.OctoQuadLocalizerTest;
+import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 import java.util.ArrayList;

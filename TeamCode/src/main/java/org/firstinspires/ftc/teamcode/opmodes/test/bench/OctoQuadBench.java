@@ -8,7 +8,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.octoquad.OctoQuadLocalizerTest;
+import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.architecture.auto;
+package org.firstinspires.ftc.teamcode.architecture.planner;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.math.Pose;
