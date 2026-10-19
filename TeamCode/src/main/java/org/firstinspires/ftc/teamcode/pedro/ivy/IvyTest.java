@@ -13,6 +13,8 @@ import static com.pedropathing.ivy.Scheduler.schedule;
 import static com.pedropathing.ivy.commands.Commands.*;
 import static com.pedropathing.ivy.groups.Groups.*;
 
+import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
+
 @Config
 @TeleOp
 public class IvyTest extends LinearOpMode {
@@ -40,14 +42,12 @@ public class IvyTest extends LinearOpMode {
                 .setPriority(1)
                 .requiring(leftShooter, rightShooter);
 
-        Command spinUpLow = Command.build()
-                .setStart(() -> b = false)
-                .setExecute(() -> {
-                    leftShooter.setPower(0.3);
-                    rightShooter.setPower(0.3);
-                })
-                .setPriority(2)
-                .requiring(leftShooter, rightShooter);
+        Command spinUpLow = instant(() -> {
+            b = false;
+            leftShooter.setPower(0.3);
+            rightShooter.setPower(0.3);
+        });
+
 
         Command stop = Command.build()
                 .setStart(() -> end = false)
@@ -56,6 +56,7 @@ public class IvyTest extends LinearOpMode {
                     rightShooter.setPower(0);
                 })
                 .setPriority(3)
+                .setDone(() -> !end)
                 .requiring(leftShooter, rightShooter);
 
         Command increment = Command.build()
