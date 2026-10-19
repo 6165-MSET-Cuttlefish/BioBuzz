@@ -4,41 +4,28 @@ import java.util.List;
 
 /** A rectangular obstacle with its sides along the field axes, in Pedro field inches. */
 public final class Obstacle {
-    public final double minX;
-    public final double maxX;
-    public final double minY;
-    public final double maxY;
+    public final Region bounds;
 
     public Obstacle(double minX, double maxX, double minY, double maxY) {
-        if (!(minX < maxX && minY < maxY)) {
-            throw new IllegalArgumentException(String.format(
-                    "empty obstacle x [%.1f, %.1f] y [%.1f, %.1f]", minX, maxX, minY, maxY));
-        }
-        this.minX = minX;
-        this.maxX = maxX;
-        this.minY = minY;
-        this.maxY = maxY;
+        bounds = new Region(minX, maxX, minY, maxY, "empty obstacle %s");
     }
 
-    /** From the point to the nearest edge; 0 inside. */
-    public double distanceTo(double x, double y) {
-        double dx = Math.max(Math.max(minX - x, x - maxX), 0);
-        double dy = Math.max(Math.max(minY - y, y - maxY), 0);
-        return Math.sqrt(dx * dx + dy * dy);
+    public double centreX() {
+        return (bounds.minX + bounds.maxX) / 2;
     }
 
-    /** From this obstacle to the nearest point of {@code region}; 0 when they overlap. */
-    public double distanceTo(Region region) {
-        double dx = Math.max(Math.max(minX - region.maxX, region.minX - maxX), 0);
-        double dy = Math.max(Math.max(minY - region.maxY, region.minY - maxY), 0);
-        return Math.sqrt(dx * dx + dy * dy);
+    public double centreY() {
+        return (bounds.minY + bounds.maxY) / 2;
     }
 
     /** Whether a robot centre at the point is within {@code clearance} of this obstacle's edge. */
     public boolean blocks(double x, double y, double clearance) {
-        double dx = Math.max(Math.max(minX - x, x - maxX), 0);
-        double dy = Math.max(Math.max(minY - y, y - maxY), 0);
-        return dx * dx + dy * dy <= clearance * clearance;
+        return gapSquared(x, x, y, y) <= clearance * clearance;
+    }
+
+    /** Whether any point of the box is within {@code clearance} of this obstacle's edge. */
+    public boolean blocks(double minX, double maxX, double minY, double maxY, double clearance) {
+        return gapSquared(minX, maxX, minY, maxY) <= clearance * clearance;
     }
 
     /**
@@ -50,10 +37,10 @@ public final class Obstacle {
         // Apart, a segment and a rectangle are nearest at an end of the segment or a corner of the rectangle.
         double limit = clearance * clearance;
         return blocks(x1, y1, clearance) || blocks(x2, y2, clearance)
-                || squaredToSegment(minX, minY, x1, y1, x2, y2) <= limit
-                || squaredToSegment(minX, maxY, x1, y1, x2, y2) <= limit
-                || squaredToSegment(maxX, minY, x1, y1, x2, y2) <= limit
-                || squaredToSegment(maxX, maxY, x1, y1, x2, y2) <= limit;
+                || squaredToSegment(bounds.minX, bounds.minY, x1, y1, x2, y2) <= limit
+                || squaredToSegment(bounds.minX, bounds.maxY, x1, y1, x2, y2) <= limit
+                || squaredToSegment(bounds.maxX, bounds.minY, x1, y1, x2, y2) <= limit
+                || squaredToSegment(bounds.maxX, bounds.maxY, x1, y1, x2, y2) <= limit;
     }
 
     public static boolean anyBlocks(List<Obstacle> obstacles,
@@ -66,7 +53,13 @@ public final class Obstacle {
 
     private boolean crosses(double x1, double y1, double x2, double y2) {
         double[] span = {0, 1};
-        return clip(x1, x2 - x1, minX, maxX, span) && clip(y1, y2 - y1, minY, maxY, span);
+        return clip(x1, x2 - x1, bounds.minX, bounds.maxX, span) && clip(y1, y2 - y1, bounds.minY, bounds.maxY, span);
+    }
+
+    private double gapSquared(double minX, double maxX, double minY, double maxY) {
+        double dx = Math.max(Math.max(bounds.minX - maxX, minX - bounds.maxX), 0);
+        double dy = Math.max(Math.max(bounds.minY - maxY, minY - bounds.maxY), 0);
+        return dx * dx + dy * dy;
     }
 
     /** Narrows {@code span} to the part of the segment's t inside {@code min..max} on one axis; false when none is. */
@@ -92,6 +85,6 @@ public final class Obstacle {
 
     @Override
     public String toString() {
-        return String.format("x [%.1f, %.1f] y [%.1f, %.1f]", minX, maxX, minY, maxY);
+        return bounds.toString();
     }
 }

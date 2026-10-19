@@ -4,6 +4,7 @@ import com.acmerobotics.dashboard.canvas.Canvas;
 import com.pedropathing.math.Pose;
 
 public class FieldVisualization {
+    public static final double CANVAS_IN = 144;
     public static final double ROBOT_RADIUS = 7.5;
 
     public static final String COLOR_ROBOT = "#FFFFFF";
@@ -14,15 +15,15 @@ public class FieldVisualization {
     /** Pedro coordinates to the dashboard's FTC-standard field frame: translate by (-72,-72), rotate -90°. */
     public static Pose toField(Pose pedroPose) {
         return new Pose(
-                pedroPose.y() - 72.0,
-                -(pedroPose.x() - 72.0),
+                pedroPose.y() - CANVAS_IN / 2,
+                -(pedroPose.x() - CANVAS_IN / 2),
                 pedroPose.heading() - Math.PI / 2);
     }
 
     /** Position-only {@link #toField(Pose)}, without allocating a Pose. */
     public static double[] toField(double x, double y) {
-        double transX = x - 72.0;
-        double transY = y - 72.0;
+        double transX = x - CANVAS_IN / 2;
+        double transY = y - CANVAS_IN / 2;
         return new double[]{ transY, -transX };
     }
 

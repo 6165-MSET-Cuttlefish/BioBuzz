@@ -4,7 +4,6 @@ import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
-import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.modules.Camera;
@@ -43,10 +42,7 @@ public class BioBuzzTele extends BioBuzzOpMode {
 
     @Override
     protected void onStart() {
-        for (EnhancedMotor motor : new EnhancedMotor[] {robot.drivetrain.getFl(), robot.drivetrain.getBl(),
-                robot.drivetrain.getBr(), robot.drivetrain.getFr()}) {
-            motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        }
+        robot.drivetrain.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
     }
 
     @Override

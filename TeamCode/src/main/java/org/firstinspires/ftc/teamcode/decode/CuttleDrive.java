@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.decode;
 
-import com.pedropathing.algorithm.Foresight;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.revhub.drivetrains.Mecanum;
 import com.pedropathing.revhub.drivetrains.MecanumConfig;
@@ -11,6 +10,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 public final class CuttleDrive {
@@ -20,10 +20,10 @@ public final class CuttleDrive {
 
     public static MecanumConfig drivetrainConfig() {
         return new MecanumConfig(c -> {
-            c.frontLeftName.set("fl");
-            c.frontRightName.set("fr");
-            c.backLeftName.set("bl");
-            c.backRightName.set("br");
+            c.frontLeftName.set(Drivetrain.FRONT_LEFT);
+            c.frontRightName.set(Drivetrain.FRONT_RIGHT);
+            c.backLeftName.set(Drivetrain.BACK_LEFT);
+            c.backRightName.set(Drivetrain.BACK_RIGHT);
             c.frontLeftDirection.set(DcMotorSimple.Direction.REVERSE);
             c.frontRightDirection.set(DcMotorSimple.Direction.FORWARD);
             c.backLeftDirection.set(DcMotorSimple.Direction.REVERSE);
@@ -50,6 +50,6 @@ public final class CuttleDrive {
                 new PinpointLocalizer(hardwareMap, localizerConfig()),
                 new Mecanum(hardwareMap, drivetrainConfig()),
                 // decode/ never follows a path; Follower still needs a Foresight, so it borrows Betta's.
-                new Foresight(BettaConstants.foresightConfig()));
+                BettaConstants.foresight());
     }
 }

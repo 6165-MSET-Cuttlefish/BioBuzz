@@ -4,7 +4,6 @@ import com.pedropathing.math.Pose;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -58,10 +57,10 @@ public final class RouteOptimizer {
     }
 
     /**
-     * Null if the robot can stand centred on a ball of {@code radius} at (x, y) at some heading, with its footprint
-     * clear, as the route passes over it; otherwise why it can't.
+     * Null if the robot can stand centred on a ball at (x, y) at some heading, with its footprint clear, as the
+     * route passes over it; otherwise why it can't.
      */
-    public static String ballProblem(double x, double y, double radius, RobotShape robot, Region area,
+    public static String ballProblem(double x, double y, RobotShape robot, Region area,
                                      List<Obstacle> obstacles, double gapIn) {
         if (!area.contains(x, y)) return "outside " + area;
         for (int i = 0; i < RoutePathBuilder.HEADING_STEPS; i++) {
@@ -107,14 +106,7 @@ public final class RouteOptimizer {
 
         // Most balls first: only when no order through all of them is drivable is one left out.
         for (int size = reachable.length; size >= 0; size--) {
-            List<int[]> orders = new ArrayList<>();
-            for (List<Integer> subset : subsets(indices, size)) {
-                for (int[] perm : permutations(subset.size())) {
-                    int[] order = new int[perm.length];
-                    for (int i = 0; i < perm.length; i++) order[i] = subset.get(perm[i]);
-                    orders.add(order);
-                }
-            }
+            List<int[]> orders = orders(indices, size);
             final double[] bound = new double[orders.size()];
             Integer[] byBound = new Integer[orders.size()];
             for (int i = 0; i < bound.length; i++) {
@@ -128,13 +120,10 @@ public final class RouteOptimizer {
                 int[] order = orders.get(index);
                 RoutePathBuilder.Shape shape = planner.shape(order);
                 if (shape == null || (best != null && !(shape.length() < best.length))) continue;
-                Ball[] ordered = new Ball[order.length];
-                for (int i = 0; i < order.length; i++) ordered[i] = reachable[order[i]];
-                best = new Route(start, returnPose, ordered, dropped, shape);
+                best = new Route(start, returnPose, planner.ordered(order), dropped, shape);
             }
             if (best != null) {
-                List<Ball> visited = new ArrayList<>();
-                Collections.addAll(visited, best.order);
+                List<Ball> visited = Arrays.asList(best.order);
                 for (Ball ball : reachable) {
                     if (!visited.contains(ball)) dropped.add(new Dropped(ball, "no drivable order that also visits the others"));
                 }
@@ -149,7 +138,7 @@ public final class RouteOptimizer {
     private static String placementProblem(Ball ball, Pose start, List<Ball> kept, Region area,
                                            List<Obstacle> obstacles, RobotShape robot, double gapIn) {
         if (robot.covers(start, ball.x, ball.y)) return "under the robot at the start";
-        String problem = ballProblem(ball.x, ball.y, ball.radius, robot, area, obstacles, gapIn);
+        String problem = ballProblem(ball.x, ball.y, robot, area, obstacles, gapIn);
         if (problem != null) return problem;
         for (Ball other : kept) {
             if (Math.hypot(ball.x - other.x, ball.y - other.y) < RoutePathBuilder.COINCIDENT_IN) {
@@ -157,6 +146,18 @@ public final class RouteOptimizer {
             }
         }
         return null;
+    }
+
+    private static List<int[]> orders(List<Integer> indices, int size) {
+        List<int[]> orders = new ArrayList<>();
+        for (List<Integer> subset : subsets(indices, size)) {
+            for (int[] perm : permutations(subset.size())) {
+                int[] order = new int[perm.length];
+                for (int i = 0; i < perm.length; i++) order[i] = subset.get(perm[i]);
+                orders.add(order);
+            }
+        }
+        return orders;
     }
 
     private static List<List<Integer>> subsets(List<Integer> items, int size) {

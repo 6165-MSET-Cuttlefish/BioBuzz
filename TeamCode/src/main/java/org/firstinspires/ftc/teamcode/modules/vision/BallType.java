@@ -10,6 +10,8 @@ public enum BallType {
     public final String label;
     public final double diameterIn;
 
+    private static final BallType[] VALUES = values();
+
     BallType(int code, String label, double diameterIn) {
         this.code = code;
         this.label = label;
@@ -17,9 +19,16 @@ public enum BallType {
     }
 
     public static BallType fromCode(int code) {
-        for (BallType type : values()) {
+        for (BallType type : VALUES) {
             if (type.code == code) return type;
         }
         throw new IllegalArgumentException("Unknown ball type code " + code);
+    }
+
+    public static boolean isCode(double code) {
+        for (BallType type : VALUES) {
+            if (type.code == code) return true;
+        }
+        return false;
     }
 }

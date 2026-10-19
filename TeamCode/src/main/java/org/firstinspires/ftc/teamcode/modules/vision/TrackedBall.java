@@ -11,7 +11,7 @@ public final class TrackedBall {
     public final double y;
     public final double vx;
     public final double vy;
-    public final boolean visible;
+    private final boolean visible;
 
     TrackedBall(int id, BallType type, double x, double y, double vx, double vy, boolean visible) {
         this.id = id;
@@ -28,6 +28,8 @@ public final class TrackedBall {
     public double headingDeg() { return Math.toDegrees(Math.atan2(vy, vx)); }
 
     public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIn; }
+
+    public boolean visible() { return visible; }
 
     /** Constant-velocity extrapolation; balls on carpet decelerate, so keep the horizon short. */
     public Point predict(double seconds) {

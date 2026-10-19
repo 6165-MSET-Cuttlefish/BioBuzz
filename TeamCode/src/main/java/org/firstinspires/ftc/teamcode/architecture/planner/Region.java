@@ -10,10 +10,12 @@ public final class Region {
     public final double maxY;
 
     public Region(double minX, double maxX, double minY, double maxY) {
+        this(minX, maxX, minY, maxY, "empty region %s: is a margin larger than the space it trims?");
+    }
+
+    Region(double minX, double maxX, double minY, double maxY, String emptyMessage) {
         if (!(minX < maxX && minY < maxY)) {
-            throw new IllegalArgumentException(String.format(
-                    "empty region x [%.1f, %.1f] y [%.1f, %.1f]: is a margin larger than the space it trims?",
-                    minX, maxX, minY, maxY));
+            throw new IllegalArgumentException(String.format(emptyMessage, describe(minX, maxX, minY, maxY)));
         }
         this.minX = minX;
         this.maxX = maxX;
@@ -37,6 +39,10 @@ public final class Region {
 
     @Override
     public String toString() {
+        return describe(minX, maxX, minY, maxY);
+    }
+
+    private static String describe(double minX, double maxX, double minY, double maxY) {
         return String.format("x [%.1f, %.1f] y [%.1f, %.1f]", minX, maxX, minY, maxY);
     }
 }

@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode.decode.modules;
 
+import static org.firstinspires.ftc.teamcode.decode.DecodeContext.FAR_WALL_Y;
+import static org.firstinspires.ftc.teamcode.decode.DecodeContext.FIELD_IN;
+
 import com.pedropathing.math.Pose;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -64,6 +67,7 @@ public class ShooterInterpolation {
             for (Map.Entry<String, List<ShooterDataPoint>> e : allPointsByKey.entrySet()) {
                 String k = e.getKey();
                 List<ShooterDataPoint> pts = e.getValue();
+                pts.sort(Comparator.comparingDouble(p -> p.rpm));
                 double dist = pts.get(0).tunedDistance;
                 sortedByDistance.add(new PositionIndex(k, dist, pts));
             }
@@ -117,9 +121,7 @@ public class ShooterInterpolation {
         }
 
         double interpolateGroupHood(String k, double rpm) {
-            List<ShooterDataPoint> sorted = new ArrayList<>(allPointsByKey.get(k));
-            sorted.sort(Comparator.comparingDouble(p -> p.rpm));
-
+            List<ShooterDataPoint> sorted = allPointsByKey.get(k);
             ShooterDataPoint low = sorted.get(0), high = sorted.get(sorted.size() - 1);
             for (int i = 0; i < sorted.size() - 1; i++) {
                 if (rpm >= sorted.get(i).rpm && rpm <= sorted.get(i + 1).rpm) {
@@ -156,26 +158,26 @@ public class ShooterInterpolation {
 
         TABLE.addPoint(100.8, 110.5, 2075, 0.01);
 
-        TABLE.addPoint(141.5 / 2, 24, 3075, 0.2585);
-        TABLE.addPoint(141.5 / 2, 24, 2975, 0.2125);
-        TABLE.addPoint(141.5 / 2, 24, 2875, 0.1825);
+        TABLE.addPoint(FIELD_IN / 2, 24, 3075, 0.2585);
+        TABLE.addPoint(FIELD_IN / 2, 24, 2975, 0.2125);
+        TABLE.addPoint(FIELD_IN / 2, 24, 2875, 0.1825);
 
-        TABLE.addPoint(141.5 / 2 + 18, 0 + 8, 3025, 0.2635);
-        TABLE.addPoint(141.5 / 2 + 18, 0 + 8, 2975, 0.2525);
-        TABLE.addPoint(141.5 / 2 + 18, 0 + 8, 2895, 0.195);
+        TABLE.addPoint(FIELD_IN / 2 + 18, FAR_WALL_Y, 3025, 0.2635);
+        TABLE.addPoint(FIELD_IN / 2 + 18, FAR_WALL_Y, 2975, 0.2525);
+        TABLE.addPoint(FIELD_IN / 2 + 18, FAR_WALL_Y, 2895, 0.195);
 
-        TABLE.addPoint(45, 0 + 8, 3275, 0.2535);
-        TABLE.addPoint(45, 0 + 8, 3175, 0.2320);
-        TABLE.addPoint(45, 0 + 8, 3125, 0.2025);
-        TABLE.addPoint(45, 0 + 8, 3075, 0.1720);
+        TABLE.addPoint(45, FAR_WALL_Y, 3275, 0.2535);
+        TABLE.addPoint(45, FAR_WALL_Y, 3175, 0.2320);
+        TABLE.addPoint(45, FAR_WALL_Y, 3125, 0.2025);
+        TABLE.addPoint(45, FAR_WALL_Y, 3075, 0.1720);
 
-        TABLE.addPoint(141.5 / 2, 0 + 8, 3055, 0.2530);
-        TABLE.addPoint(141.5 / 2, 0 + 8, 3035, 0.2325);
-        TABLE.addPoint(141.5 / 2, 0 + 8, 2975, 0.1725);
+        TABLE.addPoint(FIELD_IN / 2, FAR_WALL_Y, 3055, 0.2530);
+        TABLE.addPoint(FIELD_IN / 2, FAR_WALL_Y, 3035, 0.2325);
+        TABLE.addPoint(FIELD_IN / 2, FAR_WALL_Y, 2975, 0.1725);
 
-        TABLE.addPoint(76, 0 + 8, 3125, 0.2635);
-        TABLE.addPoint(76, 0 + 8, 3025, 0.2325);
-        TABLE.addPoint(76, 0 + 8, 2975, 0.1725);
+        TABLE.addPoint(76, FAR_WALL_Y, 3125, 0.2635);
+        TABLE.addPoint(76, FAR_WALL_Y, 3025, 0.2325);
+        TABLE.addPoint(76, FAR_WALL_Y, 2975, 0.1725);
 
         TABLE.buildIndex();
     }

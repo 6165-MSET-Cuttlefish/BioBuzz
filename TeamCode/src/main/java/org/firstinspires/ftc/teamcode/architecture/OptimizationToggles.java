@@ -21,9 +21,6 @@ public final class OptimizationToggles {
 
     public static boolean profilerEnabled = true;
 
-    /** loopProfile default, read at class load — not live like the rest of this class. */
-    public static boolean loopProfileTelemetryByDefault = true;
-
     /** Loops between per-hub Lynx current reads (a bus command, not bulk-cached). */
     public static int currentReadEveryNLoops = 1;
 }

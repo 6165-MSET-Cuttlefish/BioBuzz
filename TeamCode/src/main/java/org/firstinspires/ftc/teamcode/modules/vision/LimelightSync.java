@@ -126,7 +126,7 @@ public final class LimelightSync {
             if (!ll.pipelineSwitch(park)) {
                 return String.format("pipeline switch to %d (parking before the upload to %d) rejected", park, target);
             }
-            if (!waitForPipeline(r, park, System.currentTimeMillis())) continue;
+            if (!waitFor(r, park, System.currentTimeMillis(), SWITCH_WAIT_MS, false)) continue;
             sleep(r, PARK_SETTLE_MS);
             check(r);
             if (!ll.uploadPipeline(LimelightFiles.BALL_PIPELINE, target)) {
@@ -139,7 +139,7 @@ public final class LimelightSync {
             uploads++;
             check(r);
             if (!ll.pipelineSwitch(target)) return String.format("pipeline switch to %d rejected", target);
-            if (waitForStamp(r, target, System.currentTimeMillis())) return pythonProblem(r, target);
+            if (waitFor(r, target, System.currentTimeMillis(), LOAD_WAIT_MS, true)) return pythonProblem(r, target);
         }
         if (uploads == 0) return String.format("the Limelight never reported park pipeline %d", park);
         return String.format("pipeline %d never reported the upload's stamp %d after %d upload%s (llpython[0] %s); check "
@@ -161,29 +161,15 @@ public final class LimelightSync {
     }
 
     // getControlHubTimeStamp() is the wall clock when the SDK parsed the result.
-    private static boolean waitForPipeline(Request r, int pipeline, long fromMillis)
+    private static boolean waitFor(Request r, int pipeline, long fromMillis, long waitMs, boolean needStamp)
             throws InterruptedException, Cancelled {
-        long deadline = System.nanoTime() + SWITCH_WAIT_MS * 1_000_000L;
+        long deadline = System.nanoTime() + waitMs * 1_000_000L;
         while (System.nanoTime() < deadline) {
             check(r);
             LLResult result = r.limelight.getLatestResult();
             if (result != null && result.getControlHubTimeStamp() > fromMillis
-                    && result.getPipelineIndex() == pipeline) {
-                return true;
-            }
-            Thread.sleep(POLL_MS);
-        }
-        return false;
-    }
-
-    private static boolean waitForStamp(Request r, int pipeline, long fromMillis)
-            throws InterruptedException, Cancelled {
-        long deadline = System.nanoTime() + LOAD_WAIT_MS * 1_000_000L;
-        while (System.nanoTime() < deadline) {
-            check(r);
-            LLResult result = r.limelight.getLatestResult();
-            if (result != null && result.getControlHubTimeStamp() > fromMillis
-                    && result.getPipelineIndex() == pipeline && result.getPythonOutput()[0] == STAMP) {
+                    && result.getPipelineIndex() == pipeline
+                    && (!needStamp || result.getPythonOutput()[0] == STAMP)) {
                 return true;
             }
             Thread.sleep(POLL_MS);

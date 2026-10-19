@@ -10,7 +10,7 @@ final class WriteCache {
     double max = 1.0;
 
     boolean voltageCompensationEnabled = false;
-    double referenceVoltage = 13.0;
+    double referenceVoltage;
 
     // A failed Lynx bulk read returns 0 (→ Infinity → full power) or negative (→ reversed); never scale on one.
     private static final double MIN_VALID_VOLTAGE = 6.0;

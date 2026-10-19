@@ -250,8 +250,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
                 skippedOutside++;
             } else if (ball.distanceTo(robotPose.x(), robotPose.y()) > Tuning.maxRangeIn) {
                 skippedRange++;
-            } else if (RouteOptimizer.ballProblem(ball.x, ball.y, ball.type.diameterIn / 2, RobotGeometry.shape(),
-                    region, obstacles(), Tuning.railGapIn) != null) {
+            } else if (RouteOptimizer.ballProblem(ball.x, ball.y, RobotGeometry.shape(), region, obstacles(),
+                    Tuning.railGapIn) != null) {
                 // The planner would drop it anyway, but only after it had taken one of the nearest maxBalls places.
                 skippedUnreachable++;
             } else {

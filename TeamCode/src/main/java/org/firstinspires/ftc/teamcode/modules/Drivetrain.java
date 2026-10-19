@@ -4,6 +4,7 @@ import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.utils.Angle;
 import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
@@ -17,9 +18,14 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 
 @Config
 public class Drivetrain extends Module {
+    public static final String FRONT_LEFT = "fl";
+    public static final String BACK_LEFT = "bl";
+    public static final String FRONT_RIGHT = "fr";
+    public static final String BACK_RIGHT = "br";
+
     private final EnhancedMotor fl, bl, br, fr;
     private final AnalogInput floodgate;
-    private Follower follower;
+    private final Follower follower;
 
     public final ElapsedTime bonkTimer = new ElapsedTime();
 
@@ -60,26 +66,14 @@ public class Drivetrain extends Module {
     private double lastFloodgateAmps = Double.NaN;
     private boolean resyncOnWrite;
 
-    public Drivetrain(HardwareMap hardwareMap) {
-        fl = new EnhancedMotor(hardwareMap, "fl").withCachingTolerance(0.05);
-        bl = new EnhancedMotor(hardwareMap, "bl").withCachingTolerance(0.05);
-        fr = new EnhancedMotor(hardwareMap, "fr").withCachingTolerance(0.05);
-        br = new EnhancedMotor(hardwareMap, "br").withCachingTolerance(0.05);
+    public Drivetrain(HardwareMap hardwareMap, Follower follower) {
+        this.follower = follower;
+        fl = new EnhancedMotor(hardwareMap, FRONT_LEFT).withCachingTolerance(0.05);
+        bl = new EnhancedMotor(hardwareMap, BACK_LEFT).withCachingTolerance(0.05);
+        fr = new EnhancedMotor(hardwareMap, FRONT_RIGHT).withCachingTolerance(0.05);
+        br = new EnhancedMotor(hardwareMap, BACK_RIGHT).withCachingTolerance(0.05);
 
         floodgate = hardwareMap.get(AnalogInput.class, "floodgate");
-    }
-
-    /** Required for isBonk(), lockHeading() and field-centric drive; robot-centric drive works without it. */
-    public Drivetrain withFollower(Follower follower) {
-        this.follower = follower;
-        return this;
-    }
-
-    private Follower requireFollower() {
-        if (follower == null) {
-            throw new IllegalStateException("Drivetrain needs a Follower for this call; pass one with withFollower()");
-        }
-        return follower;
     }
 
     @Override
@@ -93,18 +87,18 @@ public class Drivetrain extends Module {
 
     @Override
     protected void read() {
-        if (!isWriteEnabled() || (follower != null && !follower.idle())) resyncOnWrite = true;
+        if (!isWriteEnabled() || !follower.idle()) resyncOnWrite = true;
     }
 
     @Override
     protected void write() {
         // Pedro's own cached motor objects drive these legs outside IDLE; a write here desyncs its cache and can leave a leg at 0.
-        if (follower != null && !follower.idle()) {
+        if (!follower.idle()) {
             throw new IllegalStateException("Drivetrain writes are enabled while the follower drives the motors; "
                     + "call drivetrain.setWriteEnabled(false) in follower-driven OpModes");
         }
         if (resyncOnWrite) {
-            if (follower != null) follower.drivetrain.stop();
+            follower.drivetrain.stop();
             stop();
             resyncOnWrite = false;
         }
@@ -142,8 +136,7 @@ public class Drivetrain extends Module {
     }
 
     public boolean isBonk() {
-        Follower f = requireFollower();
-        if (f.isBusy() && !f.atParametricEnd() && f.velocity().toVector2D().magnitude() < 2) {
+        if (follower.isBusy() && !follower.atParametricEnd() && follower.velocity().toVector2D().magnitude() < 2) {
             if (bonkTimer.milliseconds() > 2000) {
                 return true;
             }
@@ -174,13 +167,10 @@ public class Drivetrain extends Module {
     }
 
     public void lockHeading() {
-        lockedHeading = requireFollower().pose().heading();
-        headingLockController.reset();
-        headingLocked = true;
+        lockHeading(follower.pose().heading());
     }
 
     public void lockHeading(double headingRadians) {
-        requireFollower();
         lockedHeading = headingRadians;
         headingLockController.reset();
         headingLocked = true;
@@ -196,7 +186,7 @@ public class Drivetrain extends Module {
 
     public void setMecanumTargets(double y, double x, double rx, boolean fieldCentric) {
         if (fieldCentric) {
-            double heading = -requireFollower().pose().heading();
+            double heading = -follower.pose().heading();
             // BLUE drives from the opposite wall: a pi rotation, not a one-axis flip (that mirrors strafe).
             if (Context.allianceColor == AllianceColor.BLUE) heading += Math.PI;
             double cos = Math.cos(heading);
@@ -210,7 +200,7 @@ public class Drivetrain extends Module {
         }
 
         if (headingLocked) {
-            double currentHeading = requireFollower().pose().heading();
+            double currentHeading = follower.pose().heading();
             double headingError = Angle.error(currentHeading, lockedHeading);
             headingLockController.update(headingError, 0);
             rx = -Range.clip(headingLockController.calculate(), -1, 1);
@@ -224,20 +214,11 @@ public class Drivetrain extends Module {
         setTargets(frontLeft, backLeft, backRight, frontRight);
     }
 
-    public EnhancedMotor getFl() {
-        return fl;
-    }
-
-    public EnhancedMotor getBl() {
-        return bl;
-    }
-
-    public EnhancedMotor getBr() {
-        return br;
-    }
-
-    public EnhancedMotor getFr() {
-        return fr;
+    public void setZeroPowerBehavior(DcMotor.ZeroPowerBehavior behavior) {
+        fl.setZeroPowerBehavior(behavior);
+        bl.setZeroPowerBehavior(behavior);
+        br.setZeroPowerBehavior(behavior);
+        fr.setZeroPowerBehavior(behavior);
     }
 
     public double[] getMotorPowers() {

@@ -39,7 +39,7 @@ public class Turret extends Module {
     private final EnhancedServo turretServoFront;
     private final EnhancedServo turretServoBack;
 
-    private Follower follower;
+    private final Follower follower;
 
     private double targetAngle = 0;
     private double rawTargetAngle = 0;
@@ -67,7 +67,8 @@ public class Turret extends Module {
         }
     }
 
-    public Turret(HardwareMap hardwareMap) {
+    public Turret(HardwareMap hardwareMap, Follower follower) {
+        this.follower = follower;
         turretServoFront = new EnhancedServo(hardwareMap, "turretFront").withCachingTolerance(0.001);
         turretServoBack = new EnhancedServo(hardwareMap, "turretBack").withCachingTolerance(0.001);
 
@@ -76,18 +77,6 @@ public class Turret extends Module {
 
         turretServoFront.setDirection(Servo.Direction.FORWARD);
         turretServoBack.setDirection(Servo.Direction.FORWARD);
-    }
-
-    public Turret withFollower(Follower follower) {
-        this.follower = follower;
-        return this;
-    }
-
-    private Follower requireFollower() {
-        if (follower == null) {
-            throw new IllegalStateException("Turret needs a Follower; pass one with withFollower()");
-        }
-        return follower;
     }
 
     public static void nudgeOffset(double deltaDeg) {
@@ -144,7 +133,7 @@ public class Turret extends Module {
 
     private void updateTargetPosition() {
         if (getState(TurretState.class).equals(TurretState.AUTOAIM)) {
-            double robotHeading = Math.toDegrees(requireFollower().pose().heading());
+            double robotHeading = Math.toDegrees(follower.pose().heading());
 
             double absoluteAngle =
                     Math.toDegrees(Math.atan2(targetY - turretFieldY, targetX - turretFieldX));

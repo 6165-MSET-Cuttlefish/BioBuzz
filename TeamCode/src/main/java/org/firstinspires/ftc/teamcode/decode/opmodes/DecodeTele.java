@@ -4,7 +4,6 @@ import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.Gamepad;
 
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
@@ -16,8 +15,9 @@ import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 import org.firstinspires.ftc.teamcode.decode.modules.ShooterInterpolation;
 import org.firstinspires.ftc.teamcode.decode.modules.Turret;
 
-import static org.firstinspires.ftc.teamcode.architecture.core.Context.allianceColor;
 import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.COLOR_BLUE;
+import static org.firstinspires.ftc.teamcode.decode.DecodeContext.FAR_WALL_Y;
+import static org.firstinspires.ftc.teamcode.decode.DecodeContext.FIELD_IN;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.blueTargetPose;
 import static org.firstinspires.ftc.teamcode.decode.DecodeContext.redTargetPose;
 
@@ -32,7 +32,7 @@ public class DecodeTele extends DecodeOpMode {
 
     private boolean slowMode = false;
 
-    private final long[] lastGamepad2RumbleMs = {0};
+    private long lastGamepad2RumbleMs;
 
     private LayerGamepad d1;
     private LayerGamepad d2;
@@ -67,10 +67,7 @@ public class DecodeTele extends DecodeOpMode {
 
     @Override
     protected void onStart() {
-        robot.drivetrain.getFl().setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        robot.drivetrain.getFr().setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        robot.drivetrain.getBl().setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        robot.drivetrain.getBr().setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        robot.drivetrain.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         robot.targetPose = Context.allianceColor == AllianceColor.RED
                 ? new Pose(redTargetPose.x() - 1, redTargetPose.y())
@@ -126,17 +123,17 @@ public class DecodeTele extends DecodeOpMode {
         d2RsLeft.invalidate();
     }
 
-    private void rumble(Gamepad gamepad, long[] lastRumbleMs, int durationMs) {
+    private void rumbleGamepad2(int durationMs) {
         if (!optimizeRumbleCooldown) {
-            gamepad.rumble(durationMs);
+            gamepad2.rumble(durationMs);
             return;
         }
 
         long now = System.nanoTime() / 1_000_000;
         long cooldown = Math.max(0, optimizeRumbleCooldownMs);
-        if (now - lastRumbleMs[0] >= cooldown) {
-            gamepad.rumble(durationMs);
-            lastRumbleMs[0] = now;
+        if (now - lastGamepad2RumbleMs >= cooldown) {
+            gamepad2.rumble(durationMs);
+            lastGamepad2RumbleMs = now;
         }
     }
 
@@ -178,7 +175,7 @@ public class DecodeTele extends DecodeOpMode {
             if (robot.drivetrain.isHeadingLocked()) {
                 robot.drivetrain.unlockHeading();
             } else {
-                robot.drivetrain.lockHeading(allianceColor == AllianceColor.RED ? Math.toRadians(39.7) : Math.toRadians(155));
+                robot.drivetrain.lockHeading(Math.toRadians(Context.allianceColor == AllianceColor.RED ? 39.7 : 155));
             }
         }
 
@@ -192,13 +189,13 @@ public class DecodeTele extends DecodeOpMode {
             resetPoseAndOffsets(new Pose(8.875, 9, Math.toRadians(180)));
         }
         if (d1.b.wasJustPressed()) {
-            resetPoseAndOffsets(new Pose(141.5 - 8.875, 9, Math.toRadians(0)));
+            resetPoseAndOffsets(new Pose(FIELD_IN - 8.875, 9, Math.toRadians(0)));
         }
         if (d1.y.wasJustPressed()) {
-            resetPoseAndOffsets(new Pose(141.5 / 2, 8, Math.toRadians(90)));
+            resetPoseAndOffsets(new Pose(FIELD_IN / 2, FAR_WALL_Y, Math.toRadians(90)));
         }
         if (d1.dpadDown.wasJustPressed()) {
-            resetPoseAndOffsets(new Pose(141.5 / 2, 141.5 - 8.875, Math.toRadians(90)));
+            resetPoseAndOffsets(new Pose(FIELD_IN / 2, FIELD_IN - 8.875, Math.toRadians(90)));
         }
     }
 
@@ -251,7 +248,7 @@ public class DecodeTele extends DecodeOpMode {
         }
 
         if (robot.turret.getState(Turret.TurretState.class) == Turret.TurretState.HOLD) {
-            rumble(gamepad2, lastGamepad2RumbleMs, 200);
+            rumbleGamepad2(200);
         }
 
         if (d2.leftStickX.getValue() > 0.5) {

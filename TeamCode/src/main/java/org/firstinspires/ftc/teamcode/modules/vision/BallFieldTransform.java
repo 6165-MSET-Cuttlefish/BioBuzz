@@ -42,7 +42,7 @@ public final class BallFieldTransform {
             vy += robot.vy + robot.omega * offset[0];
         }
 
-        return new FieldBall(ball.id, ball.type, robot.x + offset[0], robot.y + offset[1], vx, vy, ball.visible);
+        return new FieldBall(ball.id, ball.type, robot.x + offset[0], robot.y + offset[1], vx, vy, ball.visible());
     }
 
     // Mount offset is for points only: a rigid translation moves a position, not a velocity.

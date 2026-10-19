@@ -417,7 +417,7 @@ public class HubBench extends OpMode {
 
     private final class Frame {
         final DualTelemetry dt = new DualTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
-        final FieldMapRenderer field = new FieldMapRenderer(73, 74);
+        final FieldMapRenderer field = new FieldMapRenderer(FieldMapRenderer.DS_WIDTH_PX, FieldMapRenderer.DS_HEIGHT_PX);
         final PoseRing poses = new PoseRing(30);
         final String loopDump;
         TelemetryPacket packet;

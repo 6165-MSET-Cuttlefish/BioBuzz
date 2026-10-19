@@ -70,11 +70,7 @@ public final class FieldBallTracker {
                 if (distance <= Tuning.matchRadiusIn) pairings.add(new Pairing(k, f, distance));
             }
         }
-        Collections.sort(pairings, new Comparator<Pairing>() {
-            @Override public int compare(Pairing a, Pairing b) {
-                return Double.compare(a.distance, b.distance);
-            }
-        });
+        Collections.sort(pairings, Comparator.comparingDouble(p -> p.distance));
         return pairings;
     }
 

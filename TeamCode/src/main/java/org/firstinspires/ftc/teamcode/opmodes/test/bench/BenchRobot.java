@@ -41,6 +41,6 @@ public class BenchRobot extends Robot {
     @Override
     protected void initializeGameModules() {
         BenchIO.require(opMode.hardwareMap, AnalogInput.class, "floodgate", BenchIO.RUNNER_HINT);
-        drivetrain = new Drivetrain(opMode.hardwareMap).withFollower(follower);
+        drivetrain = new Drivetrain(opMode.hardwareMap, follower);
     }
 }

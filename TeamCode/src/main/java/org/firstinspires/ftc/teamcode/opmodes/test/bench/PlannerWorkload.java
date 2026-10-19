@@ -82,7 +82,7 @@ final class PlannerWorkload {
             // Within the intake's reach, or the planner drops the ball and the n-ball case times a smaller search.
             do {
                 b[i] = new Ball(uniform(keepIn.minX, keepIn.maxX), uniform(keepIn.minY, keepIn.maxY), BALL_RADIUS_IN);
-            } while (RouteOptimizer.ballProblem(b[i].x, b[i].y, BALL_RADIUS_IN, ROBOT, keepIn, rails, RAIL_GAP_IN) != null
+            } while (RouteOptimizer.ballProblem(b[i].x, b[i].y, ROBOT, keepIn, rails, RAIL_GAP_IN) != null
                     || ROBOT.covers(start, b[i].x, b[i].y));
         }
         return new Layout("random n=" + balls, start, b);

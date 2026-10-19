@@ -84,12 +84,10 @@ public class Shooter extends Module {
     }
 
     public Shooter(HardwareMap hardwareMap) {
-        left = new EnhancedMotor(hardwareMap, "leftFlywheel").withCachingTolerance(0.005);
-        right = new EnhancedMotor(hardwareMap, "rightFlywheel").withCachingTolerance(0.005);
+        left = new EnhancedMotor(hardwareMap, "leftFlywheel").withCachingTolerance(0.005).withVoltageCompensation(13.0);
+        right = new EnhancedMotor(hardwareMap, "rightFlywheel").withCachingTolerance(0.005).withVoltageCompensation(13.0);
         hood = new EnhancedServo(hardwareMap, "hood").withCachingTolerance(0.001);
 
-        left.setVoltageCompensationEnabled(true);
-        right.setVoltageCompensationEnabled(true);
         left.setDirection(DcMotorSimple.Direction.REVERSE);
         left.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);
         right.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);

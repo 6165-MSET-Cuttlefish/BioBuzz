@@ -49,9 +49,9 @@ public class DecodeRobot extends Robot {
     protected void initializeGameModules() {
         targetPose = Context.allianceColor == AllianceColor.RED ? redTargetPose : blueTargetPose;
         HardwareMap hw = opMode.hardwareMap;
-        drivetrain = new Drivetrain(hw).withFollower(follower);
+        drivetrain = new Drivetrain(hw, follower);
         shooter = new Shooter(hw);
-        turret = new Turret(hw).withFollower(follower);
+        turret = new Turret(hw, follower);
         magazine = new Magazine(hw);
     }
 

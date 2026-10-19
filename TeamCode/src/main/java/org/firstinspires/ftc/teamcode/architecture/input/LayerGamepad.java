@@ -5,12 +5,10 @@ import com.qualcomm.robotcore.hardware.Gamepad;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
-import java.util.function.DoubleSupplier;
 
 /** SDK {@link Gamepad} wrapped with per-control edge/cached suppliers. */
 public final class LayerGamepad {
     private final List<EdgeBooleanSupplier> boolSuppliers = new ArrayList<>();
-    private final List<CachedDoubleSupplier> doubleSuppliers = new ArrayList<>();
 
     public final CachedDoubleSupplier leftStickX, leftStickY;
     public final CachedDoubleSupplier rightStickX, rightStickY;
@@ -26,12 +24,12 @@ public final class LayerGamepad {
     public final CachedDoubleSupplier touchpadFinger1X, touchpadFinger1Y;
 
     public LayerGamepad(Gamepad gamepad) {
-        leftStickX  = doubleSupplier(() -> gamepad.left_stick_x);
-        leftStickY  = doubleSupplier(() -> gamepad.left_stick_y);
-        rightStickX = doubleSupplier(() -> gamepad.right_stick_x);
-        rightStickY = doubleSupplier(() -> gamepad.right_stick_y);
-        leftTrigger  = doubleSupplier(() -> gamepad.left_trigger);
-        rightTrigger = doubleSupplier(() -> gamepad.right_trigger);
+        leftStickX  = new CachedDoubleSupplier(() -> gamepad.left_stick_x);
+        leftStickY  = new CachedDoubleSupplier(() -> gamepad.left_stick_y);
+        rightStickX = new CachedDoubleSupplier(() -> gamepad.right_stick_x);
+        rightStickY = new CachedDoubleSupplier(() -> gamepad.right_stick_y);
+        leftTrigger  = new CachedDoubleSupplier(() -> gamepad.left_trigger);
+        rightTrigger = new CachedDoubleSupplier(() -> gamepad.right_trigger);
 
         a = boolSupplier(() -> gamepad.a);
         b = boolSupplier(() -> gamepad.b);
@@ -54,8 +52,8 @@ public final class LayerGamepad {
         back  = boolSupplier(() -> gamepad.back);
 
         touchpad         = boolSupplier(() -> gamepad.touchpad);
-        touchpadFinger1X = doubleSupplier(() -> gamepad.touchpad_finger_1_x);
-        touchpadFinger1Y = doubleSupplier(() -> gamepad.touchpad_finger_1_y);
+        touchpadFinger1X = new CachedDoubleSupplier(() -> gamepad.touchpad_finger_1_x);
+        touchpadFinger1Y = new CachedDoubleSupplier(() -> gamepad.touchpad_finger_1_y);
     }
 
     private EdgeBooleanSupplier boolSupplier(BooleanSupplier source) {
@@ -64,14 +62,7 @@ public final class LayerGamepad {
         return s;
     }
 
-    private CachedDoubleSupplier doubleSupplier(DoubleSupplier source) {
-        CachedDoubleSupplier s = new CachedDoubleSupplier(source);
-        doubleSuppliers.add(s);
-        return s;
-    }
-
     public void invalidateAll() {
         for (int i = 0; i < boolSuppliers.size(); i++) boolSuppliers.get(i).invalidate();
-        for (int i = 0; i < doubleSuppliers.size(); i++) doubleSuppliers.get(i).invalidate();
     }
 }

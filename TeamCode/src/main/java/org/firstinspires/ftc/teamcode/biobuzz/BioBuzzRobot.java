@@ -28,9 +28,9 @@ public class BioBuzzRobot extends Robot {
 
     @Override
     protected void initializeGameModules() {
-        drivetrain = new Drivetrain(opMode.hardwareMap).withFollower(follower);
+        drivetrain = new Drivetrain(opMode.hardwareMap, follower);
         cellTip = new CellTipCamera(opMode.hardwareMap);
-        camera = new Camera(opMode.hardwareMap).withFollower(follower);
+        camera = new Camera(opMode.hardwareMap, follower);
         actions = new RobotActions(this);
     }
 }

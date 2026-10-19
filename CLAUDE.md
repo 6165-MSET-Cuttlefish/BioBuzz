@@ -65,11 +65,11 @@ Pedro Pathing 3:
 
 **Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision activates `Camera.VisionState.DISABLED` in `initialize()`.
 
-**Drivetrain** needs `withFollower(follower)`: without it, field-centric drive and heading lock throw and `write()` silently stops guarding against Pedro. An OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
+**Drivetrain** throws on a write while the follower drives the motors: an OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
 
 **Ball collection** (`RobotActions.collectBalls`) plans once from the balls in view, drives the intake over them and returns to where it planned from. It waits only `visionWaitMs` for a fresh frame, so a START during the INIT Limelight sync can end it SKIPPED, as does a Limelight fault at its start; a route already driving finishes without vision. `BallCollection.keepIn`/`obstacles`/`configuredPose` give other OpModes its `onField` switch.
 
-**Vision** (`modules/vision/`). `TrackedBall` is camera-relative, `FieldBall` field-relative; `Camera.getFieldBalls()` stays empty unless the Camera is built `withFollower(follower)`. A stale field ball keeps its last position with `visible()` false: check `visible()` before chasing one.
+**Vision** (`modules/vision/`). `TrackedBall` is camera-relative, `FieldBall` field-relative. A stale field ball keeps its last position with `visible()` false: check `visible()` before chasing one.
 
 **Ball detection** is `limelight/ball_contour_snapscript.py` plus `ball_pipeline.vpr`, compiled into the generated `LimelightFiles` (so deploySloth carries edits) and uploaded at every INIT by `LimelightSync` while `syncOnInit` is on. SnapScripts get the raw image: paste `eocvsim/homography`'s whole Python block into the script, and after a lens recalibration update `LENS_*` in both the script and `HomographyCalculationPipeline`.
 

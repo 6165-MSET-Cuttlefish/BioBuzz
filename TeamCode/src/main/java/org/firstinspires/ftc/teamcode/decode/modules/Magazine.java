@@ -27,8 +27,6 @@ public class Magazine extends Module {
     // Servo position units per millisecond.
     public static double horizontalFrontSpeed = 0.0008;
     public static double horizontalBackSpeed = 0.0005;
-    private double currentHorizontalFrontPosition = Double.NaN;
-    private double currentHorizontalBackPosition = Double.NaN;
     private long lastHorizontalUpdateTime = 0;
 
     public enum HorizontalFrontState implements State {
@@ -93,24 +91,16 @@ public class Magazine extends Module {
         double targetHorizontalFrontPos = getState(HorizontalFrontState.class).getValue();
         double targetHorizontalBackPos = getState(HorizontalBackState.class).getValue();
 
-        if (Double.isNaN(currentHorizontalFrontPosition)) {
-            currentHorizontalFrontPosition = targetHorizontalFrontPos;
-        }
-        if (Double.isNaN(currentHorizontalBackPosition)) {
-            currentHorizontalBackPosition = targetHorizontalBackPos;
-        }
-
         long now = System.nanoTime() / 1_000_000;
-        if (lastHorizontalUpdateTime == 0) lastHorizontalUpdateTime = now;
+        if (lastHorizontalUpdateTime == 0) {
+            lastHorizontalUpdateTime = now;
+            horizontalFrontPosition = targetHorizontalFrontPos;
+            horizontalBackPosition = targetHorizontalBackPos;
+        }
         long dtMs = now - lastHorizontalUpdateTime;
         lastHorizontalUpdateTime = now;
-        currentHorizontalFrontPosition = slew(currentHorizontalFrontPosition, targetHorizontalFrontPos,
-                horizontalFrontSpeed, dtMs);
-        currentHorizontalBackPosition = slew(currentHorizontalBackPosition, targetHorizontalBackPos,
-                horizontalBackSpeed, dtMs);
-
-        horizontalFrontPosition = currentHorizontalFrontPosition;
-        horizontalBackPosition = currentHorizontalBackPosition;
+        horizontalFrontPosition = slew(horizontalFrontPosition, targetHorizontalFrontPos, horizontalFrontSpeed, dtMs);
+        horizontalBackPosition = slew(horizontalBackPosition, targetHorizontalBackPos, horizontalBackSpeed, dtMs);
 
         intakePower = getState(IntakeState.class).getValue();
         verticalPower = getState(VerticalState.class).getValue();

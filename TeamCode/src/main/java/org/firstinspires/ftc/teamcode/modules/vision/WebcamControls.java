@@ -3,6 +3,8 @@ package org.firstinspires.ftc.teamcode.modules.vision;
 import com.acmerobotics.dashboard.config.Config;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntSupplier;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.ExposureControl;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.GainControl;
@@ -28,10 +30,9 @@ public class WebcamControls {
     private final OpenCvWebcam webcam;
 
     private boolean lastManual;
-    private int lastExposureMs   = UNSET;
-    private int lastGain         = UNSET;
-    private int lastWhiteBalance = UNSET;
-    private long exposureRetryAt, gainRetryAt, whiteBalanceRetryAt;
+    private final Knob exposureKnob = new Knob(() -> exposureMs, this::applyExposure);
+    private final Knob gainKnob = new Knob(() -> gain, this::applyGain);
+    private final Knob whiteBalanceKnob = new Knob(() -> whiteBalanceK, this::applyWhiteBalance);
 
     public WebcamControls(OpenCvWebcam webcam) {
         this.webcam = webcam;
@@ -52,21 +53,41 @@ public class WebcamControls {
         if (modeChanged) {
             setModes(ExposureControl.Mode.Manual, WhiteBalanceControl.Mode.MANUAL);
             // The camera resets values on a mode switch.
-            lastExposureMs = lastGain = lastWhiteBalance = UNSET;
-            exposureRetryAt = gainRetryAt = whiteBalanceRetryAt = now;
+            exposureKnob.reset(now);
+            gainKnob.reset(now);
+            whiteBalanceKnob.reset(now);
         }
-        if (exposureMs != lastExposureMs && now - exposureRetryAt >= 0) {
-            if (applyExposure()) lastExposureMs = exposureMs;
-            else exposureRetryAt = now + RETRY_NANOS;
+        exposureKnob.update(now);
+        gainKnob.update(now);
+        whiteBalanceKnob.update(now);
+    }
+
+    private static final class Knob {
+        private final IntSupplier value;
+        private final BooleanSupplier apply;
+        private int last = UNSET;
+        private long retryAt;
+
+        Knob(IntSupplier value, BooleanSupplier apply) {
+            this.value = value;
+            this.apply = apply;
         }
-        if (gain != lastGain && now - gainRetryAt >= 0) {
-            if (applyGain()) lastGain = gain;
-            else gainRetryAt = now + RETRY_NANOS;
+
+        void reset(long now) {
+            last = UNSET;
+            retryAt = now;
         }
-        if (whiteBalanceK != lastWhiteBalance && now - whiteBalanceRetryAt >= 0) {
-            if (applyWhiteBalance()) lastWhiteBalance = whiteBalanceK;
-            else whiteBalanceRetryAt = now + RETRY_NANOS;
+
+        void update(long now) {
+            if (value.getAsInt() != last && now - retryAt >= 0) {
+                if (apply.getAsBoolean()) last = value.getAsInt();
+                else retryAt = now + RETRY_NANOS;
+            }
         }
+    }
+
+    private static long clamp(long want, long min, long max) {
+        return max > min ? Math.max(min, Math.min(max, want)) : want;
     }
 
     private void setModes(ExposureControl.Mode expMode, WhiteBalanceControl.Mode wbMode) {
@@ -86,9 +107,7 @@ public class WebcamControls {
             if (exp == null) return false;
             long min = exp.getMinExposure(TimeUnit.MILLISECONDS);
             long max = exp.getMaxExposure(TimeUnit.MILLISECONDS);
-            long want = exposureMs;
-            if (max > min) want = Math.max(min, Math.min(max, want));
-            return exp.setExposure(want, TimeUnit.MILLISECONDS);
+            return exp.setExposure(clamp(exposureMs, min, max), TimeUnit.MILLISECONDS);
         } catch (Exception ignored) {
             return false;
         }
@@ -100,9 +119,7 @@ public class WebcamControls {
             if (g == null) return false;
             int min = g.getMinGain();
             int max = g.getMaxGain();
-            int want = gain;
-            if (max > min) want = Math.max(min, Math.min(max, want));
-            return g.setGain(want);
+            return g.setGain((int) clamp(gain, min, max));
         } catch (Exception ignored) {
             return false;
         }
@@ -114,9 +131,7 @@ public class WebcamControls {
             if (wb == null) return false;
             int min = wb.getMinWhiteBalanceTemperature();
             int max = wb.getMaxWhiteBalanceTemperature();
-            int want = whiteBalanceK;
-            if (max > min) want = Math.max(min, Math.min(max, want));
-            return wb.setWhiteBalanceTemperature(want);
+            return wb.setWhiteBalanceTemperature((int) clamp(whiteBalanceK, min, max));
         } catch (Exception ignored) {
             return false;
         }

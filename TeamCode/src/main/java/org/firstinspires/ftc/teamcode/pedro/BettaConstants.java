@@ -16,15 +16,12 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 
 @Config
 public class BettaConstants {
 
     public static class MecanumSettings {
-        public String frontLeftName = "fl";
-        public String frontRightName = "fr";
-        public String backLeftName = "bl";
-        public String backRightName = "br";
         public DcMotorSimple.Direction frontLeftDirection = DcMotorSimple.Direction.REVERSE;
         public DcMotorSimple.Direction frontRightDirection = DcMotorSimple.Direction.FORWARD;
         public DcMotorSimple.Direction backLeftDirection = DcMotorSimple.Direction.REVERSE;
@@ -71,10 +68,10 @@ public class BettaConstants {
 
     public static MecanumConfig drivetrainConfig() {
         return new MecanumConfig(c -> {
-            c.frontLeftName.set(mecanum.frontLeftName);
-            c.frontRightName.set(mecanum.frontRightName);
-            c.backLeftName.set(mecanum.backLeftName);
-            c.backRightName.set(mecanum.backRightName);
+            c.frontLeftName.set(Drivetrain.FRONT_LEFT);
+            c.frontRightName.set(Drivetrain.FRONT_RIGHT);
+            c.backLeftName.set(Drivetrain.BACK_LEFT);
+            c.backRightName.set(Drivetrain.BACK_RIGHT);
             c.frontLeftDirection.set(mecanum.frontLeftDirection);
             c.frontRightDirection.set(mecanum.frontRightDirection);
             c.backLeftDirection.set(mecanum.backLeftDirection);
@@ -119,10 +116,19 @@ public class BettaConstants {
         });
     }
 
+    public static PinpointLocalizer localizer(HardwareMap hardwareMap) {
+        return new PinpointLocalizer(hardwareMap, localizerConfig());
+    }
+
+    public static Mecanum drivetrain(HardwareMap hardwareMap) {
+        return new Mecanum(hardwareMap, drivetrainConfig());
+    }
+
+    public static Foresight foresight() {
+        return new Foresight(foresightConfig());
+    }
+
     public static Follower create(HardwareMap hardwareMap) {
-        return new Follower(
-                new PinpointLocalizer(hardwareMap, localizerConfig()),
-                new Mecanum(hardwareMap, drivetrainConfig()),
-                new Foresight(foresightConfig()));
+        return new Follower(localizer(hardwareMap), drivetrain(hardwareMap), foresight());
     }
 }

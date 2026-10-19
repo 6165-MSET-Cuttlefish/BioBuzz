@@ -7,6 +7,11 @@ public final class RobotStateHistory {
 
     private static final int CAPACITY = 64;
 
+    /** The clock every sample and vision frame is stamped on. */
+    public static double nowSeconds() {
+        return System.nanoTime() * 1e-9;
+    }
+
     public static final class Sample {
         public final double x, y, heading;
         public final double vx, vy, omega;

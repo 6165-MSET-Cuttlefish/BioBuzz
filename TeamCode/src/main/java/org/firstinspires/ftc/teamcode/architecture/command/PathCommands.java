@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 
 public final class PathCommands {
@@ -23,28 +24,24 @@ public final class PathCommands {
 
     /** Follows {@code path} and finishes once Pedro's end-hold has settled. */
     public static CommandBuilder follow(Follower f, Path path) {
-        return Command.build()
+        return onFollower(f, Command.build()
                 .setStart(() -> {
                     f.holdEnd.set(true);
                     f.follow(path);
                 })
                 .setDone(() -> f.atParametricEnd() && !f.isBusy())
-                .setEnd(stopIfInterrupted(f))
-                .requiring(f)
-                .setConflictBehavior(ConflictBehavior.OVERRIDE);
+                .setEnd(stopIfInterrupted(f)));
     }
 
     /** Follows {@code path} and finishes at the parametric end, with whatever settling error remains. */
     public static CommandBuilder followThrough(Follower f, Path path) {
-        return Command.build()
+        return onFollower(f, Command.build()
                 .setStart(() -> {
                     f.holdEnd.set(false);
                     f.follow(path);
                 })
                 .setDone(f::atParametricEnd)
-                .setEnd(stopIfInterrupted(f))
-                .requiring(f)
-                .setConflictBehavior(ConflictBehavior.OVERRIDE);
+                .setEnd(stopIfInterrupted(f)));
     }
 
     /**
@@ -61,7 +58,7 @@ public final class PathCommands {
             return leg < 0 || leg >= tails.length ? Double.MAX_VALUE : f.remainingDistance() + tails[leg];
         };
         AtomicBoolean armed = new AtomicBoolean();
-        return Command.build()
+        return onFollower(f, Command.build()
                 .setStart(() -> {
                     armed.set(false);
                     f.holdEnd.set(true);
@@ -71,30 +68,22 @@ public final class PathCommands {
                     if (remainingOnPath.getAsDouble() > inches) armed.set(true);
                 })
                 .setDone(() -> f.atParametricEnd() || (armed.get() && remainingOnPath.getAsDouble() <= inches))
-                .setEnd(stopIfInterrupted(f))
-                .requiring(f)
-                .setConflictBehavior(ConflictBehavior.OVERRIDE);
+                .setEnd(stopIfInterrupted(f)));
     }
 
     /** Holds wherever the robot is when the command starts. */
     public static CommandBuilder hold(Follower f) {
         // Not PedroCommands.hold(f): that reads the pose when the command is built, which for a
         // sequence built in initialize() is the pose at INIT rather than the one reached by then.
-        return Commands.instant(() -> f.hold(f.pose()))
-                .requiring(f)
-                .setConflictBehavior(ConflictBehavior.OVERRIDE);
+        return onFollower(f, Commands.instant(() -> f.hold(f.pose())));
     }
 
     public static CommandBuilder hold(Follower f, Pose pose) {
-        return PedroCommands.hold(f, pose)
-                .requiring(f)
-                .setConflictBehavior(ConflictBehavior.OVERRIDE);
+        return onFollower(f, PedroCommands.hold(f, pose));
     }
 
     public static CommandBuilder stop(Follower f) {
-        return Commands.instant(f::stop)
-                .requiring(f)
-                .setConflictBehavior(ConflictBehavior.OVERRIDE);
+        return onFollower(f, Commands.instant(f::stop));
     }
 
     public static CommandBuilder timeout(Command command, double ms) {
@@ -108,8 +97,12 @@ public final class PathCommands {
                 .setDone(() -> System.nanoTime() - start.get() >= ms * 1e6);
     }
 
+    private static CommandBuilder onFollower(Follower f, CommandBuilder command) {
+        return command.requiring(f).setConflictBehavior(ConflictBehavior.OVERRIDE);
+    }
+
     // Interrupted by a timeout, a race, or a newer path command: Pedro would otherwise finish the abandoned path and hold at its end.
-    private static java.util.function.Consumer<EndCondition> stopIfInterrupted(Follower f) {
+    private static Consumer<EndCondition> stopIfInterrupted(Follower f) {
         return end -> {
             if (end == EndCondition.INTERRUPTED) f.stop();
         };

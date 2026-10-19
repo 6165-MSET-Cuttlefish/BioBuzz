@@ -7,7 +7,6 @@ import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
-import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 
 @Config
@@ -40,6 +39,6 @@ public abstract class Robot {
         public boolean dashboardTelemetry = true;
         public boolean voltage = true;
         public boolean current = false;
-        public boolean loopProfile = OptimizationToggles.loopProfileTelemetryByDefault;
+        public boolean loopProfile = true;
     }
 }

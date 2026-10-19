@@ -13,6 +13,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
+import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
@@ -46,10 +47,10 @@ public class BallFieldDriveTest extends LinearOpMode {
         out = new DualTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
 
         BettaConstants.MecanumSettings m = BettaConstants.mecanum;
-        fl = hardwareMap.get(DcMotorEx.class, m.frontLeftName);
-        bl = hardwareMap.get(DcMotorEx.class, m.backLeftName);
-        fr = hardwareMap.get(DcMotorEx.class, m.frontRightName);
-        br = hardwareMap.get(DcMotorEx.class, m.backRightName);
+        fl = hardwareMap.get(DcMotorEx.class, Drivetrain.FRONT_LEFT);
+        bl = hardwareMap.get(DcMotorEx.class, Drivetrain.BACK_LEFT);
+        fr = hardwareMap.get(DcMotorEx.class, Drivetrain.FRONT_RIGHT);
+        br = hardwareMap.get(DcMotorEx.class, Drivetrain.BACK_RIGHT);
         fl.setDirection(m.frontLeftDirection);
         bl.setDirection(m.backLeftDirection);
         fr.setDirection(m.frontRightDirection);

@@ -161,6 +161,7 @@ public final class RoutePathBuilder {
     /** Shapes for many visit orders of the same balls, sharing every detour they have in common. */
     static final class Planner {
         private static final int START = -1;
+        private static final int RETURN = Integer.MAX_VALUE;
 
         private final Pose start;
         private final Pose returnPose;
@@ -171,7 +172,7 @@ public final class RoutePathBuilder {
         private final double gap;
         private final boolean forceSplineOnly;
         private final double graphClearance;
-        private final Map<Long, VisibilityGraphPlanner.Leg> detours = new HashMap<>();
+        private final Map<Long, List<Pose>> detours = new HashMap<>();
 
         Planner(Pose start, Ball[] balls, Pose returnPose, Region area, List<Obstacle> obstacles, RobotShape robot,
                 double gap, boolean forceSplineOnly) {
@@ -186,11 +187,16 @@ public final class RoutePathBuilder {
             graphClearance = Math.max(robot.widthIn, robot.intakeWidthIn) / 2 + gap;
         }
 
+        Ball[] ordered(int[] order) {
+            Ball[] ordered = new Ball[order.length];
+            for (int i = 0; i < order.length; i++) ordered[i] = balls[order[i]];
+            return ordered;
+        }
+
         /** No drive for {@code order} is shorter: every one passes its essential stops in turn, then the return pose. */
         double lowerBound(int[] order) {
             if (order.length == 0) return 0;
-            Ball[] ordered = new Ball[order.length];
-            for (int i = 0; i < order.length; i++) ordered[i] = balls[order[i]];
+            Ball[] ordered = ordered(order);
             double total = 0;
             Pose at = start;
             for (int s : IntakeCurvePlanner.essentialStops(start.x(), start.y(), ordered, robot.intakeWidthIn)) {
@@ -203,8 +209,7 @@ public final class RoutePathBuilder {
 
         /** Null if no leg built for {@code order} keeps the footprint inside the area and clear of the obstacles. */
         Shape shape(int[] order) {
-            Ball[] ordered = new Ball[order.length];
-            for (int i = 0; i < order.length; i++) ordered[i] = balls[order[i]];
+            Ball[] ordered = ordered(order);
 
             Leg intake;
             int essential = 0;
@@ -274,9 +279,9 @@ public final class RoutePathBuilder {
             waypoints.add(start);
             int from = START;
             for (int to : order) {
-                VisibilityGraphPlanner.Leg detour = detour(from, to);
+                List<Pose> detour = detour(from, to);
                 if (detour == null) return null;
-                for (int j = 1; j < detour.waypoints.size(); j++) addDistinct(waypoints, detour.waypoints.get(j));
+                for (int j = 1; j < detour.size(); j++) addDistinct(waypoints, detour.get(j));
                 from = to;
             }
             Segment spline = Segment.tangent(IntakeCurvePlanner.through(waypoints));
@@ -293,12 +298,11 @@ public final class RoutePathBuilder {
             Segment line = Segment.turning(from.heading(), returnPose.heading(), from, returnPose);
             if (line.fits(robot, area, obstacles, gap)) return new Leg(Collections.singletonList(line), Reroute.NONE);
 
-            VisibilityGraphPlanner.Leg detour = detour(fromBall, Integer.MAX_VALUE);
+            List<Pose> detour = detour(fromBall, RETURN);
             if (detour == null) return null;
             List<Pose> waypoints = new ArrayList<>();
             waypoints.add(from);
-            for (int j = 1; j < detour.waypoints.size(); j++) addDistinct(waypoints, detour.waypoints.get(j));
-            if (waypoints.size() < 2) return new Leg(Collections.<Segment>emptyList(), Reroute.NONE);
+            for (int j = 1; j < detour.size(); j++) addDistinct(waypoints, detour.get(j));
 
             Segment spline = Segment.turning(from.heading(), returnPose.heading(), IntakeCurvePlanner.through(waypoints));
             if (spline.fits(robot, area, obstacles, gap)) return new Leg(Collections.singletonList(spline), Reroute.SPLINE);
@@ -314,15 +318,15 @@ public final class RoutePathBuilder {
             return allFit(hops) ? new Leg(hops, Reroute.POLYLINE) : null;
         }
 
-        // Keyed by ball indices (START for the start, MAX_VALUE for the return pose), as they don't depend on the order.
-        private VisibilityGraphPlanner.Leg detour(int from, int to) {
+        // Keyed by ball indices (or START and RETURN), as they don't depend on the order.
+        private List<Pose> detour(int from, int to) {
             long key = ((long) from << 32) ^ (to & 0xffffffffL);
             if (detours.containsKey(key)) return detours.get(key);
             Pose a = from == START ? start : balls[from].toPose();
-            Pose b = to == Integer.MAX_VALUE ? returnPose : balls[to].toPose();
-            VisibilityGraphPlanner.Leg leg = VisibilityGraphPlanner.planPath(a, b, area, obstacles, graphClearance);
-            detours.put(key, leg);
-            return leg;
+            Pose b = to == RETURN ? returnPose : balls[to].toPose();
+            List<Pose> detour = VisibilityGraphPlanner.planPath(a, b, area, obstacles, graphClearance);
+            detours.put(key, detour);
+            return detour;
         }
 
         // Null if a turn in place between drives doesn't fit.

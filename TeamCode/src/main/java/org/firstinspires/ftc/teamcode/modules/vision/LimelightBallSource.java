@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.modules.vision;
 
+import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
@@ -34,7 +36,8 @@ public final class LimelightBallSource {
     private static final int OFFSET_WINDOW = 128;
     private static final double TS_UNIT_CHECK_SPAN_SECONDS = 5;
     private static final double TS_UNIT_TOLERANCE = 0.1;
-    private static final BallType[] TYPES = BallType.values();
+    private static final int HEADER_SLOTS = 2;
+    private static final int BALL_SLOTS = 3;
 
     public static final class Frame {
         public static final Frame EMPTY = new Frame(Collections.<TrackedBall>emptyList(), 0, 0, 0, 0, true);
@@ -44,7 +47,7 @@ public final class LimelightBallSource {
         public final double fps;
         /** Capture to arrival on the hub. */
         public final double latencyMs;
-        /** Capture time on the System.nanoTime() clock, the one RobotStateHistory is stamped on; 0 before the first frame. */
+        /** Capture time on {@link RobotStateHistory#nowSeconds()}'s clock; 0 before the first frame. */
         public final double timestampSeconds;
         /** No live frame: none yet, a Limelight fault, or none new for {@link Tuning#staleFrameSeconds}. */
         public final boolean stale;
@@ -229,7 +232,7 @@ public final class LimelightBallSource {
         int count = (int) out[1];
         List<BallDetection> detections = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            int base = 2 + 3 * i;
+            int base = HEADER_SLOTS + BALL_SLOTS * i;
             detections.add(new BallDetection(BallType.fromCode((int) out[base]), out[base + 1], out[base + 2]));
         }
 
@@ -273,12 +276,12 @@ public final class LimelightBallSource {
                     number(uploadOnly ? LimelightSync.STAMP : LimelightSync.FILE_SCRIPT_ID));
         }
         int count = (int) out[1];
-        if (count != out[1] || count < 0 || 2 + 3 * count > out.length) {
+        if (count != out[1] || count < 0 || HEADER_SLOTS + BALL_SLOTS * count > out.length) {
             return String.format("script reported %s balls in %d llpython slots", number(out[1]), out.length);
         }
         for (int i = 0; i < count; i++) {
-            int base = 2 + 3 * i;
-            if (!isTypeCode(out[base])) return String.format("script reported ball type code %s", number(out[base]));
+            int base = HEADER_SLOTS + BALL_SLOTS * i;
+            if (!BallType.isCode(out[base])) return String.format("script reported ball type code %s", number(out[base]));
             // The SDK parses a non-numeric llpython entry as NaN.
             if (!Double.isFinite(out[base + 1]) || !Double.isFinite(out[base + 2])) {
                 return String.format("script reported ball position (%s, %s)", out[base + 1], out[base + 2]);
@@ -290,11 +293,6 @@ public final class LimelightBallSource {
     private static boolean allZero(double[] out) {
         for (double v : out) if (v != 0) return false;
         return true;
-    }
-
-    private static boolean isTypeCode(double code) {
-        for (BallType type : TYPES) if (type.code == code) return true;
-        return false;
     }
 
     static String number(double v) {
@@ -366,9 +364,5 @@ public final class LimelightBallSource {
         clockCheckStartHub = Double.NaN;
         clockChecked = false;
         clockProblem = null;
-    }
-
-    private static double nowSeconds() {
-        return System.nanoTime() * 1e-9;
     }
 }

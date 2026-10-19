@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.modules;
 
+import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
@@ -37,21 +39,14 @@ public class Camera extends Module {
     private final RobotStateHistory robotHistory = new RobotStateHistory();
     private final FieldBallTracker fieldBallTracker = new FieldBallTracker();
 
-    private Follower follower;
+    private final Follower follower;
     private LimelightBallSource.Frame frame = LimelightBallSource.Frame.EMPTY;
     private List<FieldBall> fieldBalls = Collections.emptyList();
     private double previousReadSeconds = Double.NaN;
 
-    public Camera(HardwareMap hardwareMap) {
+    public Camera(HardwareMap hardwareMap, Follower follower) {
         source = new LimelightBallSource(hardwareMap);
-    }
-
-    public Camera withFollower(Follower follower) {
         this.follower = follower;
-        robotHistory.clear();
-        previousReadSeconds = Double.NaN;
-        fieldBallTracker.reset();
-        return this;
     }
 
     @Override
@@ -72,10 +67,6 @@ public class Camera extends Module {
     }
 
     private void updateFieldBalls(boolean newFrame) {
-        if (follower == null) {
-            fieldBalls = Collections.emptyList();
-            return;
-        }
         // read() runs before follower.update(): this pose is the previous loop's, so it gets that loop's time.
         double now = nowSeconds();
         if (!Double.isNaN(previousReadSeconds)) {
@@ -131,10 +122,6 @@ public class Camera extends Module {
 
     public Point getPredictedBallPosition(TrackedBall ball, double lookaheadSeconds) {
         return ball.predict(lookaheadSeconds + predictionAgeSeconds());
-    }
-
-    public boolean hasRobotState() {
-        return follower != null;
     }
 
     public List<FieldBall> getFieldBalls() {
@@ -193,10 +180,6 @@ public class Camera extends Module {
         return age;
     }
 
-    private static double nowSeconds() {
-        return System.nanoTime() * 1e-9;
-    }
-
     /** No live Limelight frame: none yet, vision disabled, a Limelight fault, or none new for {@code LimelightBalls → staleFrameSeconds}. */
     public boolean isFrameStale() {
         return frame.stale;
@@ -230,18 +213,10 @@ public class Camera extends Module {
             }
         }
         if (ballTelemetry) {
-            if (hasRobotState()) {
-                for (FieldBall ball : fieldBalls) {
-                    logDashboard("Ball " + ball.id, "%s field (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
-                            ball.type.label, ball.x, ball.y, ball.speed(), ball.headingDeg(),
-                            ball.visible() ? "" : " [last seen]");
-                }
-            } else {
-                for (TrackedBall ball : frame.balls) {
-                    logDashboard("Ball " + ball.id, "%s cam (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
-                            ball.type.label, ball.x, ball.y, ball.speed(), ball.headingDeg(),
-                            ball.visible ? "" : " [coasting]");
-                }
+            for (FieldBall ball : fieldBalls) {
+                logDashboard("Ball " + ball.id, "%s field (%.1f, %.1f)in  %.1fin/s @ %.0fdeg%s",
+                        ball.type.label, ball.x, ball.y, ball.speed(), ball.headingDeg(),
+                        ball.visible() ? "" : " [last seen]");
             }
         }
     }

@@ -48,7 +48,6 @@ public abstract class EnhancedOpMode extends OpMode {
     private TelemetryPacket packet;
     private List<LynxModule> lynxHubs;
     private int loopIndex = 0;
-    private long monotonicLoopCount = 0;
     private long profiledLoopCount = 0;
     private double profiledLoopSumMs = 0;
     private double profiledLoopMaxMs = 0;
@@ -131,7 +130,7 @@ public abstract class EnhancedOpMode extends OpMode {
         loopTimer.reset();
         gameTimer.reset();
 
-        field = new FieldMapRenderer(73, 74);
+        field = new FieldMapRenderer(FieldMapRenderer.DS_WIDTH_PX, FieldMapRenderer.DS_HEIGHT_PX);
         field.drawFieldLayout();
         field.snapshot();
     }
@@ -415,7 +414,6 @@ public abstract class EnhancedOpMode extends OpMode {
         double ms = loopTimer.milliseconds();
         loopTimes[loopIndex] = ms;
         loopIndex = (loopIndex + 1) % loopTimes.length;
-        monotonicLoopCount++;
         profiledLoopCount++;
         profiledLoopSumMs += ms;
         if (ms > profiledLoopMaxMs) profiledLoopMaxMs = ms;
@@ -468,8 +466,7 @@ public abstract class EnhancedOpMode extends OpMode {
                 || Math.abs(fh - lastFieldRenderHeading) > Math.toRadians(2);
         if (poseChanged || loopsSinceFieldRender >= FIELD_RENDER_INTERVAL) {
             field.restore();
-            field.drawRobot(fx, fy, fh,
-                    Context.allianceColor.equals(AllianceColor.RED) ? COLOR_RED : COLOR_BLUE);
+            field.drawRobot(fx, fy, fh, allianceHex());
             cachedFieldHtml = htmlSize(FONT_SMALL, field.renderHtml());
             lastFieldRenderX = fx;
             lastFieldRenderY = fy;
@@ -504,7 +501,7 @@ public abstract class EnhancedOpMode extends OpMode {
         String image = FieldConfig.image();
         double inches = image != null ? FieldConfig.imageInches() : FieldConfig.fieldWidthInches;
         // The page frame runs down from its top-left corner; Pedro's origin is the field's bottom-left one.
-        double top = 144 - inches;
+        double top = FieldVisualization.CANVAS_IN - inches;
         if (!dashboardSkipFieldImage && image != null) {
             overlay.setAlpha(FieldConfig.imageOpacity());
             overlay.drawImage(image, 0, top, inches, inches);
@@ -567,10 +564,13 @@ public abstract class EnhancedOpMode extends OpMode {
     private void addAllianceTelemetry() {
         if (Context.allianceColor != cachedAllianceColor) {
             cachedAllianceColor = Context.allianceColor;
-            String colorHex = Context.allianceColor == AllianceColor.RED ? COLOR_RED : COLOR_BLUE;
-            cachedAllianceHtml = htmlColor(colorHex, htmlBold(String.valueOf(Context.allianceColor)));
+            cachedAllianceHtml = htmlColor(allianceHex(), htmlBold(String.valueOf(Context.allianceColor)));
         }
         robot.telemetry.addRawHtml("Alliance", cachedAllianceHtml);
+    }
+
+    private static String allianceHex() {
+        return Context.allianceColor == AllianceColor.RED ? COLOR_RED : COLOR_BLUE;
     }
 
     private void addVoltageCurrentTelemetry() {
@@ -599,11 +599,11 @@ public abstract class EnhancedOpMode extends OpMode {
     private double getTotalCurrent() {
         int every = Math.max(1, currentReadEveryNLoops);
         // Throttle on loop count; this is only called on render loops.
-        if (lastCurrentReadLoop == Long.MIN_VALUE || monotonicLoopCount - lastCurrentReadLoop >= every) {
+        if (lastCurrentReadLoop == Long.MIN_VALUE || profiledLoopCount - lastCurrentReadLoop >= every) {
             double total = 0;
             for (LynxModule hub : lynxHubs) total += hub.getCurrent(CurrentUnit.AMPS);
             cachedTotalCurrent = total;
-            lastCurrentReadLoop = monotonicLoopCount;
+            lastCurrentReadLoop = profiledLoopCount;
         }
         return cachedTotalCurrent;
     }

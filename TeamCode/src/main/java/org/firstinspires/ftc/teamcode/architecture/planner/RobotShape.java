@@ -92,14 +92,14 @@ public final class RobotShape {
         if (clash == NONE) return null;
         if (clash == OUTSIDE) return "over the edge of " + area;
         Obstacle o = obstacles.get(clash);
-        return covers(new Pose(x, y, heading), (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2)
+        return covers(new Pose(x, y, heading), o.centreX(), o.centreY())
                 ? "on top of " + o : String.format("within %.1f in of %s", gap, o);
     }
 
     private static final int NONE = -1;
     private static final int OUTSIDE = -2;
 
-    // NONE, OUTSIDE, or the index of the obstacle it comes too close to; called for every sample of every candidate, so no allocation.
+    // NONE, OUTSIDE, or the index of the obstacle it comes too close to; runs for every sample of every candidate, so keep it lean.
     private int clash(double x, double y, double heading, Region area, List<Obstacle> obstacles, double gap) {
         double c = Math.cos(heading);
         double s = Math.sin(heading);
@@ -123,7 +123,7 @@ public final class RobotShape {
                 if (o.intersectsSegment(xs[i], ys[i], xs[j], ys[j], gap)) return k;
             }
             // An obstacle smaller than the footprint can sit under it clear of every edge.
-            if (under(x, y, c, s, (o.minX + o.maxX) / 2, (o.minY + o.maxY) / 2)) return k;
+            if (under(x, y, c, s, o.centreX(), o.centreY())) return k;
         }
         return NONE;
     }
@@ -142,11 +142,8 @@ public final class RobotShape {
                                      List<Obstacle> obstacles, double gap) {
         double r = turnRadius;
         if (minX - r < area.minX || maxX + r > area.maxX || minY - r < area.minY || maxY + r > area.maxY) return false;
-        double clearance = r + gap;
         for (Obstacle o : obstacles) {
-            double dx = Math.max(Math.max(o.minX - maxX, minX - o.maxX), 0);
-            double dy = Math.max(Math.max(o.minY - maxY, minY - o.maxY), 0);
-            if (dx * dx + dy * dy <= clearance * clearance) return false;
+            if (o.blocks(minX, maxX, minY, maxY, r + gap)) return false;
         }
         return true;
     }

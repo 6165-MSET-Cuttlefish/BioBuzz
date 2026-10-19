@@ -12,6 +12,6 @@ public class CameraRobot extends BallCollectionRobot {
 
     @Override
     protected void initializeGameModules() {
-        camera = new Camera(opMode.hardwareMap).withFollower(follower);
+        camera = new Camera(opMode.hardwareMap, follower);
     }
 }

@@ -48,10 +48,6 @@ public class EnhancedMotor implements DcMotorEx {
         motor.setPower(0.0);
     }
 
-    public void setVoltageCompensationEnabled(boolean enabled) {
-        cache.voltageCompensationEnabled = enabled;
-    }
-
     @Override public void setMotorEnable() {
         motor.setMotorEnable();
         clearCaches();

@@ -30,7 +30,7 @@ public class WebcamStopBench extends EnhancedOpMode {
 
         @Override
         protected void initializeGameModules() {
-            drivetrain = new Drivetrain(opMode.hardwareMap).withFollower(follower);
+            drivetrain = new Drivetrain(opMode.hardwareMap, follower);
             cellTip = new TimedCellTipCamera(opMode.hardwareMap, this);
         }
     }

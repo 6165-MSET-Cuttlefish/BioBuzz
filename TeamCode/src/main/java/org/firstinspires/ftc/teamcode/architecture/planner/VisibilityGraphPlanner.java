@@ -22,28 +22,17 @@ public final class VisibilityGraphPlanner {
 
     private VisibilityGraphPlanner() {}
 
-    public static final class Leg {
-        public final List<Pose> waypoints;
-        public final double length;
-
-        Leg(List<Pose> waypoints, double length) {
-            this.waypoints = waypoints;
-            this.length = length;
-        }
-    }
-
     /**
-     * The waypoints start at {@code start}, keeping its heading, and end at {@code goal}'s position; every
-     * later waypoint faces along the hop arriving at it. Null if either end is outside {@code keepIn} or no
-     * route inside it exists.
+     * The positions from {@code start} to {@code goal}, both included, with heading 0. Null if either end is
+     * outside {@code keepIn} or no route inside it exists.
      */
-    public static Leg planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance) {
+    public static List<Pose> planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance) {
         if (!keepIn.contains(start) || !keepIn.contains(goal)) return null;
         if (!Obstacle.anyBlocks(obstacles, start.x(), start.y(), goal.x(), goal.y(), clearance)) {
             List<Pose> direct = new ArrayList<>();
-            direct.add(start);
-            direct.add(new Pose(goal.x(), goal.y(), Math.atan2(goal.y() - start.y(), goal.x() - start.x())));
-            return new Leg(direct, start.distance(goal));
+            direct.add(new Pose(start.x(), start.y(), 0));
+            direct.add(new Pose(goal.x(), goal.y(), 0));
+            return direct;
         }
         final int startNode = 0;
         final int goalNode = 1;
@@ -54,7 +43,8 @@ public final class VisibilityGraphPlanner {
         double placementRadius = clearance + boundaryMarginIn;
         int perCorner = Math.max(2, pointsPerCorner);
         for (Obstacle o : obstacles) {
-            double[][] corners = {{o.maxX, o.maxY}, {o.minX, o.maxY}, {o.minX, o.minY}, {o.maxX, o.minY}};
+            Region b = o.bounds;
+            double[][] corners = {{b.maxX, b.maxY}, {b.minX, b.maxY}, {b.minX, b.minY}, {b.maxX, b.minY}};
             for (int corner = 0; corner < corners.length; corner++) {
                 for (int i = 0; i < perCorner; i++) {
                     double angle = Math.PI / 2 * (corner + (double) i / (perCorner - 1));
@@ -101,20 +91,12 @@ public final class VisibilityGraphPlanner {
 
         if (dist[goalNode] == Double.MAX_VALUE) return null;
 
-        List<Integer> indexPath = new ArrayList<>();
-        for (int cur = goalNode; cur != -1; cur = prev[cur]) indexPath.add(0, cur);
-
         List<Pose> waypoints = new ArrayList<>();
-        for (int i = 0; i < indexPath.size(); i++) {
-            double[] p = nodes.get(indexPath.get(i));
-            double heading = start.heading();
-            if (i > 0) {
-                double[] before = nodes.get(indexPath.get(i - 1));
-                heading = Math.atan2(p[1] - before[1], p[0] - before[0]);
-            }
-            waypoints.add(new Pose(p[0], p[1], heading));
+        for (int cur = goalNode; cur != -1; cur = prev[cur]) {
+            double[] p = nodes.get(cur);
+            waypoints.add(0, new Pose(p[0], p[1], 0));
         }
-        return new Leg(waypoints, dist[goalNode]);
+        return waypoints;
     }
 
     private static boolean insideAny(double px, double py, List<Obstacle> obstacles, double clearance) {

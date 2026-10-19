@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.modules;
 
+import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
@@ -63,7 +65,7 @@ public class CellTipCamera extends Module {
         CellTipPipeline.Verdict verdict = pipeline.latest();
         stalenessMs = verdict.timestampSeconds == 0
                 ? Double.NaN
-                : (System.nanoTime() * 1e-9 - verdict.timestampSeconds) * 1000;
+                : (nowSeconds() - verdict.timestampSeconds) * 1000;
         fresh = stalenessMs >= 0 && stalenessMs <= maxStalenessMs;
         tipped = fresh && verdict.tipped;
     }

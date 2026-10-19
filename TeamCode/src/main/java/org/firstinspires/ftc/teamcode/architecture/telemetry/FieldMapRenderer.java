@@ -1,6 +1,13 @@
 package org.firstinspires.ftc.teamcode.architecture.telemetry;
 
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
+
+import java.util.Arrays;
+import java.util.Objects;
+
 public class FieldMapRenderer {
+    public static final int DS_WIDTH_PX = 73;
+    public static final int DS_HEIGHT_PX = 74;
 
     private final int width;
     private final int height;
@@ -14,8 +21,8 @@ public class FieldMapRenderer {
     public FieldMapRenderer(int width, int height) {
         this.width = width;
         this.height = height;
-        this.scaleX = width / 144.0;
-        this.scaleY = height / 144.0;
+        this.scaleX = width / FieldVisualization.CANVAS_IN;
+        this.scaleY = height / FieldVisualization.CANVAS_IN;
         this.pixels = new boolean[height][width];
         this.cellColors = new String[(height + 3) / 4][(width + 1) / 2];
     }
@@ -51,12 +58,8 @@ public class FieldMapRenderer {
     }
 
     private void clear() {
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) pixels[y][x] = false;
-        }
-        for (int y = 0; y < cellColors.length; y++) {
-            for (int x = 0; x < cellColors[0].length; x++) cellColors[y][x] = null;
-        }
+        for (boolean[] row : pixels) Arrays.fill(row, false);
+        for (String[] row : cellColors) Arrays.fill(row, null);
     }
 
     public void snapshot() {
@@ -78,15 +81,18 @@ public class FieldMapRenderer {
 
     private void setPixel(int x, int y, String color) {
         int py = (height - 1) - y;
-        if (x < 0 || py < 0 || x >= width || py >= height) return;
+        if (!inBounds(x, py)) return;
         pixels[py][x] = true;
         cellColors[py / 4][x / 2] = color;
     }
 
     private void setPixel(int x, int y) {
         int py = (height - 1) - y;
-        if (x < 0 || py < 0 || x >= width || py >= height) return;
-        pixels[py][x] = true;
+        if (inBounds(x, py)) pixels[py][x] = true;
+    }
+
+    private boolean inBounds(int x, int row) {
+        return x >= 0 && row >= 0 && x < width && row < height;
     }
 
     private void drawHorizontal(int x1, int x2, int y) {
@@ -141,9 +147,7 @@ public class FieldMapRenderer {
     }
 
     public String renderHtml() {
-        int cellRows = (height + 3) / 4;
-        int cellCols = (width + 1) / 2;
-        StringBuilder out = new StringBuilder(cellRows * cellCols * 4);
+        StringBuilder out = new StringBuilder(cellColors.length * cellColors[0].length * 4);
         out.append("<pre style='line-height:1; letter-spacing:0;'>");
         for (int y = 0; y < height; y += 4) {
             int cy = y / 4;
@@ -152,7 +156,7 @@ public class FieldMapRenderer {
             for (int x = 0; x < width; x += 2) {
                 char b = braille(x, y);
                 String color = cellColors[cy][x / 2];
-                if (!strEq(color, runColor)) {
+                if (!Objects.equals(color, runColor)) {
                     flushRun(out, run, runColor);
                     runColor = color;
                 }
@@ -169,8 +173,7 @@ public class FieldMapRenderer {
     private int toPxY(double inches) { return (int) Math.round(inches * scaleY); }
 
     private boolean isTrue(int x, int y) {
-        if (x < 0 || y < 0 || x >= width || y >= height) return false;
-        return pixels[y][x];
+        return inBounds(x, y) && pixels[y][x];
     }
 
     private char braille(int x, int y) {
@@ -200,11 +203,5 @@ public class FieldMapRenderer {
             out.append(run);
         }
         run.setLength(0);
-    }
-
-    private static boolean strEq(String a, String b) {
-        if (a == b) return true;
-        if (a == null || b == null) return false;
-        return a.equals(b);
     }
 }

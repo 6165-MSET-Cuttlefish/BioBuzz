@@ -12,10 +12,6 @@ public class CachedDoubleSupplier {
         this.current = doubleSupplier.getAsDouble();
     }
 
-    public void invalidate() {
-        lastUpdatedFrame = -1L;
-    }
-
     public double getValue() {
         long frame = InputClock.current();
         if (lastUpdatedFrame != frame) {

@@ -10,6 +10,7 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @TeleOp(name = "Pinpoint Drive Test", group = "Test")
@@ -23,10 +24,10 @@ public class PinpointDriveTest extends LinearOpMode {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
 
         BettaConstants.MecanumSettings m = BettaConstants.mecanum;
-        fl = motor(m.frontLeftName, m.frontLeftDirection);
-        bl = motor(m.backLeftName, m.backLeftDirection);
-        fr = motor(m.frontRightName, m.frontRightDirection);
-        br = motor(m.backRightName, m.backRightDirection);
+        fl = motor(Drivetrain.FRONT_LEFT, m.frontLeftDirection);
+        bl = motor(Drivetrain.BACK_LEFT, m.backLeftDirection);
+        fr = motor(Drivetrain.FRONT_RIGHT, m.frontRightDirection);
+        br = motor(Drivetrain.BACK_RIGHT, m.backRightDirection);
 
         BettaConstants.PinpointSettings p = BettaConstants.pinpoint;
         pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, p.name);

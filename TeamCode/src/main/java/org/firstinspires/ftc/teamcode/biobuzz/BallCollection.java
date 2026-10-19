@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode.biobuzz;
 
+import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+
 import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
@@ -142,9 +144,6 @@ public final class BallCollection extends CommandBuilder {
 
     /** {@link RobotActions#collectBalls} builds it for a BioBuzzRobot. */
     public BallCollection(Follower follower, Drivetrain drivetrain, Camera camera, Settings settings) {
-        if (!camera.hasRobotState()) {
-            throw new IllegalArgumentException("ball collection needs field balls: build the Camera withFollower(...)");
-        }
         this.follower = follower;
         this.drivetrain = drivetrain;
         this.camera = camera;
@@ -243,17 +242,12 @@ public final class BallCollection extends CommandBuilder {
                 skipped.add(new Skipped(ball, String.format("beyond %.0f in", used.maxRangeIn)));
             } else {
                 // The planner would drop it anyway, but only after it had taken one of the nearest maxBalls places.
-                String unreachable = RouteOptimizer.ballProblem(ball.x, ball.y, ball.type.diameterIn / 2, robot, area,
-                        obstacles, used.railGapIn);
+                String unreachable = RouteOptimizer.ballProblem(ball.x, ball.y, robot, area, obstacles, used.railGapIn);
                 if (unreachable == null) usable.add(ball);
                 else skipped.add(new Skipped(ball, unreachable));
             }
         }
-        Collections.sort(usable, new Comparator<FieldBall>() {
-            @Override public int compare(FieldBall a, FieldBall b) {
-                return Double.compare(a.distanceTo(from.x(), from.y()), b.distanceTo(from.x(), from.y()));
-            }
-        });
+        Collections.sort(usable, Comparator.comparingDouble(ball -> ball.distanceTo(from.x(), from.y())));
         for (int i = 0; i < usable.size(); i++) {
             if (i < used.maxBalls) planned.add(usable.get(i));
             else skipped.add(new Skipped(usable.get(i), "past the nearest " + used.maxBalls));
@@ -292,10 +286,6 @@ public final class BallCollection extends CommandBuilder {
             drivetrain.stop();
             drivetrain.setWriteEnabled(true);
         }
-    }
-
-    private static double nowSeconds() {
-        return System.nanoTime() * 1e-9;
     }
 
     public Status status() {

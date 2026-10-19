@@ -84,10 +84,11 @@ final class CollectionDisplay {
         overlay.setStroke("#CC0000");
         overlay.setFill("#FF000033");
         for (Obstacle o : obstacles) {
-            double[] a = FieldVisualization.toField(o.minX, o.minY);
-            double[] b = FieldVisualization.toField(o.maxX, o.minY);
-            double[] c = FieldVisualization.toField(o.maxX, o.maxY);
-            double[] d = FieldVisualization.toField(o.minX, o.maxY);
+            Region r = o.bounds;
+            double[] a = FieldVisualization.toField(r.minX, r.minY);
+            double[] b = FieldVisualization.toField(r.maxX, r.minY);
+            double[] c = FieldVisualization.toField(r.maxX, r.maxY);
+            double[] d = FieldVisualization.toField(r.minX, r.maxY);
             double[] xs = {a[0], b[0], c[0], d[0]};
             double[] ys = {a[1], b[1], c[1], d[1]};
             overlay.fillPolygon(xs, ys);

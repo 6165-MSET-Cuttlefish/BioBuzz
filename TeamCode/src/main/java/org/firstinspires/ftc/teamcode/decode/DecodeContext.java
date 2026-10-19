@@ -10,7 +10,10 @@ import com.pedropathing.math.Velocity;
 @Config("DecodeContext")
 public final class DecodeContext {
 
-    public static final Pose redTargetPose = new Pose(141.5 - 17, 144);
+    public static final double FIELD_IN = 141.5;
+    public static final double FAR_WALL_Y = 8;
+
+    public static final Pose redTargetPose = new Pose(FIELD_IN - 17, 144);
     public static final Pose blueTargetPose = new Pose(17, 144);
 
     public static double turretFieldX = 0;
@@ -52,16 +55,12 @@ public final class DecodeContext {
             targetY -= robotVy * robot.turret.flightTime;
 
             if (sotmAccel) {
-                // [fl, bl, br, fr]; localThrustY is always 0 for mecanum commands, kept because sotmAccelScale was tuned with it.
+                // Forward thrust only: sotmAccelScale was tuned without the strafe term.
                 double[] powers = robot.drivetrain.getMotorPowers();
-                double localThrustX = (powers[0] + powers[1] + powers[2] + powers[3]) / 4.0;
-                double localThrustY = (powers[0] - powers[1] - powers[2] + powers[3]) / 4.0;
+                double localThrust = (powers[0] + powers[1] + powers[2] + powers[3]) / 4.0;
 
-                double cos = Math.cos(robotRad);
-                double sin = Math.sin(robotRad);
-
-                double thrustX = localThrustX * cos - localThrustY * sin;
-                double thrustY = localThrustX * sin + localThrustY * cos;
+                double thrustX = localThrust * Math.cos(robotRad);
+                double thrustY = localThrust * Math.sin(robotRad);
 
                 double accelX = thrustX * sotmAccelScale - robotVx * sotmDragScale;
                 double accelY = thrustY * sotmAccelScale - robotVy * sotmDragScale;
