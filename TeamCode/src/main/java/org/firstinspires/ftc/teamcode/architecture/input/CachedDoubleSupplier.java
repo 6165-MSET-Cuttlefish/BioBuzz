@@ -16,11 +16,6 @@ public class CachedDoubleSupplier {
         lastUpdatedFrame = -1L;
     }
 
-    public void primeToCurrentState() {
-        current = doubleSupplier.getAsDouble();
-        lastUpdatedFrame = InputClock.current();
-    }
-
     public double getValue() {
         long frame = InputClock.current();
         if (lastUpdatedFrame != frame) {

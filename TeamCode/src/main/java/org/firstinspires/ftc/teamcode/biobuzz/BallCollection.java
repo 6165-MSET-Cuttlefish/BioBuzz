@@ -132,7 +132,6 @@ public final class BallCollection extends CommandBuilder {
     private Region area;
     private List<Obstacle> obstacles = Collections.emptyList();
     private RobotShape robot;
-    private Pose planStart;
     private final List<FieldBall> planned = new ArrayList<>();
     private final List<Skipped> skipped = new ArrayList<>();
     private Ball[] balls = new Ball[0];
@@ -167,7 +166,6 @@ public final class BallCollection extends CommandBuilder {
         area = keepIn(used.onField, used.wallGapIn);
         obstacles = obstacles(used.onField);
         robot = RobotGeometry.shape();
-        planStart = null;
         planned.clear();
         skipped.clear();
         balls = new Ball[0];
@@ -218,7 +216,6 @@ public final class BallCollection extends CommandBuilder {
             detail = "the start pose " + problem;
             return;
         }
-        planStart = start;
         select(start);
         balls = new Ball[planned.size()];
         for (int i = 0; i < balls.length; i++) {
@@ -328,11 +325,6 @@ public final class BallCollection extends CommandBuilder {
     /** The robot the last plan was made for; null before the command starts. */
     public RobotShape robot() {
         return robot;
-    }
-
-    /** Where the plan starts and returns to; null until planned. */
-    public Pose planStart() {
-        return planStart;
     }
 
     /** Null until planned. */

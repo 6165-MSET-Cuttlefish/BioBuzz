@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.architecture.core;
 
-import com.pedropathing.ivy.Command;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,7 +13,6 @@ public abstract class Module {
     private final List<Runnable> tunableRefreshers = new ArrayList<>();
 
     private DualTelemetry telemetry;
-    private Command startupCommand;
     private boolean telemetryEnabled = true;
     private boolean writeEnabled = true;
     private final String name;
@@ -142,15 +140,6 @@ public abstract class Module {
 
     public final void setWriteEnabled(boolean enabled) { this.writeEnabled = enabled; }
     public final boolean isWriteEnabled() { return writeEnabled; }
-
-    /** See {@link Faults#raise}; keys are global, not per module. */
-    protected final void raiseFault(String key, String message) { Faults.raise(key, message); }
-    protected final void clearFault(String key) { Faults.clear(key); }
-    public final boolean hasFault(String key) { return Faults.has(key); }
-
-    /** Command scheduled once at start(). NOT re-armed later. */
-    public final void setStartupCommand(Command command) { this.startupCommand = command; }
-    public final Command getStartupCommand() { return startupCommand; }
 
     protected final void logDS(String caption, Object value) {
         if (telemetry.isDSFrame()) telemetry.addDSData(name + " " + caption, value);

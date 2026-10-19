@@ -5,9 +5,7 @@ import com.pedropathing.ivy.commands.Commands;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.function.Supplier;
 
-import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 
 public final class StateCommands {
@@ -20,10 +18,5 @@ public final class StateCommands {
         return Commands.instant(() -> {
             for (State state : ordered) state.activate();
         }).requiring(requirements);
-    }
-
-    /** Like {@link #set} but resolves the state when the command starts; the module must be named up front. */
-    public static CommandBuilder setLazy(Module requirement, Supplier<? extends State> supplier) {
-        return Commands.instant(() -> supplier.get().activate()).requiring(requirement);
     }
 }

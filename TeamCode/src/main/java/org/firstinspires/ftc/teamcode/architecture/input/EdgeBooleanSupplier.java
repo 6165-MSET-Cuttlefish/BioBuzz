@@ -21,13 +21,6 @@ public class EdgeBooleanSupplier {
         ensureFresh();
     }
 
-    public void primeToCurrentState() {
-        boolean state = booleanSupplier.getAsBoolean();
-        previous = state;
-        current = state;
-        lastUpdatedFrame = InputClock.current();
-    }
-
     private void ensureFresh() {
         long frame = InputClock.current();
         if (lastUpdatedFrame != frame) {

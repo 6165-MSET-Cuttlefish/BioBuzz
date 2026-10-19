@@ -32,8 +32,6 @@ public class EnhancedServo implements Servo, PwmControl {
         }
     }
 
-    public double getCachedPosition() { return cache.cached; }
-
     @Override public ServoController getController() { return servo.getController(); }
     @Override public int getPortNumber() { return servo.getPortNumber(); }
 

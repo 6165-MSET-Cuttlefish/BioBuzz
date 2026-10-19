@@ -7,13 +7,8 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 
-/**
- * SDK {@link Gamepad} wrapped with per-control edge/cached suppliers. While {@link #atRest}
- * is true, every supplier reads neutral so inactive layers are physically present but silent.
- */
+/** SDK {@link Gamepad} wrapped with per-control edge/cached suppliers. */
 public final class LayerGamepad {
-    private boolean atRest = false;
-
     private final List<EdgeBooleanSupplier> boolSuppliers = new ArrayList<>();
     private final List<CachedDoubleSupplier> doubleSuppliers = new ArrayList<>();
 
@@ -31,36 +26,36 @@ public final class LayerGamepad {
     public final CachedDoubleSupplier touchpadFinger1X, touchpadFinger1Y;
 
     public LayerGamepad(Gamepad gamepad) {
-        leftStickX  = doubleSupplier(() -> atRest ? 0.0 : gamepad.left_stick_x);
-        leftStickY  = doubleSupplier(() -> atRest ? 0.0 : gamepad.left_stick_y);
-        rightStickX = doubleSupplier(() -> atRest ? 0.0 : gamepad.right_stick_x);
-        rightStickY = doubleSupplier(() -> atRest ? 0.0 : gamepad.right_stick_y);
-        leftTrigger  = doubleSupplier(() -> atRest ? 0.0 : gamepad.left_trigger);
-        rightTrigger = doubleSupplier(() -> atRest ? 0.0 : gamepad.right_trigger);
+        leftStickX  = doubleSupplier(() -> gamepad.left_stick_x);
+        leftStickY  = doubleSupplier(() -> gamepad.left_stick_y);
+        rightStickX = doubleSupplier(() -> gamepad.right_stick_x);
+        rightStickY = doubleSupplier(() -> gamepad.right_stick_y);
+        leftTrigger  = doubleSupplier(() -> gamepad.left_trigger);
+        rightTrigger = doubleSupplier(() -> gamepad.right_trigger);
 
-        a = boolSupplier(() -> !atRest && gamepad.a);
-        b = boolSupplier(() -> !atRest && gamepad.b);
-        x = boolSupplier(() -> !atRest && gamepad.x);
-        y = boolSupplier(() -> !atRest && gamepad.y);
+        a = boolSupplier(() -> gamepad.a);
+        b = boolSupplier(() -> gamepad.b);
+        x = boolSupplier(() -> gamepad.x);
+        y = boolSupplier(() -> gamepad.y);
 
-        dpadUp    = boolSupplier(() -> !atRest && gamepad.dpad_up);
-        dpadDown  = boolSupplier(() -> !atRest && gamepad.dpad_down);
-        dpadLeft  = boolSupplier(() -> !atRest && gamepad.dpad_left);
-        dpadRight = boolSupplier(() -> !atRest && gamepad.dpad_right);
+        dpadUp    = boolSupplier(() -> gamepad.dpad_up);
+        dpadDown  = boolSupplier(() -> gamepad.dpad_down);
+        dpadLeft  = boolSupplier(() -> gamepad.dpad_left);
+        dpadRight = boolSupplier(() -> gamepad.dpad_right);
 
-        leftBumper  = boolSupplier(() -> !atRest && gamepad.left_bumper);
-        rightBumper = boolSupplier(() -> !atRest && gamepad.right_bumper);
+        leftBumper  = boolSupplier(() -> gamepad.left_bumper);
+        rightBumper = boolSupplier(() -> gamepad.right_bumper);
 
-        leftStickButton  = boolSupplier(() -> !atRest && gamepad.left_stick_button);
-        rightStickButton = boolSupplier(() -> !atRest && gamepad.right_stick_button);
+        leftStickButton  = boolSupplier(() -> gamepad.left_stick_button);
+        rightStickButton = boolSupplier(() -> gamepad.right_stick_button);
 
-        guide = boolSupplier(() -> !atRest && gamepad.guide);
-        start = boolSupplier(() -> !atRest && gamepad.start);
-        back  = boolSupplier(() -> !atRest && gamepad.back);
+        guide = boolSupplier(() -> gamepad.guide);
+        start = boolSupplier(() -> gamepad.start);
+        back  = boolSupplier(() -> gamepad.back);
 
-        touchpad         = boolSupplier(() -> !atRest && gamepad.touchpad);
-        touchpadFinger1X = doubleSupplier(() -> atRest ? 0.0 : gamepad.touchpad_finger_1_x);
-        touchpadFinger1Y = doubleSupplier(() -> atRest ? 0.0 : gamepad.touchpad_finger_1_y);
+        touchpad         = boolSupplier(() -> gamepad.touchpad);
+        touchpadFinger1X = doubleSupplier(() -> gamepad.touchpad_finger_1_x);
+        touchpadFinger1Y = doubleSupplier(() -> gamepad.touchpad_finger_1_y);
     }
 
     private EdgeBooleanSupplier boolSupplier(BooleanSupplier source) {
@@ -75,20 +70,8 @@ public final class LayerGamepad {
         return s;
     }
 
-    public void setAtRest(boolean atRest) {
-        boolean wasAtRest = this.atRest;
-        this.atRest = atRest;
-        // On rest→active: prime so a button held at activation doesn't fire wasJustPressed.
-        if (wasAtRest && !atRest) primeAllSuppliers();
-    }
-
     public void invalidateAll() {
         for (int i = 0; i < boolSuppliers.size(); i++) boolSuppliers.get(i).invalidate();
         for (int i = 0; i < doubleSuppliers.size(); i++) doubleSuppliers.get(i).invalidate();
-    }
-
-    private void primeAllSuppliers() {
-        for (int i = 0; i < boolSuppliers.size(); i++) boolSuppliers.get(i).primeToCurrentState();
-        for (int i = 0; i < doubleSuppliers.size(); i++) doubleSuppliers.get(i).primeToCurrentState();
     }
 }

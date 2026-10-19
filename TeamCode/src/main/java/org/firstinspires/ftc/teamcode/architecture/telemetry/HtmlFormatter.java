@@ -6,8 +6,6 @@ public final class HtmlFormatter {
     public static final String COLOR_VALUE  = "#e37c07";
     public static final String COLOR_MODULE = "#4fc3f7";
     public static final String COLOR_STATE  = "#81c784";
-    public static final String COLOR_GREEN  = "#66bb6a";
-    public static final String COLOR_YELLOW = "#ffa726";
     public static final String COLOR_RED    = "#ef5350";
     public static final String COLOR_BLUE   = "#448aff";
     public static final String COLOR_GRAY   = "#9e9e9e";
@@ -18,7 +16,6 @@ public final class HtmlFormatter {
     public static final int FONT_NORMAL  = 0;
     public static final int FONT_LARGE   = 1;
     public static final int FONT_XLARGE  = 2;
-    public static final int FONT_XXLARGE = 3;
 
     public static String htmlBold(String text) {
         return "<b>" + text + "</b>";

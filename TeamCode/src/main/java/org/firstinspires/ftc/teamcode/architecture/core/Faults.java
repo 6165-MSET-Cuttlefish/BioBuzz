@@ -57,10 +57,6 @@ public final class Faults {
         }
     }
 
-    public static boolean any() {
-        return !snapshot.isEmpty();
-    }
-
     /** Immutable, in order of first raise. */
     public static List<Fault> active() {
         return snapshot;

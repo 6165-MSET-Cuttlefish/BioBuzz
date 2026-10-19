@@ -21,23 +21,8 @@ public final class PathHeadings {
     // A switch on a join of Paths.path(a, b) rounds onto either curve, so each side reads this far into its own.
     private static final double JOIN_INSET = 1e-9;
 
-    /** The direction of travel {@code fraction} of the way along {@code path}; on a corner between two curves, ask the curve itself. */
-    public static double tangentAt(Path path, double fraction) {
-        checkFraction(fraction);
-        return directionAt(path.curve, path.curve.parameter(fraction), 0, 1);
-    }
-
-    public static double startTangent(Path path) {
-        return directionAt(path.curve, 0, 0, 1);
-    }
-
     public static double endTangent(Path path) {
         return directionAt(path.curve, 1, 0, 1);
-    }
-
-    /** The heading change the follower is asked for where {@code after} takes over from {@code before}; 0 is seamless. */
-    public static double jump(Path before, Path after) {
-        return Angle.normalizeSigned(after.heading(0) - before.heading(1));
     }
 
     /**
@@ -106,11 +91,5 @@ public final class PathHeadings {
             throw new IllegalArgumentException(String.format("switch fraction %s lands on an end of the path", switchAt));
         }
         return switchT;
-    }
-
-    private static void checkFraction(double fraction) {
-        if (!(fraction >= 0 && fraction <= 1)) {
-            throw new IllegalArgumentException(String.format("path fraction %s is outside 0..1", fraction));
-        }
     }
 }

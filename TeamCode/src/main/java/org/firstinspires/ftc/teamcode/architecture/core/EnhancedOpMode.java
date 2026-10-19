@@ -3,7 +3,6 @@ package org.firstinspires.ftc.teamcode.architecture.core;
 import com.acmerobotics.dashboard.FtcDashboard;
 import com.acmerobotics.dashboard.canvas.Canvas;
 import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
-import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
 import com.qualcomm.hardware.lynx.LynxModule;
@@ -200,7 +199,6 @@ public abstract class EnhancedOpMode extends OpMode {
         profiledLoopMaxMs = 0;
         profiler.reset();
         Scheduler.reset();
-        scheduleStartupCommands();
         onStart();
         loopTimer.reset();
     }
@@ -394,15 +392,6 @@ public abstract class EnhancedOpMode extends OpMode {
                 m.write();
                 profiler.leaveSection(m.getWriteSectionName(), t);
             }
-        }
-    }
-
-    // Ivy cannot enumerate running commands: a startup command that must yield to one already holding
-    // its module should require that module with BlockedBehavior/ConflictBehavior CANCEL.
-    private void scheduleStartupCommands() {
-        for (Module m : modules) {
-            Command startup = m.getStartupCommand();
-            if (startup != null) Scheduler.schedule(startup);
         }
     }
 
@@ -621,8 +610,5 @@ public abstract class EnhancedOpMode extends OpMode {
 
     public final LoopProfiler getProfiler() { return profiler; }
 
-    protected final void raiseFault(String key, String message) { Faults.raise(key, message); }
-    protected final void clearFault(String key) { Faults.clear(key); }
-    public final boolean hasFault(String key) { return Faults.has(key); }
     public final List<Faults.Fault> activeFaults() { return Faults.active(); }
 }
