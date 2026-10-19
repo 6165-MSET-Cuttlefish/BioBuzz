@@ -48,10 +48,11 @@ public class ButterflyTest extends LinearOpMode {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
 
         telemetry.addData("Status", "Initialized");
+        telemetry.update();
 
         waitForStart();
 
-        while (opModeIsActive() && !isStopRequested()) {
+        while (opModeIsActive()) {
             if (gamepad1.aWasPressed()) {
                 tractionMode = !tractionMode;
 
@@ -97,6 +98,7 @@ public class ButterflyTest extends LinearOpMode {
             backRight.setPower(brPower/speedLimit);
 
             telemetry.addData("Mode", tractionMode ? "Traction" : "Mecanum");
+            telemetry.update();
         }
     }
 }

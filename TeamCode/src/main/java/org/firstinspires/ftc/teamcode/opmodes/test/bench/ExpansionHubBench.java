@@ -73,17 +73,14 @@ public class ExpansionHubBench extends LinearOpMode {
 
         Map<String, Runnable> odometry = new LinkedHashMap<>();
         Map<String, Map<String, Object>> devices = new LinkedHashMap<>();
-        OctoQuad octoQuad = hardwareMap.tryGet(OctoQuad.class, OctoQuadLocalizerTest.name);
-        if (octoQuad != null) {
-            OctoQuad.LocalizerDataBlock block = new OctoQuad.LocalizerDataBlock();
-            odometry.put(OctoQuadLocalizerTest.name, () -> octoQuad.readLocalizerData(block));
-            devices.put(OctoQuadLocalizerTest.name, device(octoQuad.getConnectionInfo(), octoQuad.getChipId() & 0xFF));
-        }
-        GoBildaPinpointDriver pinpoint = hardwareMap.tryGet(GoBildaPinpointDriver.class, BettaConstants.pinpoint.name);
-        if (pinpoint != null) {
-            odometry.put(BettaConstants.pinpoint.name, pinpoint::update);
-            devices.put(BettaConstants.pinpoint.name, device(pinpoint.getConnectionInfo(), pinpoint.getDeviceVersion()));
-        }
+        OctoQuad octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+        OctoQuad.LocalizerDataBlock block = new OctoQuad.LocalizerDataBlock();
+        odometry.put(OctoQuadLocalizerTest.name, () -> octoQuad.readLocalizerData(block));
+        devices.put(OctoQuadLocalizerTest.name, device(octoQuad.getConnectionInfo(), octoQuad.getChipId() & 0xFF));
+        GoBildaPinpointDriver pinpoint = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, BettaConstants.pinpoint.name,
+                BenchIO.RUNNER_HINT);
+        odometry.put(BettaConstants.pinpoint.name, pinpoint::update);
+        devices.put(BettaConstants.pinpoint.name, device(pinpoint.getConnectionInfo(), pinpoint.getDeviceVersion()));
 
         Map<String, Map<String, Timed>> commands = new LinkedHashMap<>();
         List<Timed> commandReads = new ArrayList<>();
@@ -117,12 +114,10 @@ public class ExpansionHubBench extends LinearOpMode {
                 for (LynxModule hub : measured) hub.getBulkData();
             }));
         }
-        if (!odometry.isEmpty()) {
-            passes.put("bothHubsBulkPlusOdometry", new Timed(() -> {
-                for (LynxModule hub : measured) hub.getBulkData();
-                for (Runnable read : odometry.values()) read.run();
-            }));
-        }
+        passes.put("bothHubsBulkPlusOdometry", new Timed(() -> {
+            for (LynxModule hub : measured) hub.getBulkData();
+            for (Runnable read : odometry.values()) read.run();
+        }));
         if (!roundRobin("loopPass", new ArrayList<>(passes.values()))) return;
         report.put("loopPass", summaries(passes));
 

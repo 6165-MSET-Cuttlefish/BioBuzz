@@ -132,7 +132,7 @@ public class DecodeTele extends DecodeOpMode {
             return;
         }
 
-        long now = System.currentTimeMillis();
+        long now = System.nanoTime() / 1_000_000;
         long cooldown = Math.max(0, optimizeRumbleCooldownMs);
         if (now - lastRumbleMs[0] >= cooldown) {
             gamepad.rumble(durationMs);
@@ -240,30 +240,14 @@ public class DecodeTele extends DecodeOpMode {
         }
 
         if (d2RsUp.wasJustPressed()) {
-            if (ShooterInterpolation.activeMode == ShooterInterpolation.Mode.CLOSE) {
-                robot.shooter.closeVelocityOffset += 25;
-            } else {
-                robot.shooter.farVelocityOffset += 25;
-            }
+            robot.shooter.nudgeOffsets(25, 0);
         } else if (d2RsDown.wasJustPressed()) {
-            if (ShooterInterpolation.activeMode == ShooterInterpolation.Mode.CLOSE) {
-                robot.shooter.closeVelocityOffset -= 25;
-            } else {
-                robot.shooter.farVelocityOffset -= 25;
-            }
+            robot.shooter.nudgeOffsets(-25, 0);
         }
         if (d2RsRight.wasJustPressed()) {
-            if (ShooterInterpolation.activeMode == ShooterInterpolation.Mode.CLOSE) {
-                robot.shooter.closeHoodOffset += 0.01;
-            } else {
-                robot.shooter.farHoodOffset += 0.01;
-            }
+            robot.shooter.nudgeOffsets(0, 0.01);
         } else if (d2RsLeft.wasJustPressed()) {
-            if (ShooterInterpolation.activeMode == ShooterInterpolation.Mode.CLOSE) {
-                robot.shooter.closeHoodOffset -= 0.01;
-            } else {
-                robot.shooter.farHoodOffset -= 0.01;
-            }
+            robot.shooter.nudgeOffsets(0, -0.01);
         }
 
         if (robot.turret.getState(Turret.TurretState.class) == Turret.TurretState.HOLD) {
@@ -271,20 +255,10 @@ public class DecodeTele extends DecodeOpMode {
         }
 
         if (d2.leftStickX.getValue() > 0.5) {
-            robot.turret.turretManualOffset -= .25;
-            if (Turret.isCloseTele) {
-                Turret.teleTurretOffsetClose = robot.turret.turretManualOffset;
-            } else {
-                Turret.teleTurretOffsetFar = robot.turret.turretManualOffset;
-            }
+            Turret.nudgeOffset(-.25);
         }
         if (d2.leftStickX.getValue() < -0.5) {
-            robot.turret.turretManualOffset += .25;
-            if (Turret.isCloseTele) {
-                Turret.teleTurretOffsetClose = robot.turret.turretManualOffset;
-            } else {
-                Turret.teleTurretOffsetFar = robot.turret.turretManualOffset;
-            }
+            Turret.nudgeOffset(.25);
         }
 
         if (d2.dpadRight.wasJustPressed()) {

@@ -136,12 +136,12 @@ public class WebcamBench extends LinearOpMode {
             });
             long t5 = System.nanoTime();
             r.put("closeAsyncCallMs", (t5 - t4) / 1e6);
-            long deadline = System.currentTimeMillis() + 10000;
+            long deadline = System.nanoTime() + 10000 * 1_000_000L;
             while (true) {
                 synchronized (closedAt) {
                     if (closedAt[0] != 0) break;
                 }
-                if (System.currentTimeMillis() > deadline) throw new IllegalStateException("closeCameraDeviceAsync never called onClose");
+                if (System.nanoTime() > deadline) throw new IllegalStateException("closeCameraDeviceAsync never called onClose");
                 sleep(5);
             }
             r.put("closeAsyncDoneMs", (closedAt[0] - t4) / 1e6);
@@ -154,9 +154,9 @@ public class WebcamBench extends LinearOpMode {
     }
 
     private void waitForFrame(OpenCvWebcam cam) {
-        long deadline = System.currentTimeMillis() + FIRST_FRAME_TIMEOUT_MS;
+        long deadline = System.nanoTime() + FIRST_FRAME_TIMEOUT_MS * 1_000_000L;
         while (cam.getFrameCount() == 0) {
-            if (System.currentTimeMillis() > deadline) {
+            if (System.nanoTime() > deadline) {
                 throw new IllegalStateException("no frame from the webcam within " + FIRST_FRAME_TIMEOUT_MS + " ms of startStreaming");
             }
             sleep(2);

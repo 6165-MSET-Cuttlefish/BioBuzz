@@ -22,7 +22,7 @@ final class PlannerWorkload {
     static final double WALL_GAP_IN = 1;
     static final double RAIL_GAP_IN = 1;
     static final double BALL_RADIUS_IN = 1.4;
-    static final RobotShape ROBOT = new RobotShape(18, 18, 9, 18);
+    static final RobotShape ROBOT = new RobotShape(16, 15, 8, 15);
 
     static final class Layout {
         final String label;

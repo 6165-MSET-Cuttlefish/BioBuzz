@@ -10,14 +10,16 @@ import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import static com.pedropathing.ivy.Scheduler.schedule;
 import static com.pedropathing.ivy.groups.Groups.sequential;
-import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
+import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @Autonomous(name = "ForwardBackTest", group = "Test")
 public class ForwardBackTest extends LinearOpMode {
+
+    private static final double ROUTINE_TIMEOUT_MS = 30000;
 
     private Follower follower;
 
@@ -26,11 +28,11 @@ public class ForwardBackTest extends LinearOpMode {
     private final Pose start = poseFactory.of(56.5205, 19.2527, 90);
     private final Pose forward = poseFactory.of(56.5205, 99.2527, 90);
 
-    public Command autoRoutine() {
-        return sequential(
-                follow(follower, forwardPath()),
-                follow(follower, backPath())
-        );
+    private Command autoRoutine() {
+        return PathCommands.timeout(sequential(
+                PathCommands.follow(follower, forwardPath()),
+                PathCommands.follow(follower, backPath())
+        ), ROUTINE_TIMEOUT_MS);
     }
 
     @Override
@@ -60,11 +62,11 @@ public class ForwardBackTest extends LinearOpMode {
         }
     }
 
-    public Path forwardPath() {
+    private Path forwardPath() {
         return line(start, forward).constant(start.heading());
     }
 
-    public Path backPath() {
+    private Path backPath() {
         return line(forward, start).constant(start.heading());
     }
 }

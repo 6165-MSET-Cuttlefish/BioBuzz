@@ -101,6 +101,16 @@ public class Shooter extends Module {
         shooterVelocityTimer.reset();
     }
 
+    public void nudgeOffsets(double deltaRpm, double deltaHood) {
+        if (ShooterInterpolation.activeMode == ShooterInterpolation.Mode.CLOSE) {
+            closeVelocityOffset += deltaRpm;
+            closeHoodOffset += deltaHood;
+        } else {
+            farVelocityOffset += deltaRpm;
+            farHoodOffset += deltaHood;
+        }
+    }
+
     @Override
     protected void initStates() {
         setStates(FlywheelState.OFF, HoodState.BOTTOM);

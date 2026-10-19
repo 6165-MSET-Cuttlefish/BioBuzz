@@ -24,7 +24,7 @@ public class CloseFlowerAuto extends BioBuzzOpMode {
         // Pedro drives fl/bl/fr/br through its own motor objects; Drivetrain.write() would fight it for them.
         robot.drivetrain.setWriteEnabled(false);
         // A path test; disabled, the Camera never polls the Limelight or needs the ball script on it.
-        if (!Camera.VisionState.DISABLED.activate()) throw new IllegalStateException("Camera didn't take DISABLED");
+        Camera.VisionState.DISABLED.activate();
 
         CloseFlowerPaths paths = new CloseFlowerPaths();
         robot.follower.setPose(paths.start);

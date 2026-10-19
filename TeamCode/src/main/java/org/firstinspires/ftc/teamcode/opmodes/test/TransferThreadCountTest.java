@@ -110,7 +110,6 @@ public class TransferThreadCountTest extends OpMode {
         telemetry.addData("loop work (ms)", workMs);
         telemetry.addData("loop time (ms)", runtime.milliseconds());
         telemetry.addData("motor RPM", 60000 * (motor1.getCurrentPosition()-lastPosition) / runtime.milliseconds() / 145.1);
-        telemetry.update();
     }
 
     @Override

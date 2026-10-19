@@ -27,6 +27,7 @@ import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.PoseRing;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
+import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.FieldMapRenderer;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
@@ -640,8 +641,11 @@ public class HubBench extends OpMode {
             }
 
             @Override void end() {
-                result.put("what", "RouteOptimizer.findOptimalRoute + RoutePathBuilder.build as Vision Ball Collection calls them "
-                        + "(RED own half, the HIVE rails, wall and rail gaps 1, an 18 x 18 in robot with its intake 9 in ahead, start = return), seeded random layouts plus crafted worst cases");
+                RobotShape robot = PlannerWorkload.ROBOT;
+                result.put("what", String.format("RouteOptimizer.findOptimalRoute + RoutePathBuilder.build as Vision Ball Collection "
+                        + "calls them (RED own half, the HIVE rails, wall and rail gaps 1, robot %.1f x %.1f in with an intake %.1f in "
+                        + "wide %.1f in ahead, start = return), seeded random layouts plus crafted worst cases",
+                        robot.lengthIn, robot.widthIn, robot.intakeWidthIn, robot.intakeOffsetIn));
                 Map<String, Object> balls = new LinkedHashMap<>();
                 for (Map.Entry<String, List<PlannerWorkload.Timing>> e : byBalls.entrySet()) {
                     balls.put(e.getKey(), PlannerWorkload.summarize(e.getValue()));

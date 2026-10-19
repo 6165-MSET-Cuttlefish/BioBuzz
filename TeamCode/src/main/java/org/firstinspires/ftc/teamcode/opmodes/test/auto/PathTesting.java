@@ -10,14 +10,16 @@ import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import static com.pedropathing.ivy.Scheduler.schedule;
 import static com.pedropathing.ivy.groups.Groups.sequential;
-import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
+import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @Autonomous(name = "PathTesting", group = "Test")
 public class PathTesting extends LinearOpMode {
+
+    private static final double ROUTINE_TIMEOUT_MS = 30000;
 
     private Follower follower;
 
@@ -32,12 +34,12 @@ public class PathTesting extends LinearOpMode {
     private final Pose point3Start = poseFactory.of(95.4475, 19.7897, -53);
     private final Pose point3 = poseFactory.of(56.5205, 19.6393, 90);
 
-    public Command autoRoutine() {
-        return sequential(
-                follow(follower, path1()),
-                follow(follower, path2()),
-                follow(follower, path3())
-        );
+    private Command autoRoutine() {
+        return PathCommands.timeout(sequential(
+                PathCommands.follow(follower, path1()),
+                PathCommands.follow(follower, path2()),
+                PathCommands.follow(follower, path3())
+        ), ROUTINE_TIMEOUT_MS);
     }
 
     @Override
@@ -67,15 +69,15 @@ public class PathTesting extends LinearOpMode {
         }
     }
 
-    public Path path1() {
+    private Path path1() {
         return curve(start, path1Control1, path1Control2, path1).tangent();
     }
 
-    public Path path2() {
+    private Path path2() {
         return curve(path1, point2Control1, point2).tangent();
     }
 
-    public Path path3() {
+    private Path path3() {
         return line(point3Start, point3).linear(point3Start, point3);
     }
 }

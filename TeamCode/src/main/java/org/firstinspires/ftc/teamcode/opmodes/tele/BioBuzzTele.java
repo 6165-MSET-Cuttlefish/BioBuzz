@@ -28,7 +28,7 @@ public class BioBuzzTele extends BioBuzzOpMode {
         slowToggle = new EdgeBooleanSupplier(() -> gamepad1.left_trigger > 0.1);
         headingLockToggle = new EdgeBooleanSupplier(() -> gamepad1.left_bumper);
         // Ball vision is for autonomous; disabled, the Camera module never polls the Limelight.
-        if (!Camera.VisionState.DISABLED.activate()) throw new IllegalStateException("Camera didn't take DISABLED");
+        Camera.VisionState.DISABLED.activate();
         applyCellTipFlag();
     }
 
@@ -38,8 +38,7 @@ public class BioBuzzTele extends BioBuzzOpMode {
     }
 
     private static void applyCellTipFlag() {
-        CellTipCamera.VisionState state = cellTip ? CellTipCamera.VisionState.ENABLED : CellTipCamera.VisionState.DISABLED;
-        if (!state.activate()) throw new IllegalStateException("CellTipCamera didn't take " + state);
+        (cellTip ? CellTipCamera.VisionState.ENABLED : CellTipCamera.VisionState.DISABLED).activate();
     }
 
     @Override

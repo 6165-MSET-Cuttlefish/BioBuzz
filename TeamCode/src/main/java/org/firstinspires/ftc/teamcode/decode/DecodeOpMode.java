@@ -32,11 +32,11 @@ public abstract class DecodeOpMode extends EnhancedOpMode {
     protected void dashboardOverlay(Canvas overlay) {
         if (robot.turret.isInAny(Turret.TurretState.AUTOAIM)) {
             Pose turretDash = toField(new Pose(DecodeContext.turretFieldX, DecodeContext.turretFieldY));
-            overlay.setStroke("#FFFFFF")
+            overlay.setFill("#FFFFFF")
                     .fillCircle(turretDash.x(), turretDash.y(), 2);
 
             Pose targetDash = toField(new Pose(DecodeContext.targetX, DecodeContext.targetY));
-            overlay.setStroke(Context.allianceColor == AllianceColor.BLUE ? "blue" : "red")
+            overlay.setFill(Context.allianceColor == AllianceColor.BLUE ? "blue" : "red")
                     .fillCircle(targetDash.x(), targetDash.y(), 2);
         }
     }

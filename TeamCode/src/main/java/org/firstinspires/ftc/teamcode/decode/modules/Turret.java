@@ -19,7 +19,7 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 @Config("Decode Turret")
 public class Turret extends Module {
 
-    public double turretManualOffset = 0;
+    private double turretManualOffset = 0;
 
     public static boolean isCloseTele = true;
     public static double teleTurretOffsetClose = 2;
@@ -88,6 +88,14 @@ public class Turret extends Module {
             throw new IllegalStateException("Turret needs a Follower; pass one with withFollower()");
         }
         return follower;
+    }
+
+    public static void nudgeOffset(double deltaDeg) {
+        if (isCloseTele) {
+            teleTurretOffsetClose += deltaDeg;
+        } else {
+            teleTurretOffsetFar += deltaDeg;
+        }
     }
 
     @Override

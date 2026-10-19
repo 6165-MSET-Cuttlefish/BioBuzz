@@ -90,7 +90,7 @@ In INIT, `initializeLoop()` replaces `gameLoop()` and module writes stay off unl
 
 ## Module pattern
 
-- Don't touch states in a Module's constructor: they bind in `initStates()`, and `activate()` on an unbound state just returns false.
+- Don't touch states in a Module's constructor: they bind in `initStates()`, and `activate()` on an unbound state throws.
 - Name nested `@Config` classes (`@Config("Shooter")`): slothboard keys config classes by simple name, so bare nested `Tuning` classes collide and vanish.
 - Telemetry goes in `onTelemetry()`, not `read()`. DS lines outside a DS frame are dropped; gate other DS-only work on `getTelemetry().isDSFrame()`.
 - Safe state lives in `stop()`, never only in a command's `end()` (those don't run at OpMode stop). Use `EnhancedMotor.stop()`, since the write cache can drop `setPower(0)`, and keep it reversible: it can run mid-OpMode with `write()` resuming.

@@ -82,6 +82,5 @@ public class TransferCountTest extends OpMode {
         telemetry.addData("Diff threshold (mm)", diffThreshold);
         telemetry.addData("motor current", motor1.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("loop time (ms)", runtime.milliseconds());
-        telemetry.update();
     }
 }

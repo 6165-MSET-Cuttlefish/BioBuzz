@@ -100,7 +100,7 @@ public class Magazine extends Module {
             currentHorizontalBackPosition = targetHorizontalBackPos;
         }
 
-        long now = System.currentTimeMillis();
+        long now = System.nanoTime() / 1_000_000;
         if (lastHorizontalUpdateTime == 0) lastHorizontalUpdateTime = now;
         long dtMs = now - lastHorizontalUpdateTime;
         lastHorizontalUpdateTime = now;

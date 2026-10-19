@@ -88,12 +88,12 @@ public class LimelightBench extends LinearOpMode {
     }
 
     private LLStatus waitForStatus() {
-        long deadline = System.currentTimeMillis() + 15000;
+        long deadline = System.nanoTime() + 15000 * 1_000_000L;
         while (true) {
             LLStatus s = ll.getStatus();
             // A failed request returns a default LLStatus, which has no name and a 0 °C temperature.
             if (!s.getName().isEmpty() || s.getTemp() > 0) return s;
-            if (System.currentTimeMillis() > deadline) {
+            if (System.nanoTime() > deadline) {
                 throw new IllegalStateException("The Limelight at the configured address doesn't answer /status: " + PLUG_IN);
             }
             report.sendIfDue();

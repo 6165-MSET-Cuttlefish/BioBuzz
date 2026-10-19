@@ -38,14 +38,9 @@ public interface State {
         MODULES.put(this, module);
     }
 
-    /** Transition this state's owning module to this state. False if unbound. */
+    /** Transition this state's owning module to this state. Throws if unbound. */
     default boolean activate() {
-        Module m = getModule();
-        if (m == null) {
-            System.err.println("[State] activate() called on " + this + " but no module is registered");
-            return false;
-        }
-        return m.setState(this);
+        return requireModule().setState(this);
     }
 
     default Module requireModule() {

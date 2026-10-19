@@ -23,7 +23,7 @@ public class CellTipTest extends BioBuzzOpMode {
     @Override
     protected void initialize() {
         // Not needed here, and disabled it never polls the Limelight, which may not run the ball script on this bot.
-        if (!Camera.VisionState.DISABLED.activate()) throw new IllegalStateException("Camera didn't take DISABLED");
+        Camera.VisionState.DISABLED.activate();
         watch = robot.actions.checkTip();
     }
 
