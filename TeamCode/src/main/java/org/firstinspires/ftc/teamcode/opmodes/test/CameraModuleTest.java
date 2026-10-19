@@ -1,17 +1,14 @@
 package org.firstinspires.ftc.teamcode.opmodes.test;
 
-import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.opmodes.test.auto.CameraRobot;
 
 /**
  * Starts at (0, 0, 0), so while the robot hasn't moved a field ball reads robot-relative (+X forward,
@@ -21,25 +18,6 @@ import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 public class CameraModuleTest extends EnhancedOpMode {
 
     private static final int SHOWN_BALLS = 5;
-
-    static class CameraRobot extends Robot {
-        Camera camera;
-
-        CameraRobot(EnhancedOpMode opMode) {
-            super(opMode);
-            BioBuzzField.configure();
-        }
-
-        @Override
-        protected Follower createFollower(HardwareMap hardwareMap) {
-            return BettaConstants.create(hardwareMap);
-        }
-
-        @Override
-        protected void initializeGameModules() {
-            camera = new Camera(opMode.hardwareMap).withFollower(follower);
-        }
-    }
 
     private CameraRobot cam;
 

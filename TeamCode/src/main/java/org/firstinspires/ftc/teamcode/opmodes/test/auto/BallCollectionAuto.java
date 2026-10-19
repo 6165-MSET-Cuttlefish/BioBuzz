@@ -19,8 +19,6 @@ import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
-import org.firstinspires.ftc.teamcode.modules.Camera;
-import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
 /**
@@ -83,7 +81,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
         if (!collection.detail().isEmpty()) status += ": " + collection.detail();
         if (timedOut) status += String.format(" (auto timed out after %.0f ms)", Tuning.timeoutMs);
         telemetry.addData("Status", status);
-        telemetry.addData("Vision", visionState(robot.camera));
+        telemetry.addData("Vision", CollectionDisplay.visionState(robot.camera));
         if (collection.area() != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, collection.area());
         for (BallCollection.Skipped s : collection.skipped()) {
             telemetry.addData("Skipped " + label(s.ball), s.reason);
@@ -102,17 +100,9 @@ public class BallCollectionAuto extends BioBuzzOpMode {
         }
         telemetry.addData("Length", "%.0f in", route.length);
         RoutePathBuilder.Plan plan = collection.plan();
-        telemetry.addData("Intake path", plan.intake == null ? "none" : BallCollectionTest.describe(plan.intakeReroute));
+        telemetry.addData("Intake path", plan.intake == null ? "none" : CollectionDisplay.describe(plan.intakeReroute));
         telemetry.addData("Return path", plan.back == null ? "none (already there)"
-                : BallCollectionTest.describe(plan.returnReroute));
-    }
-
-    static String visionState(Camera camera) {
-        if (camera.limelightProblem() != null) return "LIMELIGHT FAULT: " + camera.limelightProblem();
-        if (camera.isSyncing()) return "STALE (putting the ball pipeline on the Limelight; wait before START)";
-        if (!camera.isFrameStale()) return "live";
-        double age = camera.getFrameAgeSeconds();
-        return Double.isInfinite(age) ? "STALE (no frame yet)" : String.format("STALE (%.2f s old)", age);
+                : CollectionDisplay.describe(plan.returnReroute));
     }
 
     private static String label(FieldBall ball) {
@@ -121,35 +111,26 @@ public class BallCollectionAuto extends BioBuzzOpMode {
 
     @Override
     protected void dashboardOverlay(Canvas overlay) {
-        if (collection.area() != null) BallCollectionTest.drawKeepIn(overlay, collection.area());
-        BallCollectionTest.drawObstacles(overlay, collection.obstacles());
+        if (collection.area() != null) CollectionDisplay.drawKeepIn(overlay, collection.area());
+        CollectionDisplay.drawObstacles(overlay, collection.obstacles());
         for (FieldBall b : robot.camera.getFieldBalls()) {
             double[] p = FieldVisualization.toField(b.x, b.y);
-            overlay.setStroke(b.visible() ? color(b.type) : "#9E9E9E");
+            overlay.setStroke(b.visible() ? CollectionDisplay.color(b.type) : "#9E9E9E");
             overlay.strokeCircle(p[0], p[1], b.type.diameterIn / 2);
         }
         Ball[] balls = collection.balls();
         for (int i = 0; i < balls.length; i++) {
             double[] p = FieldVisualization.toField(balls[i].x, balls[i].y);
-            overlay.setFill(color(collection.plannedBalls().get(i).type));
+            overlay.setFill(CollectionDisplay.color(collection.plannedBalls().get(i).type));
             overlay.fillCircle(p[0], p[1], balls[i].radius);
         }
         RoutePathBuilder.Plan plan = collection.plan();
         if (plan == null) return;
         if (plan != drawnPlan) {
             drawnPlan = plan;
-            intakeDrawing = plan.intake == null ? null : BallCollectionTest.fieldPolyline(plan.intake);
-            returnDrawing = plan.back == null ? null : BallCollectionTest.fieldPolyline(plan.back);
+            intakeDrawing = plan.intake == null ? null : CollectionDisplay.fieldPolyline(plan.intake);
+            returnDrawing = plan.back == null ? null : CollectionDisplay.fieldPolyline(plan.back);
         }
-        BallCollectionTest.drawPlan(overlay, plan, intakeDrawing, returnDrawing, collection.robot());
-    }
-
-    private static String color(BallType type) {
-        switch (type) {
-            case POLLEN: return "#FFD600";
-            case NECTAR_RED: return "#E53935";
-            case NECTAR_BLUE: return "#1E88E5";
-            default: throw new IllegalArgumentException("unhandled ball type " + type);
-        }
+        CollectionDisplay.drawPlan(overlay, plan, intakeDrawing, returnDrawing, collection.robot());
     }
 }

@@ -96,20 +96,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private static final double TRAIL_SPACING_IN = 1;
     private static final double TRAIL_TURN_DEG = 5;
 
-    static class VisionRobot extends BallCollectionRobot {
-        Camera camera;
-
-        VisionRobot(EnhancedOpMode opMode) {
-            super(opMode);
-        }
-
-        @Override
-        protected void initializeGameModules() {
-            camera = new Camera(opMode.hardwareMap).withFollower(follower);
-        }
-    }
-
-    private VisionRobot visionRobot;
+    private CameraRobot visionRobot;
 
     private List<FieldBall> plannedFrom = Collections.emptyList();
     private List<Double> plannedSettings;
@@ -136,7 +123,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() {
-        visionRobot = new VisionRobot(this);
+        visionRobot = new CameraRobot(this);
         return visionRobot;
     }
 
@@ -191,7 +178,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private void startRoute() {
         Camera camera = visionRobot.camera;
         if (camera.isFrameStale()) {
-            refused = "vision: " + BallCollectionAuto.visionState(camera);
+            refused = "vision: " + CollectionDisplay.visionState(camera);
             return;
         }
         if (plan == null) {
@@ -233,7 +220,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         if ((now - lastPlanSeconds) * 1000 < Tuning.replanIntervalMs) return;
         Camera camera = visionRobot.camera;
         if (camera.isFrameStale()) {
-            clearPlan("vision: " + BallCollectionAuto.visionState(camera));
+            clearPlan("vision: " + CollectionDisplay.visionState(camera));
             balls = new Ball[0];
             plannedFrom = Collections.emptyList();
             plannedSettings = null;
@@ -351,8 +338,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         }
         route = RouteOptimizer.findOptimalRoute(pose, balls, pose, region, obstacles, shape, Tuning.railGapIn, false);
         plan = RoutePathBuilder.build(route);
-        intakeDrawing = plan.intake == null ? null : BallCollectionTest.fieldPolyline(plan.intake);
-        returnDrawing = plan.back == null ? null : BallCollectionTest.fieldPolyline(plan.back);
+        intakeDrawing = plan.intake == null ? null : CollectionDisplay.fieldPolyline(plan.intake);
+        returnDrawing = plan.back == null ? null : CollectionDisplay.fieldPolyline(plan.back);
     }
 
     private static List<Obstacle> obstacles() {
@@ -388,12 +375,12 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected void telemetry() {
-        String state = routeRun != null ? BallCollectionTest.runState(routeRun)
+        String state = routeRun != null ? CollectionDisplay.runState(routeRun)
                 : plan == null ? "IDLE (no plan)" : "IDLE (set run=1 to drive)";
         telemetry.addData("State", state);
         if (!refused.isEmpty()) telemetry.addData("Run refused", refused);
         Camera camera = visionRobot.camera;
-        if (camera.isFrameStale()) telemetry.addData("Vision", BallCollectionAuto.visionState(camera));
+        if (camera.isFrameStale()) telemetry.addData("Vision", CollectionDisplay.visionState(camera));
         if (keepIn != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, keepIn);
         telemetry.addData("Balls", "%d tracked; skipped %d off our half, %d out of the intake's reach, %d beyond %.0f in, %d on the driven path; planning %d",
                 camera.getFieldBalls().size(), skippedOutside, skippedUnreachable, skippedRange, Tuning.maxRangeIn, skippedDriven,
@@ -417,9 +404,9 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             telemetry.addData("Intake stops", "%d of %d (the intake sweeps up the rest)",
                     plan.essentialStops, route.order.length);
         }
-        telemetry.addData("Intake path", plan.intake == null ? "none" : BallCollectionTest.describe(plan.intakeReroute));
+        telemetry.addData("Intake path", plan.intake == null ? "none" : CollectionDisplay.describe(plan.intakeReroute));
         telemetry.addData("Return path", plan.back == null ? "none (already there)"
-                : BallCollectionTest.describe(plan.returnReroute));
+                : CollectionDisplay.describe(plan.returnReroute));
     }
 
     private String label(Ball ball) {
@@ -429,28 +416,20 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected void dashboardOverlay(Canvas overlay) {
-        if (keepIn != null) BallCollectionTest.drawKeepIn(overlay, keepIn);
-        BallCollectionTest.drawObstacles(overlay, obstacles);
+        if (keepIn != null) CollectionDisplay.drawKeepIn(overlay, keepIn);
+        CollectionDisplay.drawObstacles(overlay, obstacles);
 
         // Every tracked ball, outlined in its colour; the planned ones are filled below.
         for (FieldBall b : visionRobot.camera.getFieldBalls()) {
             double[] p = FieldVisualization.toField(b.x, b.y);
-            overlay.setStroke(b.visible() ? color(b.type) : "#9E9E9E");
+            overlay.setStroke(b.visible() ? CollectionDisplay.color(b.type) : "#9E9E9E");
             overlay.strokeCircle(p[0], p[1], b.type.diameterIn / 2);
         }
         for (int i = 0; i < balls.length; i++) {
             double[] p = FieldVisualization.toField(balls[i].x, balls[i].y);
-            overlay.setFill(color(plannedFrom.get(i).type));
+            overlay.setFill(CollectionDisplay.color(plannedFrom.get(i).type));
             overlay.fillCircle(p[0], p[1], balls[i].radius);
         }
-        if (plan != null) BallCollectionTest.drawPlan(overlay, plan, intakeDrawing, returnDrawing, shape);
-    }
-
-    private static String color(BallType type) {
-        switch (type) {
-            case POLLEN: return "#FFD600";
-            case NECTAR_RED: return "#E53935";
-            default: return "#1E88E5";
-        }
+        if (plan != null) CollectionDisplay.drawPlan(overlay, plan, intakeDrawing, returnDrawing, shape);
     }
 }
