@@ -8,6 +8,7 @@ import java.util.Map;
 final class Samples {
     private double[] values = new double[256];
     private int count;
+    private long lastTickNs;
 
     void add(double ms) {
         if (count == values.length) values = Arrays.copyOf(values, count * 2);
@@ -16,6 +17,18 @@ final class Samples {
 
     void addNanos(long nanos) {
         add(nanos / 1e6);
+    }
+
+    /** Adds the time since the previous tick, so ticking once per loop records the loop period; true on the first tick. */
+    boolean tick(long nowNs) {
+        boolean first = lastTickNs == 0;
+        if (!first) addNanos(nowNs - lastTickNs);
+        lastTickNs = nowNs;
+        return first;
+    }
+
+    long lastTickNs() {
+        return lastTickNs;
     }
 
     int count() {

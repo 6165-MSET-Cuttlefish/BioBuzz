@@ -45,6 +45,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 KEY_PHASE = "Bench phase"
 KEY_STATUS = "Bench status"
 KEY_DONE = "BENCH DONE"
+KEY_LOOP = "Bench loop"
 
 BENCH_OPMODES = [
     "Bench: Probe", "Bench: Hub", "Bench: Framework Loop", "Bench: Raw Loop", "Bench: Failure Path",
@@ -53,6 +54,10 @@ BENCH_OPMODES = [
     "Bench: Power Readback", "Bench: Overlay NaN", "Bench: Planner Stop", "Bench: Webcam Thread Failure",
     "Bench: Pinpoint", "Bench: Clock", "Bench: OctoQuad", "Bench: OctoQuad Absent", "Bench: Expansion Hub",
 ]
+
+BENCHES = ("baseline", "hub", "loop", "failure", "gamepad", "write_recovery", "handover", "hardware_view", "webcam",
+           "webcam_failure", "limelight", "llfault", "sloth", "clock", "pinpoint", "octoquad", "octoquad_absent",
+           "expansion", "absent", "planner_stop", "overlay_nan")
 
 CONFIG_PROBE = "bench_probe"
 CONFIG_MAIN = "bench_main"
@@ -333,8 +338,8 @@ GP_SECOND_REST_EVERY_S = 0.2
 GP_SECOND_OFFSET_S = 0.07
 GP_VARIANTS = (("Bench: Gamepad", "gamepad", "iterative"), ("Bench: Gamepad Linear", "gamepad_linear", "linear"))
 GP_NOT_DELIVERED = {
-    "iterative": ("dashboard gamepads don't reach an iterative OpMode: expected only on slothboard before 6165.5, "
-                  "which writes gamepad1 directly and the SDK copies its own state over it before every loop"),
+    "iterative": ("regression: dashboard gamepads no longer reach an iterative OpMode (fixed in slothboard 6165.5): "
+                  "the SDK copies its own state over gamepad1 before every loop, so a write to gamepad1 is lost"),
     "linear": "the runner's RECEIVE_GAMEPAD_STATE never reached the OpMode (websocket or slothboard trouble)",
 }
 
@@ -664,7 +669,7 @@ class Dashboard:
                         self.done_line = data[KEY_DONE]
                     if self.recording is not None:
                         self.recording["packets"].append((now, data.get(KEY_PHASE, self.data.get(KEY_PHASE)),
-                                                          data.get("Bench loop"), size / max(1, len(packets))))
+                                                          data.get(KEY_LOOP), size / max(1, len(packets))))
                 if self.recording is not None:
                     self.recording["messages"] += 1
                     self.recording["bytes"] += size
@@ -690,6 +695,10 @@ class Dashboard:
                 return
             self.log(f"reconnecting after '{self.fatal}' to restore the config")
             self.fatal = None
+        self._reconnect()
+
+    def _reconnect(self):
+        with self.cond:
             old, self.ws, self.connected = self.ws, None, False
         if old is not None:
             old.close()
@@ -708,10 +717,7 @@ class Dashboard:
         except OSError as e:
             # The app can die under the socket (a config switch can get it killed) before the reader notices.
             self.log(f"dashboard send failed ({e}); reconnecting")
-            with self.cond:
-                old, self.ws, self.connected = self.ws, None, False
-            old.close()
-            self.connect(timeout=60)
+            self._reconnect()
             self.ws.send_text(json.dumps(obj))
 
     def fresh_active_config(self, timeout=10):
@@ -807,7 +813,7 @@ class FaultWatch:
     """What the dashboard websocket shows of one fault key: whether its FAULT row leads each packet the bench OpMode
     sent (the ones carrying its loop counter), whether the field overlay draws it red, and when it came and went."""
 
-    def __init__(self, key, loop_key="Bench loop"):
+    def __init__(self, key, loop_key=KEY_LOOP):
         self.caption = f"FAULT {key}"
         self.loop_key = loop_key
         self.start = time.monotonic()
@@ -976,6 +982,14 @@ class Adb:
             raise BenchError(f"the hub has no {path}: {(r.stderr or r.stdout).strip()}")
         return r.stdout
 
+    def pull_bench_file(self, name, local):
+        if self.private:
+            local.write_text(self.read_bench_file(name))
+            return
+        r = self._raw(["-s", self.serial, "pull", f"{HUB_BENCH_DIR}/{name}", str(local)])
+        if r.returncode != 0:
+            raise BenchError(f"the hub has no {HUB_BENCH_DIR}/{name}: {r.stderr.strip()}")
+
     def mark(self, text):
         self.run("shell", f"log -t BENCH_RUNNER {shlex.quote(text)}", check=False)
 
@@ -988,13 +1002,15 @@ class Adb:
         debuggable app, which the IDE's Run button installs."""
         return self.active_config_entry()["name"]
 
-    def active_config_entry(self):
+    def _read_prefs(self):
         r = self._raw(["-s", self.serial, "shell", f"run-as {RC_PACKAGE} cat {RC_PREFS}"])
         try:
-            root = ElementTree.fromstring(r.stdout)
+            return ElementTree.fromstring(r.stdout)
         except ElementTree.ParseError:
             raise BenchError(f"run-as can't read the Robot Controller's settings: {(r.stderr or r.stdout).strip()[:200]}")
-        for entry in root.iter("string"):
+
+    def active_config_entry(self):
+        for entry in self._read_prefs().iter("string"):
             if entry.get("name") == PREF_ACTIVE_CONFIG:
                 # RobotConfigFile.toString(), a JSON object.
                 return json.loads(entry.text)
@@ -1003,11 +1019,7 @@ class Adb:
     def stage_active_config(self, name, scratch, config=None):
         """Pushes a copy of the app's settings naming the active config, for switch_app().
         Read while the app is idle, so the file matches what it holds in memory."""
-        r = self._raw(["-s", self.serial, "shell", f"run-as {RC_PACKAGE} cat {RC_PREFS}"])
-        try:
-            root = ElementTree.fromstring(r.stdout)
-        except ElementTree.ParseError:
-            raise BenchError(f"run-as can't read the Robot Controller's settings: {(r.stderr or r.stdout).strip()[:200]}")
+        root = self._read_prefs()
         entry = next((e for e in root.iter("string") if e.get("name") == PREF_ACTIVE_CONFIG), None)
         if entry is None:
             entry = ElementTree.SubElement(root, "string", {"name": PREF_ACTIVE_CONFIG})
@@ -1120,8 +1132,7 @@ def extras(webcam_serial, limelight):
     if webcam_serial is not None:
         out.append(f"<Webcam name=\"aprilTagDetector\" serialNumber={attr(webcam_serial)} />")
     if limelight is not None:
-        out.append(f"<EthernetDevice name=\"limelight\" serialNumber={attr(limelight['serial'])} port=\"0\" "
-                   f"ipAddress={attr(limelight['ipAddress'])} />")
+        out.append(limelight_tag(limelight["ipAddress"], limelight["serial"]))
     return out
 
 
@@ -1149,20 +1160,24 @@ def bench_port_devices(xml_text):
     return found
 
 
-def limelight_tag(ip_address):
-    return (f"<EthernetDevice name=\"limelight\" serialNumber={attr(LIMELIGHT_CONFIG_SERIAL)} port=\"0\" "
+def limelight_tag(ip_address, serial=LIMELIGHT_CONFIG_SERIAL):
+    return (f"<EthernetDevice name=\"limelight\" serialNumber={attr(serial)} port=\"0\" "
             f"ipAddress={attr(ip_address)} />")
 
 
+def counted(summary):
+    return isinstance(summary, dict) and bool(summary.get("count"))
+
+
 def fmt(summary, unit="ms"):
-    if not isinstance(summary, dict) or not summary.get("count"):
+    if not counted(summary):
         return "n/a"
     return (f"p50 {summary['p50']:.2f} / p95 {summary['p95']:.2f} / p99 {summary.get('p99', float('nan')):.2f} / "
             f"max {summary['max']:.2f} {unit} (n={summary['count']})")
 
 
 def fmt_volts(summary):
-    if not isinstance(summary, dict) or not summary.get("count"):
+    if not counted(summary):
         return "n/a"
     return (f"min {summary['min']:.3f} / mean {summary['mean']:.3f} / p99 {summary['p99']:.3f} / max {summary['max']:.3f} V "
             f"(n={summary['count']})")
@@ -1181,13 +1196,13 @@ def fmt_plans(values):
 
 
 def fmt_cell(summary):
-    if not isinstance(summary, dict) or not summary.get("count"):
+    if not counted(summary):
         return "n/a"
     return f"{summary['p50']:.2f} / {summary['p95']:.2f} / {summary['max']:.2f}"
 
 
 def p50_diff(before, after):
-    if not all(isinstance(s, dict) and s.get("count") for s in (before, after)):
+    if not (counted(before) and counted(after)):
         return "n/a"
     return f"{after['p50'] - before['p50']:+.2f}"
 
@@ -1317,6 +1332,10 @@ class Runner:
         print(line, flush=True)
         self.logfile.write(line + "\n")
         self.logfile.flush()
+
+    def ask(self, text):
+        self.log(text)
+        input(">>> press Enter: ")
 
     def check(self, name, ok, detail, fail_means=None):
         self.checks.append((name, "PASS" if ok else "FAIL", detail, fail_means))
@@ -1681,9 +1700,9 @@ class Runner:
             return "the OpMode never logged its BenchReport start, so it is stuck before its first packet"
         if not self.dash.recording["messages"]:
             return "not even slothboard's INIT clear reached this socket, so it gets no telemetry at all"
-        return ("only slothboard's INIT clear arrived: its telemetry thread has probably died, which a NaN or infinite "
-                "field-overlay value in an earlier packet does until the app restarts (expected only before slothboard "
-                "6165.6)")
+        return ("only slothboard's INIT clear arrived: its telemetry thread has probably died until the app restarts, "
+                "which a NaN or infinite field-overlay value in an earlier packet causes only if slothboard 6165.6's "
+                "fix has regressed")
 
     def logcat_done(self, hub_t0, result_files):
         for line in self.adb.logcat_matches(hub_t0, "BENCH DONE ").splitlines():
@@ -1853,17 +1872,20 @@ class Runner:
     def _dashboard_stats(self, rec):
         seconds = max(1e-6, rec["end"] - rec["start"])
         per_phase = {}
+
+        def phase_at(phase, t):
+            return per_phase.setdefault(str(phase), {"packets": 0, "bytes": 0.0, "first": t, "last": t, "loops": set(),
+                                                     "images": 0, "imageBytes": 0})
+
         for t, phase, loop, size in rec["packets"]:
-            p = per_phase.setdefault(str(phase), {"packets": 0, "bytes": 0.0, "first": t, "last": t, "loops": set(),
-                                                  "images": 0, "imageBytes": 0})
+            p = phase_at(phase, t)
             p["packets"] += 1
             p["bytes"] += size
             p["last"] = t
             if loop is not None:
                 p["loops"].add(loop)
         for t, phase, size in rec["images"]:
-            p = per_phase.setdefault(str(phase), {"packets": 0, "bytes": 0.0, "first": t, "last": t, "loops": set(),
-                                                  "images": 0, "imageBytes": 0})
+            p = phase_at(phase, t)
             p["images"] += 1
             p["imageBytes"] += size
             p["last"] = max(p["last"], t)
@@ -1880,18 +1902,11 @@ class Runner:
 
     def pull(self, name, required=True):
         local = self.out / "raw" / f"{name}.json"
-        if self.adb.private:
-            try:
-                local.write_text(self.adb.read_bench_file(f"{name}.json"))
-            except BenchError:
-                if required:
-                    raise
-                return None
-            return json.loads(local.read_text())
-        r = self.adb._raw(["-s", self.adb.serial, "pull", f"{HUB_BENCH_DIR}/{name}.json", str(local)])
-        if r.returncode != 0:
+        try:
+            self.adb.pull_bench_file(f"{name}.json", local)
+        except BenchError:
             if required:
-                raise BenchError(f"the hub has no {HUB_BENCH_DIR}/{name}.json: {r.stderr.strip()}")
+                raise
             return None
         return json.loads(local.read_text())
 
@@ -2277,7 +2292,7 @@ class Runner:
         arrivals = []
 
         def hook(now, packet):
-            loop = telemetry_float((packet.get("data") or {}).get("Bench loop"))
+            loop = telemetry_float((packet.get("data") or {}).get(KEY_LOOP))
             if loop is not None:
                 arrivals.append(int(loop))
 
@@ -2455,7 +2470,7 @@ class Runner:
 
         def in_init():
             rec["readbackReadySeconds"] = self.wait_or_crash(
-                lambda: (telemetry_float(self.dash.data.get("Bench loop")) or 0) >= 20, 15)
+                lambda: (telemetry_float(self.dash.data.get(KEY_LOOP)) or 0) >= 20, 15)
             rec["selfCheck"] = self.dash.data.get("Bench self-check")
             self.send_on_side_socket(config_diff(HARDWARE_POWER_PATH, HARDWARE_VIEW_POWER))
             time.sleep(2)
@@ -2507,9 +2522,9 @@ class Runner:
                  "Linear twin polls without sleeping and sees every state the server delivers; the iterative bench "
                  "sees the state at the start of each loop. The hold + second client rows are measured, not judged: "
                  "a second websocket sends a rest state every 200 ms while the runner drives, as a second tab with the "
-                 "Gamepad view did before slothboard 6165.6, and every slothboard server so far applies every "
-                 "socket's state, so held loops reading the stick as 0 and extra lb rises are expected there. 6165.6 "
-                 "stops it in the client, which only --interactive sees.\n")
+                 "Gamepad view would without slothboard 6165.6's client fix, and the server applies every socket's "
+                 "state, so held loops reading the stick as 0 and extra lb rises are expected there. Only "
+                 "--interactive exercises the client fix.\n")
         self.summary += s
 
     def gp_send(self, phase, **pad):
@@ -2551,12 +2566,10 @@ class Runner:
                  "view.")
         for phase, _, text, _ in GP_INTERACTIVE:
             self.gp_mark(phase)
-            self.log(f">>> {text}, then come back here.")
-            input(">>> press Enter: ")
+            self.ask(f">>> {text}, then come back here.")
         self.gp_mark(GP_INTERACTIVE_IDLE)
-        self.log(">>> Unplug the gamepad and close the dashboard tab: the next benches time the bus and count gamepad "
+        self.ask(">>> Unplug the gamepad and close the dashboard tab: the next benches time the bus and count gamepad "
                  "states.")
-        input(">>> press Enter: ")
 
     def gp_second_client(self, side):
         self.gp_send(GP_SECOND)
@@ -2765,7 +2778,7 @@ class Runner:
                  f"{outcome.get('stopSecondsRunnerSide', 0):.2f} | {len(outcome['logMarkers'])} | {outcome['appRestarted']} |")
         time.sleep(1.5)
 
-    def run_absent_webcam(self):
+    def run_absent(self):
         self.activate_config(CONFIG_NO_WEBCAM, self.main_config(webcam=FAKE_WEBCAM_SERIAL))
         o = self.run_opmode("Bench: Webcam Stop", "webcam_absent", {"runId": "absent"}, start=False, timeout=25,
                             expect_crash=True, result_files=["webcam_stop_absent"], timeout_ok=True)
@@ -2929,8 +2942,7 @@ class Runner:
         rec = {}
 
         def prompt(text):
-            self.log(text)
-            input(">>> press Enter: ")
+            self.ask(text)
             return watch.seconds_now()
 
         def script():
@@ -3084,9 +3096,8 @@ class Runner:
 
         def open_rc_page():
             self.wait_or_crash(lambda: False, 3)
-            self.log(f">>> Open http://{self.args.host}:8080 in the Mac's browser now: the Robot Controller's own page, "
+            self.ask(f">>> Open http://{self.args.host}:8080 in the Mac's browser now: the Robot Controller's own page, "
                      "which sets the hub's clock while it is unset. Wait for it to load, then press Enter.")
-            input(">>> press Enter: ")
 
         o = self.run_opmode("Bench: Clock", "clock", {"timeoutMs": timeout_ms}, timeout=timeout_ms / 1000 + 60,
                             during=open_rc_page if interactive else None, result_files=["clock"])
@@ -3163,21 +3174,17 @@ class Runner:
                 rec["warnings"].append(warning)
             return self.dash.data.get(KEY_PINPOINT_STATUS)
 
-        def prompt(text):
-            self.log(text)
-            input(">>> press Enter: ")
-
         def script():
             ready = self.wait_or_crash(lambda: status() == "READY"
-                                       and (telemetry_float(self.dash.data.get("Bench loop")) or 0) > 20, 15)
+                                       and (telemetry_float(self.dash.data.get(KEY_LOOP)) or 0) > 20, 15)
             if ready is None:
                 rec["skipped"] = f"the Pinpoint wasn't READY before the unplug (status {status()!r}), or the OpMode crashed"
                 self.log(f"Pinpoint dropout skipped: {rec['skipped']}")
                 return
-            prompt(">>> PULL the Pinpoint's I2C cable out of the Control Hub (leave both pods in), then press Enter.")
+            self.ask(">>> PULL the Pinpoint's I2C cable out of the Control Hub (leave both pods in), then press Enter.")
             rec["notReadySeenS"] = self.wait_or_crash(lambda: status() not in (None, "READY"), 10)
             self.log(f"Pinpoint status {status()!r} on the dashboard {rec['notReadySeenS']} s after Enter")
-            prompt(">>> PLUG the Pinpoint's I2C cable back in, then press Enter.")
+            self.ask(">>> PLUG the Pinpoint's I2C cable back in, then press Enter.")
             rec["readyAgainS"] = self.wait_or_crash(lambda: status() == "READY", 30)
             self.wait_or_crash(keep_watching, 2)
 
@@ -3298,23 +3305,19 @@ class Runner:
             value = self.dash.data.get(KEY_OCTOQUAD_VALID)
             return None if value is None else str(value)
 
-        def prompt(text):
-            self.log(text)
-            input(">>> press Enter: ")
-
         def script():
             ready = self.wait_or_crash(lambda: valid() == "true"
-                                       and (telemetry_float(self.dash.data.get("Bench loop")) or 0) > 20, 15)
+                                       and (telemetry_float(self.dash.data.get(KEY_LOOP)) or 0) > 20, 15)
             if ready is None:
                 rec["skipped"] = (f"the OctoQuad's localizer reads weren't valid before the unplug (status "
                                   f"{self.dash.data.get(KEY_OCTOQUAD_STATUS)!r}), or the OpMode crashed")
                 self.log(f"OctoQuad dropout skipped: {rec['skipped']}")
                 return
-            prompt(">>> PULL the OctoQuad's I2C cable out of the Control Hub (leave both pods in), then press Enter.")
+            self.ask(">>> PULL the OctoQuad's I2C cable out of the Control Hub (leave both pods in), then press Enter.")
             rec["invalidSeenS"] = self.wait_or_crash(lambda: valid() == "false", 10)
             self.log(f"OctoQuad status {self.dash.data.get(KEY_OCTOQUAD_STATUS)!r}, valid {valid()!r} on the dashboard "
                      f"{rec['invalidSeenS']} s after Enter")
-            prompt(">>> PLUG the OctoQuad's I2C cable back in, then press Enter.")
+            self.ask(">>> PLUG the OctoQuad's I2C cable back in, then press Enter.")
             rec["validAgainS"] = self.wait_or_crash(lambda: valid() == "true", 30)
             self.wait_or_crash(keep_watching, 2)
 
@@ -3440,21 +3443,18 @@ class Runner:
         self.summary += self._expansion_summary(o, ch, address)
         if not self.args.interactive:
             return
-        self.log(EXPANSION_MOVE)
-        input(">>> press Enter: ")
+        self.ask(EXPANSION_MOVE)
         try:
             self.activate_config(CONFIG_EXPANSION_ODO, self.main_config(
                 expansion=(address, [pinpoint_tag(1), octoquad_tag(OCTOQUAD_BUS)])))
             o_eh, eh = self._expansion_hub("eh")
         except BenchError:
-            self.log(f">>> MOVE {EXPANSION_HOME}, then press Enter.")
-            input(">>> press Enter: ")
+            self.ask(f">>> MOVE {EXPANSION_HOME}, then press Enter.")
             raise
         except BaseException:
             self.log(f"!! the run is stopping: move {EXPANSION_HOME} before the next run")
             raise
-        self.log(f">>> MOVE {EXPANSION_HOME}, then press Enter.")
-        input(">>> press Enter: ")
+        self.ask(f">>> MOVE {EXPANSION_HOME}, then press Enter.")
         self.summary += self._expansion_moved_summary(ch, o_eh, eh)
 
     def _expansion_hub(self, run_id):
@@ -3857,12 +3857,10 @@ class Runner:
             self.run_probe()
             wanted = self.selection()
             self.activate_config(CONFIG_MAIN, self.main_config())
-            for name in ("baseline", "hub", "loop", "failure", "gamepad", "write_recovery", "handover", "hardware_view",
-                         "webcam", "webcam_failure", "limelight", "llfault", "sloth", "clock", "pinpoint", "octoquad",
-                         "octoquad_absent", "expansion", "absent", "planner_stop", "overlay_nan"):
+            for name in BENCHES:
                 if name in wanted:
                     self.log(f"=== {name} ===")
-                    self.guarded(name, getattr(self, f"run_{'absent_webcam' if name == 'absent' else name}"))
+                    self.guarded(name, getattr(self, f"run_{name}"))
         except BenchError as e:
             error = str(e)
             self.log(f"STOPPED: {e}")
@@ -3926,9 +3924,7 @@ class Runner:
 
     def selection(self):
         a = self.args
-        every = ("baseline", "hub", "loop", "failure", "gamepad", "write_recovery", "handover", "hardware_view",
-                 "webcam", "webcam_failure", "limelight", "llfault", "pinpoint", "octoquad", "expansion", "absent",
-                 "sloth", "clock", "planner_stop", "overlay_nan")
+        every = [n for n in BENCHES if n != "octoquad_absent"]
         chosen = {n for n in every if getattr(a, n)}
         explicit = bool(chosen) or a.all
         if not chosen:
@@ -3937,36 +3933,32 @@ class Runner:
             chosen.add("octoquad_absent")
         if a.no_sloth:
             chosen.discard("sloth")
-        if "expansion" in chosen and self.expansion is None:
-            address = a.expansion_address
-            if explicit:
-                raise BenchError(f"No Expansion Hub answered at address {address}: connect one to the Control Hub's RS485 "
-                                 "port and a 12 V supply, pass its address with --expansion-address N, or drop --expansion")
-            self.log(f"no Expansion Hub answered at address {address}: skipping the Expansion Hub bench")
-            self.summary.append(f"_Expansion Hub bench skipped: no Expansion Hub answered at address {address}._\n")
-            chosen.discard("expansion")
-        if "webcam" in chosen and self.webcam is None:
-            if explicit:
-                raise BenchError("No webcam is plugged in: plug a UVC webcam into a Control Hub USB port, or drop --webcam")
-            self.log("no webcam plugged in: skipping the webcam benches")
-            self.summary.append("_Webcam benches skipped: no webcam plugged in._\n")
-            chosen.discard("webcam")
-        if "webcam_failure" in chosen and self.webcam is None:
-            if explicit:
-                raise BenchError("No webcam is plugged in: plug a UVC webcam into a Control Hub USB port, or drop "
-                                 "--webcam-failure")
-            self.log("no webcam plugged in: skipping the webcam thread failure bench")
-            self.summary.append("_Webcam thread failure bench skipped: no webcam plugged in._\n")
-            chosen.discard("webcam_failure")
-        if "limelight" in chosen and self.limelight is None:
-            if explicit:
-                raise BenchError("No Limelight answers on an Ethernet-over-USB interface: plug the Limelight 3A into a "
-                                 "Control Hub USB port and wait for it to boot, or drop --limelight")
-            self.log("no Limelight plugged in: skipping the Limelight bench")
-            self.summary.append("_Limelight bench skipped: no Limelight plugged in._\n")
-            chosen.discard("limelight")
+        address = a.expansion_address
+        self._skip_unless(chosen, explicit, "expansion", self.expansion is not None,
+                          f"no Expansion Hub answered at address {address}", "Expansion Hub bench",
+                          f"No Expansion Hub answered at address {address}: connect one to the Control Hub's RS485 "
+                          "port and a 12 V supply, pass its address with --expansion-address N, or drop --expansion")
+        self._skip_unless(chosen, explicit, "webcam", self.webcam is not None, "no webcam plugged in", "webcam benches",
+                          "No webcam is plugged in: plug a UVC webcam into a Control Hub USB port, or drop --webcam")
+        self._skip_unless(chosen, explicit, "webcam_failure", self.webcam is not None, "no webcam plugged in",
+                          "webcam thread failure bench",
+                          "No webcam is plugged in: plug a UVC webcam into a Control Hub USB port, or drop "
+                          "--webcam-failure")
+        self._skip_unless(chosen, explicit, "limelight", self.limelight is not None, "no Limelight plugged in",
+                          "Limelight bench",
+                          "No Limelight answers on an Ethernet-over-USB interface: plug the Limelight 3A into a "
+                          "Control Hub USB port and wait for it to boot, or drop --limelight")
         self.log(f"benches: {sorted(chosen)}")
         return chosen
+
+    def _skip_unless(self, chosen, explicit, name, present, why, what, error):
+        if name not in chosen or present:
+            return
+        if explicit:
+            raise BenchError(error)
+        self.log(f"{why}: skipping the {what}")
+        self.summary.append(f"_{what[0].upper()}{what[1:]} skipped: {why}._\n")
+        chosen.discard(name)
 
 
 def parse_args(argv):

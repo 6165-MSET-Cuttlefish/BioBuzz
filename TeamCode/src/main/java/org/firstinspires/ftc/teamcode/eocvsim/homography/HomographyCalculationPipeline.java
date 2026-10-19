@@ -354,19 +354,13 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     private static String buildHomographyString(Mat h, int inputWidth, int inputHeight) {
         double sx = (double) inputWidth / OUTPUT_WIDTH_PX;
         double sy = (double) inputHeight / OUTPUT_HEIGHT_PX;
-        StringBuilder java = new StringBuilder("// calibrated at ")
-                .append(OUTPUT_WIDTH_PX).append('x').append(OUTPUT_HEIGHT_PX)
-                .append(" (from a ").append(inputWidth).append('x').append(inputHeight).append(" input)")
-                .append("\ndouble[][] H_ARRAY = {\n");
         StringBuilder python = new StringBuilder("UNDISTORT = ").append(UNDISTORT ? "True" : "False")
                 .append("\nCALIBRATION_SIZE = (")
                 .append(OUTPUT_WIDTH_PX).append(", ").append(OUTPUT_HEIGHT_PX).append(")\nH_ARRAY = (\n");
         for (int r = 0; r < 3; r++) {
-            String row = String.format("%.10e, %.10e, %.10e",
-                    h.get(r, 0)[0] * sx, h.get(r, 1)[0] * sy, h.get(r, 2)[0]);
-            java.append("    { ").append(row).append(r < 2 ? " },\n" : " }\n");
-            python.append("    (").append(row).append("),\n");
+            python.append("    (").append(String.format("%.10e, %.10e, %.10e",
+                    h.get(r, 0)[0] * sx, h.get(r, 1)[0] * sy, h.get(r, 2)[0])).append("),\n");
         }
-        return java.append("};\n\n").append(python).append(")").toString();
+        return python.append(")").toString();
     }
 }

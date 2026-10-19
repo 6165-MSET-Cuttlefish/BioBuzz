@@ -3,19 +3,24 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
+
+import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @TeleOp(name = "Mecanum", group = "Test")
 public class Mecanum extends LinearOpMode {
     @Override
     public void runOpMode() throws InterruptedException {
-        DcMotor frontLeftMotor = hardwareMap.dcMotor.get("fl");
-        DcMotor backLeftMotor = hardwareMap.dcMotor.get("bl");
-        DcMotor frontRightMotor = hardwareMap.dcMotor.get("fr");
-        DcMotor backRightMotor = hardwareMap.dcMotor.get("br");
+        DcMotor frontLeftMotor = hardwareMap.dcMotor.get(Drivetrain.FRONT_LEFT);
+        DcMotor backLeftMotor = hardwareMap.dcMotor.get(Drivetrain.BACK_LEFT);
+        DcMotor frontRightMotor = hardwareMap.dcMotor.get(Drivetrain.FRONT_RIGHT);
+        DcMotor backRightMotor = hardwareMap.dcMotor.get(Drivetrain.BACK_RIGHT);
 
-        frontLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
-        backLeftMotor.setDirection(DcMotorSimple.Direction.REVERSE);
+        BettaConstants.MecanumSettings m = BettaConstants.mecanum;
+        frontLeftMotor.setDirection(m.frontLeftDirection);
+        backLeftMotor.setDirection(m.backLeftDirection);
+        frontRightMotor.setDirection(m.frontRightDirection);
+        backRightMotor.setDirection(m.backRightDirection);
 
         waitForStart();
 

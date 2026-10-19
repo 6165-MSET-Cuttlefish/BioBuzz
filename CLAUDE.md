@@ -63,7 +63,7 @@ Pedro Pathing 3:
 
 **Faults** (`core/Faults`) are named, recoverable errors, for the Limelight only (see Fail fast). Keys are global and cleared at every `EnhancedOpMode` INIT, which also shows them; a bare `OpMode`/`LinearOpMode` must show them itself.
 
-**Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision activates `Camera.VisionState.DISABLED` in `initialize()`.
+**Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision calls `disableBallVision()` in `initialize()`.
 
 **Drivetrain** throws on a write while the follower drives the motors: an OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
 

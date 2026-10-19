@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.modules.Camera;
 
 public abstract class BioBuzzOpMode extends EnhancedOpMode {
 
@@ -11,5 +12,9 @@ public abstract class BioBuzzOpMode extends EnhancedOpMode {
     protected final Robot createRobot() {
         robot = new BioBuzzRobot(this); // shadows EnhancedOpMode.robot with a typed reference to the same object
         return robot;
+    }
+
+    protected final void disableBallVision() {
+        Camera.VisionState.DISABLED.activate();
     }
 }

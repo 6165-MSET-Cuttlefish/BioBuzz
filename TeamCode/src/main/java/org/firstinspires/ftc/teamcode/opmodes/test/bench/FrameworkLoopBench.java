@@ -191,6 +191,6 @@ public class FrameworkLoopBench extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         report.addTo(telemetry);
-        telemetry.addData("Bench loop", loopCounter);
+        telemetry.addData(BenchReport.KEY_LOOP, loopCounter);
     }
 }

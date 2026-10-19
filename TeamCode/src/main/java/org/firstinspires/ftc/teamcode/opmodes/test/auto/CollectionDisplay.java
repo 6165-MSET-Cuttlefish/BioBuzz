@@ -6,21 +6,36 @@ import com.pedropathing.math.Vector2D;
 import com.pedropathing.paths.Path;
 import com.pedropathing.paths.PathSegment;
 
+import java.util.Arrays;
 import java.util.List;
 
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
+import org.firstinspires.ftc.teamcode.architecture.core.Context;
+import org.firstinspires.ftc.teamcode.architecture.planner.Ball;
 import org.firstinspires.ftc.teamcode.architecture.planner.Obstacle;
 import org.firstinspires.ftc.teamcode.architecture.planner.Region;
 import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
 import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteRun;
+import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
+import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.BallType;
+import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
 final class CollectionDisplay {
     private static final int DRAW_SAMPLES = 20;
 
     private CollectionDisplay() {}
+
+    /** Planner settings outside the tests' Tuning; a new planner tunable goes here, or editing it leaves a stale plan. */
+    static List<Double> plannerInputs() {
+        return Arrays.asList(RobotGeometry.lengthIn, RobotGeometry.widthIn, RobotGeometry.intakeOffsetIn,
+                RobotGeometry.intakeWidthIn, (double) VisibilityGraphPlanner.pointsPerCorner,
+                VisibilityGraphPlanner.boundaryMarginIn, FieldConfig.fieldWidthInches,
+                (double) Context.allianceColor.ordinal());
+    }
 
     static String runState(RouteRun run) {
         if (run.isRunning()) return "DRIVING " + run.phase();
@@ -72,28 +87,41 @@ final class CollectionDisplay {
     }
 
     static void drawKeepIn(Canvas overlay, Region keepIn) {
-        double[] a = FieldVisualization.toField(keepIn.minX, keepIn.minY);
-        double[] b = FieldVisualization.toField(keepIn.maxX, keepIn.minY);
-        double[] c = FieldVisualization.toField(keepIn.maxX, keepIn.maxY);
-        double[] d = FieldVisualization.toField(keepIn.minX, keepIn.maxY);
+        double[][] c = fieldRect(keepIn);
         overlay.setStroke("#00C853");
-        overlay.strokePolyline(new double[]{a[0], b[0], c[0], d[0], a[0]}, new double[]{a[1], b[1], c[1], d[1], a[1]});
+        overlay.strokePolyline(new double[]{c[0][0], c[0][1], c[0][2], c[0][3], c[0][0]},
+                new double[]{c[1][0], c[1][1], c[1][2], c[1][3], c[1][0]});
     }
 
     static void drawObstacles(Canvas overlay, List<Obstacle> obstacles) {
         overlay.setStroke("#CC0000");
         overlay.setFill("#FF000033");
         for (Obstacle o : obstacles) {
-            Region r = o.bounds;
-            double[] a = FieldVisualization.toField(r.minX, r.minY);
-            double[] b = FieldVisualization.toField(r.maxX, r.minY);
-            double[] c = FieldVisualization.toField(r.maxX, r.maxY);
-            double[] d = FieldVisualization.toField(r.minX, r.maxY);
-            double[] xs = {a[0], b[0], c[0], d[0]};
-            double[] ys = {a[1], b[1], c[1], d[1]};
-            overlay.fillPolygon(xs, ys);
-            overlay.strokePolygon(xs, ys);
+            double[][] c = fieldRect(o.bounds);
+            overlay.fillPolygon(c[0], c[1]);
+            overlay.strokePolygon(c[0], c[1]);
         }
+    }
+
+    static void drawBalls(Canvas overlay, List<FieldBall> tracked, Ball[] planned, List<FieldBall> plannedFrom) {
+        for (FieldBall b : tracked) {
+            double[] p = FieldVisualization.toField(b.x, b.y);
+            overlay.setStroke(b.visible() ? color(b.type) : "#9E9E9E");
+            overlay.strokeCircle(p[0], p[1], b.type.diameterIn / 2);
+        }
+        for (int i = 0; i < planned.length; i++) {
+            double[] p = FieldVisualization.toField(planned[i].x, planned[i].y);
+            overlay.setFill(color(plannedFrom.get(i).type));
+            overlay.fillCircle(p[0], p[1], planned[i].radius);
+        }
+    }
+
+    private static double[][] fieldRect(Region r) {
+        double[] a = FieldVisualization.toField(r.minX, r.minY);
+        double[] b = FieldVisualization.toField(r.maxX, r.minY);
+        double[] c = FieldVisualization.toField(r.maxX, r.maxY);
+        double[] d = FieldVisualization.toField(r.minX, r.maxY);
+        return new double[][]{{a[0], b[0], c[0], d[0]}, {a[1], b[1], c[1], d[1]}};
     }
 
     static void drawPlan(Canvas overlay, RoutePathBuilder.Plan plan, double[][] intakeDrawing, double[][] returnDrawing,

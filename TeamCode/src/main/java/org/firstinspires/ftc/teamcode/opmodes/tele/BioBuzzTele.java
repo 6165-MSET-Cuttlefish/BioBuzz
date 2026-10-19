@@ -6,7 +6,6 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 
 @Config("BioBuzz Tele")
@@ -26,8 +25,7 @@ public class BioBuzzTele extends BioBuzzOpMode {
     protected void initialize() {
         slowToggle = new EdgeBooleanSupplier(() -> gamepad1.left_trigger > 0.1);
         headingLockToggle = new EdgeBooleanSupplier(() -> gamepad1.left_bumper);
-        // Ball vision is for autonomous; disabled, the Camera module never polls the Limelight.
-        Camera.VisionState.DISABLED.activate();
+        disableBallVision();
         applyCellTipFlag();
     }
 

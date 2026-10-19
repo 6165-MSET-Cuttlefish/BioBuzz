@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.qualcomm.hardware.limelightvision.LLResult;
 
+import org.firstinspires.ftc.teamcode.modules.vision.LimelightSync;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -27,7 +28,7 @@ final class ParsedLLResult extends LLResult {
     /** Entries carry every field LLResultTypes parses, so the parse costs what a busy pipeline's would. */
     static String synthetic(int balls, int fiducials, int detectors, double tsMs) {
         StringBuilder py = new StringBuilder();
-        py.append("6166,").append(balls);
+        py.append((long) LimelightSync.FILE_SCRIPT_ID).append(',').append(balls);
         for (int i = 0; i < balls; i++) py.append(",1,").append(20.5 + i * 3.25).append(',').append(-4.75 + i * 2.5);
         for (int i = 2 + 3 * balls; i < 32; i++) py.append(",0");
         String six = "[0,0,0,0,0,0]";

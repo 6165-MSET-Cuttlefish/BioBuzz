@@ -27,7 +27,6 @@ import java.util.Map;
 
 @TeleOp(name = "Bench: Limelight Fault", group = "Test")
 public class LimelightFaultBench extends EnhancedOpMode {
-    static final String KEY_LOOP = "Bench loop";
     private static final long ROW_INTERVAL_NS = 100_000_000L;
     private static final int MAX_ROWS = 6_000;
     // Limelight3A.lastUpdateTime starts at 0, so before the first poll the time since it is the whole epoch.
@@ -319,7 +318,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         report.addTo(telemetry);
-        telemetry.addData(KEY_LOOP, loopCounter);
+        telemetry.addData(BenchReport.KEY_LOOP, loopCounter);
         // The runner drives replug by hand and ends it with STOP, so it needs BENCH DONE as soon as it runs.
         if (running && mode.equals("replug") && !finished) {
             telemetry.addData(BenchReport.KEY_DONE, "replug: recording until STOP");

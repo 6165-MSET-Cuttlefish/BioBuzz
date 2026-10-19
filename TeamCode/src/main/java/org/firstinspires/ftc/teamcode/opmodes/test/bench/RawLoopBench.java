@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
+import org.firstinspires.ftc.teamcode.opmodes.test.auto.BarePedroAuto;
 import org.firstinspires.ftc.teamcode.opmodes.test.auto.CloseFlowerPaths;
 
 import java.util.LinkedHashMap;
@@ -28,10 +29,7 @@ public class RawLoopBench extends LinearOpMode {
         report.put("dsMsTransmissionInterval", telemetry.getMsTransmissionInterval());
         report.put("followerDriveCap", BenchRobot.DRIVE_CAP);
 
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStart(this);
 
         try {
             runPhase(report, follower, "idle", phaseSeconds);
@@ -40,10 +38,7 @@ public class RawLoopBench extends LinearOpMode {
             follower.stop();
             follower.drivetrain.stop();
             report.done("idle and following, " + phaseSeconds + " s each");
-            while (opModeIsActive()) {
-                report.sendIfDue();
-                sleep(20);
-            }
+            report.holdUntilStop(this);
         } finally {
             follower.stop();
             follower.drivetrain.stop();
@@ -56,23 +51,15 @@ public class RawLoopBench extends LinearOpMode {
         BenchIO.Gc gc = BenchIO.Gc.now();
         BenchIO.Cpu cpu = BenchIO.Cpu.now();
         long start = System.nanoTime();
-        long last = 0;
         long loops = 0;
         while (opModeIsActive() && (System.nanoTime() - start) / 1e9 < seconds) {
             long now = System.nanoTime();
-            if (last != 0) periods.addNanos(now - last);
-            last = now;
+            periods.tick(now);
             loops++;
 
             follower.update();
             Scheduler.execute();
-            telemetry.addData("x", follower.pose().x());
-            telemetry.addData("y", follower.pose().y());
-            telemetry.addData("heading", follower.pose().heading());
-            if (follower.currentPath() != null) {
-                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint());
-                telemetry.addData("Path number", follower.pathIndex());
-            }
+            BarePedroAuto.addFollowerTelemetry(telemetry, follower);
             telemetry.update();
             report.status("%s %.0f/%.0fs", name, (now - start) / 1e9, seconds);
             report.sendIfDue();

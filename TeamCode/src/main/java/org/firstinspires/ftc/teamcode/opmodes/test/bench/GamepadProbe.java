@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
-import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.qualcomm.robotcore.hardware.Gamepad;
 
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
@@ -111,7 +109,6 @@ final class GamepadProbe {
     private boolean headingLock;
     private boolean slowMode;
     private double[] lastChange;
-    private long lastPacketNs;
 
     GamepadProbe(BenchReport report, Gamepad gamepad1, Gamepad gamepad2, String variant) {
         this.report = report;
@@ -189,16 +186,10 @@ final class GamepadProbe {
         out.accept("gp phase", phaseCode);
         out.accept("lb edges", lbEdges);
         out.accept("zero-stick loops", zeroStick);
-        out.accept("Bench loop", loops);
+        out.accept(BenchReport.KEY_LOOP, loops);
     }
 
     void sendIfDue() {
-        long now = System.nanoTime();
-        if (now - lastPacketNs < PACKET_INTERVAL_NS) return;
-        lastPacketNs = now;
-        TelemetryPacket p = new TelemetryPacket(false);
-        report.addTo(p);
-        put(p::put);
-        FtcDashboard.getInstance().sendTelemetryPacket(p);
+        report.sendIfDue(PACKET_INTERVAL_NS, p -> put(p::put));
     }
 }

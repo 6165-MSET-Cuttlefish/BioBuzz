@@ -81,7 +81,6 @@ public class MockAuto extends EnhancedOpMode {
                 }));
     }
 
-    // start() resets the scheduler, so the sequence is scheduled here rather than where it is built.
     @Override
     protected void onStart() {
         Scheduler.schedule(sequence);

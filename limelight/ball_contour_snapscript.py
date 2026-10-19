@@ -10,6 +10,7 @@ llpython, 32 doubles: [0] SCRIPT_ID, [1] ball count N (0 to MAX_BALLS), then per
 [2 + 3i] type code (1 Pollen, 2 red Nectar, 3 blue Nectar), [3 + 3i] x and [4 + 3i] y in camera-frame ground inches.
 """
 
+import collections
 import math
 import time
 
@@ -113,9 +114,12 @@ _fps = 0.0
 _last_frame = None
 
 
+Candidate = collections.namedtuple("Candidate", "ball x y radius area fill cost")
+
+
 def _candidate(ball, cx, cy, radius, area, fill):
     cost = abs(area / EXPECT_AREA_PX - 1.0) + FILL_COST_WEIGHT * (1.0 - fill)
-    return ball, cx, cy, radius, area, fill, cost
+    return Candidate(ball, cx, cy, radius, area, fill, cost)
 
 
 def _single(ball, contour, raw_area, area_scale):
@@ -199,14 +203,13 @@ def _distort(points):
     return np.stack(((x * radial + dx) * fx + cx, (y * radial + dy) * fy + cy), axis=1)
 
 
-def _origin_px():
-    """Raw CALIBRATION_SIZE pixel of ground (0, 0)."""
-    return _distort(cv2.perspectiveTransform(np.zeros((1, 1, 2)), _H_INV).reshape(1, 2))[0]
+# Ground (0, 0) as a raw CALIBRATION_SIZE pixel.
+_ORIGIN_PX = _distort(cv2.perspectiveTransform(np.zeros((1, 1, 2)), _H_INV).reshape(1, 2))[0]
 
 
 def _to_ground(balls, scale_x, scale_y):
     """Ground (x, y) per ball, and whether it is below the horizon and within MAX_RANGE_IN."""
-    contacts = np.array([[b[1] * scale_x, (b[2] + b[3]) * scale_y] for b in balls], np.float64)
+    contacts = np.array([[b.x * scale_x, (b.y + b.radius) * scale_y] for b in balls], np.float64)
     pixels = _undistort(contacts)
     projected = np.dot(np.hstack((pixels, np.ones((len(pixels), 1)))), _H.T)
     w = projected[:, 2] * _GROUND_W_SIGN
@@ -225,19 +228,18 @@ def _label(image, text, origin, color, scale=0.5, thickness=1):
 
 def _draw_overlay(image, balls, ground, order, best, scale_x, scale_y):
     for rank, i in enumerate(order):
-        ball, x, y, radius, area, fill, _ = balls[i]
-        center = (int(round(x)), int(round(y)))
-        r = int(round(radius))
+        b = balls[i]
+        center = (int(round(b.x)), int(round(b.y)))
+        r = int(round(b.radius))
         cv2.circle(image, center, r, WHITE, 3 if i == best else 2)
         cv2.circle(image, center, 4, WHITE, -1)
         cv2.circle(image, (center[0], center[1] + r), 5, CONTACT, -1)
         _label(image, "%s%s%s (%.1f, %.1f)in a=%.0f f=%.2f"
-               % ("* " if i == best else "", "" if rank < MAX_BALLS else "dropped ", ball.label,
-                  ground[i][0], ground[i][1], area, fill),
-               (center[0] + r + 6, center[1] + r), ball.draw)
+               % ("* " if i == best else "", "" if rank < MAX_BALLS else "dropped ", b.ball.label,
+                  ground[i][0], ground[i][1], b.area, b.fill),
+               (center[0] + r + 6, center[1] + r), b.ball.draw)
 
-    origin = _origin_px()
-    ox, oy = int(origin[0] / scale_x), int(origin[1] / scale_y)
+    ox, oy = int(_ORIGIN_PX[0] / scale_x), int(_ORIGIN_PX[1] / scale_y)
     cv2.line(image, (ox - 10, oy), (ox + 10, oy), MAGENTA, 2)
     cv2.line(image, (ox, oy - 10), (ox, oy + 10), MAGENTA, 2)
     _label(image, "(0,0)", (ox + 14, oy), MAGENTA)
@@ -287,11 +289,11 @@ def runPipeline(image, llrobot):
         ground = []
     # Nearest first, so the ones the llpython budget drops are the far ones.
     order = sorted(range(len(balls)), key=lambda i: math.hypot(ground[i][0], ground[i][1]))
-    best = min(range(len(balls)), key=lambda i: balls[i][6]) if balls else None
+    best = min(range(len(balls)), key=lambda i: balls[i].cost) if balls else None
 
     llpython = [SCRIPT_ID, float(min(len(balls), MAX_BALLS))]
     for i in order[:MAX_BALLS]:
-        llpython.extend((float(balls[i][0].code), float(ground[i][0]), float(ground[i][1])))
+        llpython.extend((float(balls[i].ball.code), float(ground[i][0]), float(ground[i][1])))
 
     if mask_canvas is not None:
         image = mask_canvas
@@ -300,7 +302,7 @@ def runPipeline(image, llrobot):
 
     if best is None:
         return NO_CONTOUR, image, llpython
-    _, x, y, radius, _, _, _ = balls[best]
-    circle = cv2.ellipse2Poly((int(round(x)), int(round(y))), (int(round(radius)), int(round(radius))),
+    b = balls[best]
+    circle = cv2.ellipse2Poly((int(round(b.x)), int(round(b.y))), (int(round(b.radius)), int(round(b.radius))),
                               0, 0, 360, 10)
     return circle.reshape(-1, 1, 2).astype(np.int32), image, llpython

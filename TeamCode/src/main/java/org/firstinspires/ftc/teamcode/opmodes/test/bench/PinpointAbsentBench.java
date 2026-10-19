@@ -18,11 +18,7 @@ public class PinpointAbsentBench extends LinearOpMode {
     @Override
     public void runOpMode() {
         BenchReport report = new BenchReport("Pinpoint Absent", "pinpoint_absent");
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
-        if (!opModeIsActive()) return;
+        if (!report.holdUntilStart(this)) return;
 
         report.phase("create");
         Map<String, Object> create = new LinkedHashMap<>();
@@ -65,9 +61,6 @@ public class PinpointAbsentBench extends LinearOpMode {
             follower.drivetrain.stop();
         }
         report.done("create and 200 updates without a Pinpoint");
-        while (opModeIsActive()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStop(this);
     }
 }

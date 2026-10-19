@@ -44,11 +44,7 @@ public class WebcamFailureBench extends LinearOpMode {
         report.put("message", message);
         report.put("throwOnFrame", THROW_ON_FRAME);
         report.save();
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
-        if (!opModeIsActive()) return;
+        if (!report.holdUntilStart(this)) return;
 
         report.phase("streaming");
         ThrowingPipeline pipeline = new ThrowingPipeline(message);
@@ -73,9 +69,6 @@ public class WebcamFailureBench extends LinearOpMode {
             session.close();
             report.save();
         }
-        while (opModeIsActive()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStop(this);
     }
 }

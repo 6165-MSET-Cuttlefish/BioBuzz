@@ -89,6 +89,13 @@ final class BenchIO {
         RobotLog.ii(TAG, format, args);
     }
 
+    /** Fixed CPU work standing in for a loop body: its duration grows only when other threads take the core. */
+    static double workload() {
+        double acc = 0;
+        for (int i = 0; i < 20000; i++) acc += Math.sin(i * 0.001) * Math.cos(i * 0.002);
+        return acc;
+    }
+
     /** hardwareMap.get with a message that says how to get the device, instead of just that it is missing. */
     static <T> T require(HardwareMap hardwareMap, Class<T> type, String name, String howToGetIt) {
         try {
@@ -122,7 +129,7 @@ final class BenchIO {
 
     /** ART's runtime counters; bytes-allocated is process-wide, so dashboard and camera threads count too. */
     static final class Gc {
-        final long count, timeMs, blockingCount, blockingTimeMs, bytesAllocated, bytesFreed;
+        final long count, timeMs, blockingCount, blockingTimeMs, bytesAllocated;
         final long wallNanos = System.nanoTime();
 
         private Gc() {
@@ -131,7 +138,6 @@ final class BenchIO {
             blockingCount = stat("art.gc.blocking-gc-count");
             blockingTimeMs = stat("art.gc.blocking-gc-time");
             bytesAllocated = stat("art.gc.bytes-allocated");
-            bytesFreed = stat("art.gc.bytes-freed");
         }
 
         static Gc now() {

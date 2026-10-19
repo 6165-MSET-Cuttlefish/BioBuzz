@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
-import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -58,7 +56,6 @@ public class PowerReadbackBench extends OpMode {
     private long loops;
     private double lastHub = Double.NaN;
     private double lastSdk = Double.NaN;
-    private long lastPacketNs;
 
     @Override
     public void init() {
@@ -118,15 +115,12 @@ public class PowerReadbackBench extends OpMode {
         }
         lastHub = hubPower;
         lastSdk = sdkPower;
-        if (now - lastPacketNs < PACKET_INTERVAL_NS) return;
-        lastPacketNs = now;
-        TelemetryPacket p = new TelemetryPacket(false);
-        report.addTo(p);
-        p.put("Bench loop", loops);
-        p.put("Bench self-check", selfCheckOk ? "OK" : "FAILED");
-        p.put("fl hub power", String.format("%.3f", hubPower));
-        p.put("fl sdk power", String.format("%.3f", sdkPower));
-        FtcDashboard.getInstance().sendTelemetryPacket(p);
+        report.sendIfDue(PACKET_INTERVAL_NS, p -> {
+            p.put(BenchReport.KEY_LOOP, loops);
+            p.put("Bench self-check", selfCheckOk ? "OK" : "FAILED");
+            p.put("fl hub power", String.format("%.3f", hubPower));
+            p.put("fl sdk power", String.format("%.3f", sdkPower));
+        });
     }
 
     @Override

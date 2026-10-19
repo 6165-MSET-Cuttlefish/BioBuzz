@@ -7,7 +7,6 @@ import com.pedropathing.math.Pose;
 /** A Localizer with no hardware: the pose stays wherever setPose() put it, so a bare hub can run the follower. */
 final class SoftwareLocalizer implements Localizer {
     private MotionState state = MotionState.zero();
-    private long updates;
 
     @Override
     public void setPose(Pose pose) {
@@ -20,16 +19,10 @@ final class SoftwareLocalizer implements Localizer {
     }
 
     @Override
-    public void update() {
-        updates++;
-    }
+    public void update() {}
 
     @Override
     public void reset() {
         state = MotionState.zero();
-    }
-
-    long updates() {
-        return updates;
     }
 }

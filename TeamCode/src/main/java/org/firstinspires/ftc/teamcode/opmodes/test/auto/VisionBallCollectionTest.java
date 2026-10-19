@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 import com.acmerobotics.dashboard.canvas.Canvas;
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.math.Pose;
+import com.pedropathing.utils.Angle;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import java.util.ArrayList;
@@ -11,8 +12,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
@@ -23,7 +22,6 @@ import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
 import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteRun;
-import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
@@ -181,7 +179,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         Pose pose = robot.follower.pose();
         if (movedSincePlan(pose)) {
             refused = String.format("the robot moved %.1f in / turned %.0f deg since the plan; wait for the re-plan",
-                    pose.distance(startPose), Math.toDegrees(turn(pose, startPose)));
+                    pose.distance(startPose), turnDeg(pose, startPose));
             return;
         }
         refused = "";
@@ -192,18 +190,17 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     private boolean movedSincePlan(Pose pose) {
         return pose.distance(startPose) > Tuning.replanMoveIn
-                || Math.toDegrees(turn(pose, startPose)) > Tuning.replanTurnDeg;
+                || turnDeg(pose, startPose) > Tuning.replanTurnDeg;
     }
 
-    private static double turn(Pose a, Pose b) {
-        double d = a.heading() - b.heading();
-        return Math.abs(Math.atan2(Math.sin(d), Math.cos(d)));
+    private static double turnDeg(Pose a, Pose b) {
+        return Math.toDegrees(Angle.smallestDifference(a.heading(), b.heading()));
     }
 
     private void recordTrail(Pose pose) {
         if (!trail.isEmpty()) {
             Pose last = trail.get(trail.size() - 1);
-            if (pose.distance(last) < TRAIL_SPACING_IN && Math.toDegrees(turn(pose, last)) < TRAIL_TURN_DEG) return;
+            if (pose.distance(last) < TRAIL_SPACING_IN && turnDeg(pose, last) < TRAIL_TURN_DEG) return;
         }
         trail.add(pose);
     }
@@ -356,10 +353,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
                 (double) maxBalls(), Tuning.collectPollen ? 1.0 : 0.0, Tuning.collectRedNectar ? 1.0 : 0.0,
                 Tuning.collectBlueNectar ? 1.0 : 0.0, Tuning.includeLastSeen ? 1.0 : 0.0, Tuning.maxRangeIn,
                 Tuning.onField ? 1.0 : 0.0));
-        c.addAll(Arrays.asList(Tuning.wallGapIn, Tuning.railGapIn, RobotGeometry.lengthIn, RobotGeometry.widthIn,
-                RobotGeometry.intakeOffsetIn, RobotGeometry.intakeWidthIn,
-                (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,
-                FieldConfig.fieldWidthInches, (double) Context.allianceColor.ordinal()));
+        c.addAll(Arrays.asList(Tuning.wallGapIn, Tuning.railGapIn));
+        c.addAll(CollectionDisplay.plannerInputs());
         for (Box box : new Box[]{Tuning.obstacle1, Tuning.obstacle2, Tuning.obstacle3}) {
             c.addAll(Arrays.asList(box.enabled ? 1.0 : 0.0, box.x, box.y, box.sizeXIn, box.sizeYIn));
         }
@@ -412,17 +407,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         if (keepIn != null) CollectionDisplay.drawKeepIn(overlay, keepIn);
         CollectionDisplay.drawObstacles(overlay, obstacles);
 
-        // Every tracked ball, outlined in its colour; the planned ones are filled below.
-        for (FieldBall b : visionRobot.camera.getFieldBalls()) {
-            double[] p = FieldVisualization.toField(b.x, b.y);
-            overlay.setStroke(b.visible() ? CollectionDisplay.color(b.type) : "#9E9E9E");
-            overlay.strokeCircle(p[0], p[1], b.type.diameterIn / 2);
-        }
-        for (int i = 0; i < balls.length; i++) {
-            double[] p = FieldVisualization.toField(balls[i].x, balls[i].y);
-            overlay.setFill(CollectionDisplay.color(plannedFrom.get(i).type));
-            overlay.fillCircle(p[0], p[1], balls[i].radius);
-        }
+        CollectionDisplay.drawBalls(overlay, visionRobot.camera.getFieldBalls(), balls, plannedFrom);
         if (plan != null) CollectionDisplay.drawPlan(overlay, plan, intakeDrawing, returnDrawing, shape);
     }
 }

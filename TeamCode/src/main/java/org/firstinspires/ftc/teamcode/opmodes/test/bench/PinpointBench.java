@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
+import com.pedropathing.utils.Angle;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -20,7 +21,6 @@ import java.util.Map;
 @TeleOp(name = "Bench: Pinpoint", group = "Test")
 public class PinpointBench extends EnhancedOpMode {
     static final String KEY_STATUS = "Bench pinpoint status";
-    static final String KEY_LOOP = "Bench loop";
     private static final Pose SEED = new Pose(56, 8, Math.PI / 2);
     private static final double SEED_RUN_S = 3;
     private static final int MAX_ROWS = 6000;
@@ -127,7 +127,7 @@ public class PinpointBench extends EnhancedOpMode {
         running = true;
         if (!present) return;
         Pose pose = robot.follower.pose();
-        seed.put("offsetAtStartIn", offsetIn(pose, SEED));
+        seed.put("offsetAtStartIn", pose.distance(SEED));
         seed.put("turnAtStartDeg", turnDeg(pose, SEED));
     }
 
@@ -156,7 +156,7 @@ public class PinpointBench extends EnhancedOpMode {
         if (ready) frequencyHz.add(driver.getFrequency());
         Pose pose = robot.follower.pose();
         if (mode.equals("seed")) {
-            double offset = offsetIn(pose, SEED);
+            double offset = pose.distance(SEED);
             double turn = turnDeg(pose, SEED);
             if (!seed.containsKey("firstOffsetIn")) {
                 seed.put("firstOffsetIn", offset);
@@ -202,17 +202,12 @@ public class PinpointBench extends EnhancedOpMode {
         if (Math.abs(pose.x()) < 0.01 && Math.abs(pose.y()) < 0.01 && Math.abs(Math.sin(pose.heading())) < 1e-3) {
             return "zeroed";
         }
-        if (before != null && offsetIn(pose, before) < 0.01 && turnDeg(pose, before) < 0.01) return "frozen";
+        if (before != null && pose.distance(before) < 0.01 && turnDeg(pose, before) < 0.01) return "frozen";
         return "moved";
     }
 
-    static double offsetIn(Pose a, Pose b) {
-        return Math.hypot(a.x() - b.x(), a.y() - b.y());
-    }
-
     static double turnDeg(Pose a, Pose b) {
-        double d = a.heading() - b.heading();
-        return Math.abs(Math.toDegrees(Math.atan2(Math.sin(d), Math.cos(d))));
+        return Math.toDegrees(Angle.smallestDifference(a.heading(), b.heading()));
     }
 
     void finish() {
@@ -260,7 +255,7 @@ public class PinpointBench extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         report.addTo(telemetry);
-        telemetry.addData(KEY_LOOP, loops);
+        telemetry.addData(BenchReport.KEY_LOOP, loops);
         if (lastStatus != null) telemetry.addData(KEY_STATUS, lastStatus.name());
         if (running && present && mode.equals("dropout") && !finished) {
             telemetry.addData(BenchReport.KEY_DONE, "dropout: recording until STOP");

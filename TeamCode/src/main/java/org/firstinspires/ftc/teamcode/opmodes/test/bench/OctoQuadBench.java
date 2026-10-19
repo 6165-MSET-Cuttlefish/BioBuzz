@@ -18,7 +18,6 @@ import java.util.Map;
 public class OctoQuadBench extends EnhancedOpMode {
     static final String KEY_STATUS = "Bench octoquad status";
     static final String KEY_VALID = "Bench octoquad valid";
-    static final String KEY_LOOP = "Bench loop";
     private static final Pose SEED = new Pose(56, 8, Math.PI / 2);
     private static final double SEED_RUN_S = 3;
     private static final int MAX_ROWS = 6000;
@@ -148,7 +147,7 @@ public class OctoQuadBench extends EnhancedOpMode {
         running = true;
         if (!present) return;
         Pose pose = robot.follower.pose();
-        seed.put("offsetAtStartIn", PinpointBench.offsetIn(pose, SEED));
+        seed.put("offsetAtStartIn", pose.distance(SEED));
         seed.put("turnAtStartDeg", PinpointBench.turnDeg(pose, SEED));
     }
 
@@ -183,7 +182,7 @@ public class OctoQuadBench extends EnhancedOpMode {
         observed = true;
         Pose pose = robot.follower.pose();
         if (mode.equals("seed")) {
-            double offset = PinpointBench.offsetIn(pose, SEED);
+            double offset = pose.distance(SEED);
             double turn = PinpointBench.turnDeg(pose, SEED);
             if (!seed.containsKey("firstOffsetIn")) {
                 seed.put("firstOffsetIn", offset);
@@ -261,7 +260,7 @@ public class OctoQuadBench extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         report.addTo(telemetry);
-        telemetry.addData(KEY_LOOP, loops);
+        telemetry.addData(BenchReport.KEY_LOOP, loops);
         if (observed) {
             telemetry.addData(KEY_STATUS, lastStatus.name());
             telemetry.addData(KEY_VALID, String.valueOf(lastValid));

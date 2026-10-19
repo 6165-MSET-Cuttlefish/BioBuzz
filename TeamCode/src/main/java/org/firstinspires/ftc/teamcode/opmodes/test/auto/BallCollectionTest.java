@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
@@ -21,7 +20,6 @@ import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
 import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteRun;
-import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
@@ -191,10 +189,8 @@ public class BallCollectionTest extends EnhancedOpMode {
             c.add(b.y);
         }
         c.addAll(Arrays.asList(Tuning.startX, Tuning.startY, Tuning.startHeadingDeg,
-                Tuning.wallGapIn, Tuning.railGapIn, Tuning.forceSplineOnly ? 1.0 : 0.0,
-                RobotGeometry.lengthIn, RobotGeometry.widthIn, RobotGeometry.intakeOffsetIn, RobotGeometry.intakeWidthIn,
-                (double) VisibilityGraphPlanner.pointsPerCorner, VisibilityGraphPlanner.boundaryMarginIn,
-                FieldConfig.fieldWidthInches, (double) Context.allianceColor.ordinal()));
+                Tuning.wallGapIn, Tuning.railGapIn, Tuning.forceSplineOnly ? 1.0 : 0.0));
+        c.addAll(CollectionDisplay.plannerInputs());
         return c;
     }
 

@@ -5,54 +5,29 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @TeleOp(name = "Pinpoint Drive Test", group = "Test")
 public class PinpointDriveTest extends LinearOpMode {
 
     private GoBildaPinpointDriver pinpoint;
-    private DcMotorEx fl, bl, fr, br;
 
     @Override
     public void runOpMode() {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
 
-        BettaConstants.MecanumSettings m = BettaConstants.mecanum;
-        fl = motor(Drivetrain.FRONT_LEFT, m.frontLeftDirection);
-        bl = motor(Drivetrain.BACK_LEFT, m.backLeftDirection);
-        fr = motor(Drivetrain.FRONT_RIGHT, m.frontRightDirection);
-        br = motor(Drivetrain.BACK_RIGHT, m.backRightDirection);
-
-        BettaConstants.PinpointSettings p = BettaConstants.pinpoint;
-        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, p.name);
-        pinpoint.setOffsets(p.xPodOffset, p.yPodOffset, DistanceUnit.INCH);
-        pinpoint.setEncoderResolution(p.podType);
-        pinpoint.setEncoderDirections(p.xPodDirection, p.yPodDirection);
-        pinpoint.resetPosAndIMU(); // robot must be stationary (IMU recalibration)
+        BettaBareDrive drive = new BettaBareDrive(hardwareMap, true);
+        pinpoint = drive.pinpoint;
 
         while (opModeInInit()) update();
         while (opModeIsActive()) {
-            drive();
+            drive.drive(gamepad1);
             update();
         }
 
-        fl.setPower(0);
-        bl.setPower(0);
-        fr.setPower(0);
-        br.setPower(0);
-    }
-
-    private DcMotorEx motor(String name, DcMotorEx.Direction direction) {
-        DcMotorEx motor = hardwareMap.get(DcMotorEx.class, name);
-        motor.setDirection(direction);
-        motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        return motor;
+        drive.stop();
     }
 
     private void update() {
@@ -62,24 +37,5 @@ public class PinpointDriveTest extends LinearOpMode {
         telemetry.addData("heading (deg)", pinpoint.getHeading(AngleUnit.DEGREES));
         telemetry.addData("Pinpoint status", pinpoint.getDeviceStatus());
         telemetry.update();
-    }
-
-    private void drive() {
-        double y = -gamepad1.left_stick_y;
-        double x = gamepad1.left_stick_x;
-        double rx = gamepad1.right_stick_x;
-
-        double frontLeft = y + x + rx;
-        double backLeft = y - x + rx;
-        double frontRight = y - x - rx;
-        double backRight = y + x - rx;
-
-        double max = Math.max(1.0, Math.max(Math.abs(frontLeft), Math.max(Math.abs(backLeft),
-                Math.max(Math.abs(frontRight), Math.abs(backRight)))));
-
-        fl.setPower(frontLeft / max);
-        bl.setPower(backLeft / max);
-        fr.setPower(frontRight / max);
-        br.setPower(backRight / max);
     }
 }

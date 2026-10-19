@@ -37,11 +37,7 @@ public class ExpansionHubBench extends LinearOpMode {
         String runId = BenchIO.param(params, "runId", "ch");
         iterations = (int) BenchIO.param(params, "iterations", 300);
         report = new BenchReport("Expansion Hub", "expansion_hub_" + runId);
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
-        if (!opModeIsActive()) return;
+        if (!report.holdUntilStart(this)) return;
 
         report.phase("hubs");
         Map<String, Object> info = new LinkedHashMap<>();
@@ -123,10 +119,7 @@ public class ExpansionHubBench extends LinearOpMode {
 
         report.done(String.format("%d of %d hub(s) answered, %d odometry device(s), %d iterations",
                 measured.size(), hubs.size(), odometry.size(), iterations));
-        while (opModeIsActive()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStop(this);
     }
 
     private static Map<String, Object> device(String connectionInfo, int chipIdOrVersion) {

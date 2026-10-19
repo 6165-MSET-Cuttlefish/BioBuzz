@@ -100,6 +100,6 @@ public class ClockBench extends EnhancedOpMode {
     @Override
     protected void telemetry() {
         report.addTo(telemetry);
-        telemetry.addData("Bench loop", loops);
+        telemetry.addData(BenchReport.KEY_LOOP, loops);
     }
 }

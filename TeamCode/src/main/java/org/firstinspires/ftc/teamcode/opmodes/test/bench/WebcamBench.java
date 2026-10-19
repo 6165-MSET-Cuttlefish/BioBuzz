@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.stream.CameraStreamServer;
+import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.modules.vision.CellTipPipeline;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
@@ -26,8 +27,6 @@ import java.util.Map;
 public class WebcamBench extends LinearOpMode {
     static final String PLUG_IN = "plug a UVC webcam into a Control Hub USB port and rerun run_bench.py --webcam; "
             + "its probe writes the webcam's serial number into the bench config as " + CellTipCamera.WEBCAM_NAME;
-    static final String[] LABELS = {"SCORING", "AUDIENCE"};
-    static final int[][] RED_CLUSTERS = {{30, 31, 32, 33}, {34, 35, 36, 37}};
 
     private static final int WIDTH = 640;
     private static final int HEIGHT = 480;
@@ -43,11 +42,7 @@ public class WebcamBench extends LinearOpMode {
         report.put("webcamSerial", name.getSerialNumber().getString());
         double sub = BenchIO.param(report.params, "subPhaseSeconds", 5);
 
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
-        if (!opModeIsActive()) return;
+        if (!report.holdUntilStart(this)) return;
 
         boolean manual = WebcamControls.manual;
         int exposure = WebcamControls.exposureMs;
@@ -75,10 +70,7 @@ public class WebcamBench extends LinearOpMode {
             WebcamControls.gain = gain;
             WebcamControls.whiteBalanceK = wb;
         }
-        while (opModeIsActive()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStop(this);
     }
 
     static WebcamName requireWebcam(LinearOpMode op) {
@@ -172,7 +164,7 @@ public class WebcamBench extends LinearOpMode {
         r.put("maxStalenessMs", CellTipCamera.maxStalenessMs);
         r.put("noCamera", loopWhile("noCamera", null, null, seconds, false));
 
-        CellTipPipeline pipe = new CellTipPipeline("RED", LABELS, RED_CLUSTERS);
+        CellTipPipeline pipe = CellTipCamera.newPipeline(AllianceColor.RED);
         TimingPipeline timed = new TimingPipeline(pipe);
         WebcamSession session = new WebcamSession(hardwareMap, CellTipCamera.WEBCAM_NAME, timed);
         try {
@@ -223,17 +215,15 @@ public class WebcamBench extends LinearOpMode {
         BenchIO.Cpu cpu = BenchIO.Cpu.now();
         long frames0 = timed == null ? 0 : timed.frames();
         long start = System.nanoTime();
-        long last = 0;
         long lastSample = 0;
         long lastPreview = 0;
         double sink = 0;
         while (opModeIsActive() && (System.nanoTime() - start) / 1e9 < seconds) {
             long now = System.nanoTime();
-            if (last != 0) periods.addNanos(now - last);
-            last = now;
+            periods.tick(now);
             if (session != null) session.update();
             long w0 = System.nanoTime();
-            for (int i = 0; i < 20000; i++) sink += Math.sin(i * 0.001) * Math.cos(i * 0.002);
+            sink += BenchIO.workload();
             work.addNanos(System.nanoTime() - w0);
             if (session != null && now - lastSample > 100_000_000L) {
                 fps.add(session.webcam().getFps());
@@ -316,7 +306,7 @@ public class WebcamBench extends LinearOpMode {
     private Map<String, Object> closeAfter(long delayMs) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("delayMs", delayMs);
-        CellTipPipeline pipe = new CellTipPipeline("RED", LABELS, RED_CLUSTERS);
+        CellTipPipeline pipe = CellTipCamera.newPipeline(AllianceColor.RED);
         long created = System.nanoTime();
         WebcamSession session = new WebcamSession(hardwareMap, CellTipCamera.WEBCAM_NAME, pipe);
         m.put("constructMs", (System.nanoTime() - created) / 1e6);

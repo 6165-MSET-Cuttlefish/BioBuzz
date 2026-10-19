@@ -99,7 +99,6 @@ public class WriteRecoveryBench extends OpMode {
     private final Samples loopPeriods = new Samples();
     private long startNs;
     private long failSafeNs;
-    private long lastLoopNs;
 
     @Override
     public void init() {
@@ -154,8 +153,7 @@ public class WriteRecoveryBench extends OpMode {
     @Override
     public void loop() {
         long now = System.nanoTime();
-        if (lastLoopNs != 0) loopPeriods.addNanos(now - lastLoopNs);
-        lastLoopNs = now;
+        loopPeriods.tick(now);
         if (report.isDone()) {
             report.sendIfDue();
             return;

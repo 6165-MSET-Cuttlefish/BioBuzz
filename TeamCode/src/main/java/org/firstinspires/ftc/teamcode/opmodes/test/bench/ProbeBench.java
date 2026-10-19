@@ -33,11 +33,7 @@ public class ProbeBench extends LinearOpMode {
     @Override
     public void runOpMode() {
         BenchReport report = new BenchReport("Probe", "probe");
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
-        if (!opModeIsActive()) return;
+        if (!report.holdUntilStart(this)) return;
 
         report.phase("hubs");
         List<Map<String, Object>> hubs = new ArrayList<>();
@@ -93,10 +89,7 @@ public class ProbeBench extends LinearOpMode {
         if (originalResourceId != 0) report.put("originalResolvesTo", resourceName(resources, originalResourceId));
 
         report.done(hubs.size() + " hub(s), " + webcams.size() + " webcam(s), " + limelights.size() + " Limelight(s)");
-        while (opModeIsActive()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStop(this);
     }
 
     /** Mirrors the SDK's scan: an eth* interface's IPv4 address names the device; the Limelight is that subnet's .1. */

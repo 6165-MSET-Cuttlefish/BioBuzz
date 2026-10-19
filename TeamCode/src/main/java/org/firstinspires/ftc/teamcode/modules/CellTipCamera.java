@@ -44,6 +44,11 @@ public class CellTipCamera extends Module {
         this.hardwareMap = hardwareMap;
     }
 
+    public static CellTipPipeline newPipeline(AllianceColor alliance) {
+        return new CellTipPipeline(alliance.name(), CLUSTER_LABELS,
+                alliance == AllianceColor.BLUE ? BLUE_CLUSTERS : RED_CLUSTERS);
+    }
+
     @Override
     protected void initStates() {
         setStates(VisionState.ENABLED);
@@ -52,8 +57,7 @@ public class CellTipCamera extends Module {
     @Override
     public void init() {
         alliance = Context.allianceColor;
-        pipeline = new CellTipPipeline(alliance.name(), CLUSTER_LABELS,
-                alliance == AllianceColor.BLUE ? BLUE_CLUSTERS : RED_CLUSTERS);
+        pipeline = newPipeline(alliance);
         session = new WebcamSession(hardwareMap, WEBCAM_NAME, pipeline);
     }
 

@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
-import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.qualcomm.hardware.lynx.LynxAnalogInputController;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.hardware.lynx.LynxNackException;
@@ -148,7 +146,6 @@ public class AnalogPollBench extends OpMode {
     private final List<Phase> phases = new ArrayList<>();
     private final List<String> summary = new ArrayList<>();
     private int phaseIndex = -1;
-    private long lastPacketNs;
 
     private LynxModule hub;
     private AnalogInput sensorA;
@@ -265,13 +262,9 @@ public class AnalogPollBench extends OpMode {
     private void show() {
         report.addTo(telemetry);
         for (String line : summary) telemetry.addLine(line);
-        long now = System.nanoTime();
-        if (now - lastPacketNs < PACKET_INTERVAL_NS) return;
-        lastPacketNs = now;
-        TelemetryPacket packet = new TelemetryPacket(false);
-        report.addTo(packet);
-        for (String line : summary) packet.addLine(line);
-        FtcDashboard.getInstance().sendTelemetryPacket(packet);
+        report.sendIfDue(PACKET_INTERVAL_NS, packet -> {
+            for (String line : summary) packet.addLine(line);
+        });
     }
 
     private void buildSummary() {
@@ -401,7 +394,6 @@ public class AnalogPollBench extends OpMode {
         final long cpuNs = (long) (CPU_MS_PER_LOOP * 1e6);
         Poller thread;
         long startNs;
-        long last;
         double lastA = Double.NaN;
         int newValues;
         double sink;
@@ -423,9 +415,7 @@ public class AnalogPollBench extends OpMode {
         @Override
         boolean step() throws InterruptedException, LynxNackException {
             long t0 = System.nanoTime();
-            if (last == 0) startNs = t0;
-            else period.addNanos(t0 - last);
-            last = t0;
+            if (period.tick(t0)) startNs = t0;
             loops++;
             if (thread != null) thread.check();
             hub.clearBulkCache();
@@ -450,7 +440,7 @@ public class AnalogPollBench extends OpMode {
         }
 
         double newValuesPerSecond() {
-            return newValues / ((last - startNs) / 1e9);
+            return newValues / ((period.lastTickNs() - startNs) / 1e9);
         }
 
         @Override
@@ -481,7 +471,6 @@ public class AnalogPollBench extends OpMode {
         private volatile Throwable failure;
         private volatile boolean running = true;
         private long startNs;
-        private long last;
         private int polls;
         private int newValues;
 
@@ -500,8 +489,7 @@ public class AnalogPollBench extends OpMode {
                 int lastA = 0;
                 while (running && opModeThread.isAlive()) {
                     long t0 = System.nanoTime();
-                    if (last != 0) period.addNanos(t0 - last);
-                    last = t0;
+                    period.tick(t0);
                     int a = read();
                     commandMs.addNanos(System.nanoTime() - t0);
                     if (polls > 0 && a != lastA) newValues++;
@@ -542,7 +530,7 @@ public class AnalogPollBench extends OpMode {
         }
 
         double newValuesPerSecond() {
-            return newValues / ((last - startNs) / 1e9);
+            return newValues / ((period.lastTickNs() - startNs) / 1e9);
         }
 
         Map<String, Object> summary() {

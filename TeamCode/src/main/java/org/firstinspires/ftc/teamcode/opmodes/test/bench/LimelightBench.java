@@ -38,23 +38,19 @@ public class LimelightBench extends LinearOpMode {
 
         Map<String, Object> poller = new LinkedHashMap<>();
         poller.put("running", ll.isRunning());
-        poller.put("pollIntervalMs", HubBench.pollIntervalMs(ll));
+        poller.put("pollIntervalMs", BenchLimelight.pollIntervalMs(ll));
         report.put("pollerAtInit", poller);
         LLStatus initial = waitForStatus();
         report.put("initialStatus", status(initial));
         int originalPipeline = initial.getPipelineIndex();
         int savedTuningPipeline = LimelightBallSource.Tuning.pipeline;
 
-        while (opModeInInit()) {
-            report.sendIfDue();
-            sleep(20);
-        }
-        if (!opModeIsActive()) return;
+        if (!report.holdUntilStart(this)) return;
 
         try {
             proxyQuery(ballPipeline, proxyPipeline);
             statusLatency();
-            HubBench.startPolling(ll, SDK_DEFAULT_POLL_HZ);
+            BenchLimelight.startPolling(ll, SDK_DEFAULT_POLL_HZ);
             sync(ballPipeline, otherPipeline);
             report.phase("pipelineSwitch");
             Map<String, Object> switches = new LinkedHashMap<>();
@@ -81,18 +77,14 @@ public class LimelightBench extends LinearOpMode {
             report.put("restoreAccepted", ll.pipelineSwitch(originalPipeline));
             report.save();
         }
-        while (opModeIsActive()) {
-            report.sendIfDue();
-            sleep(20);
-        }
+        report.holdUntilStop(this);
     }
 
     private LLStatus waitForStatus() {
         long deadline = System.nanoTime() + 15000 * 1_000_000L;
         while (true) {
             LLStatus s = ll.getStatus();
-            // A failed request returns a default LLStatus, which has no name and a 0 °C temperature.
-            if (!s.getName().isEmpty() || s.getTemp() > 0) return s;
+            if (BenchLimelight.answered(s)) return s;
             if (System.nanoTime() > deadline) {
                 throw new IllegalStateException("The Limelight at the configured address doesn't answer /status: " + PLUG_IN);
             }
@@ -152,7 +144,7 @@ public class LimelightBench extends LinearOpMode {
 
     private int answeredIndex() {
         LLStatus s = ll.getStatus();
-        return !s.getName().isEmpty() || s.getTemp() > 0 ? s.getPipelineIndex() : -1;
+        return BenchLimelight.answered(s) ? s.getPipelineIndex() : -1;
     }
 
     private void statusLatency() {
@@ -372,7 +364,7 @@ public class LimelightBench extends LinearOpMode {
         for (int rate : new int[] {0, 100, 200, 250}) {
             report.status("%d Hz", rate);
             ll.stop();
-            if (rate > 0) HubBench.startPolling(ll, rate);
+            if (rate > 0) BenchLimelight.startPolling(ll, rate);
             Samples periods = new Samples();
             Samples work = new Samples();
             Samples staleness = new Samples();
@@ -381,13 +373,10 @@ public class LimelightBench extends LinearOpMode {
             int fresh = 0;
             double sink = 0;
             long start = System.nanoTime();
-            long last = 0;
             while (opModeIsActive() && (System.nanoTime() - start) / 1e9 < 6) {
-                long now = System.nanoTime();
-                if (last != 0) periods.addNanos(now - last);
-                last = now;
+                periods.tick(System.nanoTime());
                 long w0 = System.nanoTime();
-                for (int i = 0; i < 20000; i++) sink += Math.sin(i * 0.001) * Math.cos(i * 0.002);
+                sink += BenchIO.workload();
                 work.addNanos(System.nanoTime() - w0);
                 LLResult r = ll.getLatestResult();
                 if (r.getTimestamp() != lastTs) {
@@ -400,7 +389,7 @@ public class LimelightBench extends LinearOpMode {
             }
             double seconds = (System.nanoTime() - start) / 1e9;
             Map<String, Object> one = new LinkedHashMap<>();
-            one.put("pollIntervalMs", HubBench.pollIntervalMs(ll));
+            one.put("pollIntervalMs", BenchLimelight.pollIntervalMs(ll));
             one.put("newFramesPerSecond", fresh / seconds);
             one.put("stalenessWhenFirstSeenMs", staleness.summary());
             one.put("loopPeriodMs", periods.summary());
@@ -410,7 +399,7 @@ public class LimelightBench extends LinearOpMode {
             m.put(rate == 0 ? "off" : rate + "Hz", one);
             report.endPhase("pollRates", m);
         }
-        HubBench.startPolling(ll, SDK_DEFAULT_POLL_HZ);
+        BenchLimelight.startPolling(ll, SDK_DEFAULT_POLL_HZ);
     }
 
     /** The INIT sync (park, upload, confirm) twice, each from otherPipeline; ends settled on otherPipeline. */

@@ -11,7 +11,6 @@ import com.pedropathing.ivy.behaviors.EndCondition;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
-import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.planner.Ball;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
@@ -108,17 +107,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
     protected void dashboardOverlay(Canvas overlay) {
         if (collection.area() != null) CollectionDisplay.drawKeepIn(overlay, collection.area());
         CollectionDisplay.drawObstacles(overlay, collection.obstacles());
-        for (FieldBall b : robot.camera.getFieldBalls()) {
-            double[] p = FieldVisualization.toField(b.x, b.y);
-            overlay.setStroke(b.visible() ? CollectionDisplay.color(b.type) : "#9E9E9E");
-            overlay.strokeCircle(p[0], p[1], b.type.diameterIn / 2);
-        }
-        Ball[] balls = collection.balls();
-        for (int i = 0; i < balls.length; i++) {
-            double[] p = FieldVisualization.toField(balls[i].x, balls[i].y);
-            overlay.setFill(CollectionDisplay.color(collection.plannedBalls().get(i).type));
-            overlay.fillCircle(p[0], p[1], balls[i].radius);
-        }
+        CollectionDisplay.drawBalls(overlay, robot.camera.getFieldBalls(), collection.balls(), collection.plannedBalls());
         RoutePathBuilder.Plan plan = collection.plan();
         if (plan == null) return;
         if (plan != drawnPlan) {

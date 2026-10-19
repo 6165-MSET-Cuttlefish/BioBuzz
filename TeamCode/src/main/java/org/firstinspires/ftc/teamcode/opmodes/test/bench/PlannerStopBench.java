@@ -35,6 +35,7 @@ public class PlannerStopBench extends EnhancedOpMode {
     private volatile long stopSeenNs;
     private volatile int stopSeenDuringPlan;
     private volatile long stopSeenPlanStartNs;
+    private volatile Throwable watcherFailure;
 
     @Override
     protected Robot createRobot() {
@@ -92,15 +93,17 @@ public class PlannerStopBench extends EnhancedOpMode {
                 }
                 Thread.sleep(1);
             }
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException(e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        } catch (Throwable t) {
+            watcherFailure = t;
         }
     }
 
     @Override
     protected void initializeLoop() {
+        Throwable failure = watcherFailure;
+        if (failure != null) throw new IllegalStateException("Bench: Planner Stop's stop watcher failed", failure);
         long now = System.nanoTime();
         if (lastPlanStartNs != 0 && (now - lastPlanStartNs) / 1e6 < REPLAN_INTERVAL_MS) return;
         lastPlanStartNs = now;

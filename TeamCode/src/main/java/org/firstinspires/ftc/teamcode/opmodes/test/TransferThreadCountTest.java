@@ -19,7 +19,6 @@ public class TransferThreadCountTest extends OpMode {
     public static String upstreamSensorName = "analog0";
     public static String downstreamSensorName = "analog1";
     public static String motor1Name = "transfer1";
-    // Must match the analog bounds written by Configure Laser Rangefinder.
     public static double maxRangeMm = 1300;
     public static double diffThreshold = 25;
     public static double hysteresisMm = 10;

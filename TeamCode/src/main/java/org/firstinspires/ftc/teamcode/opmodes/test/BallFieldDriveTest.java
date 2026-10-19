@@ -6,14 +6,12 @@ import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
 import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
@@ -33,7 +31,7 @@ import java.util.List;
 public class BallFieldDriveTest extends LinearOpMode {
 
     private GoBildaPinpointDriver pinpoint;
-    private DcMotorEx fl, bl, fr, br;
+    private BettaBareDrive drive;
 
     private LimelightBallSource source;
     private final RobotStateHistory robotHistory = new RobotStateHistory();
@@ -46,23 +44,8 @@ public class BallFieldDriveTest extends LinearOpMode {
 
         out = new DualTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
 
-        BettaConstants.MecanumSettings m = BettaConstants.mecanum;
-        fl = hardwareMap.get(DcMotorEx.class, Drivetrain.FRONT_LEFT);
-        bl = hardwareMap.get(DcMotorEx.class, Drivetrain.BACK_LEFT);
-        fr = hardwareMap.get(DcMotorEx.class, Drivetrain.FRONT_RIGHT);
-        br = hardwareMap.get(DcMotorEx.class, Drivetrain.BACK_RIGHT);
-        fl.setDirection(m.frontLeftDirection);
-        bl.setDirection(m.backLeftDirection);
-        fr.setDirection(m.frontRightDirection);
-        br.setDirection(m.backRightDirection);
-
-        // The same calls, in the same order, as Pedro's PinpointLocalizer.
-        BettaConstants.PinpointSettings p = BettaConstants.pinpoint;
-        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, p.name);
-        pinpoint.setOffsets(p.xPodOffset, p.yPodOffset, DistanceUnit.INCH);
-        pinpoint.setEncoderResolution(p.podType);
-        pinpoint.setEncoderDirections(p.xPodDirection, p.yPodDirection);
-        pinpoint.resetPosAndIMU(); // robot must be stationary (IMU recalibration)
+        drive = new BettaBareDrive(hardwareMap, false);
+        pinpoint = drive.pinpoint;
 
         source = new LimelightBallSource(hardwareMap);
 
@@ -70,19 +53,16 @@ public class BallFieldDriveTest extends LinearOpMode {
             while (opModeInInit()) pump(false);
             while (opModeIsActive()) pump(true);
         } finally {
-            fl.setPower(0);
-            bl.setPower(0);
-            fr.setPower(0);
-            br.setPower(0);
+            drive.stop();
             source.stop();
         }
     }
 
-    private void pump(boolean drive) {
+    private void pump(boolean driving) {
         pinpoint.update();
         recordRobotState();
         boolean newFrame = source.update();
-        if (drive) driveFromGamepad();
+        if (driving) drive.drive(gamepad1);
 
         LimelightBallSource.Frame frame = source.latest();
         double now = System.nanoTime() * 1e-9;
@@ -123,26 +103,6 @@ public class BallFieldDriveTest extends LinearOpMode {
         FtcDashboard.getInstance().sendTelemetryPacket(packet);
 
         sleep(20);
-    }
-
-    private void driveFromGamepad() {
-        double y = -gamepad1.left_stick_y;
-        double x = gamepad1.left_stick_x;
-        double rx = gamepad1.right_stick_x;
-
-        // Mirrors Drivetrain.setMecanumTargets (robot-centric) so this drives like BioBuzz Tele.
-        double frontLeft = y + x + rx;
-        double backLeft = y - x + rx;
-        double frontRight = y - x - rx;
-        double backRight = y + x - rx;
-
-        double max = Math.max(1.0, Math.max(Math.abs(frontLeft), Math.max(Math.abs(backLeft),
-                Math.max(Math.abs(frontRight), Math.abs(backRight)))));
-
-        fl.setPower(frontLeft / max);
-        bl.setPower(backLeft / max);
-        fr.setPower(frontRight / max);
-        br.setPower(backRight / max);
     }
 
     private void recordRobotState() {

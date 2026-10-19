@@ -9,7 +9,6 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.Camera;
 
 /** CloseFlower on the framework; {@link CloseFlowerLinearAuto} drives the same paths without it, for comparison. */
 @Autonomous(name = "Close Flower Auto", group = "Test")
@@ -21,10 +20,8 @@ public class CloseFlowerAuto extends BioBuzzOpMode {
 
     @Override
     protected void initialize() {
-        // Pedro drives fl/bl/fr/br through its own motor objects; Drivetrain.write() would fight it for them.
         robot.drivetrain.setWriteEnabled(false);
-        // A path test; disabled, the Camera never polls the Limelight or needs the ball script on it.
-        Camera.VisionState.DISABLED.activate();
+        disableBallVision();
 
         CloseFlowerPaths paths = new CloseFlowerPaths();
         robot.follower.setPose(paths.start);

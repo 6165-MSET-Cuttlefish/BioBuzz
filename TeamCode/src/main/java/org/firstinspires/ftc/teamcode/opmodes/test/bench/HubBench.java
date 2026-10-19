@@ -22,7 +22,6 @@ import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.VoltageUnit;
 import org.firstinspires.ftc.robotcore.internal.network.NetworkConnectionHandler;
-import org.firstinspires.ftc.robotcore.internal.usb.EthernetOverUsbSerialNumber;
 import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.PoseRing;
@@ -34,13 +33,6 @@ import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -138,12 +130,7 @@ public class HubBench extends OpMode {
         report = new BenchReport("Hub", "hub");
         sdkDefaultDsIntervalMs = telemetry.getMsTransmissionInterval();
 
-        List<LynxModule> hubs = hardwareMap.getAll(LynxModule.class);
-        if (hubs.size() != 1 || !hubs.get(0).isParent()) {
-            throw new IllegalStateException("Bench: Hub expects the Control Hub alone in the config, found " + hubs.size()
-                    + " REV hubs; " + BenchIO.RUNNER_HINT);
-        }
-        hub = hubs.get(0);
+        hub = HubRegisters.controlHub(hardwareMap, "Bench: Hub");
         hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         motors = new DcMotorEx[] {
                 BenchIO.require(hardwareMap, DcMotorEx.class, "fl", BenchIO.RUNNER_HINT),
@@ -227,14 +214,11 @@ public class HubBench extends OpMode {
     private void buildPhases(boolean limelightPresent, double plannerScale) {
         phases.add(new Phase("sdkLoopEmpty") {
             final Samples periods = new Samples();
-            long last;
             long startNs;
 
             @Override boolean step() {
                 long now = System.nanoTime();
-                if (last != 0) periods.addNanos(now - last);
-                else startNs = now;
-                last = now;
+                if (periods.tick(now)) startNs = now;
                 loops++;
                 return now - startNs > 5_000_000_000L;
             }
@@ -559,7 +543,6 @@ public class HubBench extends OpMode {
         phases.add(new Phase("allocatingLoop") {
             Frame frame;
             final Samples periods = new Samples();
-            long last;
             long startNs;
 
             @Override void begin() {
@@ -569,9 +552,7 @@ public class HubBench extends OpMode {
 
             @Override boolean step() {
                 long now = System.nanoTime();
-                if (last != 0) periods.addNanos(now - last);
-                else startNs = now;
-                last = now;
+                if (periods.tick(now)) startNs = now;
                 loops++;
                 frame.build();
                 frame.overlay();
@@ -747,7 +728,7 @@ public class HubBench extends OpMode {
 
             @Override void begin() {
                 server = new FakeLimelightServer(3);
-                limelight = loopbackLimelight(FakeLimelightServer.PORT);
+                limelight = BenchLimelight.loopbackLimelight(FakeLimelightServer.PORT);
             }
 
             @Override boolean step() {
@@ -798,92 +779,9 @@ public class HubBench extends OpMode {
                 result.put("updatePythonInputsMs", pythonInputs.summary());
                 result.put("updateRobotOrientationMs", robotOrientation.summary());
                 result.put("requestsServed", server.requests());
-                result.put("limelightBaseUrl", baseUrl(limelight));
+                result.put("limelightBaseUrl", BenchLimelight.baseUrl(limelight));
             }
         });
-    }
-
-    private static Limelight3A limelightAt(String address) {
-        try {
-            return new Limelight3A(EthernetOverUsbSerialNumber.fromIpAddress(address, "bench"), "bench-" + address,
-                    InetAddress.getByName(address));
-        } catch (UnknownHostException e) {
-            throw new IllegalStateException("bad bench Limelight address " + address, e);
-        }
-    }
-
-    private static Limelight3A loopbackLimelight(int port) {
-        Limelight3A limelight = limelightAt("127.0.0.1");
-        String url = "http://127.0.0.1:" + port;
-        try {
-            Field f = Limelight3A.class.getDeclaredField("baseUrl");
-            f.setAccessible(true);
-            f.set(limelight, url);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new IllegalStateException("Limelight3A.baseUrl changed in this SDK", e);
-        }
-        if (!url.equals(baseUrl(limelight))) throw new IllegalStateException("Limelight3A.baseUrl didn't take " + url);
-        return limelight;
-    }
-
-    private static String baseUrl(Limelight3A limelight) {
-        try {
-            Field f = Limelight3A.class.getDeclaredField("baseUrl");
-            f.setAccessible(true);
-            return (String) f.get(limelight);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new IllegalStateException("Limelight3A.baseUrl changed in this SDK", e);
-        }
-    }
-
-    private static int unusedLoopbackPort() {
-        try (ServerSocket s = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
-            return s.getLocalPort();
-        } catch (IOException e) {
-            throw new IllegalStateException("can't find a free loopback port", e);
-        }
-    }
-
-    private static String connectFailure(int port) {
-        try (Socket s = new Socket()) {
-            s.connect(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 100);
-        } catch (IOException e) {
-            return e.getClass().getSimpleName();
-        }
-        throw new IllegalStateException("127.0.0.1:" + port + " accepted a connection; the refused case needs nothing there");
-    }
-
-    /**
-     * Starts the SDK poller at {@code hz}. Limelight3A ignores setPollRateHz while running and the device outlives the
-     * OpMode, so it is stopped first, and the interval is checked because the SDK clamps to 1-250 Hz silently.
-     */
-    static void startPolling(Limelight3A limelight, int hz) {
-        limelight.stop();
-        limelight.setPollRateHz(hz);
-        long interval = pollIntervalMs(limelight);
-        if (interval != 1000 / hz) {
-            throw new IllegalStateException("Limelight3A took " + hz + " Hz as a " + interval + " ms poll interval, not "
-                    + 1000 / hz + " ms (the SDK clamps to 1-250 Hz)");
-        }
-        limelight.start();
-        if (!limelight.isRunning()) throw new IllegalStateException("Limelight3A.start() didn't start the poller");
-    }
-
-    static long pollIntervalMs(Limelight3A limelight) {
-        try {
-            Field f = Limelight3A.class.getDeclaredField("pollIntervalMs");
-            f.setAccessible(true);
-            return f.getLong(limelight);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new IllegalStateException("Limelight3A.pollIntervalMs changed in this SDK", e);
-        }
-    }
-
-    /** Fixed CPU work standing in for a loop body: its duration grows only when other threads take the core. */
-    private static double workload() {
-        double acc = 0;
-        for (int i = 0; i < 20000; i++) acc += Math.sin(i * 0.001) * Math.cos(i * 0.002);
-        return acc;
     }
 
     private void addLimelightPollSim() {
@@ -897,7 +795,6 @@ public class HubBench extends OpMode {
                 final Samples staleness = new Samples();
                 double lastTs = Double.NaN;
                 int newResults;
-                long last;
                 long startNs;
                 double serverCpu0;
                 long requests0;
@@ -905,20 +802,18 @@ public class HubBench extends OpMode {
 
                 @Override void begin() {
                     server = new FakeLimelightServer(3);
-                    limelight = loopbackLimelight(FakeLimelightServer.PORT);
-                    if (rate > 0) startPolling(limelight, rate);
+                    limelight = BenchLimelight.loopbackLimelight(FakeLimelightServer.PORT);
+                    if (rate > 0) BenchLimelight.startPolling(limelight, rate);
                     serverCpu0 = server.cpuMs();
                     requests0 = server.requests();
                 }
 
                 @Override boolean step() {
                     long now = System.nanoTime();
-                    if (last != 0) periods.addNanos(now - last);
-                    else startNs = now;
-                    last = now;
+                    if (periods.tick(now)) startNs = now;
                     loops++;
                     long w0 = System.nanoTime();
-                    sink += workload();
+                    sink += BenchIO.workload();
                     work.addNanos(System.nanoTime() - w0);
                     LLResult r = limelight.getLatestResult();
                     if (r.getTimestamp() != lastTs) {
@@ -936,14 +831,14 @@ public class HubBench extends OpMode {
                 }
 
                 @Override void end() {
-                    double seconds = (last - startNs) / 1e9;
+                    double seconds = (periods.lastTickNs() - startNs) / 1e9;
                     release();
                     result.put("what", "the SDK's Limelight3A poller at " + (rate == 0 ? "off" : rate + " Hz")
                             + " against a fake Limelight on 127.0.0.1 while loop() runs a fixed workload; "
                             + "the fake's own CPU is reported separately and inflates the load");
                     result.put("requestedHz", rate);
-                    result.put("limelightBaseUrl", baseUrl(limelight));
-                    result.put("pollIntervalMs", pollIntervalMs(limelight));
+                    result.put("limelightBaseUrl", BenchLimelight.baseUrl(limelight));
+                    result.put("pollIntervalMs", BenchLimelight.pollIntervalMs(limelight));
                     result.put("requestsServedPerSecond", (server.requests() - requests0) / seconds);
                     result.put("fakeServerCpuMsPerSecond", (server.cpuMs() - serverCpu0) / seconds);
                     result.put("newResultsSeenPerSecond", newResults / seconds);
@@ -965,10 +860,11 @@ public class HubBench extends OpMode {
                 loops++;
                 switch (stage++) {
                     case 0: {
-                        int unused = unusedLoopbackPort();
-                        Map<String, Object> refused = timeSwitches(loopbackLimelight(unused), 10,
+                        int unused = BenchLimelight.unusedLoopbackPort();
+                        Map<String, Object> refused = BenchLimelight.timeSwitches(
+                                BenchLimelight.loopbackLimelight(unused), 10,
                                 "nothing listening on 127.0.0.1:" + unused + " (connection refused)");
-                        refused.put("refusedTargetProbe", connectFailure(unused));
+                        refused.put("refusedTargetProbe", BenchLimelight.connectFailure(unused));
                         cases.put("refusedPipelineSwitch", refused);
                         return false;
                     }
@@ -976,7 +872,8 @@ public class HubBench extends OpMode {
                         if (limelightPresent) {
                             cases.put("unpluggedPipelineSwitch", "skipped: a Limelight is plugged in, and this would switch its pipeline");
                         } else {
-                            cases.put("unpluggedPipelineSwitch", timeSwitches(limelightAt("172.29.0.1"), 3,
+                            cases.put("unpluggedPipelineSwitch", BenchLimelight.timeSwitches(
+                                    BenchLimelight.limelightAt("172.29.0.1"), 3,
                                     "the Limelight's own address with no Limelight plugged in"));
                         }
                         return false;
@@ -984,7 +881,8 @@ public class HubBench extends OpMode {
                         FakeLimelightServer s = new FakeLimelightServer(3);
                         try {
                             s.setMode(FakeLimelightServer.Mode.ERROR_500);
-                            cases.put("http500PipelineSwitch", timeSwitches(loopbackLimelight(FakeLimelightServer.PORT), 10,
+                            cases.put("http500PipelineSwitch", BenchLimelight.timeSwitches(
+                                    BenchLimelight.loopbackLimelight(FakeLimelightServer.PORT), 10,
                                     "a Limelight that answers every request with HTTP 500"));
                             s.check();
                         } finally {
@@ -996,9 +894,9 @@ public class HubBench extends OpMode {
                         FakeLimelightServer s = new FakeLimelightServer(3);
                         try {
                             s.setMode(FakeLimelightServer.Mode.HANG);
-                            Limelight3A ll = loopbackLimelight(FakeLimelightServer.PORT);
+                            Limelight3A ll = BenchLimelight.loopbackLimelight(FakeLimelightServer.PORT);
                             Map<String, Object> hang = new LinkedHashMap<>();
-                            hang.put("pipelineSwitch", timeSwitches(ll, 1,
+                            hang.put("pipelineSwitch", BenchLimelight.timeSwitches(ll, 1,
                                     "a Limelight that accepts the connection and never answers (booting or wedged)"));
                             Samples status = new Samples();
                             for (int i = 0; i < 3; i++) {
@@ -1024,20 +922,5 @@ public class HubBench extends OpMode {
                 result.putAll(cases);
             }
         });
-    }
-
-    private static Map<String, Object> timeSwitches(Limelight3A limelight, int count, String what) {
-        Samples ms = new Samples();
-        int accepted = 0;
-        for (int i = 0; i < count; i++) {
-            long t0 = System.nanoTime();
-            if (limelight.pipelineSwitch(4)) accepted++;
-            ms.addNanos(System.nanoTime() - t0);
-        }
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("what", what);
-        m.put("pipelineSwitchMs", ms.summary());
-        m.put("returnedTrue", accepted);
-        return m;
     }
 }
