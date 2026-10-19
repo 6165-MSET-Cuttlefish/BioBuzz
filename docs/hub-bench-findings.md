@@ -30,6 +30,8 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
     | 5, varied layouts | 6704 | 13669 | 16526 |
     | 5, on both sides of the rail | about 41000 | | 42906 |
 
+  - Every planner number here, the STOP trials included, is for an 18 × 18 in robot with its intake 9 in ahead. The
+    bench now plans for the Betta bot's 16 × 15 in shape, so rerun Bench: Hub and Bench: Planner Stop before comparing.
   - The cold first 4-ball plan took 227 ms.
   - STOP pressed during a plan restarted the Robot Controller app in 6 of 6 trials, about 16 s to come back. A restart
     loses dashboard edits and the alliance.

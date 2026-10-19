@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Refreshes the vendored goBILDA Prism driver from goBILDA's official Add-Prism branch.
-# Copies the four driver files verbatim except for the package line, and records the upstream commit.
+# Copies the four driver files verbatim except for the package name, and records the upstream commit.
 set -euo pipefail
 
 REF="${1:-Add-Prism}"
@@ -22,7 +22,7 @@ for f in "${FILES[@]}"; do
       -e 's/org\.firstinspires\.ftc\.teamcode\.Prism\./org.firstinspires.ftc.teamcode.vendor.prism./g' \
       "$WORK/prism/$SRC_PATH/$f" > "$DEST/$f"
 done
-printf 'repo=%s\nref=%s\ncommit=%s\ndate=%s\nfiles=%s\nnote=package line rewritten from teamcode.Prism to teamcode.vendor.prism; otherwise verbatim\n' \
+printf 'repo=%s\nref=%s\ncommit=%s\ndate=%s\nfiles=%s\nnote=package teamcode.Prism renamed to teamcode.vendor.prism in the package line and imports; otherwise verbatim\n' \
   "$REPO" "$REF" "$SHA" "$DATE" "${FILES[*]}" > "$DEST/PRISM_REV"
 
 echo "Vendored ${#FILES[@]} Prism files from $REF @ ${SHA:0:7} ($DATE)."

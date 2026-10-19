@@ -23,7 +23,6 @@ public final class Obstacle {
         return gapSquared(x, x, y, y) <= clearance * clearance;
     }
 
-    /** Whether any point of the box is within {@code clearance} of this obstacle's edge. */
     public boolean blocks(double minX, double maxX, double minY, double maxY, double clearance) {
         return gapSquared(minX, maxX, minY, maxY) <= clearance * clearance;
     }
