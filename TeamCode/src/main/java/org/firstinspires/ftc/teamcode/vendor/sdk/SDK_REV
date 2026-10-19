@@ -1,0 +1,7 @@
+repo=https://github.com/FIRST-Tech-Challenge/FtcRobotController.git
+ref=v12.0
+commit=e14c2aeb33e84d4ea21697beeea9ac49557be870
+date=2026-09-12
+path=FtcRobotController/src/main/java/org/firstinspires/ftc/robotcontroller/external/samples
+files=SensorOctoQuad.java UtilityOctoQuadConfigMenu.java
+note=package line rewritten from robotcontroller.external.samples to teamcode.vendor.sdk; @Disabled and its import removed; group "OctoQuad" changed to "Test"; otherwise verbatim

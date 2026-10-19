@@ -6,7 +6,7 @@ set -euo pipefail
 REF="${1:-Add-Prism}"
 REPO="https://github.com/goBILDA-Official/FtcRobotController-Add-Prism.git"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEST="$ROOT/TeamCode/src/main/java/org/firstinspires/ftc/teamcode/architecture/prism"
+DEST="$ROOT/TeamCode/src/main/java/org/firstinspires/ftc/teamcode/vendor/prism"
 SRC_PATH="TeamCode/src/main/java/org/firstinspires/ftc/teamcode/Prism"
 FILES=(Color.java Direction.java GoBildaPrismDriver.java PrismAnimations.java)
 WORK="$(mktemp -d)"
@@ -18,12 +18,12 @@ DATE="$(git -C "$WORK/prism" log -1 --format=%cs)"
 
 mkdir -p "$DEST"
 for f in "${FILES[@]}"; do
-  sed -e 's/^package org\.firstinspires\.ftc\.teamcode\.Prism;/package org.firstinspires.ftc.teamcode.architecture.prism;/' \
-      -e 's/org\.firstinspires\.ftc\.teamcode\.Prism\./org.firstinspires.ftc.teamcode.architecture.prism./g' \
+  sed -e 's/^package org\.firstinspires\.ftc\.teamcode\.Prism;/package org.firstinspires.ftc.teamcode.vendor.prism;/' \
+      -e 's/org\.firstinspires\.ftc\.teamcode\.Prism\./org.firstinspires.ftc.teamcode.vendor.prism./g' \
       "$WORK/prism/$SRC_PATH/$f" > "$DEST/$f"
 done
-printf 'repo=%s\nref=%s\ncommit=%s\ndate=%s\nfiles=%s\nnote=package line rewritten from teamcode.Prism to teamcode.architecture.prism; otherwise verbatim\n' \
+printf 'repo=%s\nref=%s\ncommit=%s\ndate=%s\nfiles=%s\nnote=package line rewritten from teamcode.Prism to teamcode.vendor.prism; otherwise verbatim\n' \
   "$REPO" "$REF" "$SHA" "$DATE" "${FILES[*]}" > "$DEST/PRISM_REV"
 
 echo "Vendored ${#FILES[@]} Prism files from $REF @ ${SHA:0:7} ($DATE)."
-echo "Review with: git -C \"$ROOT\" diff -- TeamCode/src/main/java/org/firstinspires/ftc/teamcode/architecture/prism"
+echo "Review with: git -C \"$ROOT\" diff -- TeamCode/src/main/java/org/firstinspires/ftc/teamcode/vendor/prism"

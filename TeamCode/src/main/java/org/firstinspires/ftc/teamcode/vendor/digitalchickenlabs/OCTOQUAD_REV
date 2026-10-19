@@ -1,0 +1,7 @@
+repo=https://github.com/DigitalChickenLabs/OctoQuad.git
+ref=master
+commit=6a074347ec8a13a3f079797a091770f673365c2e
+date=2026-08-31
+path=code_examples/FTC
+files=DeadwheelCalibrator.java HeadingScalarCalibrator.java
+note=package line rewritten from teamcode to teamcode.vendor.digitalchickenlabs; OctoQuadFWv3 replaced by the SDK's com.qualcomm.hardware.digitalchickenlabs.OctoQuad in the import and type names; @TeleOp given a name and group "Test"; otherwise verbatim

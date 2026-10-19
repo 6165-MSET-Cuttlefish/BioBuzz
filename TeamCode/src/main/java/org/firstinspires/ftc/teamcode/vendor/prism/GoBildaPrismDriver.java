@@ -20,7 +20,7 @@
  *   SOFTWARE.
  */
 
-package org.firstinspires.ftc.teamcode.architecture.prism;
+package org.firstinspires.ftc.teamcode.vendor.prism;
 
 import static com.qualcomm.robotcore.util.TypeConversion.byteArrayToInt;
 import static com.qualcomm.robotcore.util.TypeConversion.unsignedByteToInt;

@@ -1,0 +1,6 @@
+url=https://docs.brushlandlabs.com/sensors/laser-rangefinder/getting-started
+ref=docs page, unversioned
+date=2026-02-24
+fetched=2026-10-18
+files=LaserRangefinder.java
+note=the page's LaserRangefinder helper class moved into its own file and made public, as the page directs; package line and the imports it uses added; otherwise verbatim

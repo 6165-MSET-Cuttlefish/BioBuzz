@@ -20,7 +20,7 @@
  *   SOFTWARE.
  */
 
-package org.firstinspires.ftc.teamcode.architecture.prism;
+package org.firstinspires.ftc.teamcode.vendor.prism;
 
 public class Color {
     public int red;

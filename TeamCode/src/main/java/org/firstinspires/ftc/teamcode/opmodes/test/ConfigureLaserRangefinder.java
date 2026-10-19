@@ -7,6 +7,8 @@ import com.qualcomm.hardware.rev.RevColorSensorV3;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
+import org.firstinspires.ftc.teamcode.vendor.brushland.LaserRangefinder;
+
 @TeleOp(name = "Configure Laser Rangefinder", group = "Test")
 @Config
 public class ConfigureLaserRangefinder extends LinearOpMode {
@@ -17,6 +19,8 @@ public class ConfigureLaserRangefinder extends LinearOpMode {
     public static int measurementPeriodMs = 0;
     public static int roiSize = 4;
 
+    private static final int R_DISTMODE = 0x36;
+
     @Override
     public void runOpMode() {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
@@ -24,7 +28,7 @@ public class ConfigureLaserRangefinder extends LinearOpMode {
         LaserRangefinder lrf = new LaserRangefinder(hardwareMap.get(RevColorSensorV3.class, "Laser"));
         showConfig(lrf);
         waitForStart();
-        if (!lrf.isResponding()) {
+        if (!isResponding(lrf)) {
             throw new IllegalStateException("Laser rangefinder not answering on I2C: plug it into I2C bus 1 and revert it from analog first");
         }
 
@@ -46,13 +50,22 @@ public class ConfigureLaserRangefinder extends LinearOpMode {
     }
 
     private void showConfig(LaserRangefinder lrf) {
-        telemetry.addData("Answering on I2C", lrf.isResponding());
+        telemetry.addData("Answering on I2C", isResponding(lrf));
         telemetry.addData("Pin0", lrf.getPin0Mode());
         telemetry.addData("Pin1", lrf.getPin1Mode());
-        telemetry.addData("Distance Mode (1 SHORT, 2 MEDIUM, 3 LONG)", lrf.getDistanceModeRaw());
+        telemetry.addData("Distance Mode (1 SHORT, 2 MEDIUM, 3 LONG)", getDistanceModeRaw(lrf));
         telemetry.addData("Timing [Budget, Period]", java.util.Arrays.toString(lrf.getTiming()));
         telemetry.addData("ROI", java.util.Arrays.toString(lrf.getROI()));
         telemetry.addData("Optical Center", java.util.Arrays.toString(lrf.getOpticalCenter()));
         telemetry.update();
+    }
+
+    // A live sensor's timing budget is at least 5 ms; a silent or unplugged one reads all zeros.
+    private static boolean isResponding(LaserRangefinder lrf) {
+        return lrf.getTiming()[0] >= 5;
+    }
+
+    private static int getDistanceModeRaw(LaserRangefinder lrf) {
+        return lrf.i2c.read8(R_DISTMODE);
     }
 }

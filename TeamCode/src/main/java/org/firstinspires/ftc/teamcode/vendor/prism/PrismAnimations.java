@@ -20,7 +20,7 @@
  *   SOFTWARE.
  */
 
-package org.firstinspires.ftc.teamcode.architecture.prism;
+package org.firstinspires.ftc.teamcode.vendor.prism;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.qualcomm.robotcore.hardware.I2cDeviceSynchSimple;
 import com.qualcomm.robotcore.util.TypeConversion;
-import static org.firstinspires.ftc.teamcode.architecture.prism.GoBildaPrismDriver.LayerHeight;
+import static org.firstinspires.ftc.teamcode.vendor.prism.GoBildaPrismDriver.LayerHeight;
 
 public class PrismAnimations {
     public enum AnimationType{
