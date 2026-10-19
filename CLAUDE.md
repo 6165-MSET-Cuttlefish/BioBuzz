@@ -19,7 +19,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 IDE run configs are per laptop (`.idea/` isn't committed); set them up per Sloth's README.
 
-- **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/internal/`).
+- **TeamCode** (Run button, full install): first deploy, after a hub wipe or Sloth bump, and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`).
 - **deploySloth** (hot reload): everything else. It returns when the push ends, not the load: wait for logcat's `Processed Sloth Load` (or the RC screen or DS; about 5 s) before redeploying or pressing INIT, or the app restarts or the INIT never runs. An `EnhancedOpMode`'s `Code` status line names the Sloth jar it runs, or `installed APK`.
 - The hub's clock boots near 1970 until a DS connects or a browser opens `http://192.168.43.1:8080`. While it reads earlier than the APK's install time, Sloth deletes each load at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs.
 - A deploySloth replaces every `HardwareDevice` object, so state kept in one (e.g. the Limelight poll rate) doesn't carry across it.
@@ -147,7 +147,7 @@ Hardware configs ship in `res/xml/`; `limelight` is an EthernetDevice.
 
 - Don't change `JavaVersion.VERSION_1_8`, `targetSdkVersion 28` (both SDK-pinned), `compileSdk`, `minSdkVersion` or `ndkVersion` without a reason. Every DS app must match the SDK version (a mismatch fails inspection); an SDK bump also bumps `versionCode`/`versionName`.
 - Comments: none by default, in any language; only a one-line WHY a competent reader would otherwise get wrong. Usage notes go in this file.
-- Never hand-edit vendored `robotcontroller/internal/*`, `architecture/prism/*` or `pedro/procedures/*`. Refresh the last two with their `scripts/update-*.sh`, one commit each, plus any Pedro bump the Quickstart made in `TeamCode/build.gradle`.
+- Never hand-edit vendored `robotcontroller/internal/*`, `robotcontroller/external/utilities/*`, `architecture/prism/*` or `pedro/procedures/*`. Refresh the last two with their `scripts/update-*.sh`, one commit each, plus any Pedro bump the Quickstart made in `TeamCode/build.gradle`.
 - Fail fast: no catch to keep a loop alive, no silent fallback, no optional devices (`hardwareMap.get`, never `tryGet`); numeric guards and try/finally are fine. The only exceptions: `WebcamControls` ignores unsupported UVC controls, Limelight problems raise the `Limelight` fault instead of throwing while Limelight-dependent actions fall back, and the vendored `pedro/procedures/*` tuners use `tryGet` upstream.
 - `Limelight3A`:
   - Its POSTs (`pipelineSwitch`, `upload*`, `update*`, `reloadPipeline`) block up to 15 s and fail as a bare `false`. Call them only from one background thread (newest-wins one-slot mailbox, on change, rate-capped) and switch the pipeline once per OpMode, apart from `LimelightSync`'s park-and-return around an upload (the Limelight loads a script only on switching to its pipeline). `LimelightSync` is that sender.
@@ -155,4 +155,5 @@ Hardware configs ship in `res/xml/`; `limelight` is an EthernetDevice.
   - Poll errors are swallowed: health is `isConnected()`, `getTimeSinceLastUpdate()` and the result's contents.
   - `setPollRateHz` (clamped to 1–250 Hz) is ignored while polling, so `stop()` first; the rate persists across OpModes.
 - OpMode `group` is exactly `"Test"` for test OpModes and `"A"` for the competition teleop.
+- Two `@TeleOp`/`@Autonomous` OpModes with the same name (unnamed means its class name) fail the build via `TeamCode/libs/OpModeAnnotationProcessor.jar`; Sloth's scan would otherwise throw at run time. Always set `name`: the processor prints an unnamed OpMode's class name dozens of times per build.
 - Commits: one imperative subject line, no body, no trailer. Ask before pushing.

@@ -15,7 +15,7 @@ import static com.pedropathing.ivy.commands.Commands.*;
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 
 @Config
-@TeleOp
+@TeleOp(name = "IvyTest")
 public class IvyTest extends LinearOpMode {
     public static boolean end = false;
     public static boolean a = false, b = false;
