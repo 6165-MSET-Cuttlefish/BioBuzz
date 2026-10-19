@@ -4,7 +4,6 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
-import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 
 import java.lang.reflect.Field;
@@ -20,25 +19,7 @@ public class PlannerStopBench extends EnhancedOpMode {
     private static final double REPLAN_INTERVAL_MS = 250;
     private static final long WATCH_LIMIT_NS = 600_000_000_000L;
 
-    private static final class StopMark extends Module {
-        private final PlannerStopBench bench;
-
-        StopMark(PlannerStopBench bench) {
-            this.bench = bench;
-            setTelemetryEnabled(false);
-        }
-
-        @Override protected void initStates() {}
-        @Override protected void read() {}
-        @Override protected void write() {}
-
-        @Override
-        public void stop() {
-            bench.stopPassStarted(System.nanoTime());
-        }
-    }
-
-    private final StopMark stopMark = new StopMark(this);
+    private final StopHook stopMark = new StopHook(() -> stopPassStarted(System.nanoTime()));
     private final PlannerWorkload workload = new PlannerWorkload();
     private final List<Double> planMs = new ArrayList<>();
     private final Map<String, Object> stopResult = new LinkedHashMap<>();

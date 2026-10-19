@@ -79,8 +79,8 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
     Pinpoint reported `FAULT_BAD_READ` right after `BettaConstants.create`, then READY 71 ms later.
   - Rerun the Pinpoint step with the board untouched before blaming the Pinpoint. If the drift holds, a start pose set
     in INIT won't survive it, and neither would a re-seed at START.
-- **The OctoQuad hangs INIT when it's missing.** Pedro 3.0.1's `OctoQuadLocalizer` constructor waits for RUNNING in a
-  loop with no timeout and no STOP check.
+- **The OctoQuad hangs INIT when it's missing.** Pedro's `OctoQuadLocalizer` constructor (measured on 3.0.1, unchanged
+  in 3.0.2) waits for RUNNING in a loop with no timeout and no STOP check.
   - With nothing on the bus, or an MK1 reporting `FAULT_NO_IMU`, INIT hangs with no message.
   - STOP gets out: the SDK force-stopped the OpMode in about 1.3 s without restarting the app.
   - Pedro's `update()` also silently skips invalid reads (CRC error or not RUNNING) and keeps the last pose.

@@ -8,11 +8,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * The framework's INIT path (runInit through initialize) and nothing else, for run_bench.py's Sloth race: it
- * INITs this right after a deploySloth and checks whether the app restarted. The class loader shows whether the
- * hot-loaded code or the installed code ran.
- */
 @TeleOp(name = "Bench: Sloth Probe", group = "Test")
 public class SlothProbeBench extends EnhancedOpMode {
     private BenchReport report;

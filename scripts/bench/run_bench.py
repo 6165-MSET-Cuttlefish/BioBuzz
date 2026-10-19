@@ -104,10 +104,8 @@ FAKE_LIMELIGHT_PHASES = ("limelightPostLoopback", "limelightPollOff", "limelight
                          "limelightPoll250Hz", "limelightFailureModes")
 
 BALL_PIPELINE = 4
-LIMELIGHT_PROXY_PENDING = ("expected until slothboard 6165.6: its Limelight proxy forwards session.getUri(), which drops "
-                           "the query string, so /pipeline-switch?index=N reaches the Limelight as a bare /pipeline-switch "
-                           "while the proxy passes back the Limelight's answer. The dashboard's own Limelight view only "
-                           "GETs /status, so this bites the Limelight web UI and REST calls made through the hub's ports")
+LIMELIGHT_PROXY_PENDING = ("regression: slothboard's Limelight proxy drops the query string again (fixed in 6165.6), "
+                           "so /pipeline-switch?index=N reaches the Limelight as a bare /pipeline-switch")
 
 LIMELIGHT_FAULT_KEY = "Limelight"
 COLOR_FAULT = "#ff1744"
@@ -133,31 +131,25 @@ REPORT_STARTED = "starting, results in"
 CRASH_DETECT_S = 5.0
 FAILURE_INJECTED = "BENCH injected failure in "
 FAILURE_STUB_B_STOP = "BENCH stub B stop() failure"
-ERROR_LINE_PENDING = ("expected until the hub runs the EnhancedOpMode fix that copies a crash to the dashboard's Error "
-                      "line, or slothboard 6165.6, which fills the Error line from the crash: SDK 12 only logs "
-                      "user-code exceptions")
+ERROR_LINE_PENDING = ("regression: a crash no longer reaches the dashboard's Error line (SDK 12 only logs user-code "
+                      "exceptions; EnhancedOpMode and slothboard 6165.6 put them there)")
 
 WRITE_RECOVERY_LIMIT_MS = 500
-WRITE_CACHE_PENDING = ("expected until the WriteCache fix that re-sends an unchanged value at least every 250 ms: "
-                       "EnhancedMotor and EnhancedServo forward a value only when it changes, so after a hub reset, a "
-                       "keep-alive fail-safe or a write the hub dropped, the motor stays disabled and the servo limp "
-                       "until the commanded value moves")
+WRITE_CACHE_PENDING = ("regression: EnhancedMotor or EnhancedServo no longer re-sends an unchanged value at least "
+                       "every 250 ms, so after a hub reset or a dropped write the motor stays off or the servo limp")
 
 HANDOVER_MIN_SAMPLES = 10
 HANDOVER_CASES = (("C", "path cancelled from gameLoop"), ("S", "a command sequence turns writes back on"),
                   ("E", "collection-style command cancelled from gameLoop"))
-HANDOVER_PENDING = ("expected until the Drivetrain fix that resyncs Pedro's motor cache and its own when it takes the "
-                    "motors back: Pedro's IDLE stop() writes 0 to a leg Drivetrain's write cache believes already holds "
-                    "the stick, so the motors sit at 0 while the stick is held")
+HANDOVER_PENDING = ("regression: Drivetrain no longer resyncs Pedro's motor cache and its own when it takes the "
+                    "motors back, so the motors sit at 0 while the stick is held")
 
 HARDWARE_OPMODE = "Hardware"
 HARDWARE_POWER_PATH = ("__hardware__", "Motors", "fl", "Power")
 HARDWARE_VIEW_POWER = 0.2
 HARDWARE_VIEW_MOVED = 0.01
-HARDWARE_VIEW_PENDING = ("expected until slothboard 6165.6: after the built-in Hardware OpMode stops, its Motors tree "
-                         "stays in the dashboard's config and a Power edit still calls fl.setPower() from the websocket "
-                         "thread under whatever OpMode runs next, so the motor moves behind that OpMode's back (and "
-                         "behind EnhancedMotor's write cache, which won't re-send an unchanged 0)")
+HARDWARE_VIEW_PENDING = ("regression: a Power edit left in the dashboard's Hardware tree drives fl under the next "
+                         "OpMode again (fixed in slothboard 6165.6)")
 
 
 def config_value(root, path):
@@ -177,9 +169,8 @@ def config_diff(path, value):
 
 
 BASELINE_CATEGORY = "OptimizationToggles"
-BASELINE_PENDING = ("expected until slothboard 6165.6: slothboard records a baseline only from addConfigVariable(), "
-                    "which nothing on the robot calls, so the Config view's 'show only modified' filter is always "
-                    "empty and no field shows its deployed value")
+BASELINE_PENDING = ("regression: slothboard's config baseline is empty again (fixed in 6165.6), so the Config view's "
+                    "'show only modified' filter and baseline hints show nothing")
 
 SLOTH_PROBE_OPMODE = "Bench: Sloth Probe"
 DASH_TOGGLE_OPMODE = "Enable/Disable Dashboard"
@@ -206,12 +197,9 @@ SLOTH_PERSIST_PENDING = ("the app restart dropped the hot-loaded jar (Sloth keep
 SLOTH_LOAD_WAIT_S = 30
 SLOTH_LIST_SETTLE_S = 3
 SLOTH_ON_OPEN_S = 1.0
-SLOTH_LIST_PENDING = ("expected until slothboard 6165.6: while a hot load swaps TeamCode, slothboard broadcasts an "
-                      "OpMode list holding only its own OpModes ('Enable/Disable Dashboard' and 'Hardware'), the "
-                      "dashboard's picker falls to 'Enable/Disable Dashboard', and running that disables the dashboard "
-                      "on a hub with no Driver Station to turn it back on; every list also offers that OpMode. Runs "
-                      "where the app restarted or no load reached logcat aren't judged, and with none judged this "
-                      "FAILs without saying anything about slothboard")
+SLOTH_LIST_PENDING = ("regression: a hot load's OpMode list holds only slothboard's own OpModes, or a list offers "
+                      "'Enable/Disable Dashboard', again (fixed in slothboard 6165.6). With no run judged (app "
+                      "restarts, no load in logcat) this FAILs without saying anything about slothboard")
 
 FLOODGATE_THRESHOLD_A = 25.0
 FLOODGATE_LIMIT_V = FLOODGATE_THRESHOLD_A / 80.0 * 3.3
@@ -231,11 +219,9 @@ CAPTURE_CLOCK_PENDING = ("EasyOpenCV's captureTimeNanos isn't on System.nanoTime
                          "by the time the OpMode reads it. No fix is in flight")
 
 WEBCAM_FAILURE_FRAME = 30
-WEBCAM_FAILURE_PENDING = ("expected until the WebcamSession fix that catches a pipeline exception on the camera thread and "
-                          "rethrows it from update() on the OpMode thread, or slothboard 6165.6, which puts the crash text "
-                          "in errorMessage: EasyOpenCV catches the exception itself, stops the OpMode as if STOP were "
-                          "pressed (emulateEStop) and logs it only under the OpenCvCamera tag, which slothboard's "
-                          "OpModeManager monitor doesn't forward, so the dashboard shows the OpMode stopping with no cause")
+WEBCAM_FAILURE_PENDING = ("regression: a camera-thread pipeline exception no longer reaches the dashboard "
+                          "(WebcamSession rethrows it from update() on the OpMode thread; slothboard 6165.6 puts it "
+                          "in errorMessage)")
 
 KEY_PINPOINT_STATUS = "Bench pinpoint status"
 PINPOINT_INIT_HOLD_S = 2.0
@@ -296,12 +282,9 @@ CLOCK_TIMEOUT_MS = 15000
 CLOCK_INTERACTIVE_TIMEOUT_MS = 40000
 CLOCK_TOLERANCE_MS = 250
 CLOCK_UNSET_YEAR = 1975
-CLOCK_PENDING = ("Ivy's Commands.waitMs times on System.currentTimeMillis(), and the hub's wall clock jumped while it ran "
-                 "(a Driver Station connecting, or the RC's web page setting a clock left near 1970 since boot, moves it "
-                 "about 56 years), so PathCommands.timeout ended early or late; every PathCommands.timeout, Mock Auto "
-                 "pause and checkTip timeout in flight does the same. With --interactive on a hub whose clock was unset "
-                 "this FAIL is the expected demonstration; it stays until TeamCode's waits time on System.nanoTime(). "
-                 "No fix is in flight")
+CLOCK_PENDING = ("regression: PathCommands.timeout ended early or late while the hub's wall clock jumped (a Driver "
+                 "Station connecting, or the RC's web page setting a clock left near 1970), so a wait in it times on "
+                 "System.currentTimeMillis() again, as Ivy's Commands.waitMs does")
 
 KEY_PLANS = "Bench plans"
 PLANNER_STOP_BALLS = (4, 5)
@@ -323,9 +306,8 @@ PLANNER_BUDGET_PENDING = ("a route plan on the OpMode thread takes long enough t
                           "Ball Collection plan there. No fix is in flight; these numbers decide between a time budget in "
                           "RouteOptimizer, fewer balls, or planning on a worker thread")
 
-OVERLAY_NAN_PENDING = ("expected until slothboard 6165.6: one NaN or infinite field-overlay coordinate makes "
-                       "slothboard's telemetry thread throw while it serializes a batch, which ends dashboard telemetry "
-                       "for every OpMode until the app restarts (the runner restarts it after this step)")
+OVERLAY_NAN_PENDING = ("regression: a NaN or infinite field-overlay coordinate kills slothboard's telemetry thread "
+                       "again (fixed in 6165.6), ending dashboard telemetry for every OpMode until the app restarts")
 
 GAMEPAD_FIELDS = {
     "left_stick_x": 0.0, "left_stick_y": 0.0, "right_stick_x": 0.0, "right_stick_y": 0.0,
@@ -357,10 +339,9 @@ GP_NOT_DELIVERED = {
 }
 
 
-GP_SIGN_PENDING = ("expected until slothboard 6165.6, whose client sends up as -1 like a USB pad and the Driver "
-                   "Station; before it, keyboard W and the on-screen stick send +1, so every OpMode's -left_stick_y "
-                   "drives backward. No loop past 0.9 either way means the input never arrived (keyboard input off, "
-                   "the page without focus, or the stick not dragged to the edge)")
+GP_SIGN_PENDING = ("regression (fixed in slothboard 6165.6, not yet run on the hub): keyboard W and the on-screen "
+                   "stick send up as +1, so -left_stick_y drives backward. No loop past 0.9 either way means the "
+                   "input never arrived (keyboard input off, the page without focus, or the stick short of the edge)")
 GP_INTERACTIVE = (
     (GP_KEYBOARD, "keyboard W",
      "In the Gamepad view turn keyboard input on and click the page, with no USB gamepad plugged in. Hold W for 3 s "
@@ -370,9 +351,9 @@ GP_INTERACTIVE = (
     (GP_USB, "USB pad forward with the Gamepad view open",
      "Plug a USB gamepad into the Mac and press Start+A to bind it as gamepad 1, with the Gamepad view still open. "
      "Hold its left stick fully forward for 3 s and let go",
-     "expected until slothboard 6165.6: with the Gamepad view open, its 100 ms keepalive sends a rest state between "
-     "the bound pad's frames, so a held stick reads 0 and a held button presses again. No loop past -0.9 means the "
-     "pad wasn't bound with Start+A or the stick didn't reach full forward"),
+     "regression (fixed in slothboard 6165.6, not yet run on the hub): the Gamepad view's 100 ms keepalive sends a "
+     "rest state between a bound pad's frames, so a held stick reads 0. No loop past -0.9 means the pad wasn't "
+     "bound with Start+A or the stick didn't reach full forward"),
 )
 
 
@@ -400,10 +381,6 @@ class ProtocolError(BenchError):
 class ConnectionClosed(Exception):
     pass
 
-
-# ---------------------------------------------------------------------------------------------------------------------
-# RFC 6455 client
-# ---------------------------------------------------------------------------------------------------------------------
 
 class WebSocket:
     GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -545,10 +522,6 @@ class WebSocket:
         except OSError:
             pass
 
-
-# ---------------------------------------------------------------------------------------------------------------------
-# slothboard client
-# ---------------------------------------------------------------------------------------------------------------------
 
 KNOWN_SERVER_TYPES = {
     "RECEIVE_ROBOT_STATUS", "RECEIVE_OP_MODE_LIST", "RECEIVE_CONFIG", "RECEIVE_CONFIG_BASELINE", "RECEIVE_TELEMETRY",
@@ -905,10 +878,6 @@ class FaultWatch:
         return {k: v for k, v in self.__dict__.items() if k not in ("start",)}
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-# adb
-# ---------------------------------------------------------------------------------------------------------------------
-
 def find_adb():
     found = shutil.which("adb")
     if found:
@@ -1088,10 +1057,6 @@ class Adb:
         self.run("shell", f"rm {shlex.quote(f'{CONFIG_DIR}/{name}.xml')}")
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Hardware configs
-# ---------------------------------------------------------------------------------------------------------------------
-
 def attr(value):
     return xml.sax.saxutils.quoteattr(str(value))
 
@@ -1188,10 +1153,6 @@ def limelight_tag(ip_address):
     return (f"<EthernetDevice name=\"limelight\" serialNumber={attr(LIMELIGHT_CONFIG_SERIAL)} port=\"0\" "
             f"ipAddress={attr(ip_address)} />")
 
-
-# ---------------------------------------------------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------------------------------------------------
 
 def fmt(summary, unit="ms"):
     if not isinstance(summary, dict) or not summary.get("count"):
@@ -1360,8 +1321,6 @@ class Runner:
     def check(self, name, ok, detail, fail_means=None):
         self.checks.append((name, "PASS" if ok else "FAIL", detail, fail_means))
         self.log(f"{'PASS' if ok else 'FAIL'} {name}: {detail}")
-
-    # --- setup -------------------------------------------------------------------------------------------------------
 
     def connect(self):
         self.log(f"results folder: {self.out}")
@@ -1604,8 +1563,6 @@ class Runner:
             self.log(f"deleting hardware config {name}")
             self.adb.remove_config(name)
         return doomed
-
-    # --- running an OpMode --------------------------------------------------------------------------------------------
 
     def run_opmode(self, opmode, step, params=None, start=True, timeout=600, expect_crash=False,
                    stop_when_done=True, on_telemetry=None, result_files=(), timeout_ok=False, status_every=5.0,
@@ -1937,8 +1894,6 @@ class Runner:
                 raise BenchError(f"the hub has no {HUB_BENCH_DIR}/{name}.json: {r.stderr.strip()}")
             return None
         return json.loads(local.read_text())
-
-    # --- benches ------------------------------------------------------------------------------------------------------
 
     def run_probe(self):
         address = self.args.expansion_address
@@ -3806,8 +3761,6 @@ class Runner:
                    + f", {len(bad)} without '{SLOTH_PROBE_OPMODE}' or with '{DASH_TOGGLE_OPMODE}'"
                    + (f", e.g. {bad[0][:6]}" if bad else "") + (f"; runs not judged: {why}" if why else ""),
                    SLOTH_LIST_PENDING)
-
-    # --- driver -------------------------------------------------------------------------------------------------------
 
     def restore(self):
         if self.dash is None:

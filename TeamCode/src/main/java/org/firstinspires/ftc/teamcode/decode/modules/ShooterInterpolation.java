@@ -142,7 +142,6 @@ public class ShooterInterpolation {
     private static String key(double x, double y) { return x + "," + y; }
 
     static {
-        // Close-zone shots.
         TABLE.addPoint(62.3, 61.1, 2800, 0.15);
         TABLE.addPoint(62.3, 61.1, 2700, 0.1);
 
@@ -157,7 +156,6 @@ public class ShooterInterpolation {
 
         TABLE.addPoint(100.8, 110.5, 2075, 0.01);
 
-        // Far-zone shots.
         TABLE.addPoint(141.5 / 2, 24, 3075, 0.2585);
         TABLE.addPoint(141.5 / 2, 24, 2975, 0.2125);
         TABLE.addPoint(141.5 / 2, 24, 2875, 0.1825);

@@ -13,7 +13,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
-/** The Cuttle bot's drive motors and Pinpoint, as wired and measured for last season's DECODE code. */
 public final class CuttleDrive {
 
     private CuttleDrive() {

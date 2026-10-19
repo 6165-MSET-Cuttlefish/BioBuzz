@@ -13,7 +13,6 @@ import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 public class BioBuzzRobot extends Robot {
     public Drivetrain drivetrain;
     public CellTipCamera cellTip;
-    /** Limelight ball vision, field-relative through the follower. */
     public Camera camera;
     public RobotActions actions;
 

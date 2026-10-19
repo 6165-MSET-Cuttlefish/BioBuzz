@@ -15,10 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * A stand-in for a Limelight's HTTP API on 127.0.0.1, so the SDK's real Limelight3A poller and blocking
- * calls can be measured on a bare hub. Its own CPU time is counted so it can be taken out of the load figures.
- */
 final class FakeLimelightServer {
     enum Mode { OK, ERROR_500, HANG }
 
@@ -152,7 +148,6 @@ final class FakeLimelightServer {
             int end = h.indexOf('\r', at);
             int length = Integer.parseInt(h.substring(at + 15, end).trim());
             for (int i = 0; i < length && in.read() >= 0; i++) {
-                // discard the body
             }
         }
         return h;

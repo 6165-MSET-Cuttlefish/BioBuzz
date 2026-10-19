@@ -11,7 +11,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.decode.modules.Turret;
 
-/** Base for OpModes driving the {@link DecodeRobot}; adds a typed {@code robot} so game code needn't cast. */
 public abstract class DecodeOpMode extends EnhancedOpMode {
 
     protected DecodeRobot robot;

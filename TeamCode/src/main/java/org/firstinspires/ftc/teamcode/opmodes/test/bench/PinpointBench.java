@@ -9,7 +9,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
-import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
@@ -40,25 +39,7 @@ public class PinpointBench extends EnhancedOpMode {
         protected void initializeGameModules() {}
     }
 
-    private static final class Saver extends Module {
-        private final PinpointBench bench;
-
-        Saver(PinpointBench bench) {
-            this.bench = bench;
-            setTelemetryEnabled(false);
-        }
-
-        @Override protected void initStates() {}
-        @Override protected void read() {}
-        @Override protected void write() {}
-
-        @Override
-        public void stop() {
-            bench.finish();
-        }
-    }
-
-    private final Saver saver = new Saver(this);
+    private final StopHook saver = new StopHook(this::finish);
     private BenchReport report;
     private String mode;
     private GoBildaPinpointDriver driver;

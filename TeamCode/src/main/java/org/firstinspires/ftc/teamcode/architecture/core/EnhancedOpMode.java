@@ -34,7 +34,6 @@ import static org.firstinspires.ftc.teamcode.architecture.core.Robot.telemetryTo
 import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.*;
 import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.*;
 
-/** Base OpMode with auto-discovered modules, voltage compensation, dual telemetry, and dashboard field rendering. Subclasses provide a {@link Robot} via {@link #createRobot()}. */
 public abstract class EnhancedOpMode extends OpMode {
     private static final int FIELD_RENDER_INTERVAL = 10;
     // The voltage read is a bus call costing a few ms; battery voltage moves slowly.

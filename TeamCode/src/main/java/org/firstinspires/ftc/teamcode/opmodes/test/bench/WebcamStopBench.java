@@ -5,7 +5,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
-import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.modules.Drivetrain;
@@ -13,13 +12,6 @@ import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * BioBuzzRobot's modules (Drivetrain, then the real CellTipCamera) on the software-localizer follower, for the
- * framework's real stop path: run_bench.py presses STOP at chosen delays after INIT or START and watches whether
- * the SDK force-stops the OpMode or restarts the app. Each stop step rewrites webcam_stop_&lt;runId&gt;.json, so
- * the file shows how far the pass got even if the SDK kills it. With the webcam unplugged, INIT must fail with
- * CellTipCamera's "failed to open" error.
- */
 @TeleOp(name = "Bench: Webcam Stop", group = "Test")
 public class WebcamStopBench extends EnhancedOpMode {
 
@@ -68,32 +60,7 @@ public class WebcamStopBench extends EnhancedOpMode {
     }
 
     /** Discovered before the robot's modules (the OpMode's fields are walked first), so its stop() runs first. */
-    private static final class StopClock extends Module {
-        private final WebcamStopBench bench;
-
-        StopClock(WebcamStopBench bench) {
-            this.bench = bench;
-            setTelemetryEnabled(false);
-        }
-
-        @Override protected void initStates() {}
-        @Override protected void read() {}
-        @Override protected void write() {}
-
-        @Override
-        public void stop() {
-            long now = System.nanoTime();
-            bench.mark("moduleStopsStartMs", now);
-            bench.results.put("sinceLastTelemetryHookMs", bench.lastLoopNs == 0 ? null : (now - bench.lastLoopNs) / 1e6);
-            bench.results.put("wasStarted", bench.startNs != 0);
-            bench.results.put("framesFreshAtStop", bench.fresh());
-            long w0 = System.nanoTime();
-            bench.save();
-            bench.results.put("resultWriteMs", (System.nanoTime() - w0) / 1e6);
-        }
-    }
-
-    private final StopClock clock = new StopClock(this);
+    private final StopHook clock = new StopHook(this::stopPassStarted);
     private final long constructedNs = System.nanoTime();
     final Map<String, Object> results = new LinkedHashMap<>();
     private String fileName;
@@ -124,6 +91,17 @@ public class WebcamStopBench extends EnhancedOpMode {
 
     void save() {
         BenchIO.write(fileName, results);
+    }
+
+    private void stopPassStarted() {
+        long now = System.nanoTime();
+        mark("moduleStopsStartMs", now);
+        results.put("sinceLastTelemetryHookMs", lastLoopNs == 0 ? null : (now - lastLoopNs) / 1e6);
+        results.put("wasStarted", startNs != 0);
+        results.put("framesFreshAtStop", fresh());
+        long w0 = System.nanoTime();
+        save();
+        results.put("resultWriteMs", (System.nanoTime() - w0) / 1e6);
     }
 
     boolean fresh() {

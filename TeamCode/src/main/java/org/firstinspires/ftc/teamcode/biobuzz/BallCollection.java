@@ -24,15 +24,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Autonomous ball collection as one Ivy command, built by {@link RobotActions#collectBalls}. When it starts it
- * waits for a Limelight frame captured after that moment, plans a drive that runs the intake over the nearest balls
- * in view on this alliance's half ({@link BioBuzzField#ownHalf}) within range, with the robot's footprint
- * ({@link RobotGeometry}) clear of the walls and {@link BioBuzzField#hiveRails}, drives it with {@link RouteRun} and
- * returns to where it planned from. It requires the follower and the Drivetrain, whose writes it disables while Pedro
- * drives and restores afterwards. Read {@link #status()} and {@link #detail()} for how it went. With the Limelight
- * faulted when it starts, it ends SKIPPED; a route already driving finishes, since its plan needs no live vision.
- */
 public final class BallCollection extends CommandBuilder {
 
     /** Read when the command starts, so dashboard edits apply to the next run. */

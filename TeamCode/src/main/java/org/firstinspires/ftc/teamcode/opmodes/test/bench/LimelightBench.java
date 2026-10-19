@@ -16,14 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * A plugged-in Limelight 3A (USB-powered) through the SDK's Limelight3A: getStatus latency, LimelightSync putting the
- * ball pipeline on it as INIT does, what results say right after a pipeline switch (pID, llpython), what the blocking POSTs (pipelineSwitch, updatePythonInputs,
- * updateRobotOrientation) cost the calling thread, the ts clock against the hub's, the real result JSON's parse cost,
- * poll rates 100/200/250 Hz (the SDK's cap), and the real LimelightBallSource when the pipeline is switched behind
- * its back. Leaves the Limelight stopped at the SDK's default 100 Hz, on the pipeline it started on; the
- * unplug-and-replug fault timeline is {@link LimelightFaultBench}'s replug mode.
- */
 @TeleOp(name = "Bench: Limelight", group = "Test")
 public class LimelightBench extends LinearOpMode {
     static final String PLUG_IN = "plug the Limelight 3A into a Control Hub USB port (it is USB-powered), wait for its "

@@ -6,7 +6,7 @@ FTC 6165 MSET Cuttlefish, 2026–27 BIOBUZZ season.
 
 - Game-specific code goes in `biobuzz/`, `modules/`, `opmodes/`; `architecture/` stays game-agnostic. Field constants come from the game manual, never guesses. New Java files go in an existing package.
 - The top level holds only Gradle and repo files, `TeamCode/`, `limelight/` (runs on the Limelight), `scripts/` and `docs/`.
-- No BioBuzz robot yet: everything runs on the Betta bot (a sister team's DECODE bot, `pedro/BettaConstants`).
+- No BioBuzz robot yet: everything runs on the Betta bot (a sister team's DECODE bot, `betta_decode.xml`, `pedro/BettaConstants`).
 - `decode/` is last season's code for 6165's Cuttle bot only (`cuttle_decode.xml`). It shares `modules/Drivetrain`.
 - In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
@@ -56,7 +56,7 @@ Pedro Pathing 3:
 
 **Ball routing**
 
-- Planner (`architecture/planner/`): `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's.
+- Planner (`architecture/planner/`): `RouteOptimizer.findOptimalRoute` → `RoutePathBuilder.build` → `RouteRun`. Every leg keeps the whole `RobotShape` footprint (frame plus intake) inside the area; `biobuzz/RobotGeometry` is the Betta bot's (`intakeOffsetIn` runs from the centre of rotation to the middle of the intake).
 - No alliance mapping: pass mapped field coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles. Bad input throws, so check a robot-sourced start with `RouteOptimizer.poseProblem` first.
 - Pedro switches to the next piece of a compound path as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting sharp turns and reversals early, so don't merge `Plan.steps` into one compound path.
 - A curve that stops dead mid-path (a straight cubic with handles the full chord long) makes Pedro's follower throw there.
@@ -67,9 +67,9 @@ Pedro Pathing 3:
 
 **Drivetrain** needs `withFollower(follower)`: without it, field-centric drive and heading lock throw and `write()` silently stops guarding against Pedro. An OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
 
-**Ball collection** (`RobotActions.collectBalls`) waits only `visionWaitMs` for a fresh frame, so a START during the INIT Limelight sync can end it SKIPPED. `BallCollection.keepIn`/`obstacles`/`configuredPose` give other OpModes its `onField` switch.
+**Ball collection** (`RobotActions.collectBalls`) plans once from the balls in view, drives the intake over them and returns to where it planned from. It waits only `visionWaitMs` for a fresh frame, so a START during the INIT Limelight sync can end it SKIPPED, as does a Limelight fault at its start; a route already driving finishes without vision. `BallCollection.keepIn`/`obstacles`/`configuredPose` give other OpModes its `onField` switch.
 
-**Vision** (`modules/vision/`). `TrackedBall` is camera-relative, `FieldBall` field-relative. A stale field ball keeps its last position with `visible()` false: check `visible()` before chasing one.
+**Vision** (`modules/vision/`). `TrackedBall` is camera-relative, `FieldBall` field-relative; `Camera.getFieldBalls()` stays empty unless the Camera is built `withFollower(follower)`. A stale field ball keeps its last position with `visible()` false: check `visible()` before chasing one.
 
 **Ball detection** is `limelight/ball_contour_snapscript.py` plus `ball_pipeline.vpr`, compiled into the generated `LimelightFiles` (so deploySloth carries edits) and uploaded at every INIT by `LimelightSync` while `syncOnInit` is on. SnapScripts get the raw image: paste `eocvsim/homography`'s whole Python block into the script, and after a lens recalibration update `LENS_*` in both the script and `HomographyCalculationPipeline`.
 
@@ -124,13 +124,14 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 Hardware configs ship in `res/xml/`; `limelight` is an EthernetDevice.
 
 - **Mock Architecture Test** is the first run after a full install. It drives only with `Mock Auto → enableDrive` on (check motor and odometry directions first), and then finishes only on the floor.
+- **Ball Collection** (dashboard balls), **Vision Ball Collection** (Limelight balls) and **Ball Collection Auto** (`BallCollection` at START) run off the field by default: from the configured start wherever the robot stands, with no walls or HIVE rails. `onField` (`collection.onField` in the auto) reads RED field coordinates mapped to this alliance and keeps to its half. In the TeleOps, `run` 1 drives the plan on screen and 0 aborts; Ball Collection re-plans from where a run stopped, and Vision Ball Collection re-plans as balls or the robot move but never plans or starts on stale vision.
 - **Close Flower** autos: the `toAudienceWall` and `toHive` legs put part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
 - **OctoQuad** (I2C name `octoquad`, type `OctoQuadFTC`): the SDK's built-in driver handles MK2 firmware 3.1; don't add DigitalChickenLabs' `OctoQuadFWv3` driver. Calibrate with the Deadwheel and Heading Scalar calibrators (`octoquad/`), then enter the results on the dashboard in OctoQuad Localizer Test (`opmodes/test/`; gamepad1 A applies them). Localizer parameters apply only through `resetLocalizerAndCalibrateIMU()`; after each reset, don't drive or use the pose until `getLocalizerStatus()` reads `RUNNING` (throw on `FAULT_NO_IMU`), and drop data whose `crcOk` is false. Pedro's `OctoQuadConfig` takes Pinpoint-style offsets (`xPodOffset`: the forward pod's sideways offset; `yPodOffset`: the strafe pod's forward offset) and sends `-yPodOffset` as the SDK's `tcpOffsetMM_X` and `-xPodOffset` as `tcpOffsetMM_Y`.
 - **Pinpoint Localizer Test** (`opmodes/test/`) keeps its own Pinpoint and drive settings, independent of `BettaConstants`: copy tuned values into `BettaConstants.pinpoint`, which is in inches.
 - **Laser rangefinders** (Brushland, Analog Inputs `analog0`/`analog1`): switch a sensor to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, and set every reader's `maxRangeMm` to its `analogHighMm` or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta); trust `Answering on I2C`, not `Pin0`/`Pin1` (a silent sensor reads 0).
 - **Transfer Count Test** / **Transfer Thread Count Test**: `analog0` (A) sits upstream of `analog1` (B), close enough that one ball covers both; balls must only travel A to B and start with the chute clear. Tune `diffThreshold` on the dashboard graph of `A - B (mm)`.
-- **Hub-reading threads.** `modules/TransferCounter` and Bench: Analog Poll's poller are the only code reading the hub from a thread. The hub's ADC refreshes about every 10 ms and a 10 ms poller already sees almost every refresh, so poll at 10 ms: 5 ms sees no more and more than doubles what the poller costs a driving loop (`docs/hub-bench-findings.md`). Any thread that reads the hub:
+- **Hub-reading threads** (only `modules/TransferCounter` and Bench: Analog Poll's poller). Poll at 10 ms, the hub's ADC refresh; faster sees nothing new and costs the loop more (`docs/hub-bench-findings.md`). Any such thread:
   - Call `start()` on the OpMode thread and `stop()` from the OpMode's stop, not `Module.stop()`, which also runs mid-OpMode.
   - Loop only while the OpMode thread `isAlive()`: after a crash no OpMode hook runs (EnhancedOpMode skips `onEnd()`), so that is the only stop signal.
   - Stop with a volatile flag and `join`, never `interrupt()`: the SDK's `MessageKeyedLock.release` calls `lockInterruptibly()`, so an interrupt mid-command can leave the hub's USB lock held until it's abandoned after 500 ms, stalling every thread's hub commands.

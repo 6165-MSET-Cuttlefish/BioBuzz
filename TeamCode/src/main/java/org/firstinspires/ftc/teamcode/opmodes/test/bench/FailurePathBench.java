@@ -13,12 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * EnhancedOpMode's failure path: the runner's "throwIn" param picks the hook that throws (initialize,
- * initializeLoop, onStart, gameLoop, moduleInit, or none). Three stub modules log every initStates, init and stop
- * to failure_&lt;throwIn&gt;.json as it happens; stub B's stop() always throws, so a thrown hook's exception
- * should carry it as Suppressed, and with "none" stop() itself should rethrow it.
- */
 @TeleOp(name = "Bench: Failure Path", group = "Test")
 public class FailurePathBench extends EnhancedOpMode {
     static final String INJECTED = "BENCH injected failure in ";

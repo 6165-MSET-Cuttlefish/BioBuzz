@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.architecture;
 
 import com.acmerobotics.dashboard.config.Config;
 
-/** Live-tunable perf knobs on FTC Dashboard. Defaults favor visibility; tighten for competition. */
 @Config
 public final class OptimizationToggles {
     private OptimizationToggles() {}

@@ -22,12 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Webcam costs with any UVC webcam configured as aprilTagDetector: EasyOpenCV open, first-frame and close times
- * (sync and async), CellTipPipeline's per-frame cost on the camera thread with detection on, off, with and without
- * the dashboard stream, WebcamControls write stalls, and the real WebcamSession.close() + CellTipPipeline.release()
- * path at several delays after the session is created, including while its async open is still running.
- */
 @TeleOp(name = "Bench: Webcam", group = "Test")
 public class WebcamBench extends LinearOpMode {
     static final String PLUG_IN = "plug a UVC webcam into a Control Hub USB port and rerun run_bench.py --webcam; "

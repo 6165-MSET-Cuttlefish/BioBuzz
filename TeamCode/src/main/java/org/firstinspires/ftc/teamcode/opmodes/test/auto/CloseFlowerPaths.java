@@ -9,11 +9,6 @@ import com.pedropathing.paths.Path;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.auto.PathHeadings;
 
-/**
- * The CloseFlower route shared by {@link CloseFlowerAuto} and {@link CloseFlowerLinearAuto}, authored for RED and
- * rotated to BLUE through {@link FieldPose}; construct it once the alliance and field symmetry are set.
- * docs/paths/CloseFlowerAuto.pp is the same route in the visualizer.
- */
 public final class CloseFlowerPaths {
     public final Pose start = pose(56, 8, 90);
 

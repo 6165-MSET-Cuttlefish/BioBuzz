@@ -11,7 +11,6 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import static com.pedropathing.ivy.Scheduler.schedule;
 import static com.pedropathing.ivy.commands.Commands.*;
-import static com.pedropathing.ivy.groups.Groups.*;
 
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 

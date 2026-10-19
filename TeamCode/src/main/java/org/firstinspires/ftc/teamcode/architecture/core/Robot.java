@@ -10,7 +10,6 @@ import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 
-/** Game-agnostic robot base. Game subclasses wire up mechanisms in {@link #initializeGameModules()}. */
 @Config
 public abstract class Robot {
 

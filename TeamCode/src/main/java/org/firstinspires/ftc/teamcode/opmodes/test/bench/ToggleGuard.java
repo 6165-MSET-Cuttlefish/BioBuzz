@@ -8,10 +8,7 @@ import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Snapshots the static telemetry and profiler toggles a bench flips and puts them back from stop(), which the
- * framework's safe-state pass runs even when a hook throws; statics would otherwise leak into the next OpMode.
- */
+/** Restores the toggles from stop(), which runs even when a hook throws; statics would otherwise leak into the next OpMode. */
 final class ToggleGuard extends Module {
     private final int dashboardIntervalMs = OptimizationToggles.dashboardTransmissionIntervalMs;
     private final int dsIntervalMs = OptimizationToggles.dsTransmissionIntervalMs;

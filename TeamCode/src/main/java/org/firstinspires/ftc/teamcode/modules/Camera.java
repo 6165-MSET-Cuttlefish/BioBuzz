@@ -20,12 +20,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Balls from the Limelight's ball SnapScript. {@link #getBalls()} is camera-relative (robot motion
- * included); {@link #getFieldBalls()} is field-relative and stays empty until {@link #withFollower} is called.
- * Once the Limelight stops sending frames or faults ({@link #isFrameStale()}, {@link #limelightProblem()}),
- * getBalls() empties and every field ball reads not visible until it is forgotten.
- */
 @Config
 public class Camera extends Module {
 

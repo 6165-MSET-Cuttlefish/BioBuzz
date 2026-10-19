@@ -1,31 +1,13 @@
-"""Contour-gated ball-detection SnapScript for the Limelight 3A — finds Pollen and red/blue Nectar.
+"""Ball-detection SnapScript for the Limelight 3A: Pollen and red/blue Nectar.
 
-HSV masks per ball type, then contour work. Every colour blob is first split with a distance
-transform: its deepest point is the centre of the largest circle that fits, which is taken, blanked
-out, and repeated until what is left is too small for a ball. A blob that splits into two or more
-circles is a group of touching balls. Otherwise it is one ball if its area, bounding-box aspect
-(w / h) and fill (contour area / box area) are all in range, drawn as its enclosing circle. A ball
-whose ground contact is at or above the horizon (which is also every point behind the camera) or
-farther than MAX_RANGE_IN from the (0,0) crosshair is dropped. There is no tracking and no overlap
-suppression; the types' hues don't overlap.
+The robot uploads this file and ball_pipeline.vpr to pipeline 4 at every INIT, SCRIPT_ID replaced by a stamp of both
+files. To tune in the web editor, turn LimelightBalls → syncOnInit off first, and copy the values back here before the
+next deploySloth or app restart turns it back on.
 
-The robot uploads this file and ball_pipeline.vpr to pipeline 4 at every INIT (LimelightBalls →
-syncOnInit), with SCRIPT_ID replaced by a stamp of both files. To tune in the Limelight's web editor,
-turn syncOnInit off first, or the next INIT replaces the edits; it turns back on at every deploySloth
-or app restart, so copy the values back into this file before then.
+Areas are in CALIBRATION_SIZE pixels, so the gates hold at any streaming resolution.
 
-Areas are in pixels of a CALIBRATION_SIZE frame, so the gates hold at any streaming resolution.
-The UNDISTORT, CALIBRATION_SIZE and H_ARRAY block comes from eocvsim/homography; with UNDISTORT set,
-contact points are undistorted with the lens calibration before the homography.
-
-llpython, 32 doubles:
-    0        SCRIPT_ID (the upload's stamp), so the hub can reject the wrong pipeline or an old copy
-    1        ball count N, 0 to MAX_BALLS
-    2 + 3i   type code: 1 Pollen, 2 red Nectar, 3 blue Nectar
-    3 + 3i   x, camera-frame ground inches
-    4 + 3i   y, camera-frame ground inches
-Balls are packed nearest first. The returned contour (tx/ty/ta) is the lowest-cost ball's circle,
-where cost = |area / EXPECT_AREA_PX - 1| + FILL_COST_WEIGHT * (1 - fill); a split circle's fill is pi/4.
+llpython, 32 doubles: [0] SCRIPT_ID, [1] ball count N (0 to MAX_BALLS), then per ball i, nearest first:
+[2 + 3i] type code (1 Pollen, 2 red Nectar, 3 blue Nectar), [3 + 3i] x and [4 + 3i] y in camera-frame ground inches.
 """
 
 import math

@@ -31,13 +31,6 @@ import org.firstinspires.ftc.teamcode.modules.Camera;
 import org.firstinspires.ftc.teamcode.modules.vision.BallType;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
-/**
- * Ball Collection with the balls coming from the Limelight instead of the dashboard, from (84, 72, 270 deg)
- * wherever the robot stands unless {@code onField} is on. While idle it re-plans from the robot's pose whenever the nearest
- * {@code maxBalls} usable balls appear, vanish or move, or the robot moves; setting {@code run} to 1 drives exactly the
- * plan shown and returns to where the robot started it, and setting it to 0 aborts. Nothing plans or starts on stale
- * vision or a Limelight fault.
- */
 @TeleOp(name = "Vision Ball Collection", group = "Test")
 public class VisionBallCollectionTest extends EnhancedOpMode {
 

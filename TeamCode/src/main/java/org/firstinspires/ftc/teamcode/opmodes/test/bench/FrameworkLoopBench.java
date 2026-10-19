@@ -15,12 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * The real EnhancedOpMode pipeline on a bare Control Hub: {@link BenchRobot} (Drivetrain module, Pedro Mecanum on
- * empty motor ports, software localizer), driven like BioBuzz Tele, through phases that each change one telemetry
- * or dashboard setting. Loop period is timed between consecutive onLoopStart() calls, so it includes the SDK's
- * between-loop work.
- */
 @TeleOp(name = "Bench: Framework Loop", group = "Test")
 public class FrameworkLoopBench extends EnhancedOpMode {
 

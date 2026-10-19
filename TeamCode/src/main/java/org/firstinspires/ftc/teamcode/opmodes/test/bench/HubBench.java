@@ -47,14 +47,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Bare-Control-Hub costs, phase by phase: the SDK's own loop overhead, bus reads and writes on empty ports, the
- * framework's telemetry and dashboard packets, the route planner, and the Limelight poller against a fake
- * Limelight on loopback. Every phase is timed on this OpMode thread; the chunked ones stop each loop() after
- * {@link #CHUNK_NS} so the dashboard keeps hearing from it.
- */
 @TeleOp(name = "Bench: Hub", group = "Test")
 public class HubBench extends OpMode {
+    // Chunked phases return from loop() after this, so the dashboard and the runner keep hearing from the OpMode.
     private static final long CHUNK_NS = 30_000_000L;
     private static final int DS_HOLD_MS = Integer.MAX_VALUE;
 

@@ -11,23 +11,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Tracks the detections limelight/ball_contour_snapscript.py packs into llpython. OpMode thread only.
- * After its first poll, and on each {@link Tuning#pipeline} change, {@link LimelightSync} puts the ball pipeline on
- * the Limelight; the frame is stale until it has. A Limelight problem never throws: it raises the {@link #FAULT_KEY}
- * fault with {@link #problem()} and the frame goes stale until the Limelight recovers, which clears it.
- */
 public final class LimelightBallSource {
 
     @Config("LimelightBalls")
     public static class Tuning {
         /** The pipeline running ball_contour_snapscript.py. */
         public static int pipeline = 4;
-        /**
-         * Upload limelight/'s ball pipeline and script to {@link #pipeline} at every INIT. Turn off while tuning in
-         * the Limelight's web editor, or the next INIT replaces the edits; it turns back on at every deploySloth or
-         * app restart, so copy edits into limelight/ first. Off, the file's SCRIPT_ID and any stamp are accepted.
-         */
         public static boolean syncOnInit = true;
         /** With no new Limelight frame for this long, the frame goes stale: no balls, none visible. */
         public static double staleFrameSeconds = 0.25;

@@ -12,10 +12,6 @@ import org.firstinspires.ftc.teamcode.opmodes.test.auto.CloseFlowerPaths;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * Close Flower Linear Auto's loop (follower.update, Scheduler.execute, its SDK telemetry lines) with the
- * software-localizer follower, idle and then following CloseFlowerPaths.toCloseFlower: the no-framework baseline for Bench: Framework Loop.
- */
 @TeleOp(name = "Bench: Raw Loop", group = "Test")
 public class RawLoopBench extends LinearOpMode {
 

@@ -25,14 +25,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * The Limelight fault fallback through the real framework: {@link Camera} (with the real LimelightBallSource) and
- * the Drivetrain on a software-localized follower. Runner param "mode": "absent" (a limelight EthernetDevice with
- * nothing plugged in; runs runSeconds after START, then BENCH DONE) or "replug" (a real Limelight; records until
- * STOP while run_bench.py has the user unplug and replug it, then puts back pipeline restorePipeline). Every fault
- * raise, update and clear, the Limelight3A's own connection signals, loop periods split by fault state, ball
- * counts and, in absent mode, how a BallCollection scheduled at START ended go to limelight_fault_&lt;mode&gt;.json.
- */
 @TeleOp(name = "Bench: Limelight Fault", group = "Test")
 public class LimelightFaultBench extends EnhancedOpMode {
     static final String KEY_LOOP = "Bench loop";

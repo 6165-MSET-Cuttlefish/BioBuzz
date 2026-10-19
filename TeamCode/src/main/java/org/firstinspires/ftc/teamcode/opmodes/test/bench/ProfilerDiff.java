@@ -9,10 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Per-section loop-profile averages over one phase. LoopProfiler only keeps lifetime totals, and resetting it
- * mid-loop corrupts the next mark, so this differences two {@link LoopProfiler#report} snapshots instead.
- */
+/** LoopProfiler only keeps lifetime totals, and resetting it mid-loop corrupts the next mark, so this differences two snapshots instead. */
 final class ProfilerDiff {
     private static final class Section {
         double avg;

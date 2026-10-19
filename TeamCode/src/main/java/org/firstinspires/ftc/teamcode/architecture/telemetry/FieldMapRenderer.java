@@ -1,6 +1,5 @@
 package org.firstinspires.ftc.teamcode.architecture.telemetry;
 
-/** Renders a 2D pixel grid as Unicode Braille (U+2800..U+28FF, 2×4 pixels per glyph) in HTML for the DS field map. */
 public class FieldMapRenderer {
 
     private final int width;

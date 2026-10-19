@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 
-/** Ivy commands wrapping Pedro path following. Each one requires the {@link Follower}, so scheduling one interrupts whatever path is in flight. */
 public final class PathCommands {
     private PathCommands() {}
 

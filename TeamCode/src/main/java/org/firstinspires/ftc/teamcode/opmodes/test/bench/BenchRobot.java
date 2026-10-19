@@ -14,10 +14,6 @@ import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
-/**
- * The BioBuzz drive stack on a bare Control Hub: the real Drivetrain module and Pedro's Mecanum and Foresight with
- * BettaConstants, but a {@link SoftwareLocalizer} in place of the Pinpoint.
- */
 public class BenchRobot extends Robot {
     static final double DRIVE_CAP = 0.2;
 

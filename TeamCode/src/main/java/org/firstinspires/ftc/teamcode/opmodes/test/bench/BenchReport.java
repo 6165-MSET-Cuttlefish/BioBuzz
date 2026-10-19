@@ -8,10 +8,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * One bench's results file plus the dashboard keys run_bench.py watches: "Bench phase", "Bench status" and, once
- * the results file is final, "BENCH DONE". The file is rewritten at every phase end, so a crash keeps what finished.
- */
+/** run_bench.py watches these keys by name; the file is rewritten every phase so a crash keeps what finished. */
 final class BenchReport {
     static final String KEY_PHASE = "Bench phase";
     static final String KEY_STATUS = "Bench status";

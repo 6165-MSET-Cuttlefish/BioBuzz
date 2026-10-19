@@ -8,10 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Named, recoverable faults that {@link EnhancedOpMode} shows first on every telemetry frame. Keys are global;
- * cleared at every {@link EnhancedOpMode} INIT. Thread-safe.
- */
 public final class Faults {
     private Faults() {}
 

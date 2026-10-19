@@ -1,17 +1,10 @@
 # HSV tuning prompt
 
-Paste everything below the line to a vision-capable AI, with your photos, whenever you need to
-(re)derive HSV thresholds for Pollen or Nectar — a new venue's lighting, a new ball batch, or
-adding a ball type this file doesn't cover yet. Each line it returns replaces the four arguments
-after the label in that type's `BallType(...)` entry in the `BALL_TYPES` tuple of
-`limelight/ball_contour_snapscript.py`; the code and label before them and the draw colour after stay as they are.
-A new ball type also needs a new code there and in `modules/vision/BallType.java`.
-
-Treat the numbers it gives you as new **defaults** to paste in, not a final answer — confirm them
-live in the Limelight web editor with `DISPLAY_MODE = "MASK"`, which paints each type's mask in its
-own colour so you can see directly what each threshold is and isn't catching. Photos analyzed
-offline are a starting point; the Limelight's sensor, compression, and lighting are the ground
-truth.
+Paste everything below the line, with photos from the Limelight feed, into a vision-capable AI to derive HSV
+thresholds for a new venue, ball batch or ball type. Each returned line replaces the four arguments after the label in
+that type's `BallType(...)` in `BALL_TYPES` of `limelight/ball_contour_snapscript.py` (a new type also needs a code
+there and in `modules/vision/BallType.java`). They are starting values: confirm them live in the Limelight web editor
+with `DISPLAY_MODE = "MASK"` and `LimelightBalls → syncOnInit` off.
 
 ---
 

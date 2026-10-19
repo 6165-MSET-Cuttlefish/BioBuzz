@@ -24,10 +24,7 @@ final class ParsedLLResult extends LLResult {
         return synthetic(balls, 0, 0, tsMs);
     }
 
-    /**
-     * As {@link #synthetic(int, double)} plus {@code fiducials} AprilTag and {@code detectors} neural-detector entries
-     * carrying every field LLResultTypes parses, so LLResult's per-entry work scales as a busy pipeline's would.
-     */
+    /** Entries carry every field LLResultTypes parses, so the parse costs what a busy pipeline's would. */
     static String synthetic(int balls, int fiducials, int detectors, double tsMs) {
         StringBuilder py = new StringBuilder();
         py.append("6166,").append(balls);

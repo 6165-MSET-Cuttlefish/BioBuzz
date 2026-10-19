@@ -12,11 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * What BettaConstants.create and follower.update() do with a "pinpoint" configured on I2C but nothing plugged in:
- * whether they throw, how long each takes, and what pose comes back. Answers whether the real autos (Close Flower
- * Auto, Ball Collection) can run on a bare Control Hub. A throw is recorded and then rethrown.
- */
 @TeleOp(name = "Bench: Pinpoint Absent", group = "Test")
 public class PinpointAbsentBench extends LinearOpMode {
 

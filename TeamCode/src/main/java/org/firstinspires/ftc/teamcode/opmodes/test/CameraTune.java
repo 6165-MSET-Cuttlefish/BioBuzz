@@ -9,7 +9,6 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 import org.opencv.core.Mat;
 import org.openftc.easyopencv.OpenCvPipeline;
 
-// EOCV-Sim never opens an OpenCvWebcam, so WebcamControls only take effect on the robot.
 @TeleOp(name = "Camera Tune", group = "Test")
 public class CameraTune extends LinearOpMode {
 

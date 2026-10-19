@@ -3,11 +3,6 @@ package org.firstinspires.ftc.teamcode.architecture.core;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * State-machine state. Implement on an enum and set the setpoint via {@link #setValue(double)} in the constructor.
- *
- * <p>Maps are static, so bindings from the previous OpMode linger until {@link #clearModuleBindings()} at init.
- */
 public interface State {
 
     Map<State, Double> VALUES = new ConcurrentHashMap<>();

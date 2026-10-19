@@ -18,11 +18,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-/**
- * Vision Ball Collection's plan() call on synthetic layouts: RED's own half and the HIVE rails with its default gaps
- * and the placeholder robot geometry, the robot's pose as both start and return. Seeded, so every run plans the same
- * layouts.
- */
 final class PlannerWorkload {
     static final double WALL_GAP_IN = 1;
     static final double RAIL_GAP_IN = 1;

@@ -21,11 +21,6 @@ import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
 import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
 
-/**
- * {@link BallCollection} through the framework: built in initialize(), scheduled at START inside a timeout, then
- * it plans once from the balls in view and drives there and back. Off the field by default ({@code collection.onField}),
- * starting at (0, 0, 0) wherever the robot stands.
- */
 @Autonomous(name = "Ball Collection Auto", group = "Test")
 public class BallCollectionAuto extends BioBuzzOpMode {
 

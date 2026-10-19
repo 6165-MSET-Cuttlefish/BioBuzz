@@ -4,12 +4,6 @@ import com.qualcomm.hardware.limelightvision.LLResult;
 import com.qualcomm.hardware.limelightvision.LLStatus;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 
-/**
- * Puts limelight/ball_pipeline.vpr and ball_contour_snapscript.py on a Limelight pipeline and switches to it, on one
- * background thread, since Limelight3A's POSTs block for up to 15 s. One request runs at a time; a newer request
- * replaces one that hasn't started. The uploaded script reports {@link #STAMP} instead of its file's SCRIPT_ID, which
- * proves the upload is the script running.
- */
 public final class LimelightSync {
     /** What the uploaded copy reports in llpython[0]: a fingerprint of both files, below 2^24. */
     public static final double STAMP = LimelightFiles.BALL_SCRIPT_STAMP;

@@ -27,10 +27,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * What is plugged into the hub, so run_bench.py can write a config that matches: the embedded IMU's chip, the
- * attached UVC webcams' serial numbers, and any Limelight on an Ethernet-over-USB interface.
- */
 @TeleOp(name = "Bench: Probe", group = "Test")
 public class ProbeBench extends LinearOpMode {
 

@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.architecture.control;
 
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-/** PID with a position feed-forward (kPosition) and a static-friction kick. */
 public class PidController {
     public double kP = 0, kI = 0, kD = 0;
 

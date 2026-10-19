@@ -14,14 +14,6 @@ import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatte
 import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.dsTransmissionIntervalMs;
 import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.telemetryLazyFormat;
 
-/**
- * Fan-out telemetry: structure (headers, separators, raw-HTML rows) goes to both screens as the same
- * HTML, data rows stay plain on the dashboard so its graph view keeps numbers, and the braille field
- * map is Driver Station only.
- *
- * <p>Driver Station writes are accepted only in a DS frame: a loop in which {@link #beginLoop()} found the
- * SDK's transmission interval elapsed. On other loops they are dropped, since the SDK would not send them.
- */
 public class DualTelemetry implements Telemetry {
     private final Telemetry dsTelemetry;
     private final Telemetry dashTelemetry;

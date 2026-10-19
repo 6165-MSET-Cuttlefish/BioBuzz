@@ -6,7 +6,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
-import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 
@@ -26,25 +25,7 @@ public class OctoQuadBench extends EnhancedOpMode {
     private static final int READ_CALLS = 200;
     private static final int STATUS_CALLS = 50;
 
-    private static final class Saver extends Module {
-        private final OctoQuadBench bench;
-
-        Saver(OctoQuadBench bench) {
-            this.bench = bench;
-            setTelemetryEnabled(false);
-        }
-
-        @Override protected void initStates() {}
-        @Override protected void read() {}
-        @Override protected void write() {}
-
-        @Override
-        public void stop() {
-            bench.finish();
-        }
-    }
-
-    private final Saver saver = new Saver(this);
+    private final StopHook saver = new StopHook(this::finish);
     private BenchReport report;
     private String mode;
     private OctoQuad octoQuad;
