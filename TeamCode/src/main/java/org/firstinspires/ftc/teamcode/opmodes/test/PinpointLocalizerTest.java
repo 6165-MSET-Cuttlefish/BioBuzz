@@ -20,8 +20,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 public class PinpointLocalizerTest extends LinearOpMode {
     public static String pinpointName = "pinpoint";
     // OctoQuad's TCP offset points from the pods' TCP to the centre, so these are (-tcpOffsetMmY, -tcpOffsetMmX).
-    public static double xPodOffsetMm = -34.13125;
-    public static double yPodOffsetMm = 157.1625;
+    public static double xPodOffsetMm = -157.1625;
+    public static double yPodOffsetMm = 34.13125;
     public static GoBildaPinpointDriver.GoBildaOdometryPods podType = GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
     public static boolean useCustomResolution = false;
     public static double customTicksPerMm = 19.89436789;

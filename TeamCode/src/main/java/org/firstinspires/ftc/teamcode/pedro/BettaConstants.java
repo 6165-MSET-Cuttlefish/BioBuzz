@@ -31,9 +31,9 @@ public class BettaConstants {
     public static class PinpointSettings {
         public String name = "pinpoint";
         public GoBildaPinpointDriver.GoBildaOdometryPods podType = GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
-        public double xPodOffset = -6.5;
-        public double yPodOffset = 1.25;
-        public GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
+        public double xPodOffset = -6.1875;
+        public double yPodOffset = 1.34375;
+        public GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
         public GoBildaPinpointDriver.EncoderDirection yPodDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
     }
 
