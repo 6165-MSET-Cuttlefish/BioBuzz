@@ -65,7 +65,9 @@ public class Shooter extends Module {
     public enum FlywheelState implements State {
         IDLE(1800),
         OFF(0),
-        PID(0);
+        PID(0),
+        // Open-loop motor power, not RPM.
+        POWER(0.5);
 
         FlywheelState(double value) {
             setValue(value);
@@ -133,6 +135,8 @@ public class Shooter extends Module {
 
         if (fw == FlywheelState.PID) {
             targetVelocityRPM = ShooterInterpolation.getTargetRPM(distanceToGoal);
+        } else if (fw == FlywheelState.POWER) {
+            targetVelocityRPM = 0;
         } else {
             targetVelocityRPM = fw.getValue();
         }
@@ -148,7 +152,7 @@ public class Shooter extends Module {
             hoodPosition = hs.getValue() + HoodState.RESET.getValue();
         }
 
-        if (fw != FlywheelState.IDLE && fw != FlywheelState.OFF) {
+        if (fw == FlywheelState.PID) {
             targetVelocityRPM += velocityOffset;
         }
         hoodPosition += hoodOffset;
@@ -248,6 +252,11 @@ public class Shooter extends Module {
     }
 
     private void calculateShooterPower() {
+        if (getState(FlywheelState.class) == FlywheelState.POWER) {
+            shooterPidOutput = FlywheelState.POWER.getValue();
+            return;
+        }
+
         double error = targetVelocityRPM - shooterCurrentVelocityRPM;
 
         if (pureBangBang) {
