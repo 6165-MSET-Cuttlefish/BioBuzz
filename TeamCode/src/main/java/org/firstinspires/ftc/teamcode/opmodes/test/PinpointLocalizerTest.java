@@ -25,7 +25,7 @@ public class PinpointLocalizerTest extends LinearOpMode {
     public static GoBildaPinpointDriver.GoBildaOdometryPods podType = GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
     public static boolean useCustomResolution = false;
     public static double customTicksPerMm = 19.89436789;
-    public static GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
+    public static GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
     public static GoBildaPinpointDriver.EncoderDirection yPodDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
     // Off keeps the factory-calibrated scalar; on overrides it.
     public static boolean useCustomYawScalar = false;
