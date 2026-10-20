@@ -6,6 +6,7 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -22,7 +23,6 @@ public class TransferCountTest extends OpMode {
     public static int stopAtCount = 2;
     public static double motor1Power = 0;
     public static boolean resetCount = false;
-    public static boolean reset = false;
 
     private final ElapsedTime runtime = new ElapsedTime();
 
@@ -32,13 +32,16 @@ public class TransferCountTest extends OpMode {
 
     int count;
     double pastDiff;
+    boolean lastResetCount;
 
     @Override
     public void init() {
         upstream = hardwareMap.analogInput.get(upstreamSensorName);
         downstream = hardwareMap.analogInput.get(downstreamSensorName);
         motor1 = hardwareMap.get(DcMotorEx.class, motor1Name);
+        motor1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
+        lastResetCount = resetCount;
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
     }
 
@@ -60,20 +63,17 @@ public class TransferCountTest extends OpMode {
         }
         pastDiff = diff;
 
-        if (reset && count >= stopAtCount) {
-            motor1Power = 0;
-        }
+        if (resetCount != lastResetCount) count = 0;
+        lastResetCount = resetCount;
+        boolean stopped = stopAtCount > 0 && count >= stopAtCount;
 
-        if (resetCount) {
-            count = 0;
-        }
-
-        motor1.setPower(motor1Power);
+        motor1.setPower(stopped ? 0 : motor1Power);
 
         while (runtime.milliseconds() < 20) {
 
         }
 
+        telemetry.addData("Motor", stopped ? "STOPPED at count " + stopAtCount + ": flip resetCount to run again" : "running");
         telemetry.addData("Count", count);
         telemetry.addData("Upstream (mm)", mmA);
         telemetry.addData("Downstream (mm)", mmB);
