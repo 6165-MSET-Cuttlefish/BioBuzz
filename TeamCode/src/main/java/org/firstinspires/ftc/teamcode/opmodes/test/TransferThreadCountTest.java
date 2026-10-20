@@ -29,6 +29,8 @@ public class TransferThreadCountTest extends OpMode {
     public static double motor1Power = 0;
     public static boolean resetCount = false;
     public static boolean reset = false;
+    public static boolean crashInLoop = false;
+    public static boolean crashInStop = false;
 
     private final ElapsedTime runtime = new ElapsedTime();
 
@@ -62,6 +64,7 @@ public class TransferThreadCountTest extends OpMode {
 
     @Override
     public void loop() {
+        if (crashInLoop) throw new IllegalStateException("crashInLoop is on: deliberate crash in loop() to test the TransferCounter thread");
         runtime.reset();
         lastPosition = motor1.getCurrentPosition();
         if (counter != null) counter.setThreshold(diffThreshold, hysteresisMm);
@@ -113,6 +116,7 @@ public class TransferThreadCountTest extends OpMode {
 
     @Override
     public void stop() {
+        if (crashInStop) throw new IllegalStateException("crashInStop is on: deliberate crash in stop() before stopping the TransferCounter thread");
         if (counter != null) counter.stop();
     }
 }
