@@ -34,7 +34,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     @Config("Vision Ball Collection")
     public static class Tuning {
-        public static int maxBalls = 4;
+        public static int maxBalls = 3;
         public static boolean collectPollen = true;
         public static boolean collectRedNectar = true;
         public static boolean collectBlueNectar = true;

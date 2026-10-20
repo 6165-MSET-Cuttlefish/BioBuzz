@@ -34,7 +34,7 @@ public final class BallCollection extends CommandBuilder {
         public boolean collectRedNectar = true;
         public boolean collectBlueNectar = true;
         /** The nearest this many usable balls are planned; the order search is n!, so at most {@link RouteOptimizer#MAX_BALLS}. */
-        public int maxBalls = 4;
+        public int maxBalls = 3;
         public double maxRangeIn = 60;
         /** Least room between the robot's footprint and the walls or the centre line. */
         public double wallGapIn = 1;

@@ -18,8 +18,9 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
 
 ## Design around these
 
-- **Route planner: the worst problem.** It runs on the OpMode thread in Vision Ball Collection and Ball Collection,
-  whose `maxBalls` default is 4.
+- **Route planner: the worst problem.** It runs on the OpMode thread in Vision Ball Collection, Ball Collection Auto
+  and Ball Collection. `maxBalls` defaults to 3 in the first two; Ball Collection plans its `ballCount` dashboard balls
+  (4 by default).
   - Planning time by ball count:
 
     | balls | p50 | p95 | p99 or worst |
@@ -35,8 +36,7 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
   - The cold first 4-ball plan took 227 ms.
   - STOP pressed during a plan restarted the Robot Controller app in 6 of 6 trials, about 16 s to come back. A restart
     loses dashboard edits and the alliance.
-  - The fix isn't chosen yet: plan on a worker thread with a time budget, or cap the ball count. 3 balls stays under
-    0.5 s.
+  - Until planning moves to a worker thread with a time budget, `maxBalls` stays at 3, which plans in under 0.5 s.
 - **The SDK's stop window is 900 ms**, plus 100 ms of grace, covering whatever `init_loop()`/`loop()` is running and
   `stop()`.
   - Webcam close during STOP: `CellTipCamera.stop()` took 574–581 ms when STOP came right after INIT, and 61–319 ms
