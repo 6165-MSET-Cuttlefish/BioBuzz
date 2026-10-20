@@ -16,6 +16,7 @@ import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 public class CloseFlowerLinearAuto extends BarePedroAuto {
 
     private CloseFlowerPaths paths;
+    private Path[] legs;
 
     @Override
     protected Pose startPose() {
@@ -26,9 +27,14 @@ public class CloseFlowerLinearAuto extends BarePedroAuto {
 
     @Override
     protected Command routine() {
-        Path[] legs = paths.all();
+        legs = paths.all();
         Command[] follows = new Command[legs.length];
         for (int i = 0; i < legs.length; i++) follows[i] = follow(follower, legs[i]);
         return sequential(follows);
+    }
+
+    @Override
+    protected void addTelemetry() {
+        telemetry.addData("Leg", CloseFlowerPaths.leg(legs, follower.currentPath()));
     }
 }

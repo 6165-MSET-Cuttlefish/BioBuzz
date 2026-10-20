@@ -16,6 +16,7 @@ public class CloseFlowerAuto extends BioBuzzOpMode {
 
     private static final double ROUTINE_TIMEOUT_MS = 30000;
 
+    private Path[] legs;
     private Command routine;
 
     @Override
@@ -26,7 +27,7 @@ public class CloseFlowerAuto extends BioBuzzOpMode {
         CloseFlowerPaths paths = new CloseFlowerPaths();
         robot.follower.setPose(paths.start);
 
-        Path[] legs = paths.all();
+        legs = paths.all();
         Command[] follows = new Command[legs.length];
         for (int i = 0; i < legs.length; i++) follows[i] = PathCommands.follow(robot.follower, legs[i]);
         routine = PathCommands.timeout(sequential(follows), ROUTINE_TIMEOUT_MS);
@@ -40,9 +41,9 @@ public class CloseFlowerAuto extends BioBuzzOpMode {
     @Override
     protected void telemetry() {
         telemetry.addData("Routine Running", Scheduler.isRunning(routine));
+        telemetry.addData("Leg", CloseFlowerPaths.leg(legs, robot.follower.currentPath()));
         if (robot.follower.currentPath() != null) {
-            telemetry.addData("Path Index", robot.follower.pathIndex());
-            telemetry.addData("Distance Remaining", "%.1f in", robot.follower.distanceToEndpoint());
+            telemetry.addData("Distance Left On Leg", "%.1f in", robot.follower.remainingDistance());
         }
     }
 }
