@@ -92,7 +92,8 @@ Times are p50 / p95 / max in ms unless noted. Not run that day (they need `--int
   - Pipeline latency (`tl`) 227 / 244 / 254.
   - Capture to arrival on the hub 263 / 284 / 352.
   - Pipeline 0 (fiducial) runs at about 44 fps.
-  - Ball velocities and "fresh frame" logic have to tolerate about a quarter second of age.
+  - New results come 229 / 246 / 266 apart. Ball velocities and "fresh frame" logic have to tolerate about a quarter
+    second of age, so `staleFrameSeconds` (0.5 s) counts from a result's arrival on the hub, not its capture.
   - `LimelightSync` takes about 1.7 s, and INIT to the first ball frame about 1.8 s.
   - The poller's rate (100–250 Hz) doesn't change the frame rate.
 - **Webcam controls:** `WebcamControls.update()` with a write (exposure or gain) blocks for 72 / 87 / 87. Write them

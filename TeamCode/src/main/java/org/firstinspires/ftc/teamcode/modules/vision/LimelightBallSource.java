@@ -20,8 +20,8 @@ public final class LimelightBallSource {
         /** The pipeline running ball_contour_snapscript.py. */
         public static int pipeline = 4;
         public static boolean syncOnInit = true;
-        /** With no new Limelight frame for this long, the frame goes stale: no balls, none visible. */
-        public static double staleFrameSeconds = 0.25;
+        /** No new frame arriving for this long stales it: no balls. From arrival, not capture: a frame lands about 0.26 s old. */
+        public static double staleFrameSeconds = 0.5;
         /** No successful poll for this long faults; 250 is the SDK's own isConnected() threshold. */
         public static double noDataFaultMs = 250;
         /** Reporting another pipeline for this long faults; a switch takes a few frames to show. */
@@ -76,6 +76,7 @@ public final class LimelightBallSource {
     private int requested = NO_PIPELINE;
     private LimelightSync.Request sync;
     private double lastTsMs = Double.NaN;
+    private double lastArrivalSeconds = Double.NaN;
     private double lastCaptureLimelightSeconds = Double.NaN;
     private double fps = 0;
 
@@ -256,6 +257,7 @@ public final class LimelightBallSource {
         // The tracker only differences its timestamps, so it runs on the Limelight's clock, free of offset jitter.
         List<TrackedBall> balls = tracker.update(detections, captureLimelightSeconds);
         latest = new Frame(balls, count, fps, (arrivalSeconds - captureSeconds) * 1000, captureSeconds, false);
+        lastArrivalSeconds = arrivalSeconds;
         return true;
     }
 
@@ -313,7 +315,7 @@ public final class LimelightBallSource {
     }
 
     private void goStaleIfOld() {
-        if (!latest.stale && latest.ageSeconds() > Tuning.staleFrameSeconds) dropTracks();
+        if (!latest.stale && nowSeconds() - lastArrivalSeconds > Tuning.staleFrameSeconds) dropTracks();
     }
 
     // Stale tracks would match whatever is in frame next and derive velocity across the unseen gap.
