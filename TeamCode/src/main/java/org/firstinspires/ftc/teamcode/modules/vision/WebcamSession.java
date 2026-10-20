@@ -79,6 +79,9 @@ public final class WebcamSession {
 
     public OpenCvWebcam webcam() { return webcam; }
 
+    /** Null until the camera has opened. */
+    public WebcamControls controls() { return controls; }
+
     /** Call every loop from the OpMode thread; throws once the camera has reported an open failure. */
     public void update() {
         if (closed) throw new IllegalStateException(webcamName + " was closed; a WebcamSession can't reopen");
