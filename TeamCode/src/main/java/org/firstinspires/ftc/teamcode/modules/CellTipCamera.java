@@ -7,9 +7,11 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
+import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.modules.vision.CellTipPipeline;
+import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 
 /** HIVE-cell tip verdict from {@link CellTipPipeline} on the webcam; the alliance is fixed at init. */
@@ -17,6 +19,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 public class CellTipCamera extends Module {
 
     public static final String WEBCAM_NAME = "aprilTagDetector";
+    public static final String FAULT_KEY = "Webcam";
 
     public static long maxStalenessMs = 250;
     public static double checkTipTimeoutMs = 10000;
@@ -66,6 +69,10 @@ public class CellTipCamera extends Module {
         // In read(), not write(): exposure/gain tuning and the on/off state must apply during init, when writes are held back.
         pipeline.setEnabled(isInAny(VisionState.ENABLED));
         session.update();
+        WebcamControls controls = session.controls();
+        String rejected = controls == null ? null : controls.rejected();
+        if (rejected == null) Faults.clear(FAULT_KEY);
+        else Faults.raise(FAULT_KEY, WEBCAM_NAME + " rejected " + rejected);
         CellTipPipeline.Verdict verdict = pipeline.latest();
         stalenessMs = verdict.timestampSeconds == 0
                 ? Double.NaN

@@ -2,10 +2,13 @@ package org.firstinspires.ftc.teamcode.modules.vision;
 
 import com.acmerobotics.dashboard.config.Config;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BooleanSupplier;
+import java.util.function.IntPredicate;
 import java.util.function.IntSupplier;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.ExposureControl;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.GainControl;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.WhiteBalanceControl;
@@ -24,116 +27,127 @@ public class WebcamControls {
     public static int gain = 0;
     public static int whiteBalanceK = 3250;
 
-    private static final long RETRY_NANOS = TimeUnit.SECONDS.toNanos(1);
     private static final int UNSET = Integer.MIN_VALUE;
 
-    private final OpenCvWebcam webcam;
+    private final ExposureControl exposure;
+    private final WhiteBalanceControl whiteBalance;
+    private final Knob exposureKnob;
+    private final Knob gainKnob;
+    private final Knob whiteBalanceKnob;
 
     private boolean lastManual;
-    private final Knob exposureKnob = new Knob(() -> exposureMs, this::applyExposure);
-    private final Knob gainKnob = new Knob(() -> gain, this::applyGain);
-    private final Knob whiteBalanceKnob = new Knob(() -> whiteBalanceK, this::applyWhiteBalance);
+    private boolean exposureModeRejected;
+    private boolean whiteBalanceModeRejected;
+    private String rejected;
 
     public WebcamControls(OpenCvWebcam webcam) {
-        this.webcam = webcam;
+        exposure = webcam.getExposureControl();
+        whiteBalance = webcam.getWhiteBalanceControl();
+        GainControl gainControl = webcam.getGainControl();
+        exposureKnob = new Knob(" ms", () -> exposureMs,
+                () -> (int) exposure.getMinExposure(TimeUnit.MILLISECONDS),
+                () -> (int) exposure.getMaxExposure(TimeUnit.MILLISECONDS),
+                ms -> exposure.setExposure(ms, TimeUnit.MILLISECONDS));
+        gainKnob = new Knob("", () -> gain, gainControl::getMinGain, gainControl::getMaxGain, gainControl::setGain);
+        whiteBalanceKnob = new Knob(" K", () -> whiteBalanceK,
+                whiteBalance::getMinWhiteBalanceTemperature, whiteBalance::getMaxWhiteBalanceTemperature,
+                whiteBalance::setWhiteBalanceTemperature);
         this.lastManual = !manual; // force a mode apply on the first update()
     }
 
-    // Each write is a blocking USB transfer: push only changed values, and retry a rejected one at most once per RETRY_NANOS.
+    // Each write is a blocking USB transfer, so a value is sent once: a rejected one waits for a new value.
     public void update() {
         boolean modeChanged = manual != lastManual;
         lastManual = manual;
+        boolean wrote = modeChanged;
 
         if (!manual) {
             if (modeChanged) setModes(ExposureControl.Mode.ContinuousAuto, WhiteBalanceControl.Mode.AUTO);
-            return;
+        } else {
+            if (modeChanged) {
+                setModes(ExposureControl.Mode.Manual, WhiteBalanceControl.Mode.MANUAL);
+                // The camera resets values on a mode switch.
+                exposureKnob.reset();
+                gainKnob.reset();
+                whiteBalanceKnob.reset();
+            }
+            if (!exposureModeRejected) wrote |= exposureKnob.update();
+            wrote |= gainKnob.update();
+            if (!whiteBalanceModeRejected) wrote |= whiteBalanceKnob.update();
         }
+        if (wrote) rejected = describeRejected();
+    }
 
-        long now = System.nanoTime();
-        if (modeChanged) {
-            setModes(ExposureControl.Mode.Manual, WhiteBalanceControl.Mode.MANUAL);
-            // The camera resets values on a mode switch.
-            exposureKnob.reset(now);
-            gainKnob.reset(now);
-            whiteBalanceKnob.reset(now);
-        }
-        exposureKnob.update(now);
-        gainKnob.update(now);
-        whiteBalanceKnob.update(now);
+    /** What the camera refused, e.g. "gain 100, white balance mode MANUAL"; null when it took everything. */
+    public String rejected() {
+        return rejected;
+    }
+
+    public void addTelemetry(Telemetry telemetry) {
+        String mode = lastManual ? "MANUAL" : "AUTO";
+        telemetry.addData("Exposure", exposureModeRejected ? mode + " mode REJECTED" : lastManual ? exposureKnob.status() : mode);
+        telemetry.addData("Gain", lastManual ? gainKnob.status() : mode);
+        telemetry.addData("White balance", whiteBalanceModeRejected ? mode + " mode REJECTED"
+                : lastManual ? whiteBalanceKnob.status() : mode);
+    }
+
+    private void setModes(ExposureControl.Mode exposureMode, WhiteBalanceControl.Mode whiteBalanceMode) {
+        exposureModeRejected = !exposure.setMode(exposureMode);
+        whiteBalanceModeRejected = !whiteBalance.setMode(whiteBalanceMode);
+    }
+
+    private String describeRejected() {
+        String mode = lastManual ? "MANUAL" : "AUTO";
+        List<String> parts = new ArrayList<>();
+        if (exposureModeRejected) parts.add("exposure mode " + mode);
+        else if (lastManual && exposureKnob.rejected) parts.add("exposure " + exposureKnob.value());
+        if (lastManual && gainKnob.rejected) parts.add("gain " + gainKnob.value());
+        if (whiteBalanceModeRejected) parts.add("white balance mode " + mode);
+        else if (lastManual && whiteBalanceKnob.rejected) parts.add("white balance " + whiteBalanceKnob.value());
+        return parts.isEmpty() ? null : String.join(", ", parts);
     }
 
     private static final class Knob {
-        private final IntSupplier value;
-        private final BooleanSupplier apply;
+        private final String unit;
+        private final IntSupplier wanted;
+        private final IntSupplier min;
+        private final IntSupplier max;
+        private final IntPredicate set;
         private int last = UNSET;
-        private long retryAt;
+        private int sent;
+        private boolean rejected;
 
-        Knob(IntSupplier value, BooleanSupplier apply) {
-            this.value = value;
-            this.apply = apply;
+        Knob(String unit, IntSupplier wanted, IntSupplier min, IntSupplier max, IntPredicate set) {
+            this.unit = unit;
+            this.wanted = wanted;
+            this.min = min;
+            this.max = max;
+            this.set = set;
         }
 
-        void reset(long now) {
+        void reset() {
             last = UNSET;
-            retryAt = now;
+            rejected = false;
         }
 
-        void update(long now) {
-            if (value.getAsInt() != last && now - retryAt >= 0) {
-                if (apply.getAsBoolean()) last = value.getAsInt();
-                else retryAt = now + RETRY_NANOS;
-            }
+        boolean update() {
+            int want = wanted.getAsInt();
+            if (want == last) return false;
+            last = want;
+            int lo = min.getAsInt();
+            int hi = max.getAsInt();
+            sent = hi > lo ? Math.max(lo, Math.min(hi, want)) : want;
+            rejected = !set.test(sent);
+            return true;
         }
-    }
 
-    private static long clamp(long want, long min, long max) {
-        return max > min ? Math.max(min, Math.min(max, want)) : want;
-    }
-
-    private void setModes(ExposureControl.Mode expMode, WhiteBalanceControl.Mode wbMode) {
-        try {
-            ExposureControl exp = webcam.getExposureControl();
-            if (exp != null) exp.setMode(expMode);
-        } catch (Exception ignored) {}
-        try {
-            WhiteBalanceControl wb = webcam.getWhiteBalanceControl();
-            if (wb != null) wb.setMode(wbMode);
-        } catch (Exception ignored) {}
-    }
-
-    private boolean applyExposure() {
-        try {
-            ExposureControl exp = webcam.getExposureControl();
-            if (exp == null) return false;
-            long min = exp.getMinExposure(TimeUnit.MILLISECONDS);
-            long max = exp.getMaxExposure(TimeUnit.MILLISECONDS);
-            return exp.setExposure(clamp(exposureMs, min, max), TimeUnit.MILLISECONDS);
-        } catch (Exception ignored) {
-            return false;
+        String value() {
+            return sent + unit + (sent != last ? " (asked " + last + unit + ")" : "");
         }
-    }
 
-    private boolean applyGain() {
-        try {
-            GainControl g = webcam.getGainControl();
-            if (g == null) return false;
-            int min = g.getMinGain();
-            int max = g.getMaxGain();
-            return g.setGain((int) clamp(gain, min, max));
-        } catch (Exception ignored) {
-            return false;
-        }
-    }
-
-    private boolean applyWhiteBalance() {
-        try {
-            WhiteBalanceControl wb = webcam.getWhiteBalanceControl();
-            if (wb == null) return false;
-            int min = wb.getMinWhiteBalanceTemperature();
-            int max = wb.getMaxWhiteBalanceTemperature();
-            return wb.setWhiteBalanceTemperature((int) clamp(whiteBalanceK, min, max));
-        } catch (Exception ignored) {
-            return false;
+        String status() {
+            if (last == UNSET) return "not sent";
+            return rejected ? value() + " REJECTED" : value();
         }
     }
 }

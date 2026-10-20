@@ -34,9 +34,19 @@ public final class CloseFlowerPaths {
         return FieldPose.forAlliance(x, y, 0);
     }
 
+    private static final String[] LEG_NAMES = {"toCloseFlower", "toFarFlower", "toHive", "toAudienceWall", "toCorner"};
+
     /** The legs in driving order. */
     public Path[] all() {
         return new Path[] {toCloseFlower(), toFarFlower(), toHive(), toAudienceWall(), toCorner()};
+    }
+
+    /** "3/5 toHive" when {@code current} is one of {@code legs}, an {@link #all()} result; "none" otherwise. */
+    public static String leg(Path[] legs, Path current) {
+        for (int i = 0; i < legs.length; i++) {
+            if (legs[i] == current) return (i + 1) + "/" + legs.length + " " + LEG_NAMES[i];
+        }
+        return "none";
     }
 
     public Path toCloseFlower() {

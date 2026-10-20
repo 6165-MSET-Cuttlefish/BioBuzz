@@ -28,7 +28,6 @@ public class TransferThreadCountTest extends OpMode {
     public static int stopAtCount = 2;
     public static double motor1Power = 0;
     public static boolean resetCount = false;
-    public static boolean reset = false;
     public static boolean crashInLoop = false;
     public static boolean crashInStop = false;
 
@@ -42,6 +41,7 @@ public class TransferThreadCountTest extends OpMode {
 
     int loopCount;
     int lastPosition = 0;
+    boolean lastResetCount;
 
     @Override
     public void init() {
@@ -50,10 +50,12 @@ public class TransferThreadCountTest extends OpMode {
         motor1 = hardwareMap.get(DcMotorEx.class, motor1Name);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        motor1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         if (runThread) {
             counter = new TransferCounter(hardwareMap, upstreamSensorName, downstreamSensorName, maxRangeMm, pollMs);
             counter.setThreshold(diffThreshold, hysteresisMm);
         }
+        lastResetCount = resetCount;
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
     }
 
@@ -74,23 +76,22 @@ public class TransferThreadCountTest extends OpMode {
         double diff = mmA - mmB;
         if (loopEdge.update(diff, diffThreshold, hysteresisMm)) loopCount++;
 
-        if (resetCount) {
+        if (resetCount != lastResetCount) {
             loopCount = 0;
             if (counter != null) counter.resetCount();
         }
+        lastResetCount = resetCount;
         int count = counter != null ? counter.count() : loopCount;
+        boolean stopped = stopAtCount > 0 && count >= stopAtCount;
 
-        if (reset && count >= stopAtCount) {
-            motor1Power = 0;
-        }
-
-        motor1.setPower(motor1Power);
+        motor1.setPower(stopped ? 0 : motor1Power);
         double workMs = runtime.milliseconds();
 
         while (runtime.milliseconds() < loopMs) {
 
         }
 
+        telemetry.addData("Motor", stopped ? "STOPPED at count " + stopAtCount + ": flip resetCount to run again" : "running");
         telemetry.addData("Count (thread)", counter != null ? count : "off");
         telemetry.addData("Count (loop)", loopCount);
         telemetry.addData("Upstream (mm)", mmA);

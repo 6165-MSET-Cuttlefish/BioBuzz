@@ -29,10 +29,9 @@ public class CameraTune extends LinearOpMode {
     private void pump() {
         session.update();
         telemetry.addLine("Edit WebcamControls.* in the FtcDashboard config.");
-        telemetry.addData("Mode", WebcamControls.manual ? "MANUAL" : "AUTO");
-        telemetry.addData("Exposure (ms)", WebcamControls.exposureMs);
-        telemetry.addData("Gain", WebcamControls.gain);
-        telemetry.addData("White balance (K)", WebcamControls.whiteBalanceK);
+        WebcamControls controls = session.controls();
+        if (controls == null) telemetry.addLine("Waiting for the camera to open");
+        else controls.addTelemetry(telemetry);
         telemetry.addData("Camera FPS", "%.1f", session.webcam().getFps());
         telemetry.update();
         sleep(20);

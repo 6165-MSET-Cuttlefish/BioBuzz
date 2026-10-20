@@ -19,6 +19,8 @@ public abstract class BarePedroAuto extends LinearOpMode {
 
     protected abstract Command routine();
 
+    protected void addTelemetry() {}
+
     @Override
     public void runOpMode() {
         Scheduler.reset();
@@ -35,17 +37,18 @@ public abstract class BarePedroAuto extends LinearOpMode {
             follower.update();
             Scheduler.execute();
             addFollowerTelemetry(telemetry, follower);
+            addTelemetry();
             telemetry.update();
         }
     }
 
     public static void addFollowerTelemetry(Telemetry telemetry, Follower follower) {
-        telemetry.addData("x", follower.pose().x());
-        telemetry.addData("y", follower.pose().y());
-        telemetry.addData("heading", follower.pose().heading());
+        Pose pose = follower.pose();
+        telemetry.addData("x", pose.x());
+        telemetry.addData("y", pose.y());
+        telemetry.addData("heading (deg)", Math.toDegrees(pose.heading()));
         if (follower.currentPath() != null) {
-            telemetry.addData("Current path distance remaining", follower.distanceToEndpoint());
-            telemetry.addData("Path number", follower.pathIndex());
+            telemetry.addData("Distance left on path (in)", follower.remainingDistance());
         }
     }
 }
