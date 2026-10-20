@@ -41,7 +41,7 @@ Pedro Pathing 3:
 - `BezierCurve.length()` (so `parameter()`, `remainingDistance()`) can under-report S-curves and loops down to the chord: never use it for timeouts or scoring. `PathCommands.followUntilRemaining` hands over early on such curves.
 - `follow`/`followThrough` brake at the end; legs keep speed through a join only as segments of one `Paths.path(...)` or via a `followUntilRemaining` handover before braking.
 - A heading jump over 11.25° at a join gives turning priority over driving; `architecture/auto/PathHeadings` gives headings that avoid it.
-- A lambda passed to `path.heading(...)` gets path completion, not the curve's `t` (per piece inside `piecewise`); wrap it in `Interpolator.geometric(...)` to get `t`. `reverse()` drops `geometric`, so `reverseTangent()` and `facingPoint(...).reverse()` are wrong on Bezier curves: turn onto a tangent with `PathHeadings.linearThenTangent`/`holdThenTangent`/`tangentThenLinear`.
+- A lambda passed to `path.heading(...)` gets path completion, not the curve's `t` (per piece inside `piecewise`); wrap it in `Interpolator.geometric(...)` to get `t`. `reverse()` drops `geometric`, so `reverseTangent()` and `facingPoint(...).reverse()` are wrong on Bezier curves: turn onto a tangent with `PathHeadings.linearThenTangent`/`holdThenTangent`/`tangentThenLinear`, and drive one facing backwards with `PathHeadings.backwardTangent`.
 
 ## Framework layout
 
@@ -63,7 +63,7 @@ Pedro Pathing 3:
 
 **Faults** (`core/Faults`) are named, recoverable errors, for the Limelight only (see Fail fast). Keys are global and cleared at every `EnhancedOpMode` INIT, which also shows them; a bare `OpMode`/`LinearOpMode` must show them itself.
 
-**Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision calls `disableBallVision()` in `initialize()`.
+**Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision calls `disableBallVision()` in `initialize()`. `BioBuzzRobot` opens the webcam (`CellTipCamera`) at INIT and fails without it; an OpMode that doesn't need it overrides `usesCellTip()` to return false, leaving `robot.cellTip` null.
 
 **Drivetrain** throws on a write while the follower drives the motors: an OpMode that follows paths calls `robot.drivetrain.setWriteEnabled(false)`; `BallCollection` does this itself.
 

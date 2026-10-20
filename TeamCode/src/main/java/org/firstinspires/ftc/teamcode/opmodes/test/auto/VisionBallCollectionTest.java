@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
@@ -328,8 +329,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         }
         route = RouteOptimizer.findOptimalRoute(pose, balls, pose, region, obstacles, shape, Tuning.railGapIn, false);
         plan = RoutePathBuilder.build(route);
-        intakeDrawing = plan.intake == null ? null : CollectionDisplay.fieldPolyline(plan.intake);
-        returnDrawing = plan.back == null ? null : CollectionDisplay.fieldPolyline(plan.back);
+        intakeDrawing = plan.intake == null ? null : FieldVisualization.pathPolyline(plan.intake);
+        returnDrawing = plan.back == null ? null : FieldVisualization.pathPolyline(plan.back);
     }
 
     private static List<Obstacle> obstacles() {

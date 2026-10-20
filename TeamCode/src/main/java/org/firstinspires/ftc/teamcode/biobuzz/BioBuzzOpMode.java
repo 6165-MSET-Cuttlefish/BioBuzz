@@ -14,6 +14,10 @@ public abstract class BioBuzzOpMode extends EnhancedOpMode {
         return robot;
     }
 
+    protected boolean usesCellTip() {
+        return true;
+    }
+
     protected final void disableBallVision() {
         Camera.VisionState.DISABLED.activate();
     }

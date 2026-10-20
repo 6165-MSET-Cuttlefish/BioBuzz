@@ -68,6 +68,11 @@ public final class PathHeadings {
                 : Angle.normalize(start + turn * turned(curve, t, switchAt, 1))));
     }
 
+    /** Faces against the direction of travel the whole way, for driving a curve backwards. */
+    public static Path backwardTangent(Path path) {
+        return path.heading(Interpolator.geometric((curve, t) -> Angle.normalize(directionAt(curve, t, 0, 1) + Math.PI)));
+    }
+
     /** The direction at {@code t} held inside {@code from..to}, looking further inside that range where the curve stalls. */
     private static double directionAt(Curve curve, double t, double from, double to) {
         double at = Math.max(from, Math.min(to, t));

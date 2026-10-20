@@ -11,6 +11,7 @@ import com.pedropathing.ivy.behaviors.EndCondition;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.planner.Ball;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
@@ -112,8 +113,8 @@ public class BallCollectionAuto extends BioBuzzOpMode {
         if (plan == null) return;
         if (plan != drawnPlan) {
             drawnPlan = plan;
-            intakeDrawing = plan.intake == null ? null : CollectionDisplay.fieldPolyline(plan.intake);
-            returnDrawing = plan.back == null ? null : CollectionDisplay.fieldPolyline(plan.back);
+            intakeDrawing = plan.intake == null ? null : FieldVisualization.pathPolyline(plan.intake);
+            returnDrawing = plan.back == null ? null : FieldVisualization.pathPolyline(plan.back);
         }
         CollectionDisplay.drawPlan(overlay, plan, intakeDrawing, returnDrawing, collection.robot());
     }

@@ -168,8 +168,8 @@ public class BallCollectionTest extends EnhancedOpMode {
         route = RouteOptimizer.findOptimalRoute(start, balls, start, area, obstacles, shape, Tuning.railGapIn,
                 Tuning.forceSplineOnly);
         plan = RoutePathBuilder.build(route);
-        intakeDrawing = plan.intake == null ? null : CollectionDisplay.fieldPolyline(plan.intake);
-        returnDrawing = plan.back == null ? null : CollectionDisplay.fieldPolyline(plan.back);
+        intakeDrawing = plan.intake == null ? null : FieldVisualization.pathPolyline(plan.intake);
+        returnDrawing = plan.back == null ? null : FieldVisualization.pathPolyline(plan.back);
     }
 
     private static int ballCount() {

@@ -2,9 +2,6 @@ package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
 import com.acmerobotics.dashboard.canvas.Canvas;
 import com.pedropathing.math.Pose;
-import com.pedropathing.math.Vector2D;
-import com.pedropathing.paths.Path;
-import com.pedropathing.paths.PathSegment;
 
 import java.util.Arrays;
 import java.util.List;
@@ -67,23 +64,6 @@ final class CollectionDisplay {
             case NECTAR_BLUE: return "#1E88E5";
             default: throw new IllegalArgumentException("unhandled ball type " + type);
         }
-    }
-
-    static double[][] fieldPolyline(Path path) {
-        List<PathSegment> segments = path.getSegments();
-        double[] xs = new double[segments.size() * DRAW_SAMPLES + 1];
-        double[] ys = new double[xs.length];
-        int i = 0;
-        for (PathSegment segment : segments) {
-            for (int s = i == 0 ? 0 : 1; s <= DRAW_SAMPLES; s++) {
-                Vector2D p = segment.curve.get((double) s / DRAW_SAMPLES);
-                double[] field = FieldVisualization.toField(p.x(), p.y());
-                xs[i] = field[0];
-                ys[i] = field[1];
-                i++;
-            }
-        }
-        return new double[][]{xs, ys};
     }
 
     static void drawKeepIn(Canvas overlay, Region keepIn) {
