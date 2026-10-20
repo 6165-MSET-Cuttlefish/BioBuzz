@@ -18,7 +18,6 @@ public class RobotActions {
     /** Finishes on a tip or after {@link CellTipCamera#checkTipTimeoutMs}; check {@link CellTipCamera#isTipped()} to tell which. */
     public CommandBuilder checkTip() {
         CellTipCamera cellTip = robot.cellTip;
-        if (cellTip == null) throw new IllegalStateException("checkTip needs the webcam, but this OpMode's usesCellTip() is false");
         Command watch = Command.build()
                 .setDone(cellTip::isTipped)
                 .requiring(cellTip);

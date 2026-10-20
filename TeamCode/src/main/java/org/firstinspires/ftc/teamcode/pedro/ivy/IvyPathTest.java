@@ -18,11 +18,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.PathHeadings;
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
-import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.architecture.command.StateCommands;
+import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
+import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.modules.BettaTurret;
+import org.firstinspires.ftc.teamcode.opmodes.test.auto.BallCollectionRobot;
 
 @Autonomous(name = "Ivy Path Test", group = "Test")
-public class IvyPathTest extends BioBuzzOpMode {
+public class IvyPathTest extends EnhancedOpMode {
 
     private static final double ROUTINE_TIMEOUT_MS = 10 * 60 * 1000;
     private static final double PAUSE_MS = 2000;
@@ -37,25 +40,36 @@ public class IvyPathTest extends BioBuzzOpMode {
     private double[][] splineDrawing;
     private String leg = "waiting for START";
 
+    private static final class TurretRobot extends BallCollectionRobot {
+        BettaTurret turret;
+
+        TurretRobot(EnhancedOpMode opMode) {
+            super(opMode);
+        }
+
+        @Override
+        protected void initializeGameModules() {
+            turret = new BettaTurret(opMode.hardwareMap);
+        }
+    }
+
     @Override
-    protected boolean usesCellTip() {
-        return false;
+    protected Robot createRobot() {
+        TurretRobot turretRobot = new TurretRobot(this);
+        turret = turretRobot.turret;
+        return turretRobot;
     }
 
     @Override
     protected void initialize() {
-        disableBallVision();
-        robot.drivetrain.setWriteEnabled(false);
-        turret = new BettaTurret(hardwareMap);
         robot.follower.setPose(start);
 
         Path forward = curve(start, control1, control2, end).tangent();
         Path back = PathHeadings.backwardTangent(curve(end, control2, control1, start));
         splineDrawing = FieldVisualization.pathPolyline(forward);
 
-        // Not StateCommands.set: these modules' states bind only after initialize() returns.
-        Command aimSideways = instant(BettaTurret.RightState.SIDEWAYS::activate).requiring(turret);
-        Command aimForward = instant(BettaTurret.RightState.FORWARD::activate).requiring(turret);
+        Command aimSideways = StateCommands.set(BettaTurret.RightState.SIDEWAYS);
+        Command aimForward = StateCommands.set(BettaTurret.RightState.FORWARD);
 
         routine = sequential(PathCommands.timeout(Groups.loop(sequential(
                 instant(() -> leg = "forward"),
@@ -70,7 +84,7 @@ public class IvyPathTest extends BioBuzzOpMode {
                 instant(() -> leg = "timed out"));
     }
 
-    // Waits to see the new leg under half done first: in the tick a leg starts, completion() still reads the last leg's end.
+    // completion() reads 1 until Pedro updates on the new path, so wait to see it under half first.
     private Command halfway() {
         AtomicBoolean armed = new AtomicBoolean();
         return Command.build()
