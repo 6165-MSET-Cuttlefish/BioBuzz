@@ -21,10 +21,10 @@ public final class CloseFlowerPaths {
     private final Pose hive = point(61.3781, 71.1145);
     private final Pose toHiveControl1 = point(48.4909, 113.2044);
     private final Pose toHiveControl2 = point(69.2810, 106.5252);
-    private final Pose audienceWall = pose(45.3325, 8.4566, -176.9646);
-    private final Pose toAudienceWallControl1 = point(61.5713, 0.6836);
-    private final Pose toAudienceWallControl2 = point(77.9453, 8.5677);
-    private final Pose corner = pose(8.3412, 8.3306, -179.8049);
+    private final Pose audienceWall = pose(45.3325, 10.75, 180);
+    private final Pose toAudienceWallControl1 = point(61.5713, 22);
+    private final Pose toAudienceWallControl2 = point(67, 10.75);
+    private final Pose corner = pose(10.5, 10.75, 180);
 
     private static Pose pose(double x, double y, double headingDeg) {
         return FieldPose.forAlliance(x, y, Math.toRadians(headingDeg));

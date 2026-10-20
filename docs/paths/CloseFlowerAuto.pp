@@ -165,22 +165,22 @@
       "kind": "atomic",
       "endPoint": {
         "x": 45.33250620347395,
-        "y": 8.456575682382137
+        "y": 10.75
       },
       "controlPoints": [
         {
           "x": 61.57133995037221,
-          "y": 0.6836228287841251
+          "y": 22
         },
         {
-          "x": 77.9453,
-          "y": 8.5677
+          "x": 67,
+          "y": 10.75
         }
       ],
       "heading": {
         "type": "piecewise",
         "startDeg": -102.581,
-        "endDeg": -87.5481,
+        "endDeg": -88.7049,
         "reverse": false,
         "piecewiseHeading": {
           "segments": [
@@ -192,7 +192,7 @@
               "continueFromPrevious": false,
               "parameters": {
                 "startDeg": -102.581,
-                "endDeg": -87.5481
+                "endDeg": -88.7049
               }
             },
             {
@@ -217,8 +217,8 @@
       "waitAfterName": "",
       "kind": "atomic",
       "endPoint": {
-        "x": 8.341191066997514,
-        "y": 8.330645161290333
+        "x": 10.5,
+        "y": 10.75
       },
       "controlPoints": [],
       "heading": {
@@ -345,5 +345,5 @@
     }
   },
   "version": "1.5.0",
-  "timestamp": "2026-10-03T22:49:11.054Z"
+  "timestamp": "2026-10-20T01:31:42.000Z"
 }
