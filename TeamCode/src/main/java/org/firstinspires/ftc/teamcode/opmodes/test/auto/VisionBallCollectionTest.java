@@ -93,6 +93,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     private List<FieldBall> plannedFrom = Collections.emptyList();
     private List<Double> plannedSettings;
     private double lastPlanSeconds = Double.NEGATIVE_INFINITY;
+    private Pose seededStart;
     private Pose startPose;
     private Region keepIn;
     private RobotShape shape;
@@ -121,24 +122,28 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected void initialize() {
-        startPose = configuredStart();
-        robot.follower.setPose(startPose);
+        seedStart(configuredStart());
     }
 
     @Override
     protected void initializeLoop() {
+        Pose start = configuredStart();
+        if (start.x() != seededStart.x() || start.y() != seededStart.y() || start.heading() != seededStart.heading()) {
+            seedStart(start);
+            plannedSettings = null;
+            lastPlanSeconds = Double.NEGATIVE_INFINITY;
+        }
         replanIfChanged();
+    }
+
+    private void seedStart(Pose start) {
+        seededStart = start;
+        robot.follower.setPose(start);
     }
 
     @Override
     protected void onStart() {
-        // Re-seed after the Pinpoint's init recalibration, and don't treat a run=1 left over from INIT as a trigger.
-        startPose = configuredStart();
-        robot.follower.setPose(startPose);
-        // The INIT plan was built from the pose before this re-seed: drop it and re-plan on the first loop.
-        clearPlan("re-planning from the start pose");
-        plannedSettings = null;
-        lastPlanSeconds = Double.NEGATIVE_INFINITY;
+        // Don't treat a run=1 left over from INIT as a trigger.
         prevRun = Tuning.run == 1;
     }
 

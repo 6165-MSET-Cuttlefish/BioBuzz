@@ -88,8 +88,7 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected void onStart() {
-        // Re-seed after the Pinpoint's init recalibration, and don't treat a run=1 left over from INIT as a trigger.
-        robot.follower.setPose(startPose);
+        // Don't treat a run=1 left over from INIT as a trigger.
         prevRun = Tuning.run == 1;
     }
 
@@ -103,7 +102,8 @@ public class BallCollectionTest extends EnhancedOpMode {
         }
 
         if (routeRun == null) {
-            if (configChanged()) planFromConfiguredStart();
+            // From the tracked pose: re-seeding the configured start after START would hide any move since INIT.
+            if (configChanged()) planFrom(robot.follower.pose());
         } else if (!replannedAfterRun || configChanged()
                 || robot.follower.pose().distance(startPose) > MOVED_IN) {
             replannedAfterRun = true;

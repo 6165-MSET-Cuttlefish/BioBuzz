@@ -37,7 +37,6 @@ public class BallCollectionAuto extends BioBuzzOpMode {
         }
     }
 
-    private Pose startPose;
     private BallCollection collection;
     private Command routine;
     private boolean timedOut;
@@ -48,7 +47,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
     @Override
     protected void initialize() {
         boolean onField = Tuning.collection.onField;
-        startPose = BallCollection.configuredPose(onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
+        Pose startPose = BallCollection.configuredPose(onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(startPose, RobotGeometry.shape(),
                 BallCollection.keepIn(onField, Tuning.collection.wallGapIn), BallCollection.obstacles(onField),
                 Tuning.collection.railGapIn);
@@ -64,8 +63,6 @@ public class BallCollectionAuto extends BioBuzzOpMode {
 
     @Override
     protected void onStart() {
-        // Re-seed after the Pinpoint's init recalibration.
-        robot.follower.setPose(startPose);
         Scheduler.schedule(routine);
     }
 

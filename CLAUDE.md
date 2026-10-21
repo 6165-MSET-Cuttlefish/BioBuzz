@@ -51,7 +51,7 @@ Pedro Pathing 3:
 
 - Author poses for RED with `FieldPose.forAlliance(x, y, heading)`; it maps them to BLUE through `FieldConfig.symmetry()`. A bare radian passed to a path isn't mapped.
 - `FieldPose` throws until the symmetry is set, and `EnhancedOpMode` clears it and the dashboard's field image at every INIT: a BIOBUZZ `Robot` constructor calls `BioBuzzField.configure()`, a bare SDK OpMode calls `FieldConfig.setSymmetry(...)` itself. The field image is a render in Pedro's frame drawn at `FieldConfig.fieldWidthInches`; a new one must match.
-- `Robot` resets the follower to a placeholder pose at every INIT: set the start with `robot.follower.setPose(...)` in `initialize()`, then build paths.
+- `Robot` resets the follower to a placeholder pose at every INIT: set the start with `robot.follower.setPose(...)` in `initialize()`, then build paths. Odometry runs from INIT on, so the robot goes on its start spot before INIT and isn't moved after.
 - `Context.allianceColor` is set only on the dashboard or in `Context.java`, never by an OpMode, and resets on an app restart or Sloth reload.
 
 **Ball routing**

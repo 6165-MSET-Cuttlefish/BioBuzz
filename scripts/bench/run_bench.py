@@ -232,11 +232,10 @@ KEY_PINPOINT_STATUS = "Bench pinpoint status"
 PINPOINT_INIT_HOLD_S = 2.0
 PINPOINT_SEED_OFFSET_IN = 0.1
 PINPOINT_SEED_TURN_DEG = 0.2
-PINPOINT_SEED_PENDING = ("a start pose set in initialize() didn't survive the Pinpoint's IMU recalibration at INIT: Close "
-                         "Flower Auto, Mock Auto and the Linear autos set the pose only in INIT, so they start their first "
-                         "path from a pose the robot isn't at; they need the START re-seed Ball Collection Auto does, or a "
-                         "framework re-seed at START. A PASS means only that the INIT sequence the autos use keeps the "
-                         "pose; a pose set at other delays after the recalibration isn't tried. No fix is in flight")
+PINPOINT_SEED_PENDING = ("a start pose set in initialize() didn't survive the Pinpoint's IMU recalibration at INIT: every "
+                         "auto sets the pose only in INIT, so they'd all start their first path from a pose the robot isn't "
+                         "at. A PASS means only that the INIT sequence the autos use keeps the pose; a pose set at other "
+                         "delays after the recalibration isn't tried. No fix is in flight")
 PINPOINT_CRASHED = ("Bench: Pinpoint crashed (see the error): with a Pinpoint status check in BettaConstants or the "
                     "framework, a status other than READY at INIT (CALIBRATING right after create, FAULT_NO_PODS_DETECTED "
                     "without both pods) stops every OpMode, which the check must allow for")
@@ -254,8 +253,8 @@ OCTOQUAD_ABSENT_EXPECT_S = 5
 OCTOQUAD_SEED_PENDING = ("a start pose set in initialize() moved by START + 3 s on Pedro's OctoQuadLocalizer with the "
                          "OctoQuad at rest: Pedro's setPose sends whole millimetres (under 0.04 in lost), so more than that "
                          "means the OctoQuad didn't keep the pose setLocalizerPose sent or its IMU heading drifted at rest, "
-                         "and the autos that set the pose only in INIT would start from a pose the robot isn't at. A PASS "
-                         "means only that this INIT sequence keeps the pose. No fix is in flight")
+                         "and every auto sets the pose only in INIT, so they'd all start their first path from a pose the "
+                         "robot isn't at. A PASS means only that this INIT sequence keeps the pose. No fix is in flight")
 OCTOQUAD_VALID_PENDING = ("a localizer read failed its CRC or reported a status other than RUNNING with the OctoQuad plugged "
                           "in and at rest: Pedro's OctoQuadLocalizer skips such a read without a word and keeps the last "
                           "pose, so on the robot those loops drive on a stale pose; statusChanges says when and which "
