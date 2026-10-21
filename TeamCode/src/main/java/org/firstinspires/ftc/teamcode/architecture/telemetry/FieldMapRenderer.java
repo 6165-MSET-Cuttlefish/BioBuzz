@@ -48,7 +48,7 @@ public class FieldMapRenderer {
     public void drawRobot(double centerXInches, double centerYInches, double headingRadians, String color) {
         int px = toPxX(centerXInches);
         int py = toPxY(centerYInches);
-        int r  = toPxX(18 / 2.0);
+        int r  = toPxX(FieldVisualization.ROBOT_RADIUS);
 
         drawCircle(px, py, r, color);
 
