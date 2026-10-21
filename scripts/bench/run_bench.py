@@ -216,12 +216,12 @@ FLOODGATE_PENDING = ("the floodgate pin with nothing wired to it (Control Hub an
                      "down; until a Floodgate is wired, turn Drivetrain.currentLimiterConfig.enabled off for the Betta "
                      "bot. No fix is in flight: this run decides whether one is needed")
 
-CAPTURE_CLOCK_PENDING = ("EasyOpenCV's captureTimeNanos isn't on System.nanoTime()'s clock: a negative age means the capture "
-                         "clock runs ahead, so CellTipCamera's one-sided freshness gate (staleness <= maxStalenessMs) stays "
-                         "open and a frozen webcam keeps reporting its last verdict (make the gate two-sided, 0 <= "
-                         "staleness <= maxStalenessMs); an age past maxStalenessMs (a drifting or offset clock, another "
-                         "epoch, or a stalled camera thread) makes every verdict read stale, since a verdict is only older "
-                         "by the time the OpMode reads it. No fix is in flight")
+CAPTURE_CLOCK_PENDING = ("EasyOpenCV's captureTimeNanos isn't on System.nanoTime()'s clock, and CellTipCamera's freshness "
+                         "gate (0 <= staleness <= maxStalenessMs) reads a stale verdict as NO VERDICT, never TIPPED or "
+                         "SCORABLE: a negative age means the capture clock runs ahead, which makes every verdict stale once "
+                         "its lead outgrows the delay to the OpMode's read; an age past maxStalenessMs (a drifting or offset "
+                         "clock, another epoch, or a stalled camera thread) makes every verdict stale, since a verdict is "
+                         "only older by the time the OpMode reads it. No fix is in flight")
 
 WEBCAM_FAILURE_FRAME = 30
 WEBCAM_FAILURE_PENDING = ("regression: a camera-thread pipeline exception no longer reaches the dashboard "
@@ -299,16 +299,16 @@ PLANNER_STOP_SEEN = re.compile(r"planner_stop (\S+) STOP seen (?:between plans|(
 SDK_STOP_WINDOW_MS = 900
 PLANNER_STOP_PENDING = ("STOP waited for a route plan running on the OpMode thread, the plan and stop() together outlasted "
                         f"the SDK's {SDK_STOP_WINDOW_MS} ms stop window, and the SDK restarted the Robot Controller app, "
-                        "losing dashboard @Config edits and the alliance: Vision Ball Collection and Ball Collection plan "
-                        "on the OpMode thread. No fix is in flight; the plan times decide between a time budget in "
-                        "RouteOptimizer, fewer balls, or planning on a worker thread")
+                        "losing dashboard @Config edits and the alliance: Vision Ball Collection, Ball Collection Auto "
+                        "and Ball Collection plan on the OpMode thread. No fix is in flight; the plan times decide between "
+                        "a time budget in RouteOptimizer, fewer balls, or planning on a worker thread")
 PLANNER_JUDGED_BALLS = 4
 PLANNER_PLAN_P99_MS = 500
 PLANNER_HUB_MAX_MS = 800
 PLANNER_BUDGET_PENDING = ("a route plan on the OpMode thread takes long enough that a STOP landing during it leaves stop() "
-                          f"little or none of the SDK's {SDK_STOP_WINDOW_MS} ms stop window: Vision Ball Collection and "
-                          "Ball Collection plan there. No fix is in flight; these numbers decide between a time budget in "
-                          "RouteOptimizer, fewer balls, or planning on a worker thread")
+                          f"little or none of the SDK's {SDK_STOP_WINDOW_MS} ms stop window: Vision Ball Collection, "
+                          "Ball Collection Auto and Ball Collection plan there. No fix is in flight; these numbers decide "
+                          "between a time budget in RouteOptimizer, fewer balls, or planning on a worker thread")
 
 OVERLAY_NAN_PENDING = ("regression: a NaN or infinite field-overlay coordinate kills slothboard's telemetry thread "
                        "again (fixed in 6165.6), ending dashboard telemetry for every OpMode until the app restarts")
@@ -2767,7 +2767,7 @@ class Runner:
         self._finish(outcome, name, hub_t0, crashed=crashed, expect_crash=False, stop=False)
         res = self.pull(name, required=False) or {}
         ok = not (outcome["appRestarted"] or outcome["logMarkers"] or crashed or outcome.get("errorMessage"))
-        self.check(f"8b stop {run_id}: no force-stop, restart or error", ok,
+        self.check(f"webcam stop {run_id}: no force-stop, restart or error", ok,
                    f"markers {outcome['logMarkers'][:3]}, restarted {outcome['appRestarted']}, "
                    f"error {outcome.get('errorMessage')!r}")
         pass_ms = None
@@ -3112,7 +3112,7 @@ class Runner:
         drift = None
         if "epochS" in connect and "epochS" in after:
             drift = round((after["epochS"] - after["uptimeS"]) - (connect["epochS"] - connect["uptimeS"]), 1)
-        self.summary += ["## Bench: Clock (Ivy's waitMs against the hub's wall clock)\n",
+        self.summary += ["## Bench: Clock (PathCommands.timeout against the hub's wall clock)\n",
                          f"- the hub's clock read {year} before the step: "
                          + ("unset since boot, so the first Driver Station heartbeat or RC web page sets it about 56 "
                             "years forward" if unset else "already set (a Driver Station or the RC's web page set it "
@@ -3997,7 +3997,7 @@ def parse_args(argv):
     p.add_argument("--absent", action="store_true", help="the webcam-unplugged INIT check")
     p.add_argument("--sloth", action="store_true", help="the deploySloth/INIT race (runs gradle six times)")
     p.add_argument("--clock", action="store_true",
-                   help="Bench: Clock (Ivy's waitMs timeout against wall-clock jumps on the hub)")
+                   help="Bench: Clock (PathCommands.timeout against wall-clock jumps on the hub)")
     p.add_argument("--all", action="store_true",
                    help="every bench, and fail if the webcam, Limelight or Expansion Hub is missing")
     p.add_argument("--no-sloth", action="store_true", help="skip the Sloth race")

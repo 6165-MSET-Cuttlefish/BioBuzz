@@ -146,7 +146,7 @@ public class HubBench extends OpMode {
         FtcDashboard.getInstance().setTelemetryTransmissionInterval(OptimizationToggles.dashboardTransmissionIntervalMs);
 
         Map<String, Object> info = new LinkedHashMap<>();
-        info.put("imuType", String.valueOf(hub.getImuType()));
+        info.put("imuType", hub.getImuType().name());
         info.put("batteryVolts", voltageSensor.getVoltage());
         info.put("sdkDefaultDsMsTransmissionInterval", sdkDefaultDsIntervalMs);
         info.put("driverStationConnected", NetworkConnectionHandler.getInstance().isPeerConnected());
@@ -159,7 +159,7 @@ public class HubBench extends OpMode {
         boolean ok = imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(
                 RevHubOrientationOnRobot.LogoFacingDirection.UP, RevHubOrientationOnRobot.UsbFacingDirection.FORWARD)));
         info.put("imuInitializeMs", (System.nanoTime() - t0) / 1e6);
-        if (!ok) throw new IllegalStateException("the Control Hub's embedded IMU failed to initialize (type " + hub.getImuType() + ")");
+        if (!ok) throw new IllegalStateException("the Control Hub's embedded IMU failed to initialize (type " + hub.getImuType().name() + ")");
         info.put("fakeLimelightPort", FakeLimelightServer.PORT);
         report.put("info", info);
         new FakeLimelightServer(0).close();
@@ -624,8 +624,9 @@ public class HubBench extends OpMode {
             @Override void end() {
                 RobotShape robot = PlannerWorkload.ROBOT;
                 result.put("what", String.format("RouteOptimizer.findOptimalRoute + RoutePathBuilder.build as Vision Ball Collection "
-                        + "calls them (RED own half, the HIVE rails, wall and rail gaps 1, robot %.1f x %.1f in with an intake %.1f in "
-                        + "wide %.1f in ahead, start = return), seeded random layouts plus crafted worst cases",
+                        + "calls them with onField on and its obstacle boxes off (RED own half, the HIVE rails, wall and rail "
+                        + "gaps 1, robot %.1f x %.1f in with an intake %.1f in wide %.1f in ahead, start = return), seeded random "
+                        + "layouts plus crafted worst cases",
                         robot.lengthIn, robot.widthIn, robot.intakeWidthIn, robot.intakeOffsetIn));
                 Map<String, Object> balls = new LinkedHashMap<>();
                 for (Map.Entry<String, List<PlannerWorkload.Timing>> e : byBalls.entrySet()) {
