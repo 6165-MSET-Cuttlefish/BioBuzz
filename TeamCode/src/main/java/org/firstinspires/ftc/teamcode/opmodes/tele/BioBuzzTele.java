@@ -29,6 +29,13 @@ public class BioBuzzTele extends BioBuzzOpMode {
         applyCellTipFlag();
     }
 
+    // Spends a press made in INIT, so one held through START isn't taken as a new press.
+    @Override
+    protected void initializeLoop() {
+        slowToggle.invalidate();
+        headingLockToggle.invalidate();
+    }
+
     @Override
     protected void onLoopStart() {
         applyCellTipFlag();
