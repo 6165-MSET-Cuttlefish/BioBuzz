@@ -55,7 +55,6 @@ public class DecodeTele extends DecodeOpMode {
     @Override
     protected void initialize() {
         setupGamepads();
-        resetOffsets();
     }
 
     // Only the pose resets act in INIT; every other input is sampled so a press made in INIT is spent by START.
@@ -252,10 +251,10 @@ public class DecodeTele extends DecodeOpMode {
         }
 
         if (d2.leftStickX.getValue() > 0.5) {
-            Turret.nudgeOffset(-.25);
+            robot.turret.nudgeOffset(-.25);
         }
         if (d2.leftStickX.getValue() < -0.5) {
-            Turret.nudgeOffset(.25);
+            robot.turret.nudgeOffset(.25);
         }
 
         if (d2.dpadRight.wasJustPressed()) {
@@ -271,18 +270,7 @@ public class DecodeTele extends DecodeOpMode {
         robot.shooter.farVelocityOffset = 0;
         robot.shooter.closeHoodOffset = 0;
         robot.shooter.farHoodOffset = 0;
-
-        resetOffsets();
-    }
-
-    private void resetOffsets() {
-        if (Context.allianceColor == AllianceColor.RED) {
-            Turret.teleTurretOffsetClose = -4.8;
-            Turret.teleTurretOffsetFar = -4.4;
-        } else {
-            Turret.teleTurretOffsetClose = 1.8;
-            Turret.teleTurretOffsetFar = 4.5;
-        }
+        robot.turret.resetNudges();
     }
 
     private void drive() {

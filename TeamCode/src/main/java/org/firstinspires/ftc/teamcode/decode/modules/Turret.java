@@ -12,6 +12,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.PwmControl;
 import com.qualcomm.robotcore.hardware.Servo;
 
+import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
+import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
@@ -20,10 +22,14 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 public class Turret extends Module {
 
     private double turretManualOffset = 0;
+    private double closeNudgeDeg = 0;
+    private double farNudgeDeg = 0;
 
     public static boolean isCloseTele = true;
-    public static double teleTurretOffsetClose = 2;
-    public static double teleTurretOffsetFar = -4;
+    public static double redCloseOffsetDeg = -4.8;
+    public static double redFarOffsetDeg = -4.4;
+    public static double blueCloseOffsetDeg = 1.8;
+    public static double blueFarOffsetDeg = 4.5;
 
     public static double turretX = -3.875;
     public static double turretY = -1.6;
@@ -79,12 +85,17 @@ public class Turret extends Module {
         turretServoBack.setDirection(Servo.Direction.FORWARD);
     }
 
-    public static void nudgeOffset(double deltaDeg) {
+    public void nudgeOffset(double deltaDeg) {
         if (isCloseTele) {
-            teleTurretOffsetClose += deltaDeg;
+            closeNudgeDeg += deltaDeg;
         } else {
-            teleTurretOffsetFar += deltaDeg;
+            farNudgeDeg += deltaDeg;
         }
+    }
+
+    public void resetNudges() {
+        closeNudgeDeg = 0;
+        farNudgeDeg = 0;
     }
 
     @Override
@@ -94,7 +105,10 @@ public class Turret extends Module {
 
     @Override
     protected void read() {
-        turretManualOffset = isCloseTele ? teleTurretOffsetClose : teleTurretOffsetFar;
+        boolean red = Context.allianceColor == AllianceColor.RED;
+        turretManualOffset = isCloseTele
+                ? (red ? redCloseOffsetDeg : blueCloseOffsetDeg) + closeNudgeDeg
+                : (red ? redFarOffsetDeg : blueFarOffsetDeg) + farNudgeDeg;
 
         updateTargetPosition();
     }
