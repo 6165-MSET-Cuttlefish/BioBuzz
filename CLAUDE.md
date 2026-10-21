@@ -86,7 +86,7 @@ In INIT, `initializeLoop()` replaces `gameLoop()` and module writes stay off unl
 - Telemetry lines go in `telemetry()`, field drawing in `dashboardOverlay(Canvas)`. Never call `telemetry.update()` in an `EnhancedOpMode`: it closes the DS frame and later DS lines are dropped. Dashboard values stay plain text (no `HtmlFormatter`) so the graph view can plot them.
 - On `stop()` or a throwing hook, every Module whose `initStates()` began gets `stop()`, half-initialized ones included; `onEnd()` runs only on a normal stop.
 - A crash shows on the dashboard's Error line until the next INIT. The SDK only logs it, so a bare OpMode's crash shows only in logcat and the dashboard's Error view, and an `Error` (e.g. `StackOverflowError`) thrown from a bare OpMode kills the RC app.
-- Keep dashboard telemetry fast (`OptimizationToggles.dashboardTransmissionIntervalMs`) and the loop profile on: the team tunes on the dashboard.
+- Keep dashboard telemetry fast (`OptimizationToggles.dashboardTransmissionIntervalMs`) and the loop profile on (`OptimizationToggles.loopProfile`): the team tunes on the dashboard.
 
 ## Module pattern
 

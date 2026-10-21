@@ -82,21 +82,18 @@ public class FrameworkLoopBench extends EnhancedOpMode {
                 b -> OptimizationToggles.dashboardTransmissionIntervalMs = 0));
         phases.add(new Phase("dashboardInterval100", "OptimizationToggles.dashboardTransmissionIntervalMs = 100",
                 b -> OptimizationToggles.dashboardTransmissionIntervalMs = 100));
-        phases.add(new Phase("dashboardTelemetryOff", "telemetryToggles.dashboardTelemetry = false (no Bench keys reach the dashboard)",
-                b -> Robot.telemetryToggles.dashboardTelemetry = false));
-        phases.add(new Phase("dsTelemetryOff", "telemetryToggles.dsTelemetry = false",
-                b -> Robot.telemetryToggles.dsTelemetry = false));
-        phases.add(new Phase("loopProfileOff", "loopProfile and profilerEnabled false (no section breakdown)",
-                b -> {
-                    Robot.telemetryToggles.loopProfile = false;
-                    OptimizationToggles.profilerEnabled = false;
-                }));
+        phases.add(new Phase("dashboardTelemetryOff", "OptimizationToggles.dashboardTelemetry = false (no Bench keys reach the dashboard)",
+                b -> OptimizationToggles.dashboardTelemetry = false));
+        phases.add(new Phase("dsTelemetryOff", "OptimizationToggles.dsTelemetry = false",
+                b -> OptimizationToggles.dsTelemetry = false));
+        phases.add(new Phase("loopProfileOff", "OptimizationToggles.loopProfile = false (no section breakdown)",
+                b -> OptimizationToggles.loopProfile = false));
         phases.add(new Phase("drivetrainEncoderTelemetry", "Drivetrain.encoderTelemetry = true",
                 b -> Drivetrain.encoderTelemetry = true));
         phases.add(new Phase("drivetrainCurrentTelemetry", "Drivetrain.motorCurrentTelemetry = true (4 motor current commands per telemetry frame)",
                 b -> Drivetrain.motorCurrentTelemetry = true));
-        phases.add(new Phase("hubCurrentTelemetry", "telemetryToggles.current = true (a hub current command per loop)",
-                b -> Robot.telemetryToggles.current = true));
+        phases.add(new Phase("hubCurrentTelemetry", "OptimizationToggles.currentTelemetry = true (a hub current command per loop)",
+                b -> OptimizationToggles.currentTelemetry = true));
         phases.add(new Phase("followingPath", "Pedro follows CloseFlowerPaths.toCloseFlower (pose never moves, so it never finishes); Drivetrain writes off",
                 FrameworkLoopBench::startFollowing));
     }

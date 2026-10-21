@@ -306,7 +306,7 @@ public class HubBench extends OpMode {
         addCommand("voltageSensorGetVoltage", 300, "what EnhancedOpMode reads every 50 loops", i -> voltageSensor.getVoltage());
         addCommand("hubGetInputVoltage", 300, "what slothboard's GET_ROBOT_STATUS reads per hub on its socket thread",
                 i -> hub.getInputVoltage(VoltageUnit.VOLTS));
-        addCommand("hubGetCurrent", 300, "EnhancedOpMode's per-loop read with telemetryToggles.current",
+        addCommand("hubGetCurrent", 300, "EnhancedOpMode's per-loop read with OptimizationToggles.currentTelemetry",
                 i -> hub.getCurrent(CurrentUnit.AMPS));
         addCommand("motorGetCurrent", 300, "one of Drivetrain.motorCurrentTelemetry's four reads", i -> motor.getCurrent(CurrentUnit.AMPS));
         addCommand("motorSetPowerChanging", 500, "a setPower that changes the value (a hub write)",

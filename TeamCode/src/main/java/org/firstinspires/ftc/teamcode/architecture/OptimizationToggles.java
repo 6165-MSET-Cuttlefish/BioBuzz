@@ -19,7 +19,11 @@ public final class OptimizationToggles {
     /** Skip format + Item allocation on telemetry calls outside a DS frame while dashboard telemetry is off. */
     public static boolean telemetryLazyFormat = true;
 
-    public static boolean profilerEnabled = true;
+    public static boolean dsTelemetry = true;
+    public static boolean dashboardTelemetry = true;
+    public static boolean voltageTelemetry = true;
+    public static boolean currentTelemetry = false;
+    public static boolean loopProfile = true;
 
     /** Loops between per-hub Lynx current reads (a bus command, not bulk-cached). */
     public static int currentReadEveryNLoops = 1;

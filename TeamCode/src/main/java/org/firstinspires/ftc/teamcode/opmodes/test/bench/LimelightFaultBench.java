@@ -8,6 +8,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
@@ -119,7 +120,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
         info.put("ballPipeline", LimelightBallSource.Tuning.pipeline);
         info.put("staleFrameSeconds", LimelightBallSource.Tuning.staleFrameSeconds);
         info.put("pollerRunningAtInit", ll.isRunning());
-        info.put("dashboardTelemetry", Robot.telemetryToggles.dashboardTelemetry);
+        info.put("dashboardTelemetry", OptimizationToggles.dashboardTelemetry);
         report.put("info", info);
         report.put("events", events);
         report.put("connectionChanges", connectionChanges);

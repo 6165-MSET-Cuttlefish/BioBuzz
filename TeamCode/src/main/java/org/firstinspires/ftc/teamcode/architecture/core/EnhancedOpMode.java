@@ -29,7 +29,6 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.BatteryVoltage;
 import org.firstinspires.ftc.teamcode.architecture.input.InputClock;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.FieldMapRenderer;
 
-import static org.firstinspires.ftc.teamcode.architecture.core.Robot.telemetryToggles;
 import static org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter.*;
 import static org.firstinspires.ftc.teamcode.architecture.OptimizationToggles.*;
 
@@ -115,7 +114,7 @@ public abstract class EnhancedOpMode extends OpMode {
         runningCode = describeRunningCode();
 
         robot = createRobot();
-        robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
+        robot.telemetry.setEnabled(dsTelemetry, dashboardTelemetry);
         telemetry = robot.telemetry;
         packet = newPacket();
         robot.telemetry.setPacket(packet);
@@ -282,13 +281,13 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void runPipelineHead(boolean read) {
-        robot.telemetry.setEnabled(telemetryToggles.dsTelemetry, telemetryToggles.dashboardTelemetry);
+        robot.telemetry.setEnabled(dsTelemetry, dashboardTelemetry);
         robot.telemetry.syncDsTransmissionInterval();
         robot.telemetry.beginLoop();
         // Here, before any other line, so faults lead the frame; ones raised later this loop show next loop.
         addFaultTelemetry();
 
-        profiler.enabled = profilerEnabled;
+        profiler.enabled = loopProfile;
         profiler.start();
 
         clearBulkCaches();
@@ -421,7 +420,7 @@ public abstract class EnhancedOpMode extends OpMode {
 
     private void updateTelemetry() {
         boolean dsFrame = robot.telemetry.isDSFrame();
-        if (dsFrame || telemetryToggles.dashboardTelemetry) {
+        if (dsFrame || dashboardTelemetry) {
             Pose currentPose = robot.follower.pose();
             addStatusTelemetry(currentPose);
 
@@ -434,7 +433,7 @@ public abstract class EnhancedOpMode extends OpMode {
                 for (int i = 0; i < modules.size(); i++) modules.get(i).telemetry();
             }
 
-            if (telemetryToggles.loopProfile) {
+            if (loopProfile) {
                 robot.telemetry.addSeparator();
                 robot.telemetry.addGroupHeader("LOOP PROFILE (avg ms)", COLOR_BLUE);
                 List<Map.Entry<String, Double>> snapshot = profiler.snapshotSortedDesc();
@@ -574,8 +573,8 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void addVoltageCurrentTelemetry() {
-        if (telemetryToggles.voltage) robot.telemetry.addDashboardData("Voltage", "%.2fV", voltage);
-        if (telemetryToggles.current && telemetryToggles.dashboardTelemetry) {
+        if (voltageTelemetry) robot.telemetry.addDashboardData("Voltage", "%.2fV", voltage);
+        if (currentTelemetry && dashboardTelemetry) {
             robot.telemetry.addDashboardData("Current", "%.2fA", getTotalCurrent());
         }
     }
