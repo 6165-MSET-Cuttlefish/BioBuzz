@@ -61,10 +61,12 @@ public class Drivetrain extends Module {
             .withGains(1, 0, 0.2, 0.0)
             .withContinuousInput(-Math.PI, Math.PI);
 
+    private double flTarget, blTarget, brTarget, frTarget;
     private double flPower, blPower, brPower, frPower;
     private double lastCurrentLimiterMultiplier = 1.0;
     private double lastFloodgateAmps = Double.NaN;
     private boolean resyncOnWrite;
+    private boolean droveLastLoop;
 
     public Drivetrain(HardwareMap hardwareMap, Follower follower) {
         this.follower = follower;
@@ -88,6 +90,18 @@ public class Drivetrain extends Module {
     @Override
     protected void read() {
         if (!isWriteEnabled() || !follower.idle()) resyncOnWrite = true;
+        boolean drove = droveLastLoop;
+        droveLastLoop = false;
+        if (!currentLimiterConfig.enabled) {
+            lastCurrentLimiterMultiplier = 1.0;
+        } else if (drove) {
+            // Only after a loop that drove the motors: this could be the only bulk read on its hub each loop.
+            lastCurrentLimiterMultiplier = computeCurrentLimiterMultiplier();
+        } else {
+            currentOverTime *= Math.pow(currentLimiterConfig.decayRate, currentLoopTimer.milliseconds() / currentLimiterConfig.decayLoopMs);
+            lastCurrentLimiterMultiplier = 1.0;
+        }
+        currentLoopTimer.reset();
     }
 
     @Override
@@ -102,10 +116,15 @@ public class Drivetrain extends Module {
             stop();
             resyncOnWrite = false;
         }
+        flPower = flTarget * lastCurrentLimiterMultiplier;
+        blPower = blTarget * lastCurrentLimiterMultiplier;
+        brPower = brTarget * lastCurrentLimiterMultiplier;
+        frPower = frTarget * lastCurrentLimiterMultiplier;
         fl.setPower(enableMotors.enableFl ? flPower : 0);
         bl.setPower(enableMotors.enableBl ? blPower : 0);
         br.setPower(enableMotors.enableBr ? brPower : 0);
         fr.setPower(enableMotors.enableFr ? frPower : 0);
+        droveLastLoop = flTarget != 0 || blTarget != 0 || brTarget != 0 || frTarget != 0;
     }
 
     public void setTargets(double fl, double bl, double br, double fr) {
@@ -119,12 +138,10 @@ public class Drivetrain extends Module {
             br /= maxPower;
         }
 
-        lastCurrentLimiterMultiplier = computeCurrentLimiterMultiplier();
-        currentLoopTimer.reset();
-        flPower = fl * lastCurrentLimiterMultiplier;
-        blPower = bl * lastCurrentLimiterMultiplier;
-        brPower = br * lastCurrentLimiterMultiplier;
-        frPower = fr * lastCurrentLimiterMultiplier;
+        flTarget = fl;
+        blTarget = bl;
+        brTarget = br;
+        frTarget = fr;
     }
 
     @Override
@@ -133,6 +150,10 @@ public class Drivetrain extends Module {
         bl.stop();
         br.stop();
         fr.stop();
+        flPower = 0;
+        blPower = 0;
+        brPower = 0;
+        frPower = 0;
     }
 
     public boolean isBonk() {
@@ -151,8 +172,6 @@ public class Drivetrain extends Module {
     }
 
     private double computeCurrentLimiterMultiplier() {
-        if (!currentLimiterConfig.enabled) return 1.0;
-
         double current = readFloodgateAmps();
         lastFloodgateAmps = current;
         currentOverTime += Math.pow(current, 2) * currentLoopTimer.milliseconds();
@@ -229,7 +248,7 @@ public class Drivetrain extends Module {
     protected void onTelemetry() {
         logDashboard("Motor Powers", "FL:%.2f BL:%.2f FR:%.2f BR:%.2f", flPower, blPower, frPower, brPower);
 
-        // The limiter's last reading, not a fresh one; NaN until setTargets() has run with the limiter on.
+        // The limiter's last reading, not a fresh one; NaN until read() first takes one.
         logDashboard("Floodgate Current (A)", "%.2f", lastFloodgateAmps);
         logDashboard("Current Limiter Multiplier", "%.2f", lastCurrentLimiterMultiplier);
         logDashboard("currentOverTime", "%.2f", currentOverTime);
