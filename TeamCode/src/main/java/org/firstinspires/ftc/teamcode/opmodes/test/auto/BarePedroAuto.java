@@ -19,8 +19,6 @@ public abstract class BarePedroAuto extends LinearOpMode {
 
     protected abstract Command routine();
 
-    protected void addTelemetry() {}
-
     @Override
     public void runOpMode() {
         Scheduler.reset();
@@ -37,7 +35,6 @@ public abstract class BarePedroAuto extends LinearOpMode {
             follower.update();
             Scheduler.execute();
             addFollowerTelemetry(telemetry, follower);
-            addTelemetry();
             telemetry.update();
         }
     }

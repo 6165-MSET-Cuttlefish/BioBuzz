@@ -10,7 +10,6 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 
-/** CloseFlower on the framework; {@link CloseFlowerLinearAuto} drives the same paths without it, for comparison. */
 @Autonomous(name = "Close Flower Auto", group = "Test")
 public class CloseFlowerAuto extends BioBuzzOpMode {
 

@@ -73,7 +73,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | (config baseline, no OpMode) | nothing | slothboard's config baseline lists `OptimizationToggles` |
 | Bench: Hub | nothing | empty-loop overhead; bus call costs; telemetry, field map and packet costs; the floodgate pin's volts; planner time for 0 to 5 balls; LLResult parse; Limelight POST and poller costs against a fake Limelight |
 | Bench: Framework Loop | nothing | the EnhancedOpMode loop with Drivetrain and Pedro (capped at 0.2), one telemetry toggle per phase; the current limiter stays at 1.0 on an unwired floodgate |
-| Bench: Raw Loop | nothing | Close Flower Linear Auto's loop without the framework |
+| Bench: Raw Loop | nothing | the loop of a bare LinearOpMode running Pedro (capped at 0.2) without the framework, idle and then following Close Flower's first leg |
 | Bench: Failure Path | nothing | a hook throwing in each lifecycle stage: which `stop()`s run, Suppressed failures, the dashboard Error line |
 | Bench: Clock | nothing | `PathCommands.timeout` (15 s) against wall-clock jumps |
 | Bench: Pinpoint, Pinpoint Absent | a Pinpoint / none | firmware, status, and whether a start pose set in INIT survives the IMU recalibration / the follower building without one |
