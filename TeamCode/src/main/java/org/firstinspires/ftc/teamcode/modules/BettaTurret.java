@@ -73,7 +73,10 @@ public class BettaTurret extends Module {
     }
 
     @Override
-    public void stop() {}
+    public void stop() {
+        left.setPwmDisable();
+        right.setPwmDisable();
+    }
 
     @Override
     protected void onTelemetry() {

@@ -36,7 +36,7 @@ public class MockMechanism extends Module {
         if (!name.equals(boundName)) {
             boundName = name;
             // Safe the old motor before dropping it; write()/stop() only touch the current one.
-            if (motor != null) motor.setPower(0.0);
+            if (motor != null) motor.stop();
             motor = null;
             // boundName is updated first so an unknown name throws once (fail-fast), not every loop.
             if (!name.isEmpty()) {
@@ -52,7 +52,7 @@ public class MockMechanism extends Module {
 
     @Override
     public void stop() {
-        if (motor != null) motor.setPower(0.0);
+        if (motor != null) motor.stop();
     }
 
     public boolean isMotorBound() { return motor != null; }
