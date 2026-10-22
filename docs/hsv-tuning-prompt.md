@@ -2,9 +2,12 @@
 
 Paste everything below the line, with photos from the Limelight feed, into a vision-capable AI to derive HSV
 thresholds for a new venue, ball batch or ball type. Each returned line replaces the four arguments after the label in
-that type's `BallType(...)` in `BALL_TYPES` of `limelight/ball_contour_snapscript.py` (a new type also needs a code
-there and in `modules/vision/BallType.java`). They are starting values: confirm them live in the Limelight web editor
-with `DISPLAY_MODE = "MASK"` and `Limelight Balls → syncOnInit` off.
+that type's `BallType(...)` in `BALL_TYPES` of `limelight/ball_contour_snapscript.py`. A new type also needs a code
+there and in `modules/vision/BallType.java`, and a case in each `BallType` switch, which throws on a type it lacks:
+`wants` in `biobuzz/BallCollection.java` and `opmodes/test/auto/VisionBallCollectionTest.java` (each with a new
+`collect*` setting, which `BallCollection.Settings.copy()` must copy and `VisionBallCollectionTest.settings()` must
+list) and `color` in `opmodes/test/auto/CollectionDisplay.java`. The returned values are starting values:
+confirm them live in the Limelight web editor with `DISPLAY_MODE = "MASK"` and `Limelight Balls → syncOnInit` off.
 
 ---
 

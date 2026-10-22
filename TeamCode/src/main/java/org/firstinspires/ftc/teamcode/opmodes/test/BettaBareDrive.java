@@ -22,7 +22,7 @@ final class BettaBareDrive {
         fr = motor(hardwareMap, Drivetrain.FRONT_RIGHT, m.frontRightDirection, brake);
         br = motor(hardwareMap, Drivetrain.BACK_RIGHT, m.backRightDirection, brake);
 
-        // The same calls, in the same order, as Pedro's PinpointLocalizer.
+        // Pedro's PinpointLocalizer setup, but resetPosAndIMU (these tests read the pose from zero) and no 500 ms wait.
         BettaConstants.PinpointSettings p = BettaConstants.pinpoint;
         pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, p.name);
         pinpoint.setOffsets(p.xPodOffset, p.yPodOffset, DistanceUnit.INCH);
