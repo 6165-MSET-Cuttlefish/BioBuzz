@@ -29,6 +29,12 @@ final class BenchLimelight {
 
     static Limelight3A loopbackLimelight(int port) {
         Limelight3A limelight = limelightAt("127.0.0.1");
+        repoint(limelight, port);
+        return limelight;
+    }
+
+    /** A hardware map's Limelight3A outlives the OpMode, so it stays pointed here until the app restarts. */
+    static void repoint(Limelight3A limelight, int port) {
         String url = "http://127.0.0.1:" + port;
         try {
             field("baseUrl").set(limelight, url);
@@ -36,7 +42,14 @@ final class BenchLimelight {
             throw changed("baseUrl", e);
         }
         if (!url.equals(baseUrl(limelight))) throw new IllegalStateException("Limelight3A.baseUrl didn't take " + url);
-        return limelight;
+    }
+
+    static int postTimeoutMs() {
+        try {
+            return field("POSTREQUEST_TIMEOUT").getInt(null);
+        } catch (IllegalAccessException e) {
+            throw changed("POSTREQUEST_TIMEOUT", e);
+        }
     }
 
     static String baseUrl(Limelight3A limelight) {

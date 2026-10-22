@@ -6,6 +6,31 @@ and the Sloth hot load. One command runs every bench the plugged-in hardware all
 `bench-results/<timestamp>/` at the repo root (gitignored); its `summary.md` says what each FAIL means. What the results mean
 for the code: `docs/hub-bench-findings.md`.
 
+## Bare hub, unattended
+
+For a Control Hub with nothing plugged into any port, run where there is no internet and nobody to ask:
+
+1. While still online, from the worktree root: `scripts/bench/bare_hub.sh --build`. It refuses a dirty tree, builds the
+   debug APK, checks Gradle builds offline, and stamps the APK with HEAD (`TeamCode/build/outputs/apk/debug/.hubtest-build`).
+   Rerun it after every commit.
+2. Power the hub from a 12 V battery with nothing plugged in, join its Wi-Fi on the Mac (no internet then), plug the Mac
+   in with its lid open, close every dashboard tab, and turn off auto-join for other networks so macOS doesn't hop away.
+3. `scripts/bench/bare_hub.sh`. About an hour, at most 90 minutes; no keypresses. Extra flags go to `run_bench.py`.
+4. When it prints `Reconnect to the internet and tell Claude the run finished.` (or `...the run stopped.`), do that.
+
+In order, it: stops unless the APK and its stamp match HEAD and no tracked file changed; finds adb as `run_bench.py`
+does and connects to `192.168.43.1:5555` (stops within about 20 s, touching nothing, if the Mac isn't on the hub's
+Wi-Fi), and checks it is a Control Hub with the RC app (the SDK's `persist.ftcandroid.serialasusb`); keeps the Mac awake
+(`caffeinate`); checks Gradle builds offline, adding `--no-sloth` if not; copies the installed RC APKs (with sha256), its
+version, every `/sdcard/FIRST/*.xml`, the app's settings and the Sloth folder to `bench-results/<time>-backup/`, and
+writes `REINSTALL.sh` there, which puts that app, its settings and its Sloth jar back; passes the active-config setting
+from before the install to the runner (`--original-entry`), so the runner restores that one; installs the stamped APK with `adb install -r -t -g` (`-g` so no permission prompt waits for a tap;
+a signature mismatch or downgrade stops it with the hub unchanged; it never uninstalls); deletes
+`/storage/emulated/0/FIRST/dairy/sloth/*` as the Run button's `removeSlothRemote` does; starts the RC's launcher activity
+and waits for `======= INIT FINISH =======` and the dashboard port; then runs
+`run_bench.py --ports-empty --gradle-offline --out bench-results/<time>`, the whole console in `console.log` there. The
+runner restores the hardware config in a `finally`, whatever fails.
+
 ## Run it
 
 1. Power the Control Hub from a 12 V battery and **unplug everything from motor ports 0-3 and servo ports 0-1**: the
@@ -16,11 +41,13 @@ for the code: `docs/hub-bench-findings.md`.
 4. Close every dashboard tab: its status requests read hub voltage on the bus being timed, and its Gamepad view sends
    gamepad states.
 5. From the repo root: `python3 scripts/bench/run_bench.py` (the Mac's own python3 3.9+, nothing to install). About
-   30 to 50 minutes; don't touch the hub. Ctrl-C is safe: it still restores your hardware config.
+   45 to 65 minutes, of which the newer benches add about 12: Thread Lifecycle 6 (2 of them its Sloth reload), Turret
+   PWM 2 (two config switches), Freeze Dump 1.5 (an app kill and relaunch), Limelight Hung 1.5, Edge Through Start 0.5.
+   Don't touch the hub. Ctrl-C is safe: it still restores your hardware config.
 6. When it prints `Nothing to send back`, tell Claude.
 
-The Sloth step runs `./gradlew :TeamCode:deploySloth` from the terminal: if `./gradlew --version` fails there, add
-`--no-sloth`.
+The Sloth race and Thread Lifecycle's reload run `./gradlew :TeamCode:deploySloth` from the terminal: if
+`./gradlew --version` fails there, add `--no-sloth`; with no internet, add `--gradle-offline`.
 
 ### Optional hardware
 
@@ -45,21 +72,25 @@ on-screen stick and a USB pad (close the tab afterwards).
 |---|---|
 | `--ports-empty` | runs although a config names devices on motor ports 0-3 or servo ports 0-1 (only once they're unplugged) |
 | `--interactive` | the prompts above |
-| `--no-sloth` | skips the Sloth race (no Gradle builds) |
+| `--no-sloth` | skips the Sloth race and Thread Lifecycle's hot reload (no Gradle builds) |
+| `--gradle-offline` | adds `--offline` to every Gradle build the runner makes |
+| `--out DIR` | writes the results there instead of `bench-results/<timestamp>/` |
 | `--quick` | shorter phases, noisier numbers |
 | `--all` | every bench; stops if no webcam, Limelight or Expansion Hub is plugged in |
 | `--keep-configs` | leaves the `bench_*` hardware configs on the hub |
 
-`--help` lists the rest: one flag per bench (`--hub`, `--loop`, `--limelight`, ...), `--serial`, `--host`,
-`--other-pipeline`.
+`--help` lists the rest: one flag per bench (`--hub`, `--loop`, `--threads`, `--edge`, `--turret`, `--freeze-dump`,
+`--limelight`, ...), `--serial`, `--host`, `--other-pipeline`.
 
 ## What it changes on the hub
 
 It writes `bench_*` hardware configs to `/sdcard/FIRST` and switches between them by restarting the RC app; at the end
 it re-activates the config that was active, deletes the `bench_*` files and restarts the app once more. The configs put
-`fl`/`fr`/`bl`/`br` on motor ports 0-3, `benchServo`/`benchServo2` on servo ports 0-1 and `floodgate` on analog 0, and
-command nothing on the Expansion Hub. It also raises the hub's log buffer to 8 MB until the next reboot. It never
-deletes the active config, and a run that stops before writing the first `bench_*` config leaves the hub untouched.
+`fl`/`fr`/`bl`/`br` on motor ports 0-3, `benchServo`/`benchServo2` on servo ports 0-1 (`TurretL`/`TurretR` in
+`bench_turret`), `floodgate` on analog 0 and `analog0`/`analog1` on analog 2 and 3, and command nothing on the Expansion
+Hub. Bench: Freeze Dump, last, gets the app frozen and killed on purpose; the Control Hub relaunches it. It also raises the hub's log buffer to 8 MB until the next reboot. It never
+deletes the active config, and a run that stops before writing the first `bench_*` config leaves the configs untouched.
+With `bare_hub.sh` the hub runs the bench build from its install on; only `REINSTALL.sh` puts the old app back.
 With `--interactive`, opening the RC web page during Bench: Clock sets the hub's clock until it powers off.
 
 If it prints `RESTORE FAILED`: open http://192.168.43.1:8080/dash, add the Hardware Config view and activate the config
@@ -75,6 +106,9 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Framework Loop | nothing | the EnhancedOpMode loop with Drivetrain and Pedro (capped at 0.2), one telemetry toggle per phase; the current limiter stays at 1.0 on an unwired floodgate |
 | Bench: Raw Loop | nothing | the loop of a bare LinearOpMode running Pedro (capped at 0.2) without the framework, idle and then following Close Flower's first leg |
 | Bench: Failure Path | nothing | a hook throwing in each lifecycle stage: which `stop()`s run, Suppressed failures, the dashboard Error line |
+| Bench: Thread Lifecycle | nothing | `modules/TransferCounter`'s poller: one daemon thread, `stop()` within 50 ms, 90+ polls/s; no poller left at the next INIT after a normal STOP, a STOP from INIT, a crash in `loop()` and a throwing `stop()` (each also seen from adb); a failing poller stops the OpMode within 50 ms; whether `interrupt()` mid-command leaks the hub lock; 10 back-to-back runs; a Sloth reload while it runs |
+| Bench: Edge Through Start | nothing | BioBuzz Tele's `EdgeBooleanSupplier` pattern with gamepad1 LB held from INIT through START: no edge at START, one per later press |
+| Bench: Turret PWM | nothing (`bench_turret`) | BettaTurret's PWM, read from the hub's registers, through CENTER, `stop()` with writes off and on, writes back on, IDLE and RightState.FORWARD |
 | Bench: Clock | nothing | `PathCommands.timeout` (15 s) against wall-clock jumps |
 | Bench: Pinpoint, Pinpoint Absent | a Pinpoint / none | firmware, status, and whether a start pose set in INIT survives the IMU recalibration / the follower building without one |
 | Bench: OctoQuad | an OctoQuad | GuardedOctoQuadLocalizer's read costs, status changes, CRC failures after the first RUNNING read, start-pose survival |
@@ -85,13 +119,15 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Hardware OpMode, then Bench: Power Readback | nothing | a stale Hardware-view Power edit doesn't drive `fl` under the next OpMode |
 | Bench: Gamepad, Gamepad Linear | nothing | dashboard gamepad delivery, one edge per press, sticks resting within 1 s of silence |
 | Bench: Limelight Fault | nothing | the `Limelight` fault with nothing answering: raised in INIT within 5 s, loop keeps running, collection ends SKIPPED |
+| Bench: Limelight Hung | nothing | the real Camera against a fake Limelight that serves results and never answers a POST: the `Limelight` fault raised in INIT within the 15 s POST timeout + 2 s, INIT and the loop keep running, one POST and no retry; STOP during a hung POST isn't held up; the next INIT doesn't wait for it, its POSTs never overlap the old one (also with a second worker on the shared blackboard semaphore, as a reloaded LimelightSync would use), and its sync completes once the fake answers |
 | Bench: Webcam Stop (absent) | nothing | INIT fails with CellTipCamera's "failed to open" |
 | Bench: Webcam | a webcam | open/close times, per-frame and stream costs, frame age against `CellTipCamera.maxStalenessMs` |
 | Bench: Webcam Stop | a webcam | STOP at several points with the webcam open |
 | Bench: Webcam Thread Failure | a webcam | a camera-thread exception reaches the Error line within 2 s |
 | Bench: Limelight | the Limelight | slothboard's proxy, `LimelightSync` time, INIT to first frame, POST costs, frame rate and latency |
 | Bench: Planner Stop | nothing | STOP during 4- and 5-ball plans: no app restart, STOP to idle within 900 ms |
-| Bench: Overlay NaN | nothing | a NaN in a field overlay doesn't kill dashboard telemetry (runs last) |
+| Bench: Overlay NaN | nothing | a NaN in a field overlay doesn't kill dashboard telemetry |
+| Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; a switch from idle freezes the app: thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT, the relaunch's timings (runs last) |
 | Bench: Sloth Probe | Gradle | INIT racing deploySloth, the OpMode list during a load, the load signal, the jar surviving an app restart |
 
 The OpModes also run from the dashboard, but they expect the runner's configs and write results only to the hub.
@@ -136,3 +172,22 @@ bench folder. It measures how often each analog value refreshes and what a polle
 - The gamepad benches take their phase from gamepad2's right trigger (phase / 100) and a message counter on its left
   trigger, so an all-zero rest state leaves the phase alone; phase 99 ends the bench.
 - Bench: OctoQuad Absent holds INIT 6 s, then STARTs, expecting the guard's OctoQuad error.
+- Bench: Limelight Hung runs right after Bench: Limelight Fault on its config, repointing the config's `limelight` at
+  the fake, which stays so until the app restarts (the switch back to the main config does that). Its fake outlives a
+  `stop_hung` run in a static, and the runner INITs `reinit` right after with nothing between, so the INIT lands inside
+  the stopped run's 15 s POST timeout; a slower turnaround FAILs the setup check, not the robot. `reinit_fresh` clears
+  LimelightSync's private `running` flag by reflection, as a Sloth reload would leave it: a real deploySloth can't land
+  in that window. A Bench: Hub after a crashed hung run, before an app restart, can't bind `127.0.0.1:15807`.
+- Bench: Thread Lifecycle runs on the main config (`analog0`/`analog1`). Each run's result file is
+  `thread_lifecycle_<mode>`, pulled to `raw/thread_lifecycle_<run>.json`; the next run's `leftoverAtInit` judges the one
+  before (no hook runs after a crash), and a pid change between them skips that check. After each run the runner lists
+  the app's threads over adb, trying `run-as ... cat /proc/<pid>/task/*/comm`, plain `cat`, `ps -T -p` and `ps -t`
+  (`TransferCounter` is exactly comm's 15 characters); a listing during the first run is the positive control, and
+  `summary.md` names the method that worked. Its Sloth reload deploys during a 600 s run: Sloth stages the load and
+  releases it from the idle OpMode, so it lands after the runner's STOP.
+- Bench: Edge Through Start needs the hold unbroken across START: a background sender (`GamepadHold`) repeats LB every
+  50 ms from INIT until the RUNNING phase is going, since slothboard rests both pads after 500 ms without a message.
+- Bench: Freeze Dump's watch thread outlives the OpMode (slothboard ignores a config switch unless idle): the runner STOPs
+  it, sends `SET_HARDWARE_CONFIG` for the active config, waits up to 120 s for a new pid (else force-stops and starts the
+  app itself), and pulls `freeze_watch.json`, every `freeze_dump_*.txt` and `/data/anr/traces.txt` if shell can read it
+  into `raw/freeze/`, with the logcat in `logs/freeze_dump_switch.log`.
