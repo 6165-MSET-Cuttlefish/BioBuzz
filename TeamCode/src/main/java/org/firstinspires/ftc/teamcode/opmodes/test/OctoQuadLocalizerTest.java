@@ -22,8 +22,8 @@ public class OctoQuadLocalizerTest extends LinearOpMode {
     public static int portY = 4;
     public static OctoQuad.EncoderDirection directionX = OctoQuad.EncoderDirection.REVERSE;
     public static OctoQuad.EncoderDirection directionY = OctoQuad.EncoderDirection.REVERSE;
-    public static double ticksPerMmX = 19.89;
-    public static double ticksPerMmY = 19.89;
+    public static double ticksPerMmX = 19.89436789;
+    public static double ticksPerMmY = 19.89436789;
     public static double tcpOffsetMmX = -34.13125f;
     public static double tcpOffsetMmY = 157.1625f;
     public static double imuHeadingScalar = 1.0085;

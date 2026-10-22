@@ -14,35 +14,16 @@ import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
+import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @Config("Pinpoint Localizer Test")
 @TeleOp(name = "Pinpoint Localizer Test", group = "Test")
 public class PinpointLocalizerTest extends LinearOpMode {
-    public static String pinpointName = "pinpoint";
-    // OctoQuad's TCP offset points from the pods' TCP to the centre, so these are (-tcpOffsetMmY, -tcpOffsetMmX).
-    public static double xPodOffsetMm = -157.1625;
-    public static double yPodOffsetMm = 34.13125;
-    public static GoBildaPinpointDriver.GoBildaOdometryPods podType = GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
-    public static boolean useCustomResolution = false;
-    public static double customTicksPerMm = 19.89436789;
-    public static GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
-    public static GoBildaPinpointDriver.EncoderDirection yPodDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
-    // Off keeps the factory-calibrated scalar; on overrides it.
-    public static boolean useCustomYawScalar = false;
-    public static double yawScalar = 1.0;
-
     public static double startXIn = 0;
     public static double startYIn = 0;
     public static double startHeadingDeg = 0;
 
-    public static String frontLeftName = "fl";
-    public static String backLeftName = "bl";
-    public static String frontRightName = "fr";
-    public static String backRightName = "br";
-    public static DcMotorSimple.Direction frontLeftDirection = DcMotorSimple.Direction.REVERSE;
-    public static DcMotorSimple.Direction backLeftDirection = DcMotorSimple.Direction.REVERSE;
-    public static DcMotorSimple.Direction frontRightDirection = DcMotorSimple.Direction.FORWARD;
-    public static DcMotorSimple.Direction backRightDirection = DcMotorSimple.Direction.FORWARD;
     public static double maxPower = 1.0;
     public static boolean fieldCentric = false;
 
@@ -54,11 +35,11 @@ public class PinpointLocalizerTest extends LinearOpMode {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
         telemetry.setMsTransmissionInterval(50);
 
-        fl = motor(frontLeftName, frontLeftDirection);
-        bl = motor(backLeftName, backLeftDirection);
-        fr = motor(frontRightName, frontRightDirection);
-        br = motor(backRightName, backRightDirection);
-        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, pinpointName);
+        fl = motor(Drivetrain.FRONT_LEFT, BettaConstants.mecanum.frontLeftDirection);
+        bl = motor(Drivetrain.BACK_LEFT, BettaConstants.mecanum.backLeftDirection);
+        fr = motor(Drivetrain.FRONT_RIGHT, BettaConstants.mecanum.frontRightDirection);
+        br = motor(Drivetrain.BACK_RIGHT, BettaConstants.mecanum.backRightDirection);
+        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, BettaConstants.pinpoint.name);
 
         applyParameters();
         while (opModeInInit()) {
@@ -91,14 +72,10 @@ public class PinpointLocalizerTest extends LinearOpMode {
     }
 
     private void applyParameters() {
-        pinpoint.setOffsets(xPodOffsetMm, yPodOffsetMm, DistanceUnit.MM);
-        if (useCustomResolution) {
-            pinpoint.setEncoderResolution(customTicksPerMm, DistanceUnit.MM);
-        } else {
-            pinpoint.setEncoderResolution(podType);
-        }
-        pinpoint.setEncoderDirections(xPodDirection, yPodDirection);
-        if (useCustomYawScalar) pinpoint.setYawScalar(yawScalar);
+        BettaConstants.PinpointSettings settings = BettaConstants.pinpoint;
+        pinpoint.setOffsets(settings.xPodOffset, settings.yPodOffset, DistanceUnit.INCH);
+        pinpoint.setEncoderResolution(settings.podType);
+        pinpoint.setEncoderDirections(settings.xPodDirection, settings.yPodDirection);
         pinpoint.resetPosAndIMU();
         waitForCalibration();
         setStartPose();
@@ -157,7 +134,7 @@ public class PinpointLocalizerTest extends LinearOpMode {
     }
 
     private void show() {
-        telemetry.addLine("Sticks: drive  A: apply parameters and recalibrate (keep still)  B: reset to start pose");
+        telemetry.addLine("Sticks: drive  A: apply Betta Constants' Pinpoint settings and recalibrate (keep still)  B: reset to start pose");
         telemetry.addData("Status", pinpoint.getDeviceStatus());
         telemetry.addData("x (in)", pinpoint.getPosX(DistanceUnit.INCH));
         telemetry.addData("y (in)", pinpoint.getPosY(DistanceUnit.INCH));
@@ -168,8 +145,8 @@ public class PinpointLocalizerTest extends LinearOpMode {
         telemetry.addData("heading vel (deg/s)", pinpoint.getHeadingVelocity(UnnormalizedAngleUnit.DEGREES));
         telemetry.addData("Raw X pod ticks (push forward: rises)", pinpoint.getEncoderX());
         telemetry.addData("Raw Y pod ticks (push left: rises)", pinpoint.getEncoderY());
-        telemetry.addData("x offset on device (mm)", pinpoint.getXOffset(DistanceUnit.MM));
-        telemetry.addData("y offset on device (mm)", pinpoint.getYOffset(DistanceUnit.MM));
+        telemetry.addData("x offset on device (in)", pinpoint.getXOffset(DistanceUnit.INCH));
+        telemetry.addData("y offset on device (in)", pinpoint.getYOffset(DistanceUnit.INCH));
         telemetry.addData("Yaw scalar on device", pinpoint.getYawScalar());
         telemetry.addData("Pinpoint loop (us)", pinpoint.getLoopTime());
         telemetry.addData("Pinpoint frequency (Hz)", pinpoint.getFrequency());

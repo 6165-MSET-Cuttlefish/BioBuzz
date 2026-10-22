@@ -95,7 +95,7 @@ In INIT the follower and Ivy scheduler run but module writes don't (unless `shou
 
 Dashboard edits are lost on deploySloth or an app restart: copy kept values into the source.
 
-- **Pedro** (`BettaConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later. The pod offsets are the OctoQuad's, as mapped in Pinpoint Localizer Test: don't overwrite them with AutoTune's Pinpoint results. Pod directions are the Pinpoint's own, not the OctoQuad's: before any Pedro-driven run, push the robot forward, then left, in Pinpoint Localizer Test set to `BettaConstants`' directions, and check x, then y, rises.
+- **Pedro** (`BettaConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later. The pod offsets are the OctoQuad's: don't overwrite them with AutoTune's Pinpoint results. Pod directions are the Pinpoint's own, not the OctoQuad's: before any Pedro-driven run, push the robot forward, then left, in Pinpoint Localizer Test and check x, then y, rises.
 - **Ball detection**: `docs/hsv-tuning-prompt.md` derives starting HSV ranges from photos. Exposure, gain and resolution live in `limelight/ball_pipeline.vpr`: save the web UI's pipeline download over it, or the next synced INIT reverts them.
 - **Homography** (`eocvsim/homography`): a new one moves the (0,0) crosshair, so redo `Mount` in the same change.
 - **Camera Mount** (`BallFieldTransform.Mount`, measured from the Pinpoint offsets' origin): check it in Camera Module Test, robot still, a ball on the centreline at two distances: constant X or Y error is `xIn`/`yIn`, Y error growing with distance `headingDeg`, a left ball reading negative Y `mirrorY`, X error growing with distance the homography. Then, turning in place, a still ball whose field position moves means `xIn`/`yIn` is off.
@@ -109,7 +109,6 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
 - **Ivy Path Test** loops a curve to 4 ft ahead and 4 ft left of wherever the robot stands, and back: run it off the field with about 5.5 ft clear ahead and to the left.
 - **OctoQuad**: use the SDK's own driver (type `OctoQuadFTC`); don't add DigitalChickenLabs' `OctoQuadFWv3`.
-- **Pinpoint Localizer Test** has its own settings (offsets in mm): copy tuned ones into `BettaConstants.pinpoint`, in inches.
 - **Laser rangefinders** (Brushland): switch one to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, then set every reader's `maxRangeMm` to its `analogHighMm` (readers assume `analogLowMm` 0) or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta).
 - **Transfer Count Test** / **Transfer Thread Count Test**: `analog0` (A) sits upstream of `analog1` (B), close enough that one ball covers both; balls must only travel A to B and start with the chute clear.
 - **Hub-reading threads** (reference: `modules/TransferCounter`): poll at 10 ms, the hub's ADC refresh; faster only costs loop time (`docs/hub-bench-findings.md`). Any such thread:

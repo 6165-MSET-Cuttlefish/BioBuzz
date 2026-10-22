@@ -31,6 +31,7 @@ public class BettaConstants {
     public static class PinpointSettings {
         public String name = "pinpoint";
         public GoBildaPinpointDriver.GoBildaOdometryPods podType = GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
+        // OctoQuad Localizer Test's TCP offset points from the pods' TCP to the centre, so these are (-tcpOffsetMmY, -tcpOffsetMmX) in inches.
         public double xPodOffset = -6.1875;
         public double yPodOffset = 1.34375;
         public GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
