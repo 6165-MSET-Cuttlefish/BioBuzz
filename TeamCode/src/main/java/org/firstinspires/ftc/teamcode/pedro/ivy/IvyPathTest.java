@@ -21,6 +21,7 @@ import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.architecture.command.StateCommands;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.modules.BettaShooter;
 import org.firstinspires.ftc.teamcode.modules.BettaTurret;
 import org.firstinspires.ftc.teamcode.opmodes.test.auto.BallCollectionRobot;
 
@@ -36,28 +37,19 @@ public class IvyPathTest extends EnhancedOpMode {
     private final Pose end = new Pose(96, 96);
 
     private BettaTurret turret;
+    private BettaShooter shooter;
     private Command routine;
     private double[][] splineDrawing;
     private String leg = "waiting for START";
 
-    private static final class TurretRobot extends BallCollectionRobot {
-        BettaTurret turret;
 
-        TurretRobot(EnhancedOpMode opMode) {
-            super(opMode);
-        }
-
-        @Override
-        protected void initializeGameModules() {
-            turret = new BettaTurret(opMode.hardwareMap);
-        }
-    }
 
     @Override
     protected Robot createRobot() {
-        TurretRobot turretRobot = new TurretRobot(this);
-        turret = turretRobot.turret;
-        return turretRobot;
+        turret = new BettaTurret(hardwareMap);
+        shooter = new BettaShooter(hardwareMap);
+
+        return new BallCollectionRobot(this);
     }
 
     @Override
@@ -70,14 +62,16 @@ public class IvyPathTest extends EnhancedOpMode {
 
         Command aimSideways = StateCommands.set(BettaTurret.RightState.SIDEWAYS);
         Command aimForward = StateCommands.set(BettaTurret.RightState.FORWARD);
+        Command startShooter = StateCommands.set(BettaShooter.ShooterState.ON);
+        Command stopShooter = StateCommands.set(BettaShooter.ShooterState.OFF);
 
         routine = sequential(PathCommands.timeout(Groups.loop(sequential(
                 instant(() -> leg = "forward"),
-                parallel(PathCommands.follow(robot.follower, forward), sequential(halfway(), aimSideways)),
+                parallel(PathCommands.follow(robot.follower, forward), sequential(halfway(), aimSideways, startShooter)),
                 instant(() -> leg = "pause"),
                 PathCommands.waitMs(PAUSE_MS),
                 instant(() -> leg = "back"),
-                parallel(PathCommands.follow(robot.follower, back), sequential(halfway(), aimForward)),
+                parallel(PathCommands.follow(robot.follower, back), sequential(halfway(), aimForward, stopShooter)),
                 instant(() -> leg = "pause"),
                 PathCommands.waitMs(PAUSE_MS)
         )), ROUTINE_TIMEOUT_MS),
