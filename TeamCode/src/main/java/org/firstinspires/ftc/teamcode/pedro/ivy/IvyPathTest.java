@@ -10,6 +10,7 @@ import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.ivy.groups.Groups;
 import com.pedropathing.math.Pose;
+import com.pedropathing.math.Vector2D;
 import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
@@ -40,6 +41,7 @@ public class IvyPathTest extends EnhancedOpMode {
     private BettaShooter shooter;
     private Command routine;
     private double[][] splineDrawing;
+    private double[] halfwayMark;
     private String leg = "waiting for START";
     private double halfwayFiredAt = Double.NaN;
 
@@ -60,6 +62,8 @@ public class IvyPathTest extends EnhancedOpMode {
         Path forward = curve(start, control1, control2, end).tangent();
         Path back = PathHeadings.backwardTangent(curve(end, control2, control1, start));
         splineDrawing = FieldVisualization.pathPolyline(forward);
+        Vector2D middle = forward.getSegments().get(0).curve.get(0.5);
+        halfwayMark = FieldVisualization.toField(middle.x(), middle.y());
 
         Command aimSideways = StateCommands.set(BettaTurret.RightState.SIDEWAYS);
         Command aimForward = StateCommands.set(BettaTurret.RightState.FORWARD);
@@ -85,9 +89,9 @@ public class IvyPathTest extends EnhancedOpMode {
         return Command.build()
                 .setStart(() -> armed.set(false))
                 .setExecute(() -> {
-                    if (robot.follower.completion() < 0.25) armed.set(true);
+                    if (robot.follower.completion() < 0.5) armed.set(true);
                 })
-                .setDone(() -> armed.get() && robot.follower.completion() >= 0.25);
+                .setDone(() -> armed.get() && robot.follower.completion() >= 0.5);
     }
 
     private Command recordHalfway() {
@@ -105,12 +109,23 @@ public class IvyPathTest extends EnhancedOpMode {
         telemetry.addData("Leg", leg);
         telemetry.addData("Path Completion", "%.2f", robot.follower.completion());
         telemetry.addData("Halfway Fired At Completion", "%.2f", halfwayFiredAt);
-        telemetry.addData("Turret Right State", turret.getState(BettaTurret.RightState.class));
+        BettaTurret.RightState aim = turret.getState(BettaTurret.RightState.class);
+        telemetry.addData("Turret Right Position", aim == BettaTurret.RightState.IDLE
+                ? "unpowered" : String.format("%.2f (%s)", aim.getValue(), aim));
+        telemetry.addData("Shooter Power", "%.2f", shooter.getState(BettaShooter.ShooterState.class).getValue());
     }
 
     @Override
     protected void dashboardOverlay(Canvas overlay) {
         overlay.setStroke("#2962FF");
         overlay.strokePolyline(splineDrawing[0], splineDrawing[1]);
+        overlay.setStroke("#FFD600");
+        overlay.strokeCircle(halfwayMark[0], halfwayMark[1], 2);
+        if (robot.follower.isBusy()) {
+            Pose target = robot.follower.closestPose();
+            double[] p = FieldVisualization.toField(target.x(), target.y());
+            overlay.setFill("#2962FF");
+            overlay.fillCircle(p[0], p[1], 1.5);
+        }
     }
 }
