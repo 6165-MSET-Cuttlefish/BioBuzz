@@ -41,6 +41,7 @@ public class IvyPathTest extends EnhancedOpMode {
     private Command routine;
     private double[][] splineDrawing;
     private String leg = "waiting for START";
+    private double halfwayFiredAt = Double.NaN;
 
 
 
@@ -67,11 +68,11 @@ public class IvyPathTest extends EnhancedOpMode {
 
         routine = sequential(PathCommands.timeout(Groups.loop(sequential(
                 instant(() -> leg = "forward"),
-                parallel(PathCommands.follow(robot.follower, forward), sequential(halfway(), aimSideways, startShooter)),
+                parallel(PathCommands.follow(robot.follower, forward), sequential(halfway(), recordHalfway(), aimSideways, startShooter)),
                 instant(() -> leg = "pause"),
                 PathCommands.waitMs(PAUSE_MS),
                 instant(() -> leg = "back"),
-                parallel(PathCommands.follow(robot.follower, back), sequential(halfway(), aimForward, stopShooter)),
+                parallel(PathCommands.follow(robot.follower, back), sequential(halfway(), recordHalfway(), aimForward, stopShooter)),
                 instant(() -> leg = "pause"),
                 PathCommands.waitMs(PAUSE_MS)
         )), ROUTINE_TIMEOUT_MS),
@@ -89,6 +90,10 @@ public class IvyPathTest extends EnhancedOpMode {
                 .setDone(() -> armed.get() && robot.follower.completion() >= 0.25);
     }
 
+    private Command recordHalfway() {
+        return instant(() -> halfwayFiredAt = robot.follower.completion());
+    }
+
     @Override
     protected void onStart() {
         Scheduler.schedule(routine);
@@ -99,6 +104,7 @@ public class IvyPathTest extends EnhancedOpMode {
         telemetry.addData("Running", Scheduler.isRunning(routine));
         telemetry.addData("Leg", leg);
         telemetry.addData("Path Completion", "%.2f", robot.follower.completion());
+        telemetry.addData("Halfway Fired At Completion", "%.2f", halfwayFiredAt);
         telemetry.addData("Turret Right State", turret.getState(BettaTurret.RightState.class));
     }
 
