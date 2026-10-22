@@ -84,9 +84,9 @@ public class IvyPathTest extends EnhancedOpMode {
         return Command.build()
                 .setStart(() -> armed.set(false))
                 .setExecute(() -> {
-                    if (robot.follower.completion() < 0.5) armed.set(true);
+                    if (robot.follower.completion() < 0.25) armed.set(true);
                 })
-                .setDone(() -> armed.get() && robot.follower.completion() >= 0.5);
+                .setDone(() -> armed.get() && robot.follower.completion() >= 0.25);
     }
 
     @Override
