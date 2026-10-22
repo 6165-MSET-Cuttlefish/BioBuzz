@@ -56,10 +56,10 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double wallGapIn = 1;
         /** Least room between the robot's footprint and a HIVE rail or obstacle. */
         public static double railGapIn = 1;
-        /** In the start pose's frame (RED field coordinates with onField on), on top of the HIVE rails. */
-        public static Box obstacle1 = new Box(true, 40.75, 82.54, 6, 6);
-        public static Box obstacle2 = new Box(false, 40.75, 100, 6, 6);
-        public static Box obstacle3 = new Box(false, 40.75, 65, 6, 6);
+        /** In the start pose's frame (RED field coordinates with onField on), on top of the HIVE rails; the defaults sit 30 in ahead of the default start. */
+        public static Box obstacle1 = new Box(false, 84, 102, 6, 6);
+        public static Box obstacle2 = new Box(false, 101.5, 102, 6, 6);
+        public static Box obstacle3 = new Box(false, 66.5, 102, 6, 6);
         public static double timeoutMinAvgSpeedIps = 10;
         public static double timeoutMinSec = 4;
         public static double timeoutMaxSec = 30;
@@ -83,7 +83,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         }
     }
 
-    // n! visit orders.
+    // Under RouteOptimizer.MAX_BALLS: this re-plans every replanIntervalMs and the visit orders grow as n!.
     private static final int MAX_BALLS = 5;
     private static final double TRAIL_SPACING_IN = 1;
     private static final double TRAIL_TURN_DEG = 5;
@@ -212,6 +212,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     }
 
     private void replanIfChanged() {
+        // Ahead of the gates below, so a bad maxBalls throws even while vision is stale.
+        maxBalls();
         double now = System.nanoTime() * 1e-9;
         if ((now - lastPlanSeconds) * 1000 < Tuning.replanIntervalMs) return;
         Camera camera = visionRobot.camera;
@@ -289,7 +291,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         switch (type) {
             case POLLEN: return Tuning.collectPollen;
             case NECTAR_RED: return Tuning.collectRedNectar;
-            default: return Tuning.collectBlueNectar;
+            case NECTAR_BLUE: return Tuning.collectBlueNectar;
+            default: throw new IllegalArgumentException("unhandled ball type " + type);
         }
     }
 
@@ -351,7 +354,11 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
     }
 
     private static int maxBalls() {
-        return Math.max(0, Math.min(MAX_BALLS, Tuning.maxBalls));
+        if (Tuning.maxBalls < 0 || Tuning.maxBalls > MAX_BALLS) {
+            throw new IllegalArgumentException(String.format(
+                    "Vision Ball Collection maxBalls %d: must be 0 to %d", Tuning.maxBalls, MAX_BALLS));
+        }
+        return Tuning.maxBalls;
     }
 
     private static List<Double> settings() {
@@ -376,9 +383,9 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         Camera camera = visionRobot.camera;
         if (camera.isFrameStale()) telemetry.addData("Vision", CollectionDisplay.visionState(camera));
         if (keepIn != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, keepIn);
-        telemetry.addData("Balls", "%d tracked; skipped %d off our half, %d out of the intake's reach, %d beyond %.0f in, %d on the driven path; planning %d",
-                camera.getFieldBalls().size(), skippedOutside, skippedUnreachable, skippedRange, Tuning.maxRangeIn, skippedDriven,
-                balls.length);
+        telemetry.addData("Balls", "%d tracked; skipped %d %s, %d out of the intake's reach, %d beyond %.0f in, %d on the driven path; planning %d",
+                camera.getFieldBalls().size(), skippedOutside, Tuning.onField ? "off our half" : "too far from the start",
+                skippedUnreachable, skippedRange, Tuning.maxRangeIn, skippedDriven, balls.length);
         if (route == null) {
             telemetry.addData("Plan", "none: " + noPlanReason);
             return;
