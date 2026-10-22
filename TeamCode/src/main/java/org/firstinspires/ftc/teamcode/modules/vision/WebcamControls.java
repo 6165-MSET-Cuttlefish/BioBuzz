@@ -18,7 +18,7 @@ import org.openftc.easyopencv.OpenCvWebcam;
  * Live, dashboard-tunable webcam exposure/gain/white balance. Robot-only: EOCV-Sim never opens an
  * OpenCvWebcam.
  */
-@Config
+@Config("Webcam Controls")
 public class WebcamControls {
 
     public static boolean manual = true;

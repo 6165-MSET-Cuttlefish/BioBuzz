@@ -10,7 +10,7 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
 @TeleOp(name = "Motor Test", group = "Test")
-@Config
+@Config("Motor Test")
 public class MotorTest extends OpMode {
     public static String name = "motor";
     public static double power = 0;

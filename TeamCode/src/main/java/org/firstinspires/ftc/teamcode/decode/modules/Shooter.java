@@ -45,8 +45,8 @@ public class Shooter extends Module {
 
     public static boolean bangBangEnabled = true;
     public static boolean zeroPower = false;
-    public static double bangBangTolerancePercent = 0.10;
-    public static double reverseBangBangPercent = 0.10;
+    public static double bangBangToleranceFraction = 0.10;
+    public static double reverseBangBangFraction = 0.10;
     public static double reverseBangBangPower = -0.01;
     public static boolean pureBangBang = false;
     public static ShooterPID shooterPid = new ShooterPID();
@@ -188,7 +188,7 @@ public class Shooter extends Module {
             logDashboard("PID Output", "%.3f", shooterPidOutput);
             logDashboard("Motor power", "%.5f", left.getPower());
 
-            double bbRPM = targetVelocityRPM * bangBangTolerancePercent;
+            double bbRPM = targetVelocityRPM * bangBangToleranceFraction;
             logDashboard("Bang-Bang Error (RPM)", "%.1f", targetVelocityRPM - shooterCurrentVelocityRPM);
             logDashboard("Bang-Bang Tolerance (RPM)", "%.1f", bbRPM);
 
@@ -256,8 +256,8 @@ public class Shooter extends Module {
             shooterPidOutput = calculateShooterPIDPower();
         } else {
             double pidPower = calculateShooterPIDPower();
-            double thresholdRPM = targetVelocityRPM * bangBangTolerancePercent;
-            double reverseBangBangThresholdRPM = targetVelocityRPM * reverseBangBangPercent;
+            double thresholdRPM = targetVelocityRPM * bangBangToleranceFraction;
+            double reverseBangBangThresholdRPM = targetVelocityRPM * reverseBangBangFraction;
 
             if (error > thresholdRPM) {
                 shooterPidOutput = 1;

@@ -36,8 +36,8 @@ public class BallCollectionTest extends EnhancedOpMode {
         public static Ball ball4 = new Ball(60, 6, 1.4);
 
         public static boolean onField = false;
-        public static double startX = 0;
-        public static double startY = 0;
+        public static double startXIn = 0;
+        public static double startYIn = 0;
         public static double startHeadingDeg = 0;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
@@ -133,7 +133,7 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     // The configured start is configuration, so a bad one throws rather than showing as "no plan".
     private void planFromConfiguredStart() {
-        Pose configured = BallCollection.configuredPose(Tuning.onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
+        Pose configured = BallCollection.configuredPose(Tuning.onField, Tuning.startXIn, Tuning.startYIn, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(configured, RobotGeometry.shape(),
                 BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn), BallCollection.obstacles(Tuning.onField),
                 Tuning.railGapIn);
@@ -188,7 +188,7 @@ public class BallCollectionTest extends EnhancedOpMode {
             c.add(b.x);
             c.add(b.y);
         }
-        c.addAll(Arrays.asList(Tuning.startX, Tuning.startY, Tuning.startHeadingDeg,
+        c.addAll(Arrays.asList(Tuning.startXIn, Tuning.startYIn, Tuning.startHeadingDeg,
                 Tuning.wallGapIn, Tuning.railGapIn, Tuning.forceSplineOnly ? 1.0 : 0.0));
         c.addAll(CollectionDisplay.plannerInputs());
         return c;

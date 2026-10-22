@@ -8,7 +8,7 @@ import java.util.List;
 
 public final class BallFieldTransform {
 
-    @Config("CameraMount")
+    @Config("Camera Mount")
     public static class Mount {
         /** Camera-frame origin (the pipeline's crosshair) from robot center; +X forward, +Y left. */
         public static double xIn = 33.2;

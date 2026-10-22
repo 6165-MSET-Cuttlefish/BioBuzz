@@ -19,7 +19,7 @@ import java.util.ArrayDeque;
 import java.util.List;
 
 @TeleOp(name = "Shooter Test", group = "Test")
-@Config
+@Config("Shooter Test")
 public class ShooterTest extends OpMode {
     public static String flywheelName = "flywheel";
     public static String encoderName = "flywheel";

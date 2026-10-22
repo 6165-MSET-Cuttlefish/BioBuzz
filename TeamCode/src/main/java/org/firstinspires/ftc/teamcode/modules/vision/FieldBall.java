@@ -28,7 +28,7 @@ public final class FieldBall {
 
     public double headingDeg() { return Math.toDegrees(Math.atan2(vy, vx)); }
 
-    public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIn; }
+    public boolean isMoving() { return speed() >= FieldBallTracker.Tuning.movingSpeedIps; }
 
     public boolean visible() { return visible; }
 

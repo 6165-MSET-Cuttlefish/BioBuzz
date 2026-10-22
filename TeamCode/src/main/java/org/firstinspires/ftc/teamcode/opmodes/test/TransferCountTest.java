@@ -13,13 +13,13 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 
 @TeleOp(name = "Transfer Count Test", group = "Test")
-@Config
+@Config("Transfer Count Test")
 public class TransferCountTest extends OpMode {
     public static String upstreamSensorName = "analog0";
     public static String downstreamSensorName = "analog1";
     public static String motor1Name = "transfer1";
     public static double maxRangeMm = 1300;
-    public static double diffThreshold = 25;
+    public static double diffThresholdMm = 25;
     public static int stopAtCount = 2;
     public static double motor1Power = 0;
     public static boolean resetCount = false;
@@ -58,7 +58,7 @@ public class TransferCountTest extends OpMode {
         double diff = mmA - mmB;
 
         // Each ball's trailing edge (or the gap behind it) passing A pushes A − B up through the threshold once.
-        if (pastDiff <= diffThreshold && diff > diffThreshold) {
+        if (pastDiff <= diffThresholdMm && diff > diffThresholdMm) {
             count++;
         }
         pastDiff = diff;
@@ -78,8 +78,8 @@ public class TransferCountTest extends OpMode {
         telemetry.addData("Upstream (mm)", mmA);
         telemetry.addData("Downstream (mm)", mmB);
         telemetry.addData("A - B (mm)", diff);
-        telemetry.addData("Diff threshold (mm)", diffThreshold);
-        telemetry.addData("motor current", motor1.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData("Diff threshold (mm)", diffThresholdMm);
+        telemetry.addData("Motor Current (A)", motor1.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("loop time (ms)", runtime.milliseconds());
     }
 }

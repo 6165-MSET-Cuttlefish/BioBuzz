@@ -70,7 +70,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | OpMode | needs | measures |
 |---|---|---|
 | Bench: Probe | nothing | the IMU chip, attached webcams and Limelights, whether an Expansion Hub answers |
-| (config baseline, no OpMode) | nothing | slothboard's config baseline lists `OptimizationToggles` |
+| (config baseline, no OpMode) | nothing | slothboard's config baseline lists `Optimization Toggles` |
 | Bench: Hub | nothing | empty-loop overhead; bus call costs; telemetry, field map and packet costs; the floodgate pin's volts; planner time for 0 to 5 balls; LLResult parse; Limelight POST and poller costs against a fake Limelight |
 | Bench: Framework Loop | nothing | the EnhancedOpMode loop with Drivetrain and Pedro (capped at 0.2), one telemetry toggle per phase; the current limiter stays at 1.0 on an unwired floodgate |
 | Bench: Raw Loop | nothing | the loop of a bare LinearOpMode running Pedro (capped at 0.2) without the framework, idle and then following Close Flower's first leg |

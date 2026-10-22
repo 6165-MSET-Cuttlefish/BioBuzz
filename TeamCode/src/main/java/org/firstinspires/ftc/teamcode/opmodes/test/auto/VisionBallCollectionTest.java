@@ -48,8 +48,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         public static double replanIntervalMs = 250;
 
         public static boolean onField = false;
-        public static double startX = 84;
-        public static double startY = 72;
+        public static double startXIn = 84;
+        public static double startYIn = 72;
         public static double startHeadingDeg = 90;
 
         /** Least room between the robot's footprint and the walls or the centre line. */
@@ -149,7 +149,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     // The configured start is configuration, so a bad one throws rather than showing as "no plan".
     private static Pose configuredStart() {
-        Pose start = BallCollection.configuredPose(Tuning.onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
+        Pose start = BallCollection.configuredPose(Tuning.onField, Tuning.startXIn, Tuning.startYIn, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(start, RobotGeometry.shape(),
                 BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn), obstacles(), Tuning.railGapIn);
         if (problem != null) throw new IllegalStateException("Vision Ball Collection start pose " + problem);

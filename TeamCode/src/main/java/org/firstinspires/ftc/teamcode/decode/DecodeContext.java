@@ -7,7 +7,7 @@ import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 
-@Config("DecodeContext")
+@Config("Decode Context")
 public final class DecodeContext {
 
     public static final double FIELD_IN = 141.5;

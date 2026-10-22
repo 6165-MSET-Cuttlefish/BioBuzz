@@ -18,7 +18,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 
-@Config
+@Config("Betta Constants")
 public class BettaConstants {
 
     public static class MecanumSettings {

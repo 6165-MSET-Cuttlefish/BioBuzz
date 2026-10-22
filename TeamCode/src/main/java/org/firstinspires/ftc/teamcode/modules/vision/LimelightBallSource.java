@@ -15,7 +15,7 @@ import java.util.List;
 
 public final class LimelightBallSource {
 
-    @Config("LimelightBalls")
+    @Config("Limelight Balls")
     public static class Tuning {
         /** The pipeline running ball_contour_snapscript.py. */
         public static int pipeline = 4;
@@ -271,7 +271,7 @@ public final class LimelightBallSource {
             if (allZero(out)) return String.format("no script output on pipeline %d (llpython all zeros)", pipeline);
             if (out[0] == LimelightSync.FILE_SCRIPT_ID) {
                 return String.format("pipeline %d runs a web-editor copy of the ball script (SCRIPT_ID %s, not the "
-                        + "upload's %s); turn LimelightBalls → syncOnInit off while tuning there",
+                        + "upload's %s); turn Limelight Balls → syncOnInit off while tuning there",
                         pipeline, number(out[0]), number(LimelightSync.STAMP));
             }
             return String.format("unknown SCRIPT_ID %s on pipeline %d, want %s", number(out[0]), pipeline,

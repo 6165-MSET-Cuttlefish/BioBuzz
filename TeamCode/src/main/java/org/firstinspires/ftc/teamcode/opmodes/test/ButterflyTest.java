@@ -10,18 +10,18 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.Servo;
 
-@TeleOp(name="ButterflyTest", group="Test")
-@Config
+@TeleOp(name="Butterfly Test", group="Test")
+@Config("Butterfly Test")
 public class ButterflyTest extends LinearOpMode {
 
     private DcMotorEx frontLeft, frontRight, backLeft, backRight;
     private Servo leftShifter, rightShifter;
 
-    public static double LeftUpPos = 0.85;
-    public static double LeftDownPos = 0.1;
-    public static double RightUpPos  = 0.25;
-    public static double RightDownPos = 1;
-    public static double speedLimit = 2;
+    public static double leftUpPos = 0.85;
+    public static double leftDownPos = 0.1;
+    public static double rightUpPos  = 0.25;
+    public static double rightDownPos = 1;
+    public static double powerScale = 0.5;
 
     private boolean tractionMode = false;
 
@@ -57,11 +57,11 @@ public class ButterflyTest extends LinearOpMode {
                 tractionMode = !tractionMode;
 
                 if (tractionMode) {
-                    leftShifter.setPosition(LeftDownPos);
-                    rightShifter.setPosition(RightDownPos);
+                    leftShifter.setPosition(leftDownPos);
+                    rightShifter.setPosition(rightDownPos);
                 } else {
-                    leftShifter.setPosition(LeftUpPos);
-                    rightShifter.setPosition(RightUpPos);
+                    leftShifter.setPosition(leftUpPos);
+                    rightShifter.setPosition(rightUpPos);
                 }
 
             }
@@ -92,10 +92,10 @@ public class ButterflyTest extends LinearOpMode {
                 brPower /= denominator;
             }
 
-            frontLeft.setPower(flPower/speedLimit);
-            frontRight.setPower(frPower/speedLimit);
-            backLeft.setPower(blPower/speedLimit);
-            backRight.setPower(brPower/speedLimit);
+            frontLeft.setPower(flPower * powerScale);
+            frontRight.setPower(frPower * powerScale);
+            backLeft.setPower(blPower * powerScale);
+            backRight.setPower(brPower * powerScale);
 
             telemetry.addData("Mode", tractionMode ? "Traction" : "Mecanum");
             telemetry.update();

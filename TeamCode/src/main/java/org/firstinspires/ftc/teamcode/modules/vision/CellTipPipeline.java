@@ -23,7 +23,7 @@ import java.util.List;
  */
 public class CellTipPipeline extends TimestampedOpenCvPipeline {
 
-    @Config("CellTipDetection")
+    @Config("Cell Tip Detection")
     public static class Tuning {
         public static double holdSeconds = 0.25;
         public static double minTagAreaPx = 120;

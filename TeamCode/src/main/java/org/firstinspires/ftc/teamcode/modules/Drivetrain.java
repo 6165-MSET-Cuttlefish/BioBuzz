@@ -16,7 +16,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 
-@Config
+@Config("Drivetrain")
 public class Drivetrain extends Module {
     public static final String FRONT_LEFT = "fl";
     public static final String BACK_LEFT = "bl";
@@ -251,7 +251,7 @@ public class Drivetrain extends Module {
         // The limiter's last reading, not a fresh one; NaN until read() first takes one.
         logDashboard("Floodgate Current (A)", "%.2f", lastFloodgateAmps);
         logDashboard("Current Limiter Multiplier", "%.2f", lastCurrentLimiterMultiplier);
-        logDashboard("currentOverTime", "%.2f", currentOverTime);
+        logDashboard("Integrated Current (A^2*ms)", "%.2f", currentOverTime);
 
         if (encoderTelemetry) {
             logDashboard("FL Position (ticks)", fl.getCurrentPosition());

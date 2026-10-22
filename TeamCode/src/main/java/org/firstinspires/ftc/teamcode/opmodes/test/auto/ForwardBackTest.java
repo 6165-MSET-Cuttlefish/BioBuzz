@@ -11,7 +11,7 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 
-@Autonomous(name = "ForwardBackTest", group = "Test")
+@Autonomous(name = "Forward Back Test", group = "Test")
 public class ForwardBackTest extends BarePedroAuto {
 
     private static final double ROUTINE_TIMEOUT_MS = 30000;

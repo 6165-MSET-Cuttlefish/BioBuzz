@@ -19,7 +19,7 @@ import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
 import org.firstinspires.ftc.teamcode.decode.modules.Turret;
 import org.firstinspires.ftc.teamcode.modules.Drivetrain;
 
-@Config("DecodeRobot")
+@Config("Decode Robot")
 public class DecodeRobot extends Robot {
 
     public Drivetrain drivetrain;

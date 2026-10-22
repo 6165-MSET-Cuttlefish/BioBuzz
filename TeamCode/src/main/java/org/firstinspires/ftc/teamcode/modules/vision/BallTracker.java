@@ -13,7 +13,7 @@ import java.util.List;
  */
 public final class BallTracker {
 
-    @Config("BallTracking")
+    @Config("Ball Tracking")
     public static class Tuning {
         public static double matchRadiusIn = 8.0;
         /** Set equal to matchRadiusIn to disable; too wide merges nearby same-type balls. */
@@ -23,9 +23,9 @@ public final class BallTracker {
         /** Alpha-beta gains, 0-1: how hard each detection corrects the predicted position / velocity. */
         public static double positionSmoothing = 0.6;
         public static double velocitySmoothing = 0.35;
-        public static double movingSpeedIn = 3.0;
-        /** in/s; faster measured speeds are treated as a mis-association and ignored. */
-        public static double maxPlausibleSpeedIn = 250.0;
+        public static double movingSpeedIps = 3.0;
+        /** Faster measured speeds are treated as a mis-association and ignored. */
+        public static double maxPlausibleSpeedIps = 250.0;
         /** Velocity multiplier per missed frame. */
         public static double coastDecay = 0.8;
     }
@@ -142,7 +142,7 @@ public final class BallTracker {
             double residualY = detection.cameraY - predictedY;
             if (dt > 0) {
                 double measuredSpeed = Math.hypot(detection.cameraX - x, detection.cameraY - y) / dt;
-                if (measuredSpeed <= Tuning.maxPlausibleSpeedIn) {
+                if (measuredSpeed <= Tuning.maxPlausibleSpeedIps) {
                     vx += Tuning.velocitySmoothing * residualX / dt;
                     vy += Tuning.velocitySmoothing * residualY / dt;
                 }

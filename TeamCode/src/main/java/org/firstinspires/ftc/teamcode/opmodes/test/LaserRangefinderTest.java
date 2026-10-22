@@ -8,27 +8,27 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 
 @TeleOp(name = "Laser Rangefinder Test", group = "Test")
-@Config
+@Config("Laser Rangefinder Test")
 public class LaserRangefinderTest extends LinearOpMode {
-    public static String pin0Name = "analog0";
-    public static String pin1Name = "analog1";
+    public static String sensorAName = "analog0";
+    public static String sensorBName = "analog1";
     public static double maxRangeMm = 1300;
 
     @Override
     public void runOpMode() {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
 
-        AnalogInput pin0 = hardwareMap.analogInput.get(pin0Name);
-        AnalogInput pin1 = hardwareMap.analogInput.get(pin1Name);
+        AnalogInput sensorA = hardwareMap.analogInput.get(sensorAName);
+        AnalogInput sensorB = hardwareMap.analogInput.get(sensorBName);
 
         waitForStart();
         while (opModeIsActive()) {
-            double voltage0 = pin0.getVoltage();
-            double voltage1 = pin1.getVoltage();
-            telemetry.addData("voltage 0", voltage0);
-            telemetry.addData("voltage 1", voltage1);
-            telemetry.addData("distance 0 (mm)", voltage0 / 3.3 * maxRangeMm);
-            telemetry.addData("distance 1 (mm)", voltage1 / 3.3 * maxRangeMm);
+            double voltageA = sensorA.getVoltage();
+            double voltageB = sensorB.getVoltage();
+            telemetry.addData("Sensor A Voltage (V)", voltageA);
+            telemetry.addData("Sensor B Voltage (V)", voltageB);
+            telemetry.addData("Sensor A Distance (mm)", voltageA / 3.3 * maxRangeMm);
+            telemetry.addData("Sensor B Distance (mm)", voltageB / 3.3 * maxRangeMm);
             telemetry.update();
         }
     }

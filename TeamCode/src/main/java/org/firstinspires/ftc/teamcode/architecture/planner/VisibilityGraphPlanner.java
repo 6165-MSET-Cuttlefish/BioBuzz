@@ -14,7 +14,7 @@ import java.util.PriorityQueue;
  * bitangents with enough samples, and well under a millisecond for a handful of obstacles. The region is convex, so
  * a hop between two points inside it stays inside.
  */
-@Config
+@Config("Visibility Graph Planner")
 public final class VisibilityGraphPlanner {
     public static int pointsPerCorner = 4;
     // Neighbouring samples are joined by chords, which cut inside the corner's arc the samples sit on.

@@ -41,11 +41,11 @@ public abstract class BarePedroAuto extends LinearOpMode {
 
     public static void addFollowerTelemetry(Telemetry telemetry, Follower follower) {
         Pose pose = follower.pose();
-        telemetry.addData("x", pose.x());
-        telemetry.addData("y", pose.y());
-        telemetry.addData("heading (deg)", Math.toDegrees(pose.heading()));
+        telemetry.addData("X (in)", pose.x());
+        telemetry.addData("Y (in)", pose.y());
+        telemetry.addData("Heading (deg)", Math.toDegrees(pose.heading()));
         if (follower.currentPath() != null) {
-            telemetry.addData("Distance left on path (in)", follower.remainingDistance());
+            telemetry.addData("Distance Left On Path (in)", follower.remainingDistance());
         }
     }
 }

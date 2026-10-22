@@ -10,7 +10,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import org.firstinspires.ftc.teamcode.vendor.brushland.LaserRangefinder;
 
 @TeleOp(name = "Configure Laser Rangefinder", group = "Test")
-@Config
+@Config("Configure Laser Rangefinder")
 public class ConfigureLaserRangefinder extends LinearOpMode {
     public static int analogLowMm = 0;
     public static int analogHighMm = 1300;

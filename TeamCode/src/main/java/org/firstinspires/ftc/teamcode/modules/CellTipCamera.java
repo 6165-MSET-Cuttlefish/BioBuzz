@@ -15,7 +15,7 @@ import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
 import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
 
 /** HIVE-cell tip verdict from {@link CellTipPipeline} on the webcam; the alliance is fixed at init. */
-@Config
+@Config("Cell Tip Camera")
 public class CellTipCamera extends Module {
 
     public static final String WEBCAM_NAME = "aprilTagDetector";

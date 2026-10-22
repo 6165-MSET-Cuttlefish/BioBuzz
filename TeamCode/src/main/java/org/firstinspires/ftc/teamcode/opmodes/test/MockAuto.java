@@ -24,7 +24,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 @Autonomous(name = "Mock Architecture Test", group = "Test")
 public class MockAuto extends EnhancedOpMode {
 
-    @Config("Mock Auto")
+    @Config("Mock Architecture Test")
     public static class Tuning {
         public static boolean enableDrive = false;
         public static double driveInches = 24;
@@ -91,7 +91,7 @@ public class MockAuto extends EnhancedOpMode {
         telemetry.addData("Mock Phase", phase);
         telemetry.addData("Drive Enabled", Tuning.enableDrive);
         telemetry.addData("Pulse Motor", mock.mech.boundMotorName()
-                + (mock.mech.isMotorBound() ? " [bound]" : " [none — set MockMechanism.pulseMotorName]"));
+                + (mock.mech.isMotorBound() ? " [bound]" : " [none — set Mock Mechanism → pulseMotorName]"));
         telemetry.addData("Running", Scheduler.isRunning(sequence));
     }
 }

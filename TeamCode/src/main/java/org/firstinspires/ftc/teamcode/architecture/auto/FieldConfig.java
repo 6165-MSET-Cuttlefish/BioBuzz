@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode.architecture.auto;
 import com.acmerobotics.dashboard.config.Config;
 
 /** Live-tunable so a smaller test field doesn't need a code change. */
-@Config
+@Config("Field Config")
 public final class FieldConfig {
     private FieldConfig() {}
 

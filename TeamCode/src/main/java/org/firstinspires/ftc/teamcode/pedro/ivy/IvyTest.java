@@ -12,10 +12,8 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import static com.pedropathing.ivy.Scheduler.schedule;
 import static com.pedropathing.ivy.commands.Commands.*;
 
-import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
-
-@Config
-@TeleOp(name = "IvyTest")
+@Config("Ivy Test")
+@TeleOp(name = "Ivy Test", group = "Test")
 public class IvyTest extends LinearOpMode {
     public static boolean end = false;
     public static boolean a = false, b = false;

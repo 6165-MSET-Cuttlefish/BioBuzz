@@ -4,7 +4,7 @@ Paste everything below the line, with photos from the Limelight feed, into a vis
 thresholds for a new venue, ball batch or ball type. Each returned line replaces the four arguments after the label in
 that type's `BallType(...)` in `BALL_TYPES` of `limelight/ball_contour_snapscript.py` (a new type also needs a code
 there and in `modules/vision/BallType.java`). They are starting values: confirm them live in the Limelight web editor
-with `DISPLAY_MODE = "MASK"` and `LimelightBalls → syncOnInit` off.
+with `DISPLAY_MODE = "MASK"` and `Limelight Balls → syncOnInit` off.
 
 ---
 

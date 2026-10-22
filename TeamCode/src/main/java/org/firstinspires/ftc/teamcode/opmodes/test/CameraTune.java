@@ -28,7 +28,7 @@ public class CameraTune extends LinearOpMode {
 
     private void pump() {
         session.update();
-        telemetry.addLine("Edit WebcamControls.* in the FtcDashboard config.");
+        telemetry.addLine("Edit Webcam Controls in the dashboard config.");
         WebcamControls controls = session.controls();
         if (controls == null) telemetry.addLine("Waiting for the camera to open");
         else controls.addTelemetry(telemetry);

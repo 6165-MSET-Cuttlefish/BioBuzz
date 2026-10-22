@@ -14,10 +14,11 @@ import java.util.List;
  */
 public final class FieldBallTracker {
 
-    @Config("FieldBallTracking")
+    @Config("Field Ball Tracking")
     public static class Tuning {
         public static double matchRadiusIn = 8.0;
         public static double forgetAfterSeconds = 10.0;
+        public static double movingSpeedIps = 3.0;
     }
 
     private final List<Known> known = new ArrayList<>();

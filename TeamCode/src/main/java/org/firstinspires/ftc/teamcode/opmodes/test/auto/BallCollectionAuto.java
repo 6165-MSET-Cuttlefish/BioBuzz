@@ -26,8 +26,8 @@ public class BallCollectionAuto extends BioBuzzOpMode {
 
     @Config("Ball Collection Auto")
     public static class Tuning {
-        public static double startX = 0;
-        public static double startY = 0;
+        public static double startXIn = 0;
+        public static double startYIn = 0;
         public static double startHeadingDeg = 0;
         public static double timeoutMs = 25000;
         public static BallCollection.Settings collection = new BallCollection.Settings();
@@ -47,7 +47,7 @@ public class BallCollectionAuto extends BioBuzzOpMode {
     @Override
     protected void initialize() {
         boolean onField = Tuning.collection.onField;
-        Pose startPose = BallCollection.configuredPose(onField, Tuning.startX, Tuning.startY, Tuning.startHeadingDeg);
+        Pose startPose = BallCollection.configuredPose(onField, Tuning.startXIn, Tuning.startYIn, Tuning.startHeadingDeg);
         String problem = RouteOptimizer.poseProblem(startPose, RobotGeometry.shape(),
                 BallCollection.keepIn(onField, Tuning.collection.wallGapIn), BallCollection.obstacles(onField),
                 Tuning.collection.railGapIn);

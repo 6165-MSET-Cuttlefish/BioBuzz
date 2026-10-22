@@ -14,13 +14,13 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.modules.TransferCounter;
 
 @TeleOp(name = "Transfer Thread Count Test", group = "Test")
-@Config
+@Config("Transfer Thread Count Test")
 public class TransferThreadCountTest extends OpMode {
     public static String upstreamSensorName = "analog0";
     public static String downstreamSensorName = "analog1";
     public static String motor1Name = "transfer1";
     public static double maxRangeMm = 1300;
-    public static double diffThreshold = 25;
+    public static double diffThresholdMm = 25;
     public static double hysteresisMm = 10;
     public static boolean runThread = true;
     public static double pollMs = 10;
@@ -53,7 +53,7 @@ public class TransferThreadCountTest extends OpMode {
         motor1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         if (runThread) {
             counter = new TransferCounter(hardwareMap, upstreamSensorName, downstreamSensorName, maxRangeMm, pollMs);
-            counter.setThreshold(diffThreshold, hysteresisMm);
+            counter.setThreshold(diffThresholdMm, hysteresisMm);
         }
         lastResetCount = resetCount;
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
@@ -69,12 +69,12 @@ public class TransferThreadCountTest extends OpMode {
         if (crashInLoop) throw new IllegalStateException("crashInLoop is on: deliberate crash in loop() to test the TransferCounter thread");
         runtime.reset();
         lastPosition = motor1.getCurrentPosition();
-        if (counter != null) counter.setThreshold(diffThreshold, hysteresisMm);
+        if (counter != null) counter.setThreshold(diffThresholdMm, hysteresisMm);
 
         double mmA = upstream.getVoltage() / 3.3 * maxRangeMm;
         double mmB = downstream.getVoltage() / 3.3 * maxRangeMm;
         double diff = mmA - mmB;
-        if (loopEdge.update(diff, diffThreshold, hysteresisMm)) loopCount++;
+        if (loopEdge.update(diff, diffThresholdMm, hysteresisMm)) loopCount++;
 
         if (resetCount != lastResetCount) {
             loopCount = 0;
@@ -97,7 +97,7 @@ public class TransferThreadCountTest extends OpMode {
         telemetry.addData("Upstream (mm)", mmA);
         telemetry.addData("Downstream (mm)", mmB);
         telemetry.addData("A - B (mm)", diff);
-        telemetry.addData("Diff threshold (mm)", diffThreshold);
+        telemetry.addData("Diff threshold (mm)", diffThresholdMm);
         if (counter != null) {
             TransferCounter.Stats s = counter.stats();
             if (s != null) {
@@ -109,7 +109,7 @@ public class TransferThreadCountTest extends OpMode {
                 telemetry.addData("bulk read mean (ms)", s.meanCommandMs);
             }
         }
-        telemetry.addData("motor current", motor1.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData("Motor Current (A)", motor1.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("loop work (ms)", workMs);
         telemetry.addData("loop time (ms)", runtime.milliseconds());
         telemetry.addData("motor RPM", 60000 * (motor1.getCurrentPosition()-lastPosition) / runtime.milliseconds() / 145.1);

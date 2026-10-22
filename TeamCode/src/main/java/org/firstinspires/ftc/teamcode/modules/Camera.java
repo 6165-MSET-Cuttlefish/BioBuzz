@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-@Config
+@Config("Camera")
 public class Camera extends Module {
 
     public static boolean cameraTelemetry = true;
@@ -180,7 +180,7 @@ public class Camera extends Module {
         return age;
     }
 
-    /** No live Limelight frame: none yet, vision disabled, a Limelight fault, or none new for {@code LimelightBalls → staleFrameSeconds}. */
+    /** No live Limelight frame: none yet, vision disabled, a Limelight fault, or none new for {@code Limelight Balls → staleFrameSeconds}. */
     public boolean isFrameStale() {
         return frame.stale;
     }

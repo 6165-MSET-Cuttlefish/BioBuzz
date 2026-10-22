@@ -27,7 +27,7 @@ public final class TrackedBall {
 
     public double headingDeg() { return Math.toDegrees(Math.atan2(vy, vx)); }
 
-    public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIn; }
+    public boolean isMoving() { return speed() >= BallTracker.Tuning.movingSpeedIps; }
 
     public boolean visible() { return visible; }
 

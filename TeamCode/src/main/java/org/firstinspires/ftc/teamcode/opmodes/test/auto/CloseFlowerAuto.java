@@ -42,7 +42,7 @@ public class CloseFlowerAuto extends BioBuzzOpMode {
         telemetry.addData("Routine Running", Scheduler.isRunning(routine));
         telemetry.addData("Leg", CloseFlowerPaths.leg(legs, robot.follower.currentPath()));
         if (robot.follower.currentPath() != null) {
-            telemetry.addData("Distance Left On Leg", "%.1f in", robot.follower.remainingDistance());
+            telemetry.addData("Distance Left On Leg (in)", "%.1f", robot.follower.remainingDistance());
         }
     }
 }

@@ -173,7 +173,7 @@ def config_diff(path, value):
     return {"type": "SAVE_CONFIG", "configDiff": node}
 
 
-BASELINE_CATEGORY = "OptimizationToggles"
+BASELINE_CATEGORY = "Optimization Toggles"
 BASELINE_PENDING = ("regression: slothboard's config baseline is empty again (fixed in 6165.6), so the Config view's "
                     "'show only modified' filter and baseline hints show nothing")
 

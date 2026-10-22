@@ -1,7 +1,7 @@
 """Ball-detection SnapScript for the Limelight 3A: Pollen and red/blue Nectar.
 
 The robot uploads this file and ball_pipeline.vpr to pipeline 4 at every INIT, SCRIPT_ID replaced by a stamp of both
-files. To tune in the web editor, turn LimelightBalls → syncOnInit off first, and copy the values back here before the
+files. To tune in the web editor, turn Limelight Balls → syncOnInit off first, and copy the values back here before the
 next deploySloth or app restart turns it back on.
 
 Areas are in CALIBRATION_SIZE pixels, so the gates hold at any streaming resolution.

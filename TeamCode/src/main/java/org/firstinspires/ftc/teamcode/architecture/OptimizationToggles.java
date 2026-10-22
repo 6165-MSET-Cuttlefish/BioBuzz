@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.architecture;
 
 import com.acmerobotics.dashboard.config.Config;
 
-@Config
+@Config("Optimization Toggles")
 public final class OptimizationToggles {
     private OptimizationToggles() {}
 
