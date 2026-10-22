@@ -121,8 +121,9 @@ public class IvyPathTest extends EnhancedOpMode {
         overlay.strokePolyline(splineDrawing[0], splineDrawing[1]);
         overlay.setStroke("#FFD600");
         overlay.strokeCircle(halfwayMark[0], halfwayMark[1], 2);
-        if (robot.follower.isBusy()) {
-            Pose target = robot.follower.closestPose();
+        // Null in the loop a leg starts: the dashboard draws before the follower first updates on the new path.
+        Pose target = robot.follower.closestPose();
+        if (robot.follower.isBusy() && target != null) {
             double[] p = FieldVisualization.toField(target.x(), target.y());
             overlay.setFill("#2962FF");
             overlay.fillCircle(p[0], p[1], 1.5);
