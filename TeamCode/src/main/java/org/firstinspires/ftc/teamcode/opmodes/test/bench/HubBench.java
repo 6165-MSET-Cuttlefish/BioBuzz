@@ -27,6 +27,7 @@ import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.PoseRing;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
+import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.FieldMapRenderer;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
@@ -580,8 +581,11 @@ public class HubBench extends OpMode {
             final List<PlannerWorkload.Layout> queue = new ArrayList<>();
             final Map<String, List<PlannerWorkload.Timing>> byBalls = new LinkedHashMap<>();
             final Map<String, List<PlannerWorkload.Timing>> byCase = new LinkedHashMap<>();
-            final Samples chunkMs = new Samples();
+            final Samples stepMs = new Samples();
+            final Samples overrunMs = new Samples();
+            final Samples loopPeriodMs = new Samples();
             final Map<String, Object> cold = new LinkedHashMap<>();
+            PlannerWorkload.Planning planning;
             int next;
 
             @Override void begin() {
@@ -600,34 +604,43 @@ public class HubBench extends OpMode {
 
             @Override boolean step() {
                 loops++;
-                long chunkStart = System.nanoTime();
-                while (next < queue.size() && System.nanoTime() - chunkStart < CHUNK_NS) {
-                    PlannerWorkload.Layout l = queue.get(next++);
-                    if (next == 1) {
-                        cold.put("firstPlanInProcess", !PlannerWorkload.plannedBefore());
-                        PlannerWorkload.Timing t = workload.plan(l);
-                        cold.put("balls", l.balls.length);
-                        cold.put("totalMs", t.routeMs + t.buildMs);
-                        continue;
-                    }
-                    PlannerWorkload.Timing t = workload.plan(l);
-                    String key = l.label.startsWith("random") ? "n=" + l.balls.length : l.label;
-                    Map<String, List<PlannerWorkload.Timing>> into = l.label.startsWith("random") ? byBalls : byCase;
-                    if (!into.containsKey(key)) into.put(key, new ArrayList<PlannerWorkload.Timing>());
-                    into.get(key).add(t);
+                loopPeriodMs.tick(System.nanoTime());
+                if (planning == null) {
+                    if (next == 0) cold.put("firstPlanInProcess", !PlannerWorkload.plannedBefore());
+                    planning = workload.request(queue.get(next++));
                 }
-                chunkMs.addNanos(System.nanoTime() - chunkStart);
-                report.status("%d/%d plans", next, queue.size());
-                return next >= queue.size();
+                PlannerWorkload.Timing t = planning.step(stepMs, overrunMs);
+                if (t != null) {
+                    PlannerWorkload.Layout l = planning.layout;
+                    planning = null;
+                    if (next == 1) {
+                        cold.put("balls", l.balls.length);
+                        cold.put("planMs", t.planMs);
+                        cold.put("computeMs", t.computeMs);
+                        cold.put("loops", t.loops);
+                        cold.put("longestStepMs", t.maxStepMs);
+                    } else {
+                        String key = l.label.startsWith("random") ? "n=" + l.balls.length : l.label;
+                        Map<String, List<PlannerWorkload.Timing>> into = l.label.startsWith("random") ? byBalls : byCase;
+                        if (!into.containsKey(key)) into.put(key, new ArrayList<PlannerWorkload.Timing>());
+                        into.get(key).add(t);
+                    }
+                }
+                report.status("%d/%d plans", next - (planning == null ? 0 : 1), queue.size());
+                return next >= queue.size() && planning == null;
             }
 
             @Override void end() {
                 RobotShape robot = PlannerWorkload.ROBOT;
-                result.put("what", String.format("RouteOptimizer.findOptimalRoute + RoutePathBuilder.build as Vision Ball Collection "
-                        + "calls them with onField on and its obstacle boxes off (RED own half, the HIVE rails, wall and rail "
-                        + "gaps 1, robot %.1f x %.1f in with an intake %.1f in wide %.1f in ahead, start = return), seeded random "
-                        + "layouts plus crafted worst cases",
-                        robot.lengthIn, robot.widthIn, robot.intakeWidthIn, robot.intakeOffsetIn));
+                result.put("what", String.format("RouteOptimizer.search + one Search.step() per loop() (a %.0f ms slice, "
+                        + "VisibilityGraphPlanner.routeSearchSliceMs) as Vision Ball Collection makes them with onField on and "
+                        + "its obstacle boxes off (RED own half, the HIVE rails, wall and rail gaps 1, robot %.1f x %.1f in "
+                        + "with an intake %.1f in wide %.1f in ahead, start = return), seeded random layouts plus crafted "
+                        + "worst cases; planMs is request to done across loops, computeMs the slices alone, stepMs each "
+                        + "loop's slice and overrunMs its time past the slice (a STOP waits for one step)",
+                        VisibilityGraphPlanner.routeSearchSliceMs, robot.lengthIn, robot.widthIn, robot.intakeWidthIn,
+                        robot.intakeOffsetIn));
+                result.put("sliceMs", VisibilityGraphPlanner.routeSearchSliceMs);
                 Map<String, Object> balls = new LinkedHashMap<>();
                 for (Map.Entry<String, List<PlannerWorkload.Timing>> e : byBalls.entrySet()) {
                     balls.put(e.getKey(), PlannerWorkload.summarize(e.getValue()));
@@ -639,7 +652,9 @@ public class HubBench extends OpMode {
                 result.put("coldFirstPlan", cold);
                 result.put("byBallCount", balls);
                 result.put("byCase", cases);
-                result.put("loopChunkMs", chunkMs.summary());
+                result.put("stepMs", stepMs.summary());
+                result.put("overrunMs", overrunMs.summary());
+                result.put("loopPeriodMs", loopPeriodMs.summary());
             }
         });
     }

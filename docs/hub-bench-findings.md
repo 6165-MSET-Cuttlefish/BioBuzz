@@ -24,10 +24,12 @@ Times are p50 / p95 / max in ms unless noted. Not run on either day (they need `
 
 ## Design around these
 
-- **Route planner on the OpMode thread** (Vision Ball Collection, Ball Collection Auto and Ball Collection plan
-  there; these numbers are for the planner benched on those dates, so rerun Bench: Hub and Bench: Planner Stop after
-  any planner change). Planning on the field, with the HIVE rails, for an 18 × 18 in robot with its intake 9 in ahead
-  (2026-10-09) and the Betta bot's 16 × 15 in with a 15 in wide intake 8 in ahead (2026-10-24):
+- **Route planner on the OpMode thread.** Vision Ball Collection, Ball Collection Auto and Ball Collection plan 4
+  balls there (`BallCollection.BALLS`; Ball Collection its four slots), one `RouteOptimizer.Search.step()` per loop. A
+  step shapes orders for `VisibilityGraphPlanner.routeSearchSliceMs` (20 ms) and overruns it by at most one `shape()`,
+  so STOP waits for one step, not a plan. Rerun Bench: Hub and Bench: Planner Stop after any planner change. Both runs
+  below planned in one go, before slicing: on the field, with the HIVE rails, for an 18 × 18 in robot with its intake
+  9 in ahead (2026-10-09) and the Betta bot's 16 × 15 in with a 15 in wide intake 8 in ahead (2026-10-24):
 
   | balls | 2026-10-09 | 2026-10-24 |
   |---|---|---|
@@ -44,7 +46,7 @@ Times are p50 / p95 / max in ms unless noted. Not run on either day (they need `
   - The cold first 4-ball plan took 227 ms (2026-10-09) and 2046 ms (2026-10-24), each on its run's first random
     layout, which changes with the robot shape, so it doesn't isolate warm-up. On the fixed 4-ball Planner Stop
     layout, the first plan in a fresh app process took 1581 and 1728 ms against 1343–1529 for later plans.
-  - STOP pressed during a plan, judged on the hub's clock:
+  - STOP pressed during a plan in one go, judged on the hub's clock:
     - 2026-10-09: 6 of 6 trials restarted the Robot Controller app.
     - 2026-10-24: 1 of 6. STOP landed mid-plan in 5 trials. The ones that survived reached `stop()` at most 744 ms
       after STOP (the SDK's `STOP - OPMODE` 30–777 ms after its `auto-stopping`); the one that restarted reached it
@@ -53,6 +55,13 @@ Times are p50 / p95 / max in ms unless noted. Not run on either day (they need `
       `Robot Status: running` again 44.9–45.1 s after STOP. The relaunched app's dashboard answers at about 16 s,
       half a minute before it can run anything. A restart loses dashboard edits and the alliance.
   - 3 balls planned in under 0.47 s in both runs (the worst of 60 random layouts). No 3-ball STOP trial was run.
+  - Estimate for the sliced planner, not yet run on a hub, from a desktop replay of the 2026-10-24 layouts that drops
+    the same balls as the hub and runs 28–35× faster (median 32×). The longest step: about 110 ms (100–115) for random
+    4-ball layouts and about 240 ms (210–260) for the 4-ball Planner Stop layout. From request to done in an
+    `EnhancedOpMode`, whose loop runs between slices, a 4-ball plan takes about 1.3× as long as in one go (random
+    layouts p50 about 730 ms, worst about 3.3 s). STOP waits about 255 ms (up to about 275) in Vision Ball Collection
+    and Ball Collection; in Ball Collection Auto, one step plus the loop's tail plus a webcam close of up to 581 ms
+    (below) is about 830 ms (up to about 855), 45–70 ms inside the 900 ms window.
 - **The SDK's stop window is 900 ms**, plus 100 ms of grace, covering whatever `init_loop()`/`loop()` is running and
   `stop()`.
   - Webcam close during STOP (2026-10-09): `CellTipCamera.stop()` took 574–581 ms when STOP came right after INIT,

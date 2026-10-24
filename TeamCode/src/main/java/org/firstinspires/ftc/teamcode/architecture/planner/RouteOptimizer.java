@@ -82,15 +82,6 @@ public final class RouteOptimizer {
         return new Search(start, balls, returnPose, area, obstacles, robot, gapIn, forceSplineOnly);
     }
 
-    /** {@link #search} run to the end in one call. */
-    public static Route findOptimalRoute(Pose start, Ball[] balls, Pose returnPose, Region area,
-                                         List<Obstacle> obstacles, RobotShape robot, double gapIn,
-                                         boolean forceSplineOnly) {
-        Search search = search(start, balls, returnPose, area, obstacles, robot, gapIn, forceSplineOnly);
-        while (search.route == null) search.advance();
-        return search.route;
-    }
-
     /**
      * Each {@link #step()} shapes visit orders until {@link VisibilityGraphPlanner#routeSearchSliceMs} has passed, so
      * it overruns the slice by at most one shape() or the final Pedro path build. A new request is a new Search.

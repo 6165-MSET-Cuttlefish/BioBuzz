@@ -110,7 +110,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 |---|---|---|
 | Bench: Probe | nothing | the IMU chip, attached webcams and Limelights, whether an Expansion Hub answers, the hardware map's device names; whether the original shipped config's saved resource id still names its XML on this install |
 | (config baseline, no OpMode) | nothing | slothboard's config baseline lists `Optimization Toggles` |
-| Bench: Hub | nothing | empty-loop overhead; bus call costs; telemetry, field map and packet costs; the floodgate pin's volts; planner time for 0 to 5 balls; LLResult parse; Limelight POST and poller costs against a fake Limelight |
+| Bench: Hub | nothing | empty-loop overhead; bus call costs; telemetry, field map and packet costs; the floodgate pin's volts; sliced planner latency, slice lengths and loop period for 0 to 5 balls; LLResult parse; Limelight POST and poller costs against a fake Limelight |
 | Bench: Framework Loop | nothing | the EnhancedOpMode loop with Drivetrain and Pedro (capped at 0.2), one telemetry toggle per phase; the current limiter stays at 1.0 on an unwired floodgate |
 | Bench: Raw Loop | nothing | the loop of a bare LinearOpMode running Pedro (capped at 0.2) without the framework, idle and then following Close Flower's first leg |
 | Bench: Failure Path | nothing | a hook throwing in each lifecycle stage: which `stop()`s run, Suppressed failures, the dashboard Error line, and on the hub's clock how long the SDK takes to log the throw; the previous crash's Error line gone at the next INIT, judged only when a status showed the line empty (or stale) before the run's own crash |
@@ -133,7 +133,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Webcam Stop | a webcam | STOP at several points with the webcam open |
 | Bench: Webcam Thread Failure | a webcam | a camera-thread exception reaches the Error line within 2 s |
 | Bench: Limelight | the Limelight | slothboard's proxy, `LimelightSync` time, INIT to first frame, POST costs, frame rate and latency |
-| Bench: Planner Stop | nothing | STOP during 4- and 5-ball plans: no app restart, STOP to idle within 900 ms |
+| Bench: Planner Stop | nothing | STOP during 4- and 5-ball sliced plans: no app restart, hub-side STOP to idle within 900 ms, every 4-ball slice under 300 ms |
 | Bench: Overlay NaN | nothing | a NaN in a field overlay doesn't kill dashboard telemetry |
 | (config by name, Bench: Probe) | run-as | a shipped config saved with another shipped config's resource id loads its own XML; a name the build doesn't ship loads no config (both FAIL on a build without re-resolving by name at robot setup) |
 | Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; SET (3 runs), WRITE and DELETE from idle each restart the robot in the same process: no SDK `deadline expired ... EventLoop`, no Control Hub `Relaunching the RC`; thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT and ART's dump of the frozen pid (runs last) |

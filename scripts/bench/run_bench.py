@@ -335,18 +335,22 @@ PLANNER_STOP_WARM = 3
 PLANNER_STOP_WARM_WAIT_S = 180
 PLANNER_STOP_SEEN = re.compile(r"planner_stop (\S+) STOP seen (?:between plans|([\d.]+) ms into plan (\d+))")
 SDK_STOP_WINDOW_MS = 900
-PLANNER_STOP_PENDING = ("STOP waited for a route plan running on the OpMode thread, the plan and stop() together outlasted "
-                        f"the SDK's {SDK_STOP_WINDOW_MS} ms stop window, and the SDK restarted the Robot Controller app, "
-                        "losing dashboard @Config edits and the alliance: Vision Ball Collection, Ball Collection Auto "
-                        "and Ball Collection plan on the OpMode thread. No fix is in flight; the plan times decide between "
-                        "a time budget in RouteOptimizer, fewer balls, or planning on a worker thread")
 PLANNER_JUDGED_BALLS = 4
-PLANNER_PLAN_P99_MS = 500
-PLANNER_HUB_MAX_MS = 800
-PLANNER_BUDGET_PENDING = ("a route plan on the OpMode thread takes long enough that a STOP landing during it leaves stop() "
-                          f"little or none of the SDK's {SDK_STOP_WINDOW_MS} ms stop window: Vision Ball Collection, "
-                          "Ball Collection Auto and Ball Collection plan there. No fix is in flight; these numbers decide "
-                          "between a time budget in RouteOptimizer, fewer balls, or planning on a worker thread")
+PLANNER_SLICE_MAX_MS = 300
+PLANNER_AUTO_STOPPING = "auto-stopping OpMode 'Bench: Planner Stop'"
+PLANNER_STOPPED_LINE = "STOP - OPMODE"
+PLANNER_RUNNING_LINE = re.compile(r"Robot Status: running\s*$")
+PLANNER_STOP_PENDING = ("regression: a STOP during route planning restarted the Robot Controller app, losing dashboard "
+                        "@Config edits and the alliance: the planner slice running at STOP plus stop() outlasted the "
+                        f"SDK's {SDK_STOP_WINDOW_MS} ms stop window, so RouteOptimizer.Search.step() ran far past its "
+                        "slice or a whole plan ran inside one loop again")
+PLANNER_STOP_IDLE_PENDING = (f"the hub took {SDK_STOP_WINDOW_MS} ms or more from STOP ('auto-stopping') to the OpMode "
+                             "stopped ('***STOP - OPMODE***'): the planner slice running at STOP plus the loop's tail "
+                             "and stop() no longer fit the SDK's stop window, and past it the SDK restarts the app")
+PLANNER_SLICE_PENDING = (f"a RouteOptimizer.Search.step() ran {PLANNER_SLICE_MAX_MS} ms or more: one shape() past the "
+                         "slice got slower, or VisibilityGraphPlanner.routeSearchSliceMs was raised. A STOP waits for "
+                         f"that step, which then leaves stop() less of the SDK's {SDK_STOP_WINDOW_MS} ms than Ball "
+                         "Collection Auto's webcam close can take (up to 581 ms)")
 
 LLHUNG_OPMODE = "Bench: Limelight Hung"
 KEY_LIMELIGHT_STATE = "Bench limelight"
@@ -2397,24 +2401,36 @@ class Runner:
         s.append(f"- Allocating loop: {fmt(al.get('loopPeriodMs'))}; GC {dig(al, 'gc', 'gcCount')} runs, "
                  f"{dig(al, 'gc', 'gcTimeMs')} ms, blocking {dig(al, 'gc', 'blockingGcCount')}; "
                  f"{dig(al, 'gc', 'bytesAllocatedPerLoop')} B/loop")
-        cold = dig(ph, "planner", "coldFirstPlan", default={})
-        s.append(f"- Planner cold first plan ({cold.get('balls')} balls"
+        planner = ph.get("planner", {})
+        cold = planner.get("coldFirstPlan", {})
+        s.append(f"- Planner, one {planner.get('sliceMs')} ms slice per loop: cold first plan ({cold.get('balls')} balls"
                  f"{'' if cold.get('firstPlanInProcess') else ', NOT the first in this app process'}): "
-                 f"{cold.get('totalMs', float('nan')):.1f} ms")
-        for n, v in sorted(dig(ph, "planner", "byBallCount", default={}).items()):
-            s.append(f"- Planner {n}: total {fmt(v.get('totalMs'))}; {v.get('plansWithDroppedBalls')} of {v.get('plans')} dropped a ball")
-        judged = dig(ph, "planner", "byBallCount", f"n={PLANNER_JUDGED_BALLS}", "totalMs", default={})
-        worst = [judged["max"]] if judged.get("count") else []
-        if cold.get("balls") == PLANNER_JUDGED_BALLS and cold.get("totalMs") is not None:
-            worst.append(cold["totalMs"])
-        self.check(f"hub: every {PLANNER_JUDGED_BALLS}-ball route plan, the cold first one included, takes under "
-                   f"{PLANNER_HUB_MAX_MS} ms", bool(judged.get("count")) and max(worst) < PLANNER_HUB_MAX_MS,
-                   f"{PLANNER_JUDGED_BALLS}-ball plans {fmt(judged)}; cold first plan {cold.get('totalMs')} ms "
-                   f"({cold.get('balls')} balls)",
-                   PLANNER_BUDGET_PENDING if judged.get("count") else "Bench: Hub didn't reach its planner phase")
-        for n, v in dig(ph, "planner", "byCase", default={}).items():
-            if not n.startswith("n="):
-                s.append(f"  - {n}: {fmt(v.get('totalMs'))}")
+                 f"{cold.get('planMs', float('nan')):.1f} ms over {cold.get('loops')} loops, "
+                 f"{cold.get('computeMs', float('nan')):.1f} ms of it in slices, longest slice "
+                 f"{cold.get('longestStepMs', float('nan')):.1f} ms")
+        by_count = planner.get("byBallCount", {})
+        for n, v in sorted(by_count.items()):
+            s.append(f"- Planner {n}: plan {fmt(v.get('planMs'))}; in slices {fmt(v.get('computeMs'))}; "
+                     f"{fmt(v.get('loopsPerPlan'), 'loops')}; longest slice per plan {fmt(v.get('longestStepMs'))}; "
+                     f"{v.get('plansWithDroppedBalls')} of {v.get('plans')} dropped a ball")
+        cases = planner.get("byCase", {})
+        for n, v in cases.items():
+            s.append(f"  - {n}: plan {fmt(v.get('planMs'))}; longest slice {fmt(v.get('longestStepMs'))}")
+        s.append(f"- Planner slices {fmt(planner.get('stepMs'))}; past the slice {fmt(planner.get('overrunMs'))}; "
+                 f"loop period while planning {fmt(planner.get('loopPeriodMs'))}")
+        judged = {n: dig(v, "longestStepMs", "max") for n, v in by_count.items()
+                  if int(n.split("=")[1]) <= PLANNER_JUDGED_BALLS}
+        judged.update({n: dig(v, "longestStepMs", "max") for n, v in cases.items()
+                       if int(re.match(r"\d+", n).group()) <= PLANNER_JUDGED_BALLS})
+        if cold.get("balls") is not None and cold["balls"] <= PLANNER_JUDGED_BALLS:
+            judged["cold first plan"] = cold.get("longestStepMs")
+        worst = max(judged.items(), key=lambda kv: kv[1] if kv[1] is not None else float("inf"), default=None)
+        self.check(f"hub: every planner slice for up to {PLANNER_JUDGED_BALLS} balls returns within "
+                   f"{PLANNER_SLICE_MAX_MS} ms", worst is not None and worst[1] is not None
+                   and all(v is not None for v in judged.values()) and worst[1] < PLANNER_SLICE_MAX_MS,
+                   f"longest slice {worst[1]} ms ({worst[0]}) against a {planner.get('sliceMs')} ms slice"
+                   if worst is not None else "no plans of up to that many balls",
+                   PLANNER_SLICE_PENDING if judged else "Bench: Hub didn't reach its planner phase")
         for c in ("small", "typical", "ballScriptMax", "large", "xlarge"):
             v = dig(ph, "limelightParse", c, default={})
             s.append(f"- LLResult parse {c} ({v.get('contents')}, {v.get('jsonChars')} chars): JSONObject "
@@ -2757,64 +2773,88 @@ class Runner:
 
     def run_planner_stop(self):
         s = ["## Bench: Planner Stop (STOP while Vision Ball Collection-style replanning runs in INIT)\n",
-             "| balls | STOP sent after the next plan began | plans | STOP landed | plan left at STOP (ms) | STOP to stop() "
-             "(ms) | runner STOP to idle (s) | app restarted | stuck markers |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "| balls | STOP sent after the next plan began | plans | STOP landed | slice left at STOP (ms) | STOP to "
+             "stop() (ms) | hub STOP to idle (ms) | runner STOP to idle (s) | app restarted | hub STOP to running again "
+             "(s) | stuck markers |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
+
+        def whole_ms(v):
+            return "" if v is None else f"{v:.0f}"
+
         trials = []
         for balls in PLANNER_STOP_BALLS:
             for delay in PLANNER_STOP_DELAYS_S:
                 trial = self._planner_stop(balls, delay)
                 trials.append(trial)
                 if "failed" in trial:
-                    s.append(f"| {balls} | {delay} s | FAILED: {trial['failed']} | | | | | | |")
+                    s.append(f"| {balls} | {delay} s | FAILED: {trial['failed']} | | | | | | | | |")
                     continue
                 landed = "not seen"
                 if trial["planAtStop"]:
                     landed = f"in plan {trial['planAtStop']}" + (f", {trial['msIntoPlan']:.0f} ms into it"
                                                                  if trial["msIntoPlan"] is not None else "")
+                    if trial.get("inSlice") is not None:
+                        landed += (f", {trial['msIntoSlice']:.0f} ms into a slice" if trial["inSlice"]
+                                   else ", between slices")
                 elif trial["stopSeen"]:
                     landed = "between plans"
                 if trial.get("warmSeconds") is None:
                     landed += f" (never reached {PLANNER_STOP_WARM} plans; STOP came after the 10 s timeout)"
-                s.append(f"| {balls} | {delay} s | {len(trial['plans'])} | {landed} | {trial.get('planLeftMs')} | "
-                         f"{trial.get('stopToStopPassMs')} | {trial['stopSeconds']} | {trial['restarted']} | "
+                s.append(f"| {balls} | {delay} s | {len(trial['plans'])} | {landed} | {whole_ms(trial.get('sliceLeftMs'))} | "
+                         f"{whole_ms(trial.get('stopToStopPassMs'))} | {whole_ms(trial.get('hubStopToIdleMs'))} | "
+                         f"{trial['stopSeconds']} | {trial['restarted']} | {trial.get('hubStopToRunningS') or ''} | "
                          f"{len(trial['markers'])} |")
         s.append("")
         for balls in PLANNER_STOP_BALLS:
             ran = [t for t in trials if t["balls"] == balls and "failed" not in t]
             plans = [ms for t in ran for ms in t["plans"]]
+            compute = [ms for t in ran for ms in t["planComputeMs"]]
+            loops = [n for t in ran for n in t["planLoops"]]
             firsts = [round(t["plans"][0]) for t in ran if t["plans"]]
             cold = [round(t["plans"][0]) for t in ran if t["firstPlanInProcess"] and t["plans"]]
-            s.append(f"- {balls} balls ({ran[0]['layout'] if ran else 'no trial ran'}): every plan {fmt_plans(plans)}; "
-                     f"first plan of each trial {firsts} ms; first plans in a fresh app process {cold} ms")
+            slices = [dig(t, "stepMs", "max") for t in ran if dig(t, "stepMs", "count")]
+            periods = [dig(t, "loopPeriodMs", "max") for t in ran if dig(t, "loopPeriodMs", "count")]
+            s.append(f"- {balls} balls ({ran[0]['layout'] if ran else 'no trial ran'}), one "
+                     f"{ran[0]['sliceMs'] if ran else '?'} ms slice per loop: every plan {fmt_plans(plans)} from "
+                     f"request to done; in slices {fmt_plans(compute)}; loops per plan {sorted(set(loops))}; first plan "
+                     f"of each trial {firsts} ms; first plans in a fresh app process {cold} ms")
+            for t in ran:
+                s.append(f"  - {t['delay']} s: slices {fmt(t.get('stepMs'))}; past the slice {fmt(t.get('overrunMs'))}; "
+                         f"loop period while planning {fmt(t.get('loopPeriodMs'))}")
             restarted = [f"{t['delay']} s" for t in ran if t["restarted"] or t["markers"]]
             mid = [t for t in ran if t["planAtStop"]]
-            left = max((t["planLeftMs"] for t in mid if t.get("planLeftMs") is not None), default=None)
             self.check(f"planner stop {balls} balls: STOP during replanning never restarts the app",
                        len(ran) == len(PLANNER_STOP_DELAYS_S) and not restarted,
-                       f"{len(ran)} of {len(PLANNER_STOP_DELAYS_S)} trials ran, {len(mid)} with STOP mid-plan"
-                       + (f" (at most {left:.0f} ms of plan left at STOP)" if left is not None else "")
-                       + f"; plans {fmt_plans(plans)}; restarts or stuck markers after STOP at {restarted or 'none'}",
+                       f"{len(ran)} of {len(PLANNER_STOP_DELAYS_S)} trials ran, {len(mid)} with STOP mid-plan; plans "
+                       f"{fmt_plans(plans)}; restarts or stuck markers after STOP at {restarted or 'none'}"
+                       + "".join(f"; {t['delay']} s back to Robot Status: running {t['hubStopToRunningS']} s after STOP "
+                                 "(hub clock)" for t in ran if t.get("hubStopToRunningS") is not None),
                        PLANNER_STOP_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
                        "a trial didn't finish (see the table), so not every STOP was tried")
-            slow = [f"{t['delay']} s" for t in ran if not t["stopSeconds"] < SDK_STOP_WINDOW_MS / 1000]
-            self.check(f"planner stop {balls} balls: the runner sees every STOP reach idle within {SDK_STOP_WINDOW_MS} ms",
+            idle = [t.get("hubStopToIdleMs") for t in ran]
+            slow = [f"{t['delay']} s" for t in ran if not (t.get("hubStopToIdleMs") is not None
+                                                          and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
+            self.check(f"planner stop {balls} balls: the hub logs every STOP reaching idle within {SDK_STOP_WINDOW_MS} ms "
+                       "('auto-stopping' to '***STOP - OPMODE***')",
                        len(ran) == len(PLANNER_STOP_DELAYS_S) and not slow,
-                       f"STOP to idle {[t['stopSeconds'] for t in ran]} s; at or over {SDK_STOP_WINDOW_MS} ms after STOP "
-                       f"at {slow or 'none'}",
-                       PLANNER_BUDGET_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
+                       f"hub STOP to idle {idle} ms (None: no such line, as after a restart); at or over "
+                       f"{SDK_STOP_WINDOW_MS} ms or missing at {slow or 'none'}; the runner saw "
+                       f"{[t['stopSeconds'] for t in ran]} s through its status polling",
+                       PLANNER_STOP_IDLE_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
                        "a trial didn't finish (see the table), so not every STOP was timed")
             if balls == PLANNER_JUDGED_BALLS:
-                p99 = percentile(plans, 99) if plans else None
-                self.check(f"planner stop {balls} balls: per-plan p99 under {PLANNER_PLAN_P99_MS} ms",
-                           p99 is not None and p99 < PLANNER_PLAN_P99_MS,
-                           f"p99 {p99:.0f} ms; plans {fmt_plans(plans)}" if plans else "no trial recorded a plan",
-                           PLANNER_BUDGET_PENDING if plans else "no trial ran far enough to plan")
-        s.append("- The bench replans the crafted layout every 250 ms as Vision Ball Collection does when the balls "
-                 "keep moving (back to back once a plan takes longer), and records when the SDK's stopRequested flips; "
-                 "STOP is sent the set delay after the runner sees a plan finish, and the SDK gives STOP "
-                 f"{SDK_STOP_WINDOW_MS} ms (+100) to finish the running init_loop() and stop() before it restarts the "
-                 "app.\n")
+                self.check(f"planner stop {balls} balls: every planner slice returns within {PLANNER_SLICE_MAX_MS} ms",
+                           len(slices) == len(ran) and bool(ran) and max(slices) < PLANNER_SLICE_MAX_MS,
+                           f"longest slice per trial {[round(v, 1) for v in slices]} ms; loop period while planning "
+                           f"at most {[round(v, 1) for v in periods]} ms" if slices else "no trial recorded a slice",
+                           PLANNER_SLICE_PENDING if slices else "no trial ran far enough to plan")
+        s.append("- The bench requests the crafted layout again at each 250 ms replan check once the last plan is done, "
+                 "as Vision Ball Collection does while its balls keep moving, and steps it once per init_loop() as the "
+                 "collection OpModes do; it records when the SDK's stopRequested flips. STOP is sent the set delay after "
+                 "the runner sees a plan finish. Hub STOP to idle is 'auto-stopping' to '***STOP - OPMODE***' and STOP "
+                 "to running again is 'auto-stopping' to 'Robot Status: running', both on the hub's logcat clock; the "
+                 f"SDK gives STOP {SDK_STOP_WINDOW_MS} ms (+100) to finish the running init_loop() and stop() before it "
+                 "restarts the app.\n")
         self.summary += s
 
     def _planner_stop(self, balls, delay):
@@ -2847,20 +2887,50 @@ class Runner:
             return dict(rec, failed=f"crashed: {o['errorMessage']}")
         res = self.pull(step, required=False) or {}
         stop = res.get("stop") or {}
-        rec.update(plans=res.get("planMs") or [], layout=dig(res, "info", "layout"),
-                   firstPlanInProcess=dig(res, "info", "firstPlanInProcess"), stopSeen=bool(stop.get("stopSeen")),
-                   planAtStop=stop.get("planRunningAtStop"), msIntoPlan=stop.get("msIntoPlanAtStop"),
-                   planLeftMs=stop.get("planLeftAtStopMs"), stopToStopPassMs=stop.get("stopToStopPassMs"),
+        rec.update(plans=res.get("planMs") or [], planComputeMs=res.get("planComputeMs") or [],
+                   planLoops=res.get("planLoops") or [], stepMs=res.get("stepMs"), overrunMs=res.get("overrunMs"),
+                   loopPeriodMs=res.get("loopPeriodMs"), layout=dig(res, "info", "layout"),
+                   sliceMs=dig(res, "info", "sliceMs"), firstPlanInProcess=dig(res, "info", "firstPlanInProcess"),
+                   stopSeen=bool(stop.get("stopSeen")), planAtStop=stop.get("planRunningAtStop"),
+                   msIntoPlan=stop.get("msIntoPlanAtStop"), inSlice=stop.get("inSliceAtStop"),
+                   msIntoSlice=stop.get("msIntoSliceAtStop"), sliceLeftMs=stop.get("sliceLeftAtStopMs"),
+                   stopToStopPassMs=stop.get("stopToStopPassMs"),
                    stopSeconds=round(o.get("stopSecondsRunnerSide", float("nan")), 2),
                    restarted=bool(o.get("appRestarted") or o.get("restartedDuringStop")),
                    markers=o.get("logMarkers") or [])
+        log_file = self.out / "logs" / f"{step}.log"
+        log_text = log_file.read_text() if log_file.exists() else ""
+        rec.update(self._planner_stop_hub_times(log_text, step, rec["restarted"]))
         if not stop.get("stopSeen"):
-            log_file = self.out / "logs" / f"{step}.log"
-            for m in PLANNER_STOP_SEEN.finditer(log_file.read_text() if log_file.exists() else ""):
+            for m in PLANNER_STOP_SEEN.finditer(log_text):
                 if m.group(1) == run_id:
                     rec.update(stopSeen=True, planAtStop=int(m.group(3)) if m.group(3) else None,
                                msIntoPlan=float(m.group(2)) if m.group(2) else None)
         return rec
+
+    @staticmethod
+    def _planner_stop_hub_times(log_text, step, restarted):
+        """STOP to idle, and after a restart STOP to running again, from the step's logcat on the hub's clock."""
+        lines = log_text.splitlines()
+        begin = next((i for i, line in enumerate(lines) if "BENCH_RUNNER" in line and f"begin {step}" in line), 0)
+        stop = next((i for i in range(begin, len(lines)) if PLANNER_AUTO_STOPPING in lines[i]), None)
+        if stop is None:
+            return {"hubStopToIdleMs": None}
+
+        def hub_ms(end):
+            a, b = logcat_time(lines[stop]), logcat_time(lines[end])
+            if a is None or b is None:
+                return None
+            ms = (b - a).total_seconds() * 1000
+            return round(ms + 366 * 86400 * 1000 if ms < -180 * 86400 * 1000 else ms, 1)
+
+        idle = next((i for i in range(stop, len(lines)) if PLANNER_STOPPED_LINE in lines[i]), None)
+        out = {"hubStopToIdleMs": hub_ms(idle) if idle is not None else None}
+        if restarted:
+            running = next((i for i in range(stop, len(lines)) if PLANNER_RUNNING_LINE.search(lines[i])), None)
+            back = hub_ms(running) if running is not None else None
+            out["hubStopToRunningS"] = round(back / 1000, 1) if back is not None else None
+        return out
 
     def send_on_side_socket(self, obj):
         side = SideSocket(self.args.host, DASHBOARD_PORT)
