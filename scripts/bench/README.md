@@ -21,7 +21,9 @@ For a Control Hub with nothing plugged into any port, run where there is no inte
 In order, it: stops unless the APK and its stamp match HEAD and no tracked file changed; finds adb as `run_bench.py`
 does and connects to `192.168.43.1:5555` (stops within about 20 s, touching nothing, if the Mac isn't on the hub's
 Wi-Fi), and checks it is a Control Hub with the RC app (the SDK's `persist.ftcandroid.serialasusb`); keeps the Mac awake
-(`caffeinate`); checks Gradle builds offline, adding `--no-sloth` if not; copies the installed RC APKs (with sha256), its
+(`caffeinate`); stops, saying so and how to reconnect, if adb loses the hub at any step before the runner starts (told
+apart from a real answer by adb's exit status and `get-state`, never by empty output); checks Gradle builds offline,
+adding `--no-sloth` if not; copies the installed RC APKs (with sha256), its
 version, every `/sdcard/FIRST/*.xml`, the app's settings and the Sloth folder to `bench-results/<time>-backup/`, and
 writes `REINSTALL.sh` there, which puts that app, its settings and its Sloth jar back; passes the active-config setting
 from before the install to the runner (`--original-entry`), so the runner restores that one; installs the stamped APK with `adb install -r -t -g` (`-g` so no permission prompt waits for a tap;

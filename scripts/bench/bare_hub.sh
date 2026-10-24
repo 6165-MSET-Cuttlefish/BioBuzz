@@ -84,6 +84,17 @@ stamp_get() { sed -n "s/^$1=//p" "$STAMP" | head -n 1; }
 
 hub() { with_timeout "${HUB_TIMEOUT:-120}" "$ADB" -s "$SERIAL" "$@" </dev/null; }
 
+die_if_hub_lost() {
+  local state
+  state=$(with_timeout 10 "$ADB" -s "$SERIAL" get-state </dev/null 2>/dev/null | tr -d '\r' || true)
+  [ "$state" = "device" ] && return 0
+  local changed="Nothing on the hub was changed."
+  [ -z "$REINSTALL_HINT" ] || changed=""
+  local how="adb now reports"
+  [ -z "$2" ] || how="adb exited $2 and now reports"
+  die "adb lost its connection to the Control Hub while $1 ($how the hub as '${state:-not connected}'). ${3:-$changed} To recover: check that the Mac is still on the hub's Wi-Fi (macOS can hop to another network) and that nothing else on the Mac restarted adb, wait a minute if the hub rebooted, run '$ADB connect $SERIAL' until it prints 'connected to $SERIAL', then run scripts/bench/bare_hub.sh again."
+}
+
 need_python() {
   command -v python3 >/dev/null 2>&1 || die "python3 isn't on PATH (macOS offers to install the Command Line Tools the first time you type python3)"
   python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 9))' || die "run_bench.py needs python3 3.9 or newer"
@@ -132,15 +143,28 @@ run() {
     sleep 2
   done
   [ "$state" = "device" ] || die "adb can't use $SERIAL (state '${state:-none}'). Run '$ADB connect $SERIAL' to see why; 'unauthorized' means accepting the debugging prompt. Nothing was changed on the hub."
-  local serialasusb
-  serialasusb=$(hub shell getprop persist.ftcandroid.serialasusb | tr -d '\r') || die "adb couldn't read the device's properties; nothing was changed on it"
+  local serialasusb rc=0
+  serialasusb=$(hub shell getprop persist.ftcandroid.serialasusb) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    die_if_hub_lost "reading its properties" "$rc"
+    die "adb couldn't read the device's properties (exit $rc: $serialasusb); nothing was changed on it"
+  fi
+  serialasusb=$(printf '%s' "$serialasusb" | tr -d '\r')
   case "$serialasusb" in
     1|true|y|yes|on) ;;
     *) die "the device at $SERIAL isn't a REV Control Hub (persist.ftcandroid.serialasusb is '$serialasusb', which the FTC SDK reads as no). Nothing was changed on it." ;;
   esac
-  local paths
-  paths=$(hub shell pm path "$PACKAGE" | tr -d '\r' | sed -n 's/^package://p' || true)
-  [ -n "$paths" ] || die "the Control Hub has no Robot Controller app ($PACKAGE), which every Control Hub ships with: tell Claude. Nothing was changed on the hub."
+  local pm_out paths
+  rc=0
+  pm_out=$(hub shell pm path "$PACKAGE" 2>&1) || rc=$?
+  paths=$(printf '%s\n' "$pm_out" | tr -d '\r' | sed -n 's/^package://p')
+  if [ "$rc" -ne 0 ] || [ -z "$paths" ]; then
+    die_if_hub_lost "asking it where the Robot Controller app is (pm path)" "$rc"
+    case "$rc" in
+      0|1) die "the Control Hub answers but has no Robot Controller app ($PACKAGE), which every Control Hub ships with: tell Claude. Nothing was changed on the hub." ;;
+      *) die "adb shell pm path failed with exit $rc although adb still sees the hub: $pm_out. Run this again, and tell Claude if it repeats. Nothing was changed on the hub." ;;
+    esac
+  fi
 
   local stamp backup
   stamp=$(date +%Y-%m-%d_%H%M%S)
@@ -162,17 +186,33 @@ run() {
   hub shell getprop > "$backup/getprop.txt" 2>&1 || true
   local p
   for p in $paths; do
-    HUB_TIMEOUT=900 hub pull "$p" "$backup/apk/$(basename "$p")" >/dev/null || die "couldn't copy $p off the hub, so there would be no way back: stopped before installing anything"
+    rc=0
+    HUB_TIMEOUT=900 hub pull "$p" "$backup/apk/$(basename "$p")" >/dev/null || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      die_if_hub_lost "copying $p off it" "$rc"
+      die "couldn't copy $p off the hub, so there would be no way back: stopped before installing anything"
+    fi
   done
   (cd "$backup/apk" && shasum -a 256 ./*.apk > SHA256SUMS)
   hub shell dumpsys package "$PACKAGE" | tr -d '\r' \
     | grep -E 'versionName|versionCode|firstInstallTime|lastUpdateTime|pkgFlags' > "$backup/package.txt" || true
-  hub shell ls -1 /sdcard/FIRST/ | tr -d '\r' | grep '\.xml$' > "$backup/FIRST/configs.txt" || true
+  local listing
+  rc=0
+  listing=$(hub shell ls -1 /sdcard/FIRST/) || rc=$?
+  [ "$rc" -eq 0 ] || die_if_hub_lost "listing its hardware configs" "$rc"
+  printf '%s\n' "$listing" | tr -d '\r' | grep '\.xml$' > "$backup/FIRST/configs.txt" || true
   local x
   while IFS= read -r x; do
-    hub pull "/sdcard/FIRST/$x" "$backup/FIRST/$x" >/dev/null || die "couldn't copy /sdcard/FIRST/$x off the hub: stopped before installing anything"
+    rc=0
+    hub pull "/sdcard/FIRST/$x" "$backup/FIRST/$x" >/dev/null || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      die_if_hub_lost "copying /sdcard/FIRST/$x off it" "$rc"
+      die "couldn't copy /sdcard/FIRST/$x off the hub: stopped before installing anything"
+    fi
   done < "$backup/FIRST/configs.txt"
-  hub shell run-as "$PACKAGE" cat "shared_prefs/${PACKAGE}_preferences.xml" > "$backup/rc_preferences.xml" 2>&1 || true
+  rc=0
+  hub shell run-as "$PACKAGE" cat "shared_prefs/${PACKAGE}_preferences.xml" > "$backup/rc_preferences.xml" 2>&1 || rc=$?
+  [ "$rc" -eq 0 ] || die_if_hub_lost "reading the app's settings" "$rc"
   local original_entry=""
   original_entry=$(python3 -I -c 'import sys, xml.etree.ElementTree as ET
 try:
@@ -189,9 +229,20 @@ for e in root.iter("string"):
   else
     say "!! couldn't read the app's settings (not a debuggable build): REINSTALL.sh can't restore them, and if its active config is one shipped inside that app (res/xml), the bench build may load a different config or none in its place; re-select it by hand afterwards"
   fi
-  if hub shell "test -d $SLOTH_DIR"; then
-    HUB_TIMEOUT=300 hub pull "$SLOTH_DIR" "$backup/sloth" >/dev/null || die "couldn't copy $SLOTH_DIR off the hub: stopped before installing anything"
-  fi
+  rc=0
+  hub shell "test -d $SLOTH_DIR" || rc=$?
+  case "$rc" in
+    0)
+      HUB_TIMEOUT=300 hub pull "$SLOTH_DIR" "$backup/sloth" >/dev/null || rc=$?
+      if [ "$rc" -ne 0 ]; then
+        die_if_hub_lost "copying $SLOTH_DIR off it" "$rc"
+        die "couldn't copy $SLOTH_DIR off the hub: stopped before installing anything"
+      fi ;;
+    1) ;;
+    *)
+      die_if_hub_lost "looking for its Sloth folder" "$rc"
+      die "adb couldn't check for $SLOTH_DIR on the hub (exit $rc): stopped before installing anything" ;;
+  esac
   chmod 0644 "$backup/rc_preferences.xml"
   local apks f reinstall="$PWD/$backup/REINSTALL.sh"
   apks=$(ls "$backup/apk"/*.apk | wc -l | tr -d ' ')
@@ -227,7 +278,8 @@ for e in root.iter("string"):
 
   say "installing $apk"
   local out
-  out=$(with_timeout 600 "$ADB" -s "$SERIAL" install -r -t -g "$apk" </dev/null 2>&1 || true)
+  rc=0
+  out=$(with_timeout 600 "$ADB" -s "$SERIAL" install -r -t -g "$apk" </dev/null 2>&1) || rc=$?
   echo "$out"
   case "$out" in
     *INSTALL_FAILED_UPDATE_INCOMPATIBLE*)
@@ -235,7 +287,9 @@ for e in root.iter("string"):
     *INSTALL_FAILED_VERSION_DOWNGRADE*)
       die "the hub's Robot Controller app has a newer versionCode than this build ($backup/package.txt), so nothing was installed and the hub is as it was. Tell Claude." ;;
     *Success*) ;;
-    *) die "adb install didn't succeed (output above); the hub keeps the app it had. Tell Claude." ;;
+    *)
+      die_if_hub_lost "installing the bench APK" "$rc" "If it dropped mid-install, the hub has either its old app or the bench build: once adb is back, bash $reinstall puts the old one back either way."
+      die "adb install didn't succeed (output above); the hub keeps the app it had. Tell Claude." ;;
   esac
   REINSTALL_HINT="bash $reinstall"
 
@@ -243,15 +297,22 @@ for e in root.iter("string"):
   hub shell "rm -rf $SLOTH_DIR/*" || true
   hub shell logcat -G 8M || true
   local t0
-  t0="$(hub shell date "'+%m-%d %H:%M:%S'" | tr -d '\r').000" || die "adb couldn't read the hub's clock after the install"
+  rc=0
+  t0=$(hub shell date "'+%m-%d %H:%M:%S'") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    die_if_hub_lost "reading its clock after the install" "$rc"
+    die "adb couldn't read the hub's clock after the install"
+  fi
+  t0="$(printf '%s' "$t0" | tr -d '\r').000"
   say "starting the Robot Controller app"
   hub shell "am force-stop $PACKAGE; am start -n $LAUNCHER -a android.intent.action.MAIN -c android.intent.category.LAUNCHER" \
-    || die "adb couldn't start the Robot Controller app"
+    || { rc=$?; die_if_hub_lost "starting the Robot Controller app" "$rc"; die "adb couldn't start the Robot Controller app"; }
   local launched deadline
   launched=$(date +%s)
   deadline=$((launched + START_WAIT_S))
   until hub shell "logcat -d -v threadtime -T '$t0' | grep -F -e '$SETUP_DONE'" 2>/dev/null | grep -q -F -e "$SETUP_DONE" \
         && tcp_open "$HOST" 8000; do
+    die_if_hub_lost "waiting for the Robot Controller app to start" ""
     [ "$(date +%s)" -lt "$deadline" ] || die "the Robot Controller app didn't finish starting within $START_WAIT_S s of launching it (no '$SETUP_DONE' in logcat, or no dashboard on port 8000); besides the install, only the hot-loaded Sloth jars were removed, and REINSTALL.sh puts them back"
     sleep 5
   done
