@@ -257,7 +257,7 @@ for e in root.iter("string"):
   done
   say "the Robot Controller is up after about $(( $(date +%s) - launched )) s"
 
-  say "running the benches: about an hour, no keypresses; the runner puts the hardware config back at the end even if a step fails"
+  say "running the benches: about 45 minutes, at most 90, no keypresses; the runner puts the hardware config back at the end even if a step fails"
   local rc=0 entry_flag=()
   [ -z "$original_entry" ] || entry_flag=(--original-entry "$original_entry")
   python3 scripts/bench/run_bench.py --ports-empty --gradle-offline --out "$RESULTS" $sloth_flag \

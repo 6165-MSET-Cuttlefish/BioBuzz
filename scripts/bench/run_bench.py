@@ -59,7 +59,8 @@ BENCH_OPMODES = [
 
 BENCHES = ("baseline", "hub", "loop", "failure", "threads", "gamepad", "edge", "write_recovery", "handover",
            "hardware_view", "turret", "webcam", "webcam_failure", "limelight", "llfault", "sloth", "clock", "pinpoint",
-           "octoquad", "octoquad_absent", "expansion", "absent", "planner_stop", "overlay_nan", "freeze_dump")
+           "octoquad", "octoquad_absent", "expansion", "absent", "planner_stop", "overlay_nan", "config_by_name",
+           "freeze_dump")
 
 CONFIG_PROBE = "bench_probe"
 CONFIG_MAIN = "bench_main"
@@ -71,8 +72,11 @@ CONFIG_OCTOQUAD_ABSENT = "bench_octoquad_absent"
 CONFIG_EXPANSION = "bench_expansion"
 CONFIG_EXPANSION_ODO = "bench_expansion_odo"
 CONFIG_TURRET = "bench_turret"
+CONFIG_FREEZE_SCRATCH = "bench_freeze_scratch"
+CONFIG_UNSHIPPED = "bench_unshipped"
 BENCH_CONFIGS = (CONFIG_MAIN, CONFIG_PINPOINT, CONFIG_NO_WEBCAM, CONFIG_LLFAULT, CONFIG_OCTOQUAD, CONFIG_OCTOQUAD_ABSENT,
-                 CONFIG_EXPANSION, CONFIG_EXPANSION_ODO, CONFIG_TURRET, CONFIG_PROBE)
+                 CONFIG_EXPANSION, CONFIG_EXPANSION_ODO, CONFIG_TURRET, CONFIG_FREEZE_SCRATCH, CONFIG_UNSHIPPED,
+                 CONFIG_PROBE)
 # AppUtil.CONFIG_FILES_DIR; the app keeps the active config's name in its default SharedPreferences.
 CONFIG_DIR = "/sdcard/FIRST"
 RC_PREFS = f"shared_prefs/{RC_PACKAGE}_preferences.xml"
@@ -89,6 +93,13 @@ PREFS_COPIED = "BENCH_PREFS_COPIED"
 LOG_BUFFER = "8M"
 RESTART_FAILED = "Something went wrong when reflecting to restart the robot"
 ROBOT_FAILED = "Robot failed to start"
+CONFIG_RENUMBERED = "which this build numbers"
+CONFIG_FELL_BACK = "Falling back on noConfig"
+CONFIG_BY_NAME_HELD = ("the robot controller loads a shipped (res/xml) config by the resource id saved with it, so after an "
+                       "install that adds, renames or removes a res/xml file the hub loads another config's XML under "
+                       "the saved name, and for a name the build no longer ships it loads whatever XML has that id "
+                       "instead of no config. The fix (re-resolving shipped configs by name at robot setup) is held on "
+                       "another branch and not in this build, so this FAILs until it lands")
 RESTORE_WINDOW_S = 600
 RESTORE_RETRY_S = 30
 CONFIG_SWITCH_TIMEOUT_S = 150
@@ -141,13 +152,17 @@ LOGCAT_DONE_EVERY_S = 5.0
 REPORT_STARTED = "starting, results in"
 CRASH_DETECT_S = 5.0
 FAILURE_INJECTED = "BENCH injected failure in "
+FAILURE_EVENT = "failure path event: "
 FAILURE_STUB_B_STOP = "BENCH stub B stop() failure"
 ERROR_LINE_PENDING = ("regression: a crash no longer reaches the dashboard's Error line (SDK 12 only logs user-code "
                       "exceptions; EnhancedOpMode and slothboard 6165.6 put them there)")
 
-WRITE_RECOVERY_LIMIT_MS = 500
-WRITE_CACHE_PENDING = ("regression: EnhancedMotor or EnhancedServo no longer re-sends an unchanged value at least "
-                       "every 250 ms, so after a hub reset or a dropped write the motor stays off or the servo limp")
+WRITE_RECOVERY_RAW_LOOPS = 2
+WRITE_RECOVERY_WRAPPED_LOOPS = 2
+WRITE_CACHE_PENDING = ("regression: EnhancedMotor or EnhancedServo no longer re-sends an unchanged value every WriteCache "
+                       "re-send period, so after a hub reset or a dropped write the motor stays off or the servo limp "
+                       "longer than that period (or for good); nothing clears WriteCache on a failSafe, so the re-send is "
+                       "the only way back")
 
 HANDOVER_MIN_SAMPLES = 10
 HANDOVER_CASES = (("C", "path cancelled from gameLoop"), ("S", "a command sequence turns writes back on"),
@@ -249,6 +264,12 @@ PINPOINT_DROPOUT_PENDING = ("expected until the Pinpoint status fix: on a failed
                             "and velocity (firmware v1/v2, FAULT_BAD_READ) or zeroes them (v3+, NOT_READY), and only its "
                             "status says so, which nothing in Pedro or the framework reads, so the follower drives on a "
                             "frozen or (0, 0, 0) pose with no fault and no error")
+PINPOINT_ABSENT_POSE_IN = 0.5
+PINPOINT_ABSENT_TURN_DEG = 1.0
+PINPOINT_ABSENT_MEANS = ("with nothing on the Pinpoint's I2C port, the follower built from BettaConstants neither raised a "
+                         "fault nor kept the pose setPose set (the detail has the poses it read; on 2026-10-24 every one "
+                         "was (0, 0, 0)): an auto on a robot whose Pinpoint is unplugged or dead follows every path from "
+                         "the field origin with no warning. Nothing on this branch checks for a missing Pinpoint")
 
 KEY_OCTOQUAD_STATUS = "Bench octoquad status"
 KEY_OCTOQUAD_VALID = "Bench octoquad valid"
@@ -445,14 +466,29 @@ EDGE_CONTROL_MEANS = ("an EdgeBooleanSupplier read only after START gives zero o
 FREEZE_OPMODE = "Bench: Freeze Dump"
 FREEZE_CONTROL_S = 5.0
 FREEZE_RELAUNCH_WAIT_S = 120
+FREEZE_TRIGGERS = ("set", "set", "set", "write", "delete")
+FREEZE_MESSAGES = {"set": "SET_HARDWARE_CONFIG", "write": "WRITE_HARDWARE_CONFIG", "delete": "DELETE_HARDWARE_CONFIG"}
 FREEZE_TRACES = "/data/anr/traces.txt"
+FREEZE_TRACES_WROTE = "Wrote stack traces"
+FREEZE_TRACES_HEADER = re.compile(r"^----- pid (\d+) at (\d{4})-(\d\d)-(\d\d) (\d\d:\d\d:\d\d) -----$", re.M)
+FREEZE_TRACES_THREAD = re.compile(r'^"(.*)" (?:daemon )?prio=\d+ tid=(\d+) (\w+)')
+FREEZE_TRACES_WAITS = re.compile(r"^\s+- waiting to lock <(0x[0-9a-f]+)> \(a ([^)]+)\)(?: held by thread (\d+))?")
+FREEZE_DEADLINE = "deadline expired waiting for service termination: EventLoop"
+FREEZE_AP_TAG = "FtcAccessPointService"
+FREEZE_AP_RELAUNCH = "Relaunching the RC"
 FREEZE_STOP_FILE = "freeze_watch.stop"
 FREEZE_ALIVE_STALL = "no RC alive broadcast"
-FREEZE_LOG_LINES = (WATCHDOG_KILLED, APP_KILLED, "Wrote stack traces", "Unable to open stack trace file", "freeze watch",
-                    "Force stopping", "reacting to signal", ROBOT_SETUP_DONE, RESTART_FAILED)
+FREEZE_LOG_LINES = (WATCHDOG_KILLED, APP_KILLED, FREEZE_TRACES_WROTE, "Unable to open stack trace file", "freeze watch",
+                    "Force stopping", "reacting to signal", ROBOT_SETUP_DONE, RESTART_FAILED, FREEZE_DEADLINE)
 FREEZE_HYPOTHESIS = ("attemptRestart", "onOpModePostStop")
 FREEZE_GUARD_MEANS = ("a dashboard Hardware Config switch while an OpMode is in INIT restarted the robot under it: "
                       "slothboard's stopped-only guard doesn't hold")
+FREEZE_RESTART_MEANS = ("a dashboard hardware-config change at idle froze the Robot Controller app until the SDK's 10 s "
+                        "deadline or the Control Hub's watchdog ended it, and the app was killed and relaunched (about "
+                        "50 s with no robot, losing dashboard edits and the alliance), or the restart failed or wasn't "
+                        "tried (the detail says which): slothboard before 6165.7 runs the robot restart while holding "
+                        "its OpMode lock, which the event loop's teardown needs, so this FAILs on any build pinning "
+                        "6165.6 or older")
 
 OVERLAY_NAN_PENDING = ("regression: a NaN or infinite field-overlay coordinate kills slothboard's telemetry thread "
                        "again (fixed in 6165.6), ending dashboard telemetry for every OpMode until the app restarts")
@@ -676,6 +712,9 @@ KNOWN_SERVER_TYPES = {
     "RECEIVE_IMAGE", "RECEIVE_HARDWARE_CONFIG_LIST", "RECEIVE_LOGCAT_ERRORS", "RECEIVE_LOGCAT_LINES",
     "RECEIVE_GAMEPAD_STATE",
 }
+DASH_SHORT_CONNECTION_S = 5.0
+DASH_RECONNECT_FIRST_S = 0.5
+DASH_RECONNECT_MAX_S = 4.0
 
 
 class Dashboard:
@@ -691,6 +730,8 @@ class Dashboard:
         # Off only while restoring the config: an unknown message type is then logged instead of stopping the restore.
         self.strict = True
         self.disconnects = 0
+        self.short_drops = 0
+        self.last_lifetime = None
         self.status = None
         self.status_seq = 0
         self.seen_active = set()
@@ -717,12 +758,14 @@ class Dashboard:
     def connect(self, timeout):
         deadline = time.monotonic() + timeout
         last_error = None
+        wait = DASH_RECONNECT_FIRST_S
         while time.monotonic() < deadline:
             try:
                 ws = WebSocket(self.host, self.port)
             except OSError as e:
                 last_error = e
-                time.sleep(1)
+                time.sleep(max(0.0, min(wait, deadline - time.monotonic())))
+                wait = min(DASH_RECONNECT_MAX_S, wait * 2)
                 continue
             with self.cond:
                 self.ws = ws
@@ -754,8 +797,10 @@ class Dashboard:
                 if self.ws is ws:
                     self.connected = False
                     self.disconnects += 1
+                    self.last_lifetime = time.monotonic() - self.connected_at[connection]
+                    self.short_drops = self.short_drops + 1 if self.last_lifetime < DASH_SHORT_CONNECTION_S else 0
                     if not self.closing:
-                        self.log(f"dashboard websocket dropped: {e}")
+                        self.log(f"dashboard websocket dropped after {self.last_lifetime:.1f} s: {e}")
                 self.cond.notify_all()
         except BenchError as e:
             with self.cond:
@@ -788,6 +833,9 @@ class Dashboard:
                 self.status = msg["status"]
                 self.status_seq += 1
                 self.seen_active.add(self.status["activeOpMode"])
+                if self.recording is not None:
+                    self.recording["statuses"].append((now, self.status["activeOpMode"],
+                                                       self.status.get("errorMessage") or ""))
             elif kind == "RECEIVE_OP_MODE_LIST":
                 self.opmodes = [(o["name"], o.get("group")) for o in msg["opModeInfoList"]]
                 self.opmode_seq += 1
@@ -850,7 +898,14 @@ class Dashboard:
     def ensure_connected(self, timeout=60):
         self.check()
         if not self.connected:
-            self.log("reconnecting to the dashboard")
+            delay = (min(DASH_RECONNECT_MAX_S, DASH_RECONNECT_FIRST_S * 2 ** (self.short_drops - 1))
+                     if self.short_drops else 0.0)
+            if delay:
+                self.log(f"reconnecting to the dashboard in {delay:.1f} s ({self.short_drops} connection(s) in a row "
+                         f"dropped within {DASH_SHORT_CONNECTION_S:.0f} s)")
+                time.sleep(min(delay, timeout))
+            else:
+                self.log("reconnecting to the dashboard")
             self.connect(timeout)
 
     def send(self, obj):
@@ -927,7 +982,8 @@ class Dashboard:
 
     def start_recording(self):
         with self.cond:
-            self.recording = {"start": time.monotonic(), "packets": [], "images": [], "messages": 0, "bytes": 0}
+            self.recording = {"start": time.monotonic(), "packets": [], "images": [], "statuses": [], "messages": 0,
+                              "bytes": 0}
 
     def stop_recording(self):
         with self.cond:
@@ -1518,6 +1574,65 @@ def mentions(text, phrase):
     return re.search(re.escape(phrase) + r"(?!\w)", text or "") is not None
 
 
+def logcat_pid(line):
+    parts = (line or "").split(None, 3)
+    return parts[2] if len(parts) > 3 else None
+
+
+def lines_after(log_text, mark):
+    lines = log_text.splitlines()
+    start = next((i for i, line in enumerate(lines) if mark in line), None)
+    return [] if start is None else lines[start:]
+
+
+def error_lines_while(statuses, opmode, t0):
+    out = []
+    for t, active, error in statuses:
+        if active == opmode and (not out or out[-1][1] != error):
+            out.append([round(t - t0, 2), error])
+    return out
+
+
+def traces_sections(text):
+    heads = list(FREEZE_TRACES_HEADER.finditer(text))
+    return [(m.group(1), f"{m.group(3)}-{m.group(4)} {m.group(5)}.000",
+             text[m.start():heads[i + 1].start() if i + 1 < len(heads) else len(text)]) for i, m in enumerate(heads)]
+
+
+def traces_lock_waits(section):
+    names, waits, current = {}, [], None
+    for line in section.splitlines():
+        m = FREEZE_TRACES_THREAD.match(line)
+        if m:
+            current = (m.group(1), m.group(2))
+            names[m.group(2)] = m.group(1)
+            continue
+        w = FREEZE_TRACES_WAITS.match(line)
+        if w and current is not None:
+            waits.append((current, w.group(1), w.group(2), w.group(3)))
+    return [f"{name} (tid {tid}) waits to lock <{lock}> ({cls}) held by "
+            + (f"{names.get(holder, '?')} (tid {holder})" if holder else "a thread ART didn't name")
+            for (name, tid), lock, cls, holder in waits]
+
+
+def shipped_hub_devices(name):
+    path = REPO_ROOT / SHIPPED_CONFIG_DIR / f"{name}.xml"
+    try:
+        root = ElementTree.parse(path).getroot()
+    except (OSError, ElementTree.ParseError):
+        return None
+    children = list(root)
+    if len(children) != 1 or children[0].tag != "LynxUsbDevice" or children[0].get("serialNumber") != "(embedded)":
+        return None
+    modules = list(children[0])
+    if len(modules) != 1 or modules[0].get("port") != children[0].get("parentModuleAddress"):
+        return None
+    devices = list(modules[0])
+    if not devices or any(d.get("bus") is not None or not d.get("name") for d in devices):
+        return None
+    return {d.get("name") for d in devices}
+
+
 class Runner:
     def __init__(self, args):
         self.args = args
@@ -1542,6 +1657,7 @@ class Runner:
         self.dash = None
         self.probe = None
         self.original = None
+        self.original_xml = None
         self.original_entry = None
         self.original_shipped = False
         self.restore_notes = []
@@ -1633,8 +1749,11 @@ class Runner:
         if (active != NO_CONFIG and active in self.adb.config_names()
                 and self.original_entry.get("location") != "RESOURCE"):
             self.original = active
-            self.log(f"active hardware config: {active} (restored at the end)")
-            (self.out / "original_config.xml").write_text(self.adb.read_config(active))
+            self.original_xml = self.adb.read_config(active)
+            (self.out / "original_config.xml").write_text(self.original_xml)
+            self.log(f"active hardware config: {active} (restored at the end"
+                     + (", contents included: the run writes its own bench config of that name)" if active in BENCH_CONFIGS
+                        else ")"))
         elif (self.original_entry.get("location") == "RESOURCE"
               or ("location" not in self.original_entry and (REPO_ROOT / SHIPPED_CONFIG_DIR / f"{active}.xml").exists())):
             self.original, self.original_shipped = active, True
@@ -1724,10 +1843,20 @@ class Runner:
         self.restarts.append({"during": during, "pid": pid, "waitedSeconds": round(time.monotonic() - t0, 1)})
         self.log(f"the Robot Controller app is back up (pid {pid}) after {time.monotonic() - t0:.0f} s")
 
-    def activate_config(self, name, xml_text=None, config=None, accept=None):
+    def config_copy(self, name, xml_text):
+        n = 1
+        while True:
+            local = self.out / "logs" / (f"{name}.xml" if n == 1 else f"{name}.{n}.xml")
+            if not local.exists() or local.read_text() == xml_text:
+                local.write_text(xml_text)
+                return local
+            n += 1
+
+    def activate_config(self, name, xml_text=None, config=None, accept=None, battery=True):
         """Over adb: write the file, stop the app, point its settings at the file and start it. Through slothboard's
-        WRITE/SET_HARDWARE_CONFIG only when run-as can't edit the settings: that path freezes the app until the
-        Control Hub's watchdog relaunches it. Done when the hub logs a robot setup and its settings name the config."""
+        WRITE/SET_HARDWARE_CONFIG only when run-as can't edit the settings: on slothboard 6165.6 or older that path
+        freezes the app until the Control Hub's watchdog relaunches it. Done when the hub logs a robot setup and its settings name the config.
+        battery=False for a config that may load no REV hub, where slothboard reports no battery voltage."""
         self.wait_idle()
         if xml_text is None and config is None and name not in self.adb.config_names():
             # slothboard would activate "no config" for a name it doesn't list.
@@ -1737,12 +1866,11 @@ class Runner:
         self.adb.mark(f"activate config {name}")
         t0 = time.monotonic()
         self.configs_touched = True
-        if xml_text is not None:
-            (self.out / "logs" / f"{name}.xml").write_text(xml_text)
+        local = self.config_copy(name, xml_text) if xml_text is not None else None
         if self.switch_with_adb:
             self.log(f"{'writing and ' if xml_text is not None else ''}activating hardware config {name} over adb")
-            if xml_text is not None:
-                self.adb.run("push", str(self.out / "logs" / f"{name}.xml"), f"{CONFIG_DIR}/{name}.xml")
+            if local is not None:
+                self.adb.run("push", str(local), f"{CONFIG_DIR}/{name}.xml")
             self.adb.stage_active_config(name, self.out / "logs" / "rc_prefs.xml", config)
             self.adb.switch_app()
         elif xml_text is not None:
@@ -1773,7 +1901,7 @@ class Runner:
             if active not in (accept or {name}):
                 raise BenchError(f"the robot restarted on hardware config {active}, not {name} (logs/{log_name})")
             self.dash.ensure_connected(timeout=60)
-            self.wait_ready()
+            self.wait_ready(battery)
             # The settings file is what the runner wrote; the dashboard's list says what the running app loaded.
             live = None
             for _ in range(5):
@@ -1800,13 +1928,13 @@ class Runner:
         elif watchdog:
             self.log(f"the Control Hub's watchdog relaunched the app during the switch ({watchdog}x)")
 
-    def wait_ready(self):
+    def wait_ready(self, battery=True):
         # A reconnected socket still holds the status from before the switch.
         with self.dash.cond:
             self.dash.status = None
         self.dash.wait_until(lambda: self.dash.status and self.dash.status.get("available")
                              and self.dash.status["activeOpMode"] == IDLE_OPMODE
-                             and self.dash.status.get("batteryVoltage", -1) >= 0, 90,
+                             and (not battery or self.dash.status.get("batteryVoltage", -1) >= 0), 90,
                              "the robot to finish restarting", poll_status_every=1.0)
         time.sleep(2)
 
@@ -1913,7 +2041,9 @@ class Runner:
         finally:
             try:
                 if self.dash.recording is not None:
-                    outcome["dashboard"] = self._dashboard_stats(self.dash.stop_recording())
+                    rec = self.dash.stop_recording()
+                    outcome["dashboard"] = self._dashboard_stats(rec)
+                    outcome["errorLinesWhileActive"] = error_lines_while(rec["statuses"], opmode, t_init)
                 if self.dash.status and self.dash.status["activeOpMode"] == opmode:
                     self._stop(opmode, outcome)
             finally:
@@ -2152,8 +2282,7 @@ class Runner:
     def run_probe(self):
         address = self.args.expansion_address
         self.activate_config(CONFIG_PROBE, hub_config([], expansion=(address, [])))
-        stored = (self.original_entry.get("resourceId")
-                  if self.original_shipped and not self.args.original_entry else None)
+        stored = self.original_entry.get("resourceId") if self.original_shipped else None
         self.run_opmode("Bench: Probe", "probe", {"originalResourceId": stored} if stored else None, timeout=60,
                         result_files=["probe"])
         self.probe = self.pull("probe")
@@ -2184,15 +2313,16 @@ class Runner:
             name, current = self.original, self.probe.get("shippedConfigs", {}).get(self.original)
             target = self.probe.get("originalResolvesTo")
             advice = f"re-activate {name}" if current else f"{name} isn't shipped any more: activate another config"
-            self.check(f"the hub's active config {name} loads res/xml/{name}", current == stored,
-                       f"stored as resource {stored:#010x}, which this install resolves to {target}; res/xml/{name} is "
-                       + (f"{current:#010x}" if current else "no longer shipped") + ("" if current == stored else f"; {advice}"),
-                       "an install that added, renamed or removed a res/xml file renumbered the shipped configs, so the "
-                       "hub loaded a different XML than its config name says; re-activate the config on every hub that "
-                       "uses it (this run's restore does that here while the name is still shipped); expected only until "
-                       "the robot controller re-resolves shipped configs by name at startup")
+            when = "before the install" if self.args.original_entry else "on the hub"
+            self.check(f"the hub's active config {name} loads res/xml/{name} on this install", current == stored,
+                       f"saved {when} as resource {stored:#010x}, which this install resolves to {target}; "
+                       f"res/xml/{name} is " + (f"{current:#010x}" if current else "no longer shipped")
+                       + ("" if current == stored else f"; {advice}"),
+                       f"this install renumbered the shipped configs, so the hub loads {target} under the name {name}; "
+                       + CONFIG_BY_NAME_HELD + "; this run's restore re-activates the config by name on this hub only")
             if current != stored:
-                self.log(f"!! the hub's active config {name} was loading {target}: {advice} on every hub that uses it")
+                self.log(f"!! the hub's active config {name} loads {target} on this install: {advice} on every hub that "
+                         "uses it")
 
     def main_config(self, webcam="detected", pinpoint=False, octoquad_bus=None, expansion=None):
         serial = self.webcam if webcam == "detected" else webcam
@@ -2297,9 +2427,10 @@ class Runner:
         for k in ("limelightPollOff", "limelightPoll100Hz", "limelightPoll200Hz", "limelightPoll250Hz"):
             v = ph.get(k, {})
             s.append(f"- {k}: interval {v.get('pollIntervalMs')} ms, {v.get('requestsServedPerSecond', 0):.0f} req/s, "
-                     f"fake server {v.get('fakeServerCpuMsPerSecond', 0):.1f} ms CPU/s, process CPU "
-                     f"{dig(v, 'cpu', 'processCpuPercentOfOneCore', default=0):.0f}% of a core; loop {fmt(v.get('loopPeriodMs'))}; "
-                     f"workload {fmt(v.get('workloadMs'))}")
+                     f"fake server {v.get('fakeServerCpuMsPerSecond', 0):.1f} ms CPU/s, process CPU with the in-process "
+                     f"fake Limelight included {dig(v, 'cpu', 'processCpuPercentOfOneCore', default=0):.0f}% of a core "
+                     f"(Bench: Limelight measures a real one); loop {fmt(v.get('loopPeriodMs'))}; workload "
+                     f"{fmt(v.get('workloadMs'))}")
         fm = ph.get("limelightFailureModes", {})
         for k in ("refusedPipelineSwitch", "unpluggedPipelineSwitch", "http500PipelineSwitch"):
             v = fm.get(k)
@@ -2348,8 +2479,8 @@ class Runner:
             s.append("|---|---|---|---|---|---|---|")
             dash = dig(o, "dashboard", "perPhase", default={})
             for name, ph in fw["phases"].items():
-                top = ", ".join(f"{x['section']} {x['meanMs']:.2f}" for x in ph.get("sections", [])
-                                if not x["nested"])
+                top = ("profiler off" if dig(ph, "settings", "loopProfile") is False else
+                       ", ".join(f"{x['section']} {x['meanMs']:.2f}" for x in ph.get("sections", []) if not x["nested"]))
                 d = dash.get(name, {})
                 s.append(f"| {name} | {fmt(ph.get('loopPeriodMs'))} | {ph.get('dsFramesPerSecond', 0):.1f} | {top} | "
                          f"{dig(ph, 'gc', 'bytesAllocatedPerLoop', default=0):.0f} | {d.get('packetsPerSecond', 0):.1f} | "
@@ -2367,6 +2498,7 @@ class Runner:
         variants = [("initialize", False), ("initializeLoop", False), ("moduleInit", False), ("onStart", True),
                     ("gameLoop", True), ("none", True)]
         shown = None
+        hub_report = {}
         for throw_in, start in variants:
             step = f"failure_{throw_in}"
             try:
@@ -2389,11 +2521,20 @@ class Runner:
             line = o.get("statusErrorMessage") or ""
             expected_stops = ["A", "B"] if throw_in == "moduleInit" else ["A", "B", "C"]
             self.check(f"failure {throw_in}: module stops", stops == expected_stops, f"stops {stops}, expected {expected_stops}")
+            while_active = o.get("errorLinesWhileActive") or []
             if shown is not None:
-                self.check(f"failure {throw_in}: the previous crash's Error line was cleared at INIT",
-                           not mentions(o.get("initStatusError"), shown) and not mentions(line, shown),
-                           f"Error line {o.get('initStatusError')!r} when {throw_in}'s INIT showed, {line!r} at its end",
-                           "a crash's Error line outlived the next INIT, so the dashboard showed a stale crash")
+                stale = [error for _, error in while_active if mentions(error, shown)] or (
+                    [line] if mentions(line, shown) else [])
+                if stale or any(error == "" for _, error in while_active):
+                    self.check(f"failure {throw_in}: the previous crash's Error line was cleared at INIT", not stale,
+                               f"Error line while {throw_in} was active [s after INIT sent, line]: {while_active}; "
+                               f"{line!r} at its end",
+                               "a crash's Error line outlived the next INIT, so the dashboard showed a stale crash")
+                else:
+                    s.append(f"- {throw_in}: whether the previous crash's Error line was cleared at INIT wasn't seen: "
+                             f"every status while it was active already showed its own crash {while_active}")
+            hub_s = self.failure_hub_seconds(step, throw_in, log_text)
+            hub_report[throw_in] = hub_s
             if throw_in == "none":
                 text = FAILURE_STUB_B_STOP
                 self.check("failure none: onEnd ran after the stops", "onEnd" in events, f"events {events}")
@@ -2421,61 +2562,112 @@ class Runner:
                            mentions(o["errorMessage"], text) or text in log_text,
                            f"error {o['errorMessage']!r} from {o.get('errorSource')}")
                 self.check(f"failure {throw_in}: dashboard Error line shows the exception", mentions(line, text),
-                           f"Error line {line!r}" + (f" {o['errorLineSeconds']} s after the crash" if "errorLineSeconds" in o
+                           f"Error line {line!r}" + (f" at the runner's status read {o['errorLineSeconds']} s after it saw "
+                                                     "the crash" if "errorLineSeconds" in o
                                                      else " (the runner saw no crash)" if not o["crashed"] else
-                                                     f", still empty {ERROR_LINE_WAIT_S:.0f} s after the crash"),
-                           ERROR_LINE_PENDING)
+                                                     f", still empty {ERROR_LINE_WAIT_S:.0f} s after the runner saw the "
+                                                     "crash"), ERROR_LINE_PENDING)
                 self.check(f"failure {throw_in}: stop failure attached as Suppressed",
                            "Suppressed:" in log_text and "stub B stop()" in log_text, "looked for 'Suppressed:' in the log")
                 self.check(f"failure {throw_in}: onEnd not called", "onEnd" not in events, f"events {events}")
             shown = text if mentions(line, text) else None
-            s.append(f"- throwIn={throw_in}: crashed={o['crashed']} (via {o.get('crashSignal')}, "
-                     f"{o.get('crashSeenAfterStartSeconds', o.get('crashSeenSeconds'))} s), error={o['errorMessage']!r} "
-                     f"from {o.get('errorSource')}, Error line {line!r}, events={events}")
+            s.append(f"- throwIn={throw_in}: hub: the SDK logged '{USER_CODE_THREW}' {hub_s} s after the throw; runner: "
+                     f"crashed={o['crashed']} (via {o.get('crashSignal')}, seen "
+                     f"{o.get('crashSeenAfterStartSeconds', o.get('crashSeenSeconds'))} s after "
+                     f"{'START' if start else 'INIT'} was sent), Error line {o.get('errorLineSeconds')} s after that; "
+                     f"error={o['errorMessage']!r} from {o.get('errorSource')}, Error line {line!r}, events={events}")
+        thrown = [v for k, v in hub_report.items() if k != "none" and v is not None]
+        s.append(f"- On the hub's clock (logcat), the SDK logged '{USER_CODE_THREW}' "
+                 + (f"{min(thrown):.2f}-{max(thrown):.2f} s after a hook threw" if thrown else "at times this run couldn't "
+                    "read from the logs")
+                 + (f" and {hub_report['none']:.2f} s after stub B's stop() threw" if hub_report.get("none") is not None
+                    else "")
+                 + ". The runner's times are its own: it learns of a crash from slothboard's push of that line, and "
+                   "reads the Error line with an adb round trip and a status request, then every 0.25 s.")
         s.append("- The Error-line checks read GET_ROBOT_STATUS's errorMessage, which the dashboard shows as its "
                  "Error line, with no log fallback.\n")
         self.summary += s
 
+    def failure_hub_seconds(self, step, throw_in, log_text):
+        event = FAILURE_EVENT + ("init B" if throw_in == "moduleInit" else "stop B" if throw_in == "none"
+                                 else f"throwing in {throw_in}")
+        lines = lines_after(log_text, f"begin {step}")
+        start = next((i for i, line in enumerate(lines) if event in line), None)
+        if start is None:
+            return None
+        reported = next((line for line in lines[start:] if USER_CODE_THREW in line
+                         and OPMODE_MANAGER_TAG in line), None)
+        return logcat_delta(lines[start], reported) if reported else None
+
     def run_write_recovery(self):
         o = self.run_opmode("Bench: Write Recovery", "write_recovery", timeout=60, result_files=["write_recovery"])
         res = self.pull("write_recovery", required=not o["crashed"]) or {}
-        channels = res.get("channels") or {}
-        s = ["## Bench: Write Recovery (a failSafe() mid-run, hub registers read with Lynx commands)\n",
-             f"- battery {dig(res, 'info', 'batteryVolts')} V; loop {fmt(res.get('loopPeriodMs'))}"]
+        channels, trials, info = res.get("channels") or {}, res.get("trials") or [], res.get("info") or {}
+        resend, loop_p95 = info.get("resendMs"), dig(res, "loopPeriodMs", "p95")
+        s = ["## Bench: Write Recovery (failSafe() at several points of WriteCache's re-send period, hub registers "
+             "read with Lynx commands)\n",
+             f"- battery {info.get('batteryVolts')} V; loop {fmt(res.get('loopPeriodMs'))}; WriteCache re-sends an "
+             f"unchanged value after {resend} ms. Each failSafe follows a write of every device (the commanded value "
+             f"moved by {info.get('nudge')}) by the set ms {info.get('phasesMs')}, so a wrapped device's re-send is due "
+             "that much less than the period after the failSafe"]
+        names = list(channels)
+        if trials:
+            s += ["", "| failSafe | ms after the write | " + " | ".join(f"{n} back after ms (loops)" for n in names) + " |",
+                  "|---|---|" + "---|" * len(names)]
+            for t in trials:
+                cells = [f"{dig(t, 'channels', n, 'recoveredMs')} ({dig(t, 'channels', n, 'recoveredLoops')})"
+                         for n in names]
+                s.append(f"| {t.get('trial')} | {t.get('phaseMs')} | " + " | ".join(cells) + " |")
+            s.append("")
         if o["crashed"]:
             s.append(f"- CRASHED: {o['errorMessage']}")
         for name, c in channels.items():
             s.append(f"- {name} ({'EnhancedMotor/EnhancedServo' if c.get('wrapped') else 'raw SDK device'}, {c.get('kind')} "
-                     f"port {c.get('port')}): at {c.get('target')} before failSafe {c.get('settledBeforeFailSafe')}; back "
-                     f"{c.get('recoveredMs')} ms after it; {c.get('loopsAtTargetAfterFailSafe')} of "
-                     f"{c.get('loopsAfterFailSafe')} loops at target afterwards")
+                     f"port {c.get('port')}): at its target before the first failSafe {c.get('settledBeforeFailSafe')}; "
+                     f"worst {c.get('worstRecoveredMs')} ms ({c.get('worstRecoveredLoops')} loops) after a failSafe "
+                     f"{c.get('worstPhaseMs')} ms after the write; never back {c.get('neverRecovered')} times")
         s.append("")
         self.summary += s
-        if not channels:
-            self.check("write recovery: bench reported its channels", False, f"error {o.get('errorMessage')!r}")
+        if not channels or not trials:
+            self.check("write recovery: bench reported its failSafes", False, f"error {o.get('errorMessage')!r}")
             return
         settled = [n for n, c in channels.items() if not c.get("settledBeforeFailSafe")]
-        self.check("write recovery: every channel reached its commanded state before failSafe", not settled,
+        self.check("write recovery: every channel reached its commanded state before the first failSafe", not settled,
                    f"not at target: {settled or 'none'}",
                    "the hub didn't take the writes at all (a low battery, or a config problem), so the recovery "
                    "checks can't be judged")
         if settled:
             return
+        phases = [t["phaseMs"] for t in trials if t.get("phaseMs") is not None]
         for wrapped in (False, True):
             for name, c in channels.items():
                 if bool(c.get("wrapped")) != wrapped:
                     continue
-                ms = c.get("recoveredMs")
-                ok = ms is not None and ms <= WRITE_RECOVERY_LIMIT_MS
-                label = "EnhancedMotor" if c.get("kind") == "motor" else "EnhancedServo"
+                per = [(t.get("phaseMs"), dig(t, "channels", name, "recoveredMs"), dig(t, "channels", name, "recoveredLoops"))
+                       for t in trials]
+                back = [ms for _, ms, _ in per if ms is not None]
+                never = len(per) - len(back)
                 if wrapped:
-                    self.check(f"write recovery: {label} {name} reaches the hub again within "
-                               f"{WRITE_RECOVERY_LIMIT_MS} ms of a failSafe", ok,
-                               f"back after {ms} ms" if ms is not None else "never back in 2 s", WRITE_CACHE_PENDING)
+                    label = "EnhancedMotor" if c.get("kind") == "motor" else "EnhancedServo"
+                    limit = (resend + WRITE_RECOVERY_WRAPPED_LOOPS * loop_p95
+                             if resend is not None and loop_p95 is not None else None)
+                    covered = bool(phases) and loop_p95 is not None and min(phases) <= loop_p95
+                    worst = max(back) if back else None
+                    self.check(f"write recovery: {label} {name} reaches the hub again within WriteCache's re-send "
+                               f"period + {WRITE_RECOVERY_WRAPPED_LOOPS} loops of a failSafe, wherever it lands",
+                               covered and not never and limit is not None and worst <= limit,
+                               f"worst {worst} ms (limit {limit} ms: {resend} + {WRITE_RECOVERY_WRAPPED_LOOPS} x loop p95 "
+                               f"{loop_p95}); never back after {never} of {len(per)}; [ms after the write, back after "
+                               f"ms] {[(p, ms) for p, ms, _ in per]}"
+                               + ("" if covered else "; no failSafe landed within a loop of a write, so the longest "
+                                  "wait wasn't exercised"), WRITE_CACHE_PENDING)
                 else:
+                    loops = [n for _, _, n in per]
                     self.check(f"write recovery: raw {c.get('kind')} {name} reaches the hub again within "
-                               f"{WRITE_RECOVERY_LIMIT_MS} ms of a failSafe (control)", ok,
-                               f"back after {ms} ms" if ms is not None else "never back in 2 s",
+                               f"{WRITE_RECOVERY_RAW_LOOPS} loops of every failSafe (control)",
+                               not never and all(n is not None and n <= WRITE_RECOVERY_RAW_LOOPS for n in loops),
+                               f"loops to come back per failSafe {loops}, worst {max(back) if back else None} ms; never "
+                               f"back after {never} of {len(per)}",
                                "the SDK's own re-send didn't heal a raw device either, so failSafe() did something "
                                "else on this hub and the wrapped results don't say anything about WriteCache")
 
@@ -3412,9 +3604,14 @@ class Runner:
                        f"{len(posts)} POSTs: {[(p.get('line'), p.get('openMs'), p.get('endedBy')) for p in posts]}",
                        LLHUNG_RETRY_MEANS)
             if held:
+                columns, rows = r.get("rowColumns") or [], r.get("rows") or []
+                before = ([row for row in rows if first is None or row[columns.index("ms")] < first]
+                          if "ms" in columns else [])
+                stale = (sum(1 for row in before if row[columns.index("frameStale")] == 1)
+                         if "frameStale" in columns else None)
                 s.append(f"- hung_init: the POST hung {round(held[0].get('openMs') or 0)} ms ({held[0].get('endedBy')}); "
-                         f"until the fault at {first} ms the only sign was Camera's `Frame: STALE (putting the ball pipeline "
-                         "on the Limelight)`, and a Ball Collection started in that time ends SKIPPED (the sync isn't done)")
+                         f"before the fault at {first} ms, Camera's frame read stale in {stale} of {len(before)} sampled "
+                         "rows")
 
         for stop_id, _, next_id, _ in pairs:
             if stop_id in broken:
@@ -3485,7 +3682,9 @@ class Runner:
                            f"{dig(r_next, 'atInit', 'sender', 'syncUsesIt')}, longest POST overlap {overlap} ms; POSTs "
                            f"[line, received, ended, by] {timeline}", LLHUNG_FRESH_MEANS)
             else:
-                self.check("llhung reinit: one sender: the next run's POSTs wait for the previous run's hung POST",
+                self.check("llhung reinit: the next run's POSTs wait for the previous run's hung POST (the stopped run's "
+                           "worker takes the new request, so this doesn't exercise the shared blackboard sender; "
+                           "reinit_fresh does)",
                            serialized and r_next.get("maxSenderThreads") == 1,
                            f"{r_next.get('maxSenderThreads')} LimelightSync threads at once, longest POST overlap "
                            f"{overlap} ms; POSTs [line, received, ended, by] {timeline}", LLHUNG_SINGLE_MEANS)
@@ -3507,12 +3706,17 @@ class Runner:
             self.check(f"llhung {next_id}: no LimelightSync thread left once the sync is done",
                        dig(r_next, "stop", "senderThreadCountAfter") == 0,
                        f"{dig(r_next, 'stop', 'senderThreadsAfter')}", LLHUNG_LEFTOVER_MEANS)
+            old = [p for p in previous if p.get("held") and p.get("endedMs") is not None]
+            waited = (f"; the stopped run's POST was sent {-old[0]['receivedMs']:.0f} ms before this INIT and released "
+                      f"{old[0]['endedMs'] - old[0]['receivedMs']:.0f} ms after it was sent, and the sync finished at "
+                      f"{dig(r_next, 'sync', 'doneMs')} ms" if old else "")
             s.append(f"- {stop_id} then {next_id}: POSTs on the fake [line, received ms, ended ms, by], times from "
-                     f"{next_id}'s INIT: {timeline}")
+                     f"{next_id}'s INIT: {timeline}{waited}")
         senders = sorted({str(dig(r, "atInit", "sender", "identity")) for _, _, r in runs
                           if dig(r, "atInit", "sender", "present")})
-        s.append(f"- the blackboard's LimelightSync.sender semaphore across the runs: {senders} (a single identity is "
-                 f"the same object every run); permits at reinit's INIT "
+        s.append(f"- the blackboard's LimelightSync.sender semaphore across the runs: {senders} (every run here shares "
+                 "one class loader, so one identity is expected whatever the sender is; only reinit_fresh's check "
+                 f"touches the blackboard sharing); permits at reinit's INIT "
                  f"{dig(by_id['reinit'][1], 'atInit', 'sender', 'permits')} (0 while the hung POST holds it)")
         s.append("- reinit_fresh clears LimelightSync's `running` flag by reflection, so the next request starts a "
                  "second worker while the first is still blocked, and checks LimelightSync's own sender is the "
@@ -4006,7 +4210,7 @@ class Runner:
 
     def run_freeze_dump(self):
         name = self.active_config()
-        rec = {"config": name}
+        rec = {"config": name, "runs": []}
         self.results["freeze_dump_switch"] = rec
 
         def control():
@@ -4028,183 +4232,326 @@ class Runner:
                             result_files=["freeze_dump", "freeze_watch"])
         c = rec.get("control")
         if o["crashed"] or not c:
-            rec["trigger"] = None
+            rec["notTried"] = f"Bench: Freeze Dump crashed in INIT ({o.get('errorMessage')!r}), so no change was sent"
         else:
             ignored = (c.get("pidBefore") is not None and c.get("pidAfter") == c.get("pidBefore")
                        and c.get("activeOpMode") == FREEZE_OPMODE and not o["appRestarted"])
             self.check("freeze dump: slothboard ignores a hardware-config switch while an OpMode is in INIT", ignored,
                        f"{c}; the step's app restart {o['appRestarted']}", FREEZE_GUARD_MEANS)
             if not ignored:
-                rec.update(trigger=None, initGuardFailed=True, pidBefore=c.get("pidBefore"), pidAfter=o.get("pidAfter"))
+                rec["notTried"] = ("the switch sent during INIT already restarted the robot, taking the watch with it, "
+                                   "so no change from idle was sent")
             else:
-                self._freeze_trigger(name, rec)
-        self._freeze_collect(rec)
+                self._freeze_runs(name, rec)
         self._freeze_report(rec, o)
 
-    def _freeze_trigger(self, name, rec):
+    def _freeze_runs(self, name, rec):
+        counts = {}
+        for i, kind in enumerate(FREEZE_TRIGGERS):
+            counts[kind] = counts.get(kind, 0) + 1
+            run = {"id": f"{kind}_{counts[kind]}", "kind": kind, "message": FREEZE_MESSAGES[kind]}
+            rec["runs"].append(run)
+            try:
+                if i > 0:
+                    armed = self.run_opmode(FREEZE_OPMODE, f"freeze_arm_{run['id']}", start=False, timeout=15,
+                                            result_files=["freeze_dump", "freeze_watch"])
+                    if armed["crashed"]:
+                        run["notSent"] = f"re-arming the watch crashed: {armed.get('errorMessage')!r}"
+                        continue
+                self._freeze_trigger(name, run)
+                self._freeze_collect(run)
+            except ProtocolError:
+                raise
+            except BenchError as e:
+                run["failed"] = str(e)
+                self.log(f"!! freeze dump {run['id']}: {e}; sending no more changes")
+                self.settle()
+                return
+
+    def _freeze_trigger(self, name, run):
         self.wait_idle()
-        rec["listedAsActive"] = self.dash.fresh_active_config()
+        run["listedAsActive"] = self.dash.fresh_active_config()
+        if run["kind"] == "write":
+            contents = self.adb.read_config(name)
+            run["target"] = f"{name}, written with its own contents ({len(contents)} chars)"
+            message = {"type": run["message"], "hardwareConfigName": name, "hardwareConfigContents": contents}
+        elif run["kind"] == "delete":
+            scratch = self.config_copy(CONFIG_FREEZE_SCRATCH, hub_config([]))
+            self.adb.run("push", str(scratch), f"{CONFIG_DIR}/{CONFIG_FREEZE_SCRATCH}.xml")
+            run["target"] = f"{CONFIG_FREEZE_SCRATCH}, pushed for it and never active"
+            message = {"type": run["message"], "hardwareConfigName": CONFIG_FREEZE_SCRATCH}
+        else:
+            run["target"] = name
+            message = {"type": run["message"], "hardwareConfigName": name}
         pid = self.adb.pid()
         hub_t0 = self.adb.hub_time()
         anr = self.adb._raw(["-s", self.adb.serial, "shell", "ls -l /data/anr/"], timeout=30)
-        rec["anrDirBefore"] = (anr.stdout or anr.stderr).strip()[:400]
-        self.adb.mark("BENCH freeze dump: hardware-config switch from idle")
+        folder = self.out / "raw" / "freeze" / run["id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        run.update(pidBefore=pid, hubT0=hub_t0, mark=f"BENCH freeze dump {run['id']}: {run['message']} from idle",
+                   anrDirBefore=(anr.stdout or anr.stderr).strip()[:400], pidGoneSeconds=None, newPidSeconds=None,
+                   setupInProcessSeconds=None, forcedRelaunch=False, restartFailed=False, traces=None)
+        self.adb.mark(run["mark"])
         t0 = time.monotonic()
-        self.dash.send({"type": "SET_HARDWARE_CONFIG", "hardwareConfigName": name})
-        rec.update(trigger="the switch sent from idle", pidBefore=pid, hubT0=hub_t0, pidGoneSeconds=None,
-                   newPidSeconds=None, setupInProcessSeconds=None, forcedRelaunch=False, restartFailed=False)
-        next_log = 0.0
+        self.dash.send(message)
+        run["sent"] = True
         while time.monotonic() - t0 < FREEZE_RELAUNCH_WAIT_S:
             self.adb.ensure_connected()
-            now_pid = self.adb.pid()
             elapsed = round(time.monotonic() - t0, 1)
-            if now_pid is None:
-                if rec["pidGoneSeconds"] is None:
-                    rec["pidGoneSeconds"] = elapsed
-            elif now_pid != pid:
-                rec["newPidSeconds"] = elapsed
+            lines = self._freeze_lines(run)
+            self._freeze_copy_traces(run, lines, folder, elapsed)
+            if any(RESTART_FAILED in line for line in lines):
+                run["restartFailed"] = True
                 break
-            elif time.monotonic() >= next_log:
-                next_log = time.monotonic() + 3
-                hits = self.adb.logcat_matches(hub_t0, ROBOT_SETUP_DONE, RESTART_FAILED)
-                if RESTART_FAILED in hits:
-                    rec["restartFailed"] = True
-                    break
-                if ROBOT_SETUP_DONE in hits:
-                    rec["setupInProcessSeconds"] = elapsed
-                    break
+            if any(ROBOT_SETUP_DONE in line and logcat_pid(line) == pid for line in lines):
+                run["setupInProcessSeconds"] = elapsed
+                break
+            now_pid = self.adb.pid()
+            if now_pid is None:
+                if run["pidGoneSeconds"] is None:
+                    run["pidGoneSeconds"] = elapsed
+            elif now_pid != pid:
+                run["newPidSeconds"] = elapsed
+                break
             time.sleep(1)
-        if rec["newPidSeconds"] is None and rec["setupInProcessSeconds"] is None and not rec["restartFailed"]:
-            self.log(f"!! the app is still frozen {FREEZE_RELAUNCH_WAIT_S} s after the switch and the Control Hub's "
-                     "watchdog hasn't relaunched it: force-stopping and starting it")
+        # The relaunched app's own startup ANR rewrites the traces file about 25 s after it starts.
+        self._freeze_copy_traces(run, self._freeze_lines(run), folder, round(time.monotonic() - t0, 1))
+        if run["newPidSeconds"] is None and run["setupInProcessSeconds"] is None and not run["restartFailed"]:
+            self.log(f"!! the app is still frozen {FREEZE_RELAUNCH_WAIT_S} s after the {run['message']} and the Control "
+                     "Hub's watchdog hasn't relaunched it: force-stopping and starting it")
             self.adb.run("shell", f"am force-stop {RC_PACKAGE}; am start -n {RC_LAUNCHER}", check=False)
-            rec["forcedRelaunch"] = True
-        if rec["setupInProcessSeconds"] is None and not rec["restartFailed"]:
-            self.wait_restart("the freeze dump's config switch")
+            run["forcedRelaunch"] = True
+        if run["setupInProcessSeconds"] is None and not run["restartFailed"]:
+            self.wait_restart(f"the freeze dump's {run['id']}")
         else:
             self.wait_ready()
-        rec["pidAfter"] = self.note_pid()
-        rec["readySeconds"] = round(time.monotonic() - t0, 1)
-        self.log(f"freeze dump: pid {pid} -> {rec['pidAfter']}, ready {rec['readySeconds']} s after the switch")
+        run["pidAfter"] = self.note_pid()
+        run["readySeconds"] = round(time.monotonic() - t0, 1)
+        if run["traces"] is None:
+            self._freeze_copy_traces(run, None, folder, run["readySeconds"])
+        run["activeAfter"] = self.active_config()
+        if run["kind"] == "delete":
+            run["scratchLeft"] = CONFIG_FREEZE_SCRATCH in self.adb.config_names()
+        self.log(f"freeze dump {run['id']}: pid {pid} -> {run['pidAfter']}, ready {run['readySeconds']} s after the "
+                 f"{run['message']}")
+        if run["activeAfter"] != name:
+            self.log(f"!! {run['activeAfter']} is active after the {run['message']}, not {name}: re-activating {name}")
+            self.activate_config(name)
 
-    def _freeze_collect(self, rec):
-        folder = self.out / "raw" / "freeze"
-        folder.mkdir(exist_ok=True)
-        log_text = (self._save_log("logs/freeze_dump_switch.log", rec["hubT0"]) if rec.get("hubT0")
-                    else self._step_text("freeze_dump"))
-        rec["logLines"] = [line for line in log_text.splitlines() if any(m in line for m in FREEZE_LOG_LINES)][:80]
-        rec["watchdogKilled"] = WATCHDOG_KILLED in log_text
-        rec["sdkKilled"] = APP_KILLED in log_text
+    def _freeze_lines(self, run):
+        hits = self.adb.logcat_matches(run["hubT0"], run["mark"], ROBOT_SETUP_DONE, RESTART_FAILED, FREEZE_TRACES_WROTE)
+        return lines_after(hits, run["mark"])
+
+    def _freeze_copy_traces(self, run, lines, folder, elapsed):
+        if run.get("traces") is not None:
+            return
+        if lines is not None and not any(FREEZE_TRACES_WROTE in line and logcat_pid(line) == run["pidBefore"]
+                                         for line in lines):
+            return
+        r = self.adb._raw(["-s", self.adb.serial, "shell", f"cat {FREEZE_TRACES}"], timeout=120)
+        text = r.stdout if r.returncode == 0 else ""
+        (folder / "anr_traces.txt").write_text(text)
+        sections = traces_sections(text)
+
+        def after_change(when):
+            seconds = logcat_delta(run["hubT0"], when)
+            return seconds is not None and seconds >= -1
+
+        since = [sec for sec in sections if sec[0] == run["pidBefore"] and after_change(sec[1])]
+        info = {"copiedSecondsAfterChange": elapsed,
+                "when": "late, once the app was back" if lines is None else "as soon as that pid logged its dump",
+                "chars": len(text), "error": None if text.strip() else (r.stderr or r.stdout).strip()[:200],
+                "processes": [f"pid {pid} at {when[:-4]}" for pid, when, _ in sections]}
+        if since:
+            pid, when, section = since[-1]
+            (folder / "anr_traces_frozen_pid.txt").write_text(section)
+            info.update(frozenPidDump=f"pid {pid} at {when[:-4]}", lockWaits=traces_lock_waits(section))
+        run["traces"] = info
+
+    def _freeze_collect(self, run):
+        folder = self.out / "raw" / "freeze" / run["id"]
+        log_text = self._save_log(f"logs/freeze_dump_{run['id']}.log", run["hubT0"])
+        after = lines_after(log_text, run["mark"])
+        run["logLines"] = [line for line in after if any(m in line for m in FREEZE_LOG_LINES)][:80]
+        run["deadlineExpired"] = any(FREEZE_DEADLINE in line for line in after)
+        run["apRelaunch"] = any(FREEZE_AP_TAG in line and FREEZE_AP_RELAUNCH in line for line in after)
+        run["sdkKilled"] = any(APP_KILLED in line for line in after)
         names = self.adb.bench_shell(f"ls {self.adb.bench_dir()}", check=False).split()
-        rec["dumpFiles"] = sorted(n for n in names if n.startswith("freeze_dump_") and n.endswith(".txt"))
-        rec["pulled"] = []
-        for n in rec["dumpFiles"] + [n for n in ("freeze_watch.json",) if n in names]:
+        run["dumpFiles"] = sorted(n for n in names if n.startswith("freeze_dump_") and n.endswith(".txt"))
+        run["pulled"] = []
+        for n in run["dumpFiles"] + [n for n in ("freeze_watch.json",) if n in names]:
             try:
                 self.adb.pull_bench_file(n, folder / n)
-                rec["pulled"].append(n)
+                run["pulled"].append(n)
             except BenchError as e:
                 self.log(f"couldn't copy {n} from the hub: {e}")
-        traces = self.adb._raw(["-s", self.adb.serial, "shell", f"cat {FREEZE_TRACES}"], timeout=120)
-        if traces.returncode == 0 and traces.stdout.strip():
-            (folder / "anr_traces.txt").write_text(traces.stdout)
-            rec["traces"] = f"readable, {len(traces.stdout)} chars in raw/freeze/anr_traces.txt"
-        else:
-            rec["traces"] = f"unreadable: {(traces.stderr or traces.stdout).strip()[:200]!r}"
         stop_file = f"{self.adb.bench_dir()}/{FREEZE_STOP_FILE}"
         self.adb.bench_shell(f"touch {stop_file}", check=False)
         time.sleep(1.5)
         self.adb.bench_shell(f"rm -f {stop_file}", check=False)
 
+    @staticmethod
+    def _freeze_outcome(run):
+        if run.get("notSent") or not run.get("sent"):
+            return "not tried"
+        if run.get("failed"):
+            return "the runner lost it"
+        if run.get("restartFailed"):
+            return "restart failed"
+        if run.get("forcedRelaunch"):
+            return "FROZE, and no watchdog relaunch came, so the runner force-stopped it"
+        if run.get("pidAfter") != run.get("pidBefore") or run.get("deadlineExpired") or run.get("apRelaunch"):
+            return "FROZE"
+        if run.get("setupInProcessSeconds") is not None:
+            return "restarted in process"
+        return "unclear: same pid, but no robot setup seen"
+
+    @staticmethod
+    def _freeze_detail(run, with_id=True):
+        why = run.get("notSent") or run.get("failed")
+        return ((f"{run['id']}: " if with_id else "") + run["outcome"] + (f" ({why})" if why else "")
+                + (f"; pid {run.get('pidBefore')} -> {run.get('pidAfter')}; set up in the same pid after "
+                   f"{run.get('setupInProcessSeconds')} s; new pid after {run.get('newPidSeconds')} s; ready "
+                   f"{run.get('readySeconds')} s; '{FREEZE_DEADLINE}' {run.get('deadlineExpired')}; the Control Hub's "
+                   f"'{FREEZE_AP_RELAUNCH}' {run.get('apRelaunch')}" if run.get("sent") else ""))
+
     def _freeze_report(self, rec, o):
-        folder = self.out / "raw" / "freeze"
-        index_file = folder / "freeze_watch.json"
-        index = json.loads(index_file.read_text()) if index_file.exists() else {}
-        events = index.get("events") or []
-        dumps = [e for e in events if e.get("type") == "dump"]
-        stalls = [e for e in dumps if str(e.get("detail", "")).startswith(FREEZE_ALIVE_STALL)]
-        changed = rec.get("pidAfter") is not None and rec.get("pidAfter") != rec.get("pidBefore")
-        last_stall = stalls[-1] if stalls else None
-        resumed_after = last_stall is not None and any(
-            e.get("type") == "resumed" and (e.get("sinceArmMs") or 0) > (last_stall.get("sinceArmMs") or 0) for e in events)
-        froze = changed and last_stall is not None and not resumed_after
-        captured = froze and last_stall.get("file") in rec["pulled"]
-        outcome = ("not tried" if not rec.get("trigger") or rec.get("restartFailed") else "NOT REPRODUCED" if not changed
-                   else "FROZE, dumps captured" if captured else "FROZE, no dump captured")
-        rec["outcome"] = outcome
-        if index.get("failure"):
-            means = (f"the watch thread failed ({index.get('failure')}), so it couldn't dump the freeze; its frames are "
-                     "in raw/freeze/freeze_watch.json")
-        elif rec.get("initGuardFailed"):
-            means = ("the switch sent during INIT already restarted the robot, taking the watch with it, so the switch "
-                     "from idle wasn't sent")
-        elif not rec.get("trigger"):
-            means = (f"Bench: Freeze Dump crashed in INIT ({o.get('errorMessage')!r}), so no switch was sent")
-        elif rec.get("restartFailed"):
-            means = "slothboard logged that it couldn't restart the robot onto the config, so nothing froze or was tried"
-        elif rec.get("forcedRelaunch") and not dumps:
-            means = ("the switch had no visible effect for 120 s, then the runner killed and restarted the app itself, "
-                     "so this says nothing about the freeze")
-        elif not dumps:
-            means = ("the app was killed and relaunched but the watch thread wrote no dump (look for 'freeze watch' in "
-                     "logs/freeze_dump_switch.log), so the freeze's cause is still unknown")
-        elif not froze:
-            means = ("the app was relaunched, but the watch saw the RC come back alive after its last stall, so the "
-                     "dumps show a slow restart rather than the freeze")
-        else:
-            means = "the dump files didn't come off the hub (see run.log), so the freeze's cause is still unknown"
-        if outcome == "not tried":
-            self.summary.append(f"- freeze dump: not tested: {means}\n")
-        else:
-            self.check("freeze dump: a dashboard hardware-config switch from idle either restarted cleanly (NOT "
-                       "REPRODUCED) or froze the app with its thread dumps captured", not changed or captured,
-                       f"{outcome}: {rec.get('trigger')}; pid {rec.get('pidBefore')} -> {rec.get('pidAfter')}; "
-                       f"{len(dumps)} dumps ({len(stalls)} on a stopped RC alive broadcast, then resumed "
-                       f"{resumed_after}), pulled {rec['pulled']}", means)
-        s = ["## Bench: Freeze Dump (slothboard's hardware-config switch, with a thread-dump watch armed)\n",
-             f"- {rec.get('trigger')}: SET_HARDWARE_CONFIG {rec['config']} (slothboard listed {rec.get('listedAsActive')} "
-             f"as active); pid {rec.get('pidBefore')} -> {rec.get('pidAfter')}; old pid gone {rec.get('pidGoneSeconds')} "
-             f"s, new pid {rec.get('newPidSeconds')} s, robot set up in the same process {rec.get('setupInProcessSeconds')} "
-             f"s, ready {rec.get('readySeconds')} s after the switch"
-             + ("; the hub's watchdog never relaunched it, so the runner force-stopped it" if rec.get("forcedRelaunch")
-                else ""),
-             f"- outcome: {rec.get('outcome')}"
-             + ("; with the same pid, any dumps followed by 'resumed' are the clean restart's USB wait, not a freeze"
-                if rec.get("outcome") == "NOT REPRODUCED" else ""),
-             f"- logcat: Control Hub watchdog kill {rec.get('watchdogKilled')}, SDK emergency kill {rec.get('sdkKilled')}; "
-             f"logs/freeze_dump_switch.log has it all",
-             f"- /data/anr before the switch: {rec.get('anrDirBefore')!r}; ART's SIGQUIT dump "
-             + ("was written" if any("Wrote stack traces" in line for line in rec.get("logLines", []))
-                else "couldn't be written" if any("Unable to open stack trace file" in line for line in rec.get("logLines", []))
-                else "left no logcat line")
-             + ", so lock owners come from "
-             + ("raw/freeze/anr_traces.txt" if str(rec.get("traces", "")).startswith("readable")
-                else "the frames only (a thread inside Mutex.with under DashWebSocket.onMessage holds the activeOpMode "
-                     "lock; BLOCKED threads wait on it)"),
-             f"- watch: {len(dumps)} dumps {rec['dumpFiles']} in raw/freeze/; highest RC alive age outside stalls "
-             f"{index.get('maxAliveAgeMsOutsideStalls')} ms; SIGQUIT sent {index.get('sigquitWallMs') is not None}; "
-             f"{FREEZE_TRACES}: {rec.get('traces')}"]
-        for e in events:
-            s.append(f"  - {e.get('type')} {round(e.get('sinceArmMs') or 0)} ms after arming, RC alive age "
-                     f"{round(e.get('aliveAgeMs') or 0)} ms: {e.get('detail', '')}")
-        texts = []
-        for n in rec["pulled"]:
-            if n.endswith(".txt"):
-                texts.append((n, (folder / n).read_text()))
-        if dumps:
-            s.append(f"- suspects in the last dump: {dumps[-1].get('suspects')}")
-        if texts:
-            last_name, last = texts[-1]
-            start = last.find("=== suspects")
-            end = last.find("\n=== snapshot", start)
-            section = last[start:end] if start >= 0 else ""
-            s.append(f"- {last_name}, suspects section:\n\n```\n{section[:6000].rstrip()}\n```")
-            found = {h: any(h in t for _, t in texts) for h in FREEZE_HYPOTHESIS}
-            s.append(f"- the source's prediction (a NanoHTTPD thread in FtcDashboard.attemptRestart holding the "
-                     f"activeOpMode lock while EventLoop blocks in FtcDashboard.onOpModePostStop): {found}; read the "
-                     "dumps to confirm or refute it")
-        s += [f"  - `{line[:220]}`" for line in rec["logLines"][:20]]
+        for run in rec["runs"]:
+            run["outcome"] = self._freeze_outcome(run)
+        for kind in dict.fromkeys(FREEZE_TRIGGERS):
+            planned = FREEZE_TRIGGERS.count(kind)
+            runs = [r for r in rec["runs"] if r["kind"] == kind]
+            detail = "; ".join(self._freeze_detail(r) for r in runs) or f"not sent: {rec.get('notTried', 'no run')}"
+            if 0 < len(runs) < planned:
+                detail += f"; {planned - len(runs)} of {planned} not sent (an earlier run failed)"
+            self.check(f"freeze dump: {FREEZE_MESSAGES[kind]} from idle restarts the robot in the same process "
+                       f"({planned} run{'s' if planned > 1 else ''})",
+                       len(runs) == planned and all(r["outcome"] == "restarted in process" for r in runs), detail,
+                       FREEZE_RESTART_MEANS)
+        s = ["## Bench: Freeze Dump (slothboard's hardware-config changes from idle, with a thread-dump watch armed)\n",
+             f"- {', '.join(FREEZE_TRIGGERS)} on {rec['config']}, each from idle with the watch armed again first. The "
+             "outcome comes from the pid, the robot setup in it, the SDK's "
+             f"'{FREEZE_DEADLINE}' and the Control Hub's '{FREEZE_AP_RELAUNCH}', never from the watch's dumps: every "
+             "robot setup waits 5 s for USB between two RC alive broadcasts, so a clean restart dumps too"]
+        if rec.get("notTried"):
+            s.append(f"- not tested: {rec['notTried']}")
+        first_freeze = None
+        for run in rec["runs"]:
+            index_file = self.out / "raw" / "freeze" / run["id"] / "freeze_watch.json"
+            index = json.loads(index_file.read_text()) if index_file.exists() else {}
+            events = index.get("events") or []
+            dumps = [e for e in events if e.get("type") == "dump"]
+            stalls = [e for e in dumps if str(e.get("detail", "")).startswith(FREEZE_ALIVE_STALL)]
+            s.append(f"- {run['id']}: {run['message']} {run.get('target')} (slothboard listed {run.get('listedAsActive')} "
+                     f"as active): {self._freeze_detail(run, with_id=False)}; {run.get('activeAfter')} active afterwards"
+                     + (f"; {CONFIG_FREEZE_SCRATCH} still on the hub {run.get('scratchLeft')}" if run["kind"] == "delete"
+                        else ""))
+            if not run.get("sent"):
+                continue
+            s.append(f"  - watch: {len(dumps)} dumps ({len(stalls)} on a stopped RC alive broadcast) in "
+                     f"raw/freeze/{run['id']}/; SIGQUIT sent {index.get('sigquitWallMs') is not None}"
+                     + (f"; the watch failed: {index.get('failure')}" if index.get("failure") else ""))
+            traces = run.get("traces") or {}
+            if traces.get("frozenPidDump"):
+                s.append(f"  - ART's SIGQUIT dump of {traces['frozenPidDump']}, from during the change, copied "
+                         f"{traces['when']} ({traces['copiedSecondsAfterChange']} s after the change): lock waits "
+                         f"{traces.get('lockWaits') or 'none'}")
+            elif traces:
+                s.append(f"  - {FREEZE_TRACES} copied {traces['when']} holds no dump of pid {run['pidBefore']} from "
+                         f"after the change (it holds {traces.get('processes')}), so no lock owners: the watch's dumps "
+                         "show frames only")
+            else:
+                s.append(f"  - pid {run['pidBefore']} never logged '{FREEZE_TRACES_WROTE}', so {FREEZE_TRACES} wasn't "
+                         "copied")
+            s += [f"  - `{line[:220]}`" for line in run.get("logLines", [])[:12]]
+            if first_freeze is None and run["outcome"].startswith("FROZE") and dumps:
+                first_freeze = (run, dumps)
+        if first_freeze is not None:
+            run, dumps = first_freeze
+            folder = self.out / "raw" / "freeze" / run["id"]
+            texts = [(n, (folder / n).read_text()) for n in run.get("pulled") or [] if n.endswith(".txt")]
+            s.append(f"- {run['id']}, suspects in the last dump: {dumps[-1].get('suspects')}")
+            if texts:
+                last_name, last = texts[-1]
+                start = last.find("=== suspects")
+                end = last.find("\n=== snapshot", start)
+                section = last[start:end] if start >= 0 else ""
+                s.append(f"- {run['id']}/{last_name}, suspects section:\n\n```\n{section[:6000].rstrip()}\n```")
+                found = {h: any(h in t for _, t in texts) for h in FREEZE_HYPOTHESIS}
+                s.append(f"- the source's prediction (a NanoHTTPD thread in FtcDashboard.attemptRestart holding the "
+                         f"activeOpMode lock while EventLoop blocks in FtcDashboard.onOpModePostStop): {found}")
         s.append("")
         self.summary += s
+
+    def run_config_by_name(self):
+        s = ["## Config by name (shipped configs saved with a resource id this install gives another XML)\n"]
+        shipped = (self.probe or {}).get("shippedConfigs") or {}
+        pair = self.config_by_name_pair(shipped)
+        if not self.switch_with_adb or pair is None:
+            why = ("run-as can't write the app's settings, so the runner can't save a resource id" if not self.switch_with_adb
+                   else "this install ships no two res/xml configs with Control Hub devices alone and different device "
+                        f"names (shipped: {sorted(shipped)})")
+            self.log(f"config by name not tested: {why}")
+            self.summary += s + [f"- not tested: {why}\n"]
+            return
+        (a, a_devices), (b, b_devices) = pair
+        results = {}
+        try:
+            for case, name, accept, battery in (("wrong_id", a, {a}, True),
+                                                ("unshipped", CONFIG_UNSHIPPED, {CONFIG_UNSHIPPED, NO_CONFIG}, False)):
+                entry = {"name": name, "resourceId": shipped[b], "location": "RESOURCE", "isDirty": False}
+                self.activate_config(name, config=entry, accept=accept, battery=battery)
+                boot = self.out / "logs" / self.switches[-1]["log"]
+                boot_text = boot.read_text() if boot.exists() else ""
+                self.run_opmode("Bench: Probe", f"config_by_name_{case}", timeout=60, result_files=["probe"])
+                res = self.pull("probe", local_name=f"probe_config_by_name_{case}")
+                devices = set(res.get("devices") or [])
+                results[case] = {"saved": entry, "devices": sorted(devices),
+                                 "loaded": self.loaded_xml(devices, a, a_devices, b, b_devices),
+                                 "settingAtProbe": res.get("activeConfig"),
+                                 "setupLog": [line.strip()[:220] for line in boot_text.splitlines()
+                                              if CONFIG_RENUMBERED in line or CONFIG_FELL_BACK in line][:4]}
+        finally:
+            if self.dash.fatal is None and self.active_config() != CONFIG_MAIN:
+                self.activate_config(CONFIG_MAIN, self.main_config())
+        self.results["config_by_name"] = dict(results, configs={a: sorted(a_devices), b: sorted(b_devices)})
+        wrong, unshipped = results["wrong_id"], results["unshipped"]
+        self.check(f"config by name: {a} saved with {b}'s resource id loads res/xml/{a}", wrong["loaded"] == a,
+                   f"saved {wrong['saved']}; loaded {wrong['loaded']} (devices {wrong['devices']}); the app's setting "
+                   f"at the probe {wrong['settingAtProbe']}; setup logged {wrong['setupLog'] or 'nothing about it'}",
+                   CONFIG_BY_NAME_HELD)
+        self.check(f"config by name: a name this build doesn't ship ({CONFIG_UNSHIPPED}) loads no config",
+                   unshipped["loaded"] == "no config",
+                   f"saved {unshipped['saved']}; loaded {unshipped['loaded']} (devices {unshipped['devices']}); the "
+                   f"app's setting at the probe {unshipped['settingAtProbe']}; setup logged "
+                   f"{unshipped['setupLog'] or 'nothing about it'}", CONFIG_BY_NAME_HELD)
+        s += [f"- res/xml/{a} has {sorted(a_devices)}, res/xml/{b} has {sorted(b_devices)}; this install numbers them "
+              f"{shipped[a]:#010x} and {shipped[b]:#010x}",
+              f"- {a} saved as {shipped[b]:#010x}: loaded {wrong['loaded']}",
+              f"- {CONFIG_UNSHIPPED} saved as {shipped[b]:#010x}: loaded {unshipped['loaded']}",
+              "- Each case writes the app's setting over adb and restarts it, then Bench: Probe lists the hardware map; "
+              f"the runner switches back to {CONFIG_MAIN} afterwards\n"]
+        self.summary += s
+
+    @staticmethod
+    def config_by_name_pair(shipped):
+        candidates = sorted((len(d), n, d) for n, d in ((n, shipped_hub_devices(n)) for n in shipped) if d)
+        for i, (_, a, a_devices) in enumerate(candidates):
+            for _, b, b_devices in candidates[i + 1:]:
+                if a_devices - b_devices and b_devices - a_devices and shipped[a] != shipped[b]:
+                    return (a, a_devices), (b, b_devices)
+        return None
+
+    @staticmethod
+    def loaded_xml(devices, a, a_devices, b, b_devices):
+        only_a, only_b = a_devices - b_devices, b_devices - a_devices
+        if only_a <= devices and not only_b & devices:
+            return a
+        if only_b <= devices and not only_a & devices:
+            return b
+        if not (a_devices | b_devices) & devices:
+            return "no config"
+        return f"neither {a} nor {b} cleanly"
 
     def run_clock(self):
         before = self.adb.clock()
@@ -4352,11 +4699,29 @@ class Runner:
                             result_files=["pinpoint_absent"], timeout_ok=True)
         res = self.pull("pinpoint_absent", required=False) or {}
         ph = res.get("phases", {})
+        seed, samples = dig(ph, "update", "setPose"), dig(ph, "update", "poseSamples") or []
+        faults = [f for f in dig(ph, "update", "faults") or [] if "pinpoint" in f.lower()]
+        error = o.get("errorMessage") or ""
+
+        def kept(pose):
+            turn = abs((pose[2] - seed[2] + math.pi) % (2 * math.pi) - math.pi)
+            return (math.hypot(pose[0] - seed[0], pose[1] - seed[1]) <= PINPOINT_ABSENT_POSE_IN
+                    and math.degrees(turn) <= PINPOINT_ABSENT_TURN_DEG)
+
+        held = bool(seed) and bool(samples) and all(kept(p) for p in samples)
+        named = "pinpoint" in error.lower()
+        self.check("pinpoint absent: a missing Pinpoint is reported as a fault or keeps the pose setPose set",
+                   held or bool(faults) or named,
+                   f"setPose {seed}; poses every 50 updates {dig(ph, 'update', 'posesEvery50')}; Pinpoint faults "
+                   f"{faults or 'none'} (all faults {dig(ph, 'update', 'faults')}); crashed {o['crashed']}: {error!r}",
+                   PINPOINT_ABSENT_MEANS if samples else "Bench: Pinpoint Absent recorded no pose (see the error), so "
+                   "this wasn't judged")
         self.summary += ["## Pinpoint absent (can the real autos run on a bare hub?)\n",
-                         f"- crashed: {o['crashed']} {o.get('errorMessage') or ''}",
+                         f"- crashed: {o['crashed']} {error}",
                          f"- create: {ph.get('create')}",
-                         f"- update: {fmt(dig(ph, 'update', 'updateMs'))}; threw {dig(ph, 'update', 'threw')}; poses "
-                         f"{dig(ph, 'update', 'posesEvery50')}\n"]
+                         f"- update: {fmt(dig(ph, 'update', 'updateMs'))}; threw {dig(ph, 'update', 'threw')}; after "
+                         f"setPose {seed}, poses {dig(ph, 'update', 'posesEvery50')}; faults after the updates "
+                         f"{dig(ph, 'update', 'faults')}\n"]
 
     def run_octoquad(self):
         expansion = (self.expansion, []) if self.expansion is not None else None
@@ -4522,7 +4887,8 @@ class Runner:
                        f"{dashboard}; not first: {watch.fault_not_first}", OCTOQUAD_ABSENT_NO_FAULT)
         self.check("octoquad absent: START stops the OpMode with an error naming the OctoQuad",
                    o["crashed"] and after_start is not None and OCTOQUAD_GUARD_PREFIX in err.lower(),
-                   f"crashed {o['crashed']}, {after_start} s after START: {err!r}", OCTOQUAD_ABSENT_STARTED)
+                   f"crashed {o['crashed']}, seen by the runner {after_start} s after it sent START (its crash "
+                   f"detection lag included): {err!r}", OCTOQUAD_ABSENT_STARTED)
         self.summary += [
             "## Bench: OctoQuad Absent (GuardedOctoQuadLocalizer with nothing on the bus)\n",
             f"- config line on the Control Hub: `{octoquad_tag(OCTOQUAD_ABSENT_BUS)}`; chip id read there "
@@ -4530,7 +4896,8 @@ class Runner:
             f"- localizer built in {create_ms} ms; fault after {fault_ms} ms ({res.get('initLoopsBeforeFault')} INIT "
             f"loops): {fault_message!r}; INIT loop with the fault up {fmt(faulted)}",
             f"- {dashboard}",
-            f"- START after {OCTOQUAD_ABSENT_HOLD_S} s in INIT: crashed {o['crashed']}, {after_start} s after START: "
+            f"- START after {OCTOQUAD_ABSENT_HOLD_S} s in INIT: crashed {o['crashed']}, seen by the runner {after_start} "
+            f"s after it sent START: "
             f"{err!r}\n"]
 
     def run_expansion(self):
@@ -4873,13 +5240,22 @@ class Runner:
     def restore_target(self):
         """(name, settings entry or None, config XML to write or None, whether the entry is the original verbatim)."""
         if self.original and not self.original_shipped:
-            return self.original, None, None, False
+            return self.original, None, self.original_xml if self.original in BENCH_CONFIGS else None, False
         shipped = self.original_shipped and self.shipped_config()
         if shipped:
+            if shipped["resourceId"] != self.original_entry.get("resourceId"):
+                self.note_restore(
+                    f"{self.original} was saved as resource {self.original_entry.get('resourceId')}, which this install "
+                    f"numbers {shipped['resourceId']}: re-activated by name, which fixes this hub only (see the "
+                    "config-by-name checks)")
             return self.original, shipped, None, False
         if self.switch_with_adb:
             return self.original_entry.get("name", NO_CONFIG), dict(self.original_entry, isDirty=False), None, True
         return CONFIG_PROBE, None, hub_config([]), False
+
+    def note_restore(self, text):
+        if text not in self.restore_notes:
+            self.restore_notes.append(text)
 
     def restore_config(self):
         if not self.configs_touched:
@@ -4892,10 +5268,14 @@ class Runner:
         if verbatim and target != NO_CONFIG:
             self.log(f"writing back the original setting {entry}; if this build can't load {target}, the hub shows no "
                      "config until REINSTALL.sh puts the old app back")
+        if xml is not None:
+            self.log(f"writing back {target}.xml as it was before the run (original_config.xml): the run wrote its own "
+                     "bench config under that name")
+            self.note_restore(f"{target}.xml written back with its contents from before the run")
         try:
             self.dash.recover_for_restore()
             self.settle()
-            if self.active_config() not in accept or entry is not None:
+            if self.active_config() not in accept or entry is not None or xml is not None:
                 self.activate_config(target, xml, entry, accept=accept)
             if not self.args.keep_configs and self.remove_bench_configs(keep=target):
                 # slothboard lists configs from memory and re-reads the folder on a restart.
@@ -4912,8 +5292,7 @@ class Runner:
     def restore_over_adb(self, target, entry, xml):
         hub_t0 = self.adb.hub_time()
         if xml is not None:
-            (self.out / "logs" / f"{target}.xml").write_text(xml)
-            self.adb.run("push", str(self.out / "logs" / f"{target}.xml"), f"{CONFIG_DIR}/{target}.xml")
+            self.adb.run("push", str(self.config_copy(target, xml)), f"{CONFIG_DIR}/{target}.xml")
         self.adb.stage_active_config(target, self.out / "logs" / "rc_prefs.xml", entry)
         self.adb.switch_app()
         t0 = time.monotonic()
@@ -4969,11 +5348,17 @@ class Runner:
         if self.switches:
             killed = sum(w["appKilled"] for w in self.switches)
             over_adb = sum(w["overAdb"] for w in self.switches)
-            lines.append(f"Config switches: {len(self.switches)} ("
+            lines.append(f"Config switches the runner made between steps: {len(self.switches)} ("
                          + ("all over adb" if over_adb == len(self.switches) else f"{over_adb} over adb, the rest through the dashboard")
                          + "); "
-                         f"{killed} froze the app until the SDK or the Control Hub's watchdog killed it; per-switch "
-                         f"logcat in logs/config_*.\n")
+                         f"{killed} of them froze the app until the SDK or the Control Hub's watchdog killed it; "
+                         f"per-switch logcat in logs/config_*.\n")
+        freeze_runs = [r for r in (self.results.get("freeze_dump_switch") or {}).get("runs", []) if r.get("sent")]
+        if freeze_runs:
+            froze = sum(1 for r in freeze_runs if str(r.get("outcome", "")).startswith("FROZE"))
+            lines.append(f"Bench: Freeze Dump's own dashboard config changes, sent on purpose and not counted above: "
+                         f"{len(freeze_runs)}; {froze} froze the app until it was killed and relaunched (its section has "
+                         f"each one).\n")
         killed_steps = [r["step"] for r in self.results.values() if isinstance(r, dict) and r.get("appKilled")]
         if killed_steps:
             lines.append(f"**The app froze and was killed during: {', '.join(killed_steps)}**\n")
@@ -4986,8 +5371,10 @@ class Runner:
             lines.append(f"**Dashboard telemetry lost; those steps' results come from logcat and the result file: "
                          f"{'; '.join(lost)}**\n")
         if self.dash is not None:
-            lines.append(f"slothboard pushed {len(self.dash.opmode_log)} OpModeManager log lines to the runner "
-                         f"(its crash signal).\n")
+            distinct = len({(e.get("timestamp"), str(e.get("message", ""))) for e in self.dash.opmode_log})
+            lines.append(f"slothboard pushed {distinct} distinct OpModeManager log lines to the runner (its crash "
+                         f"signal), {len(self.dash.opmode_log)} counting the old lines its logcat monitor sends "
+                         f"again each time it restarts.\n")
         if self.checks:
             lines.append("## Checks\n")
             lines += [f"- {state} {name}: {detail}" + (f" (FAIL means: {means})" if state == "FAIL" and means else "")
@@ -5166,8 +5553,8 @@ def parse_args(argv):
     p.add_argument("--turret", action="store_true",
                    help="Bench: Turret PWM (BettaTurret's servo PWM through stop() and the write toggle; its own config)")
     p.add_argument("--freeze-dump", action="store_true",
-                   help="Bench: Freeze Dump (thread dumps while slothboard's hardware-config switch freezes the app; "
-                        "gets the app killed, so it runs last)")
+                   help="Bench: Freeze Dump (slothboard's SET (3x), WRITE and DELETE_HARDWARE_CONFIG from idle, a "
+                        "thread-dump watch armed; on slothboard 6165.6 each gets the app killed, so it runs last)")
     p.add_argument("--gamepad", action="store_true",
                    help="Bench: Gamepad and Bench: Gamepad Linear (dashboard gamepads sent over the websocket)")
     p.add_argument("--write-recovery", action="store_true",
@@ -5180,6 +5567,9 @@ def parse_args(argv):
                    help="Bench: Planner Stop (STOP pressed while the route planner replans on the OpMode thread)")
     p.add_argument("--overlay-nan", action="store_true",
                    help="Bench: Overlay NaN (restarts the app afterwards)")
+    p.add_argument("--config-by-name", action="store_true",
+                   help="which XML the app loads for a shipped config saved with another config's resource id, and for "
+                        "a name the build doesn't ship (three config switches)")
     p.add_argument("--webcam", action="store_true", help="Bench: Webcam and the Webcam Stop runs (needs a UVC webcam)")
     p.add_argument("--webcam-failure", action="store_true",
                    help="Bench: Webcam Thread Failure (a pipeline that throws on the camera thread; needs a UVC webcam)")

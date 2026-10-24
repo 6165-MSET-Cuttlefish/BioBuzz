@@ -5,6 +5,7 @@ import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
+import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 import java.util.ArrayList;
@@ -40,13 +41,20 @@ public class PinpointAbsentBench extends LinearOpMode {
         Map<String, Object> update = new LinkedHashMap<>();
         Samples ms = new Samples();
         List<String> poses = new ArrayList<>();
+        List<double[]> poseSamples = new ArrayList<>();
+        Pose seed = new Pose(56, 8, Math.PI / 2);
+        update.put("setPose", new double[] {seed.x(), seed.y(), seed.heading()});
         try {
-            follower.setPose(new Pose(56, 8, Math.PI / 2));
+            follower.setPose(seed);
             for (int i = 0; i < 200 && opModeIsActive(); i++) {
                 long u0 = System.nanoTime();
                 follower.update();
                 ms.addNanos(System.nanoTime() - u0);
-                if (i % 50 == 0) poses.add(follower.pose().toString());
+                if (i % 50 == 0) {
+                    Pose pose = follower.pose();
+                    poses.add(pose.toString());
+                    poseSamples.add(new double[] {pose.x(), pose.y(), pose.heading()});
+                }
                 report.sendIfDue();
             }
             update.put("threw", null);
@@ -56,6 +64,10 @@ public class PinpointAbsentBench extends LinearOpMode {
         } finally {
             update.put("updateMs", ms.summary());
             update.put("posesEvery50", poses);
+            update.put("poseSamples", poseSamples);
+            List<String> faults = new ArrayList<>();
+            for (Faults.Fault f : Faults.active()) faults.add(f.toString());
+            update.put("faults", faults);
             report.endPhase("update", update);
             follower.stop();
             follower.drivetrain.stop();
