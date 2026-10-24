@@ -29,7 +29,6 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     @Config("Ball Collection")
     public static class Tuning {
-        public static int ballCount = 4;
         public static Ball ball1 = new Ball(24, 0, 1.4);
         public static Ball ball2 = new Ball(36, 18, 1.4);
         public static Ball ball3 = new Ball(48, -18, 1.4);
@@ -51,10 +50,16 @@ public class BallCollectionTest extends EnhancedOpMode {
         public static int run = 0;
     }
 
-    private static final int MAX_BALLS = 4;
     private static final double MOVED_IN = 1;
 
     private List<Double> plannedConfig;
+    private Pose requestedStart;
+    private Region requestedArea;
+    private RobotShape requestedShape;
+    private Ball[] requestedBalls;
+    private List<Obstacle> requestedObstacles;
+    private RouteOptimizer.Search search;
+    private long searchStartNs;
     private Pose startPose;
     private Region area;
     private RobotShape shape;
@@ -84,6 +89,7 @@ public class BallCollectionTest extends EnhancedOpMode {
     @Override
     protected void initializeLoop() {
         if (configChanged()) planFromConfiguredStart();
+        stepSearch();
     }
 
     @Override
@@ -105,16 +111,22 @@ public class BallCollectionTest extends EnhancedOpMode {
             // From the tracked pose: re-seeding the configured start after START would hide any move since INIT.
             if (configChanged()) planFrom(robot.follower.pose());
         } else if (!replannedAfterRun || configChanged()
-                || robot.follower.pose().distance(startPose) > MOVED_IN) {
+                || robot.follower.pose().distance(requestedStart) > MOVED_IN) {
             replannedAfterRun = true;
             planFrom(robot.follower.pose());
         }
+        stepSearch();
 
         if (runHigh && !prevRun) startRoute();
         prevRun = runHigh;
     }
 
     private void startRoute() {
+        // Run drives a plan for the current config and pose, never the older one still on screen.
+        if (search != null) {
+            refused = "still planning: set run to 0, then 1 once the plan is shown";
+            return;
+        }
         if (plan == null) {
             refused = "no plan: " + noPlanReason;
             return;
@@ -144,36 +156,46 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     private void planFrom(Pose start) {
         plannedConfig = config();
-        startPose = start;
-        area = BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn);
-        shape = RobotGeometry.shape();
+        requestedStart = start;
+        requestedArea = BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn);
+        requestedShape = RobotGeometry.shape();
         // Copies, so a dashboard edit mid-route can't move what the running plan was built around.
         Ball[] slots = {Tuning.ball1, Tuning.ball2, Tuning.ball3, Tuning.ball4};
-        balls = new Ball[ballCount()];
-        for (int i = 0; i < balls.length; i++) {
+        requestedBalls = new Ball[slots.length];
+        for (int i = 0; i < slots.length; i++) {
             Pose p = BallCollection.configuredPose(Tuning.onField, slots[i].x, slots[i].y, 0);
-            balls[i] = new Ball(p.x(), p.y(), slots[i].radius);
+            requestedBalls[i] = new Ball(p.x(), p.y(), slots[i].radius);
         }
-        obstacles = BallCollection.obstacles(Tuning.onField);
+        requestedObstacles = BallCollection.obstacles(Tuning.onField);
 
-        route = null;
-        plan = null;
-        intakeDrawing = null;
-        returnDrawing = null;
-        String problem = RouteOptimizer.poseProblem(start, shape, area, obstacles, Tuning.railGapIn);
+        search = null;
+        String problem = RouteOptimizer.poseProblem(start, requestedShape, requestedArea, requestedObstacles,
+                Tuning.railGapIn);
         if (problem != null) {
+            show(null, null);
             noPlanReason = "the robot at " + problem;
             return;
         }
-        route = RouteOptimizer.findOptimalRoute(start, balls, start, area, obstacles, shape, Tuning.railGapIn,
-                Tuning.forceSplineOnly);
-        plan = RoutePathBuilder.build(route);
-        intakeDrawing = plan.intake == null ? null : FieldVisualization.pathPolyline(plan.intake);
-        returnDrawing = plan.back == null ? null : FieldVisualization.pathPolyline(plan.back);
+        search = RouteOptimizer.search(start, requestedBalls, start, requestedArea, requestedObstacles, requestedShape,
+                Tuning.railGapIn, Tuning.forceSplineOnly);
+        searchStartNs = System.nanoTime();
     }
 
-    private static int ballCount() {
-        return Math.max(0, Math.min(MAX_BALLS, Tuning.ballCount));
+    private void stepSearch() {
+        if (search != null && search.step()) show(search.route(), search.plan());
+    }
+
+    private void show(RouteOptimizer.Route route, RoutePathBuilder.Plan plan) {
+        search = null;
+        startPose = requestedStart;
+        area = requestedArea;
+        shape = requestedShape;
+        balls = requestedBalls;
+        obstacles = requestedObstacles;
+        this.route = route;
+        this.plan = plan;
+        intakeDrawing = plan == null || plan.intake == null ? null : FieldVisualization.pathPolyline(plan.intake);
+        returnDrawing = plan == null || plan.back == null ? null : FieldVisualization.pathPolyline(plan.back);
     }
 
     private boolean configChanged() {
@@ -182,7 +204,6 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     private static List<Double> config() {
         List<Double> c = new ArrayList<>();
-        c.add((double) ballCount());
         c.add(Tuning.onField ? 1.0 : 0.0);
         for (Ball b : new Ball[]{Tuning.ball1, Tuning.ball2, Tuning.ball3, Tuning.ball4}) {
             c.add(b.x);
@@ -196,13 +217,14 @@ public class BallCollectionTest extends EnhancedOpMode {
 
     @Override
     protected void telemetry() {
-        String state = routeRun != null ? CollectionDisplay.runState(routeRun)
+        String state = search != null ? "PLANNING" : routeRun != null ? CollectionDisplay.runState(routeRun)
                 : plan == null ? "IDLE (no plan)" : "IDLE (set run=1 to drive)";
         telemetry.addData("State", state);
         if (!refused.isEmpty()) telemetry.addData("Run refused", refused);
         if (area != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, area);
+        if (search != null) telemetry.addData("Planning", "%.0f ms so far", (System.nanoTime() - searchStartNs) / 1e6);
         if (route == null) {
-            telemetry.addData("Plan", "none: " + noPlanReason);
+            telemetry.addData("Plan", "none: " + (search != null ? "still planning" : noPlanReason));
             return;
         }
 

@@ -50,6 +50,7 @@ Pedro Pathing 3:
 
 - The planner doesn't map alliances: pass mapped coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles.
 - Plan with `RouteOptimizer.search(...)`, then one `Search.step()` per loop until it returns true, never a whole search in one loop: a 4-ball search takes seconds on a hub, and STOP waits for the running loop (past 900 ms the SDK restarts the app). A step runs `VisibilityGraphPlanner.routeSearchSliceMs` plus at most one `shape()`. A changed request is a new Search.
+- Collections plan 4 balls (`BallCollection.BALLS`; Ball Collection plans its four slots): the order search is n!, and 5 balls take up to 15 s on a hub.
 - Drive a plan only with `RouteRun`: `Plan.intake`/`Plan.back` are for drawing. They join the drives without the plan's turns in place, and Pedro moves to a compound path's next piece as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting reversals.
 
 **Faults** (`core/Faults`) show only in an `EnhancedOpMode`; a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
@@ -107,6 +108,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 ## Testing
 
 - **Ball Collection**, **Vision Ball Collection** and **Ball Collection Auto** default to `onField` off, which plans with no walls or HIVE rails: run them off the field. With it on (`collection.onField` in the auto), enter RED coordinates; routes keep to this alliance's half.
+- While a newer plan is being made, Vision Ball Collection keeps the last one on screen and `run` drives it unless the settings changed since; ball changes wait for the running plan to finish. Ball Collection refuses `run` until the new one is shown.
 - **Close Flower Auto**: the `toHive` leg puts part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
 - **Turret Aim Test**: calibrate `Turret.Tuning`'s `leftPosition`/`backPosition`/`rightPosition` first (dpad LEFT/BACK/RIGHT), each turret facing exactly robot-left, back and right, since AUTOAIM interpolates between them; set the start pose before INIT.

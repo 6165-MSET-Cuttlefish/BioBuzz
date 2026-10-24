@@ -33,8 +33,6 @@ public final class BallCollection extends CommandBuilder {
         public boolean collectPollen = true;
         public boolean collectRedNectar = true;
         public boolean collectBlueNectar = true;
-        /** The nearest this many usable balls are planned; the order search is n!, so at most {@link RouteOptimizer#MAX_BALLS}. */
-        public int maxBalls = 3;
         public double maxRangeIn = 60;
         /** Least room between the robot's footprint and the walls or the centre line. */
         public double wallGapIn = 1;
@@ -53,7 +51,6 @@ public final class BallCollection extends CommandBuilder {
             s.collectPollen = collectPollen;
             s.collectRedNectar = collectRedNectar;
             s.collectBlueNectar = collectBlueNectar;
-            s.maxBalls = maxBalls;
             s.maxRangeIn = maxRangeIn;
             s.wallGapIn = wallGapIn;
             s.railGapIn = railGapIn;
@@ -66,10 +63,6 @@ public final class BallCollection extends CommandBuilder {
         }
 
         void validate() {
-            if (maxBalls < 0 || maxBalls > RouteOptimizer.MAX_BALLS) {
-                throw new IllegalArgumentException(String.format(
-                        "maxBalls %d: must be 0 to %d", maxBalls, RouteOptimizer.MAX_BALLS));
-            }
             if (!(wallGapIn >= 0) || !(railGapIn >= 0)) {
                 throw new IllegalArgumentException(String.format(
                         "wallGapIn (%.1f) and railGapIn (%.1f) must be >= 0", wallGapIn, railGapIn));
@@ -90,8 +83,10 @@ public final class BallCollection extends CommandBuilder {
         }
     }
 
-    public enum Status { NOT_STARTED, WAITING_FOR_VISION, DRIVING, DONE, ABORTED, SKIPPED }
+    public enum Status { NOT_STARTED, WAITING_FOR_VISION, PLANNING, DRIVING, DONE, ABORTED, SKIPPED }
 
+    /** How many of the nearest usable balls a collection plans. */
+    public static final int BALLS = 4;
     public static final double OFF_FIELD_REACH_IN = 144;
 
     public static Region keepIn(boolean onField, double wallGapIn) {
@@ -137,6 +132,7 @@ public final class BallCollection extends CommandBuilder {
     private final List<FieldBall> planned = new ArrayList<>();
     private final List<Skipped> skipped = new ArrayList<>();
     private Ball[] balls = new Ball[0];
+    private RouteOptimizer.Search search;
     private RouteOptimizer.Route route;
     private RoutePathBuilder.Plan plan;
     private RouteRun run;
@@ -168,6 +164,7 @@ public final class BallCollection extends CommandBuilder {
         planned.clear();
         skipped.clear();
         balls = new Ball[0];
+        search = null;
         route = null;
         plan = null;
         run = null;
@@ -187,7 +184,7 @@ public final class BallCollection extends CommandBuilder {
             // A pose set in onStart() is in Camera's pose history only from this loop on; earlier frames may be placed with the old pose.
             if (Double.isNaN(visionFromSeconds)) visionFromSeconds = nowSeconds();
             if (freshFrame()) {
-                planAndDrive();
+                requestPlan();
             } else if ((nowSeconds() - startedSeconds) * 1000 > used.visionWaitMs) {
                 String limelight = camera.limelightProblem();
                 status = Status.SKIPPED;
@@ -196,9 +193,12 @@ public final class BallCollection extends CommandBuilder {
                                 : camera.isSyncing() ? " (the ball pipeline was still going onto the Limelight; START later)"
                                 : camera.isFrameStale() ? " (vision is stale)" : "");
             }
+        }
+        if (status == Status.PLANNING) {
+            if (search.step()) drive();
             return;
         }
-        if (runCommand != null && !runCommand.done()) runCommand.execute();
+        if (status == Status.DRIVING && !runCommand.done()) runCommand.execute();
     }
 
     private boolean freshFrame() {
@@ -207,7 +207,7 @@ public final class BallCollection extends CommandBuilder {
         return captureSeconds >= visionFromSeconds;
     }
 
-    private void planAndDrive() {
+    private void requestPlan() {
         Pose start = follower.pose();
         String problem = RouteOptimizer.poseProblem(start, robot, area, obstacles, used.railGapIn);
         if (problem != null) {
@@ -221,8 +221,13 @@ public final class BallCollection extends CommandBuilder {
             FieldBall b = planned.get(i);
             balls[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
         }
-        route = RouteOptimizer.findOptimalRoute(start, balls, start, area, obstacles, robot, used.railGapIn, false);
-        plan = RoutePathBuilder.build(route);
+        search = RouteOptimizer.search(start, balls, start, area, obstacles, robot, used.railGapIn, false);
+        status = Status.PLANNING;
+    }
+
+    private void drive() {
+        route = search.route();
+        plan = search.plan();
         run = new RouteRun(follower, plan, used.timeoutMinAvgSpeedIps, used.timeoutMinSec, used.timeoutMaxSec);
         runCommand = run.command();
         status = Status.DRIVING;
@@ -241,7 +246,7 @@ public final class BallCollection extends CommandBuilder {
             } else if (ball.distanceTo(from.x(), from.y()) > used.maxRangeIn) {
                 skipped.add(new Skipped(ball, String.format("beyond %.0f in", used.maxRangeIn)));
             } else {
-                // The planner would drop it anyway, but only after it had taken one of the nearest maxBalls places.
+                // The planner would drop it anyway, but only after it had taken one of the nearest BALLS places.
                 String unreachable = RouteOptimizer.ballProblem(ball.x, ball.y, robot, area, obstacles, used.railGapIn);
                 if (unreachable == null) usable.add(ball);
                 else skipped.add(new Skipped(ball, unreachable));
@@ -249,8 +254,8 @@ public final class BallCollection extends CommandBuilder {
         }
         Collections.sort(usable, Comparator.comparingDouble(ball -> ball.distanceTo(from.x(), from.y())));
         for (int i = 0; i < usable.size(); i++) {
-            if (i < used.maxBalls) planned.add(usable.get(i));
-            else skipped.add(new Skipped(usable.get(i), "past the nearest " + used.maxBalls));
+            if (i < BALLS) planned.add(usable.get(i));
+            else skipped.add(new Skipped(usable.get(i), "past the nearest " + BALLS));
         }
     }
 
@@ -279,6 +284,9 @@ public final class BallCollection extends CommandBuilder {
         } else if (status == Status.WAITING_FOR_VISION) {
             status = Status.ABORTED;
             detail = "interrupted while waiting for vision";
+        } else if (status == Status.PLANNING) {
+            status = Status.ABORTED;
+            detail = "interrupted while planning";
         }
         if (restoreWrites) {
             // Pedro drove these motors through its own objects, so resync Drivetrain's write cache at zero.
