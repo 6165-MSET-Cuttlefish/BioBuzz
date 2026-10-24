@@ -107,6 +107,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **Ball Collection**, **Vision Ball Collection** and **Ball Collection Auto** default to `onField` off, which plans with no walls or HIVE rails: run them off the field. With it on (`collection.onField` in the auto), enter RED coordinates; routes keep to this alliance's half.
 - **Close Flower Auto**: the `toHive` leg puts part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
+- **Turret Aim Test**: calibrate `Turret.Tuning`'s `leftPosition`/`backPosition`/`rightPosition` first (dpad LEFT/BACK/RIGHT), each turret facing exactly robot-left, back and right, since AUTOAIM interpolates between them; set the start pose before INIT.
 - **Ivy Path Test** loops a curve to 4 ft ahead and 4 ft left of wherever the robot stands, and back: run it off the field with about 5.5 ft clear ahead and to the left.
 - **OctoQuad**: use the SDK's own driver (type `OctoQuadFTC`); don't add DigitalChickenLabs' `OctoQuadFWv3`.
 - **Laser rangefinders** (Brushland): switch one to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, then set every reader's `maxRangeMm` to its `analogHighMm` (readers assume `analogLowMm` 0) or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta).
