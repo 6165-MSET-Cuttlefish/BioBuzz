@@ -16,7 +16,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 ## Build & deploy
 
 - **TeamCode** (Run button, full install): on a fresh hub and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`).
-- **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; about 5 s) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
+- **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; it can take 5 s, so without one wait 6) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
 - The hub's clock reads about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth.
 - Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK); after an AGP or Gradle bump, also `:TeamCode:assembleSloth`, which hooks AGP's dex task by name.
 
@@ -24,6 +24,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
+- slothboard 6165.6 freezes the app for 10 s on a dashboard hardware-config switch, save or delete at idle, then it's killed and relaunched, ready about 53 s after the switch. Switch configs from the Driver Station until a build pins 6165.7.
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
