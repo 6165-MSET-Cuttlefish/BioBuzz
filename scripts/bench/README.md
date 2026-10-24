@@ -177,7 +177,7 @@ bench folder. It measures how often each analog value refreshes and what a polle
   without BENCH DONE, or from adb logcat while waiting for INIT. `errorMessage` is the status's, else that line;
   `statusErrorMessage` is exactly the dashboard's Error line. The SDK logs that line about 0.45 s after the throw, so
   the runner's crash and Error-line times count from its own detection; Failure Path reports the hub's throw-to-line
-  time from logcat separately. slothboard 6165.6's logcat monitor sends its whole buffer again whenever it restarts,
+  time from logcat separately. slothboard's logcat monitor sends its whole buffer again whenever it restarts,
   so `summary.md` counts its lines by (timestamp, message); the crash watch ignores lines from before the step.
 - An app restart takes about 40 s, during which slothboard's status names no OpMode and a request can close the socket:
   the runner re-sends and waits for idle wherever it stops, starts or recovers a step, and `summary.md` lists them.

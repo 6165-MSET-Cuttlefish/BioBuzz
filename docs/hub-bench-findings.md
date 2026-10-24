@@ -68,7 +68,7 @@ Times are p50 / p95 / max in ms unless noted. Not run on either day (they need `
     and 61–319 ms later in the run.
   - A raw `WebcamSession.close()` made 200 ms after opening took 685 ms (2026-10-09).
   - So webcam teardown can use most of the window.
-- **A dashboard hardware-config change at idle freezes the app** (slothboard 6165.6, which this build pins).
+- **A dashboard hardware-config change at idle freezes the app** (slothboard 6165.6; this build pins 6165.7).
   - `SET_HARDWARE_CONFIG` from the dashboard with no OpMode running froze the Robot Controller app for 10 s, then the
     app was killed and relaunched, ready 53 s after the switch (2026-10-24). `WRITE_HARDWARE_CONFIG` and
     `DELETE_HARDWARE_CONFIG` ended the same way, the app gone about 10 s after the command, on the 2026-10-01 and

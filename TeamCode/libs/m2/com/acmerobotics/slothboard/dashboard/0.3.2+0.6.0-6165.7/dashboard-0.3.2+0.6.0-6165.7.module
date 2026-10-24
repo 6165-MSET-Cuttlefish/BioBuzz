@@ -3,7 +3,7 @@
   "component": {
     "group": "com.acmerobotics.slothboard",
     "module": "dashboard",
-    "version": "0.3.2+0.6.0-6165.6",
+    "version": "0.3.2+0.6.0-6165.7",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -27,7 +27,7 @@
           "group": "com.acmerobotics.slothboard",
           "module": "core",
           "version": {
-            "requires": "0.3.2+0.6.0-6165.6"
+            "requires": "0.3.2+0.6.0-6165.7"
           },
           "excludes": [
             {
@@ -46,13 +46,13 @@
       ],
       "files": [
         {
-          "name": "dashboard-0.3.2+0.6.0-6165.6.aar",
-          "url": "dashboard-0.3.2+0.6.0-6165.6.aar",
-          "size": 492633,
-          "sha512": "30b5a85a7d9784a8b02326d4dece74ddb75d54bc5e31088a1c2731a4e467a06b45a67ffea4062e1228d3d4cfb3301e891a50fcab8f1b9ec572fcb02c9cba530d",
-          "sha256": "87fc784cc6795a1ebfb3e0c243bb21a9e0a710a541bfbd7ae2e9bdb00ccc195e",
-          "sha1": "171b869d4f8e933eb6af60b7fa5f69beaafd66a7",
-          "md5": "ab784d22464c9cec61895624435988db"
+          "name": "dashboard-0.3.2+0.6.0-6165.7.aar",
+          "url": "dashboard-0.3.2+0.6.0-6165.7.aar",
+          "size": 492680,
+          "sha512": "c26be78c63ee97b1969edd9471fddb9a14c57ae67df7de43186651ff54f49e35fd534c451485bf51e1ecf691f777cceb8a0ad5a72c6ec2c60c3b0b3906d73d5b",
+          "sha256": "7109f47cd5b27c898e5ec78d274058f780d85dfe863b3d987c27884c3930a09b",
+          "sha1": "bf21666c5c1189d6caed6f92f00c62009c1fad0b",
+          "md5": "c8b351a0bbe24bd1d3fe0fd3985e5b2a"
         }
       ]
     },
@@ -90,7 +90,7 @@
           "group": "com.acmerobotics.slothboard",
           "module": "core",
           "version": {
-            "requires": "0.3.2+0.6.0-6165.6"
+            "requires": "0.3.2+0.6.0-6165.7"
           },
           "excludes": [
             {
@@ -109,13 +109,13 @@
       ],
       "files": [
         {
-          "name": "dashboard-0.3.2+0.6.0-6165.6.aar",
-          "url": "dashboard-0.3.2+0.6.0-6165.6.aar",
-          "size": 492633,
-          "sha512": "30b5a85a7d9784a8b02326d4dece74ddb75d54bc5e31088a1c2731a4e467a06b45a67ffea4062e1228d3d4cfb3301e891a50fcab8f1b9ec572fcb02c9cba530d",
-          "sha256": "87fc784cc6795a1ebfb3e0c243bb21a9e0a710a541bfbd7ae2e9bdb00ccc195e",
-          "sha1": "171b869d4f8e933eb6af60b7fa5f69beaafd66a7",
-          "md5": "ab784d22464c9cec61895624435988db"
+          "name": "dashboard-0.3.2+0.6.0-6165.7.aar",
+          "url": "dashboard-0.3.2+0.6.0-6165.7.aar",
+          "size": 492680,
+          "sha512": "c26be78c63ee97b1969edd9471fddb9a14c57ae67df7de43186651ff54f49e35fd534c451485bf51e1ecf691f777cceb8a0ad5a72c6ec2c60c3b0b3906d73d5b",
+          "sha256": "7109f47cd5b27c898e5ec78d274058f780d85dfe863b3d987c27884c3930a09b",
+          "sha1": "bf21666c5c1189d6caed6f92f00c62009c1fad0b",
+          "md5": "c8b351a0bbe24bd1d3fe0fd3985e5b2a"
         }
       ]
     },
@@ -129,13 +129,13 @@
       },
       "files": [
         {
-          "name": "dashboard-0.3.2+0.6.0-6165.6-sources.jar",
-          "url": "dashboard-0.3.2+0.6.0-6165.6-sources.jar",
-          "size": 37656,
-          "sha512": "a0308b2b92c70a67e524d52276ccc2f436b8b2210be6b9015e741655668153d9a0ae352327a26e9063094984a68ca66162e6b4b0da2e7e77b77f0fc988d37b4f",
-          "sha256": "b843c8b7113b62586595a342775195b5c5227b8a7accb8d15b592f604a55b609",
-          "sha1": "697add1c69552fc19cd0fcffc2168a0381e9ae3e",
-          "md5": "51305e52a89dd9e015c95cd33c4af470"
+          "name": "dashboard-0.3.2+0.6.0-6165.7-sources.jar",
+          "url": "dashboard-0.3.2+0.6.0-6165.7-sources.jar",
+          "size": 37740,
+          "sha512": "5dbea6b9d486b2bb2fd453049169fc42af73cf2330e8fccc1e70c28cbbdf3ab7751c7dd768aa44532a63665a92086c387ad092f7a152ff8c8bf28c4a8f7cd784",
+          "sha256": "ad2a6da4310df9e642fd8f021c530426245c567da81d098beec8bd8defe69c84",
+          "sha1": "f4dee97c35c8e8f893846432525e6abf8789a7b4",
+          "md5": "ace746bfb10a7140b23684aa8ea3c1e6"
         }
       ]
     }

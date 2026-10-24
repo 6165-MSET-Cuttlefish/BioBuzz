@@ -24,7 +24,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
-- slothboard 6165.6 freezes the app for 10 s on a dashboard hardware-config switch, save or delete at idle, then it's killed and relaunched, ready about 53 s after the switch. Switch configs from the Driver Station until a build pins 6165.7.
+- slothboard 6165.7's restart after a dashboard hardware-config switch, save or delete at idle hasn't run on a hub; if it still deadlocks, the app freezes 10 s and is relaunched, ready about 53 s later. Switch configs from the Driver Station until Bench: Freeze Dump passes on it.
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
