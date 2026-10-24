@@ -172,6 +172,8 @@ public final class RoutePathBuilder {
         private final double gap;
         private final boolean forceSplineOnly;
         private final double graphClearance;
+        private final int cornerPoints = VisibilityGraphPlanner.pointsPerCorner;
+        private final double cornerMarginIn = VisibilityGraphPlanner.boundaryMarginIn;
         private final Map<Long, List<Pose>> detours = new HashMap<>();
 
         Planner(Pose start, Ball[] balls, Pose returnPose, Region area, List<Obstacle> obstacles, RobotShape robot,
@@ -324,7 +326,8 @@ public final class RoutePathBuilder {
             if (detours.containsKey(key)) return detours.get(key);
             Pose a = from == START ? start : balls[from].toPose();
             Pose b = to == RETURN ? returnPose : balls[to].toPose();
-            List<Pose> detour = VisibilityGraphPlanner.planPath(a, b, area, obstacles, graphClearance);
+            List<Pose> detour = VisibilityGraphPlanner.planPath(a, b, area, obstacles, graphClearance, cornerPoints,
+                    cornerMarginIn);
             detours.put(key, detour);
             return detour;
         }

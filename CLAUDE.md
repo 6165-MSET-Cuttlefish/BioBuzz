@@ -49,6 +49,7 @@ Pedro Pathing 3:
 **Ball routing**
 
 - The planner doesn't map alliances: pass mapped coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles.
+- Plan with `RouteOptimizer.search(...)`, then one `Search.step()` per loop until it returns true, never a whole search in one loop: a 4-ball search takes seconds on a hub, and STOP waits for the running loop (past 900 ms the SDK restarts the app). A step runs `VisibilityGraphPlanner.routeSearchSliceMs` plus at most one `shape()`. A changed request is a new Search.
 - Drive a plan only with `RouteRun`: `Plan.intake`/`Plan.back` are for drawing. They join the drives without the plan's turns in place, and Pedro moves to a compound path's next piece as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting reversals.
 
 **Faults** (`core/Faults`) show only in an `EnhancedOpMode`; a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
