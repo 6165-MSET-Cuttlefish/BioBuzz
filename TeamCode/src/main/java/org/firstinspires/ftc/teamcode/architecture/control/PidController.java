@@ -16,6 +16,10 @@ public class PidController {
     /** |error| <= this skips the static-friction kick AND freezes the integrator. */
     public double staticDeadband = 0.0;
 
+    /** The range the caller clamps the output to: the integrator holds while the output is pinned at either end. */
+    public double outputMin = Double.NEGATIVE_INFINITY;
+    public double outputMax = Double.POSITIVE_INFINITY;
+
     private boolean continuous = false;
     private double minInput = 0;
     private double maxInput = 0;
@@ -78,8 +82,12 @@ public class PidController {
             errorDerivative = 0;
         }
 
-        if (Math.abs(error) > staticDeadband) {
-            integralSum += error * deltaTimeSeconds;
+        if (kI == 0) {
+            integralSum = 0;
+        } else if (Math.abs(error) > staticDeadband) {
+            double output = calculate();
+            boolean pinned = (output >= outputMax && error > 0) || (output <= outputMin && error < 0);
+            if (!pinned) integralSum += error * deltaTimeSeconds;
         }
     }
 

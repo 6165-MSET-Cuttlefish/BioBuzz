@@ -108,6 +108,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **Close Flower Auto**: the `toHive` leg puts part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
 - **Turret Aim Test**: calibrate each turret (`Turret.Tuning`'s `nectar` and `pollen`) first: `leftPosition`/`backPosition`/`rightPosition` (dpad left/down/right) facing exactly robot-left, back and right, since AUTOAIM interpolates between them, and `offset` so its two servos don't fight, keeping each end at least `offset` inside 0 to 1; `x`/`y` is its pivot, forward and left of the robot's centre. Set the start pose before INIT.
+- **BioBuzz Shooter Test**: fill each flywheel's `feedforward` table first: in open loop (LB/RB), step `openLoopPower` and copy each steady Feedforward Point into a table point (rpm 0 = unused; skip a point marked saturated; powers are 13 V-equivalent), then tune `kP`/`kI` with A or X.
 - **Ivy Path Test** loops a curve to 4 ft ahead and 4 ft left of wherever the robot stands, and back: run it off the field with about 5.5 ft clear ahead and to the left.
 - **OctoQuad**: use the SDK's own driver (type `OctoQuadFTC`); don't add DigitalChickenLabs' `OctoQuadFWv3`.
 - **Laser rangefinders** (Brushland): switch one to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, then set every reader's `maxRangeMm` to its `analogHighMm` (readers assume `analogLowMm` 0) or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta).
@@ -119,7 +120,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
   - Catch `Throwable` into a volatile field and rethrow it on the OpMode thread.
   - Read with its own `LynxGetBulkInputDataCommand`, never through `AnalogInput` or `clearBulkCache()`: the MANUAL bulk cache is shared across threads.
   - No writes or telemetry from the thread.
-- **Flywheel RPM** from a Through Bore: the hub's 16-bit velocity overflows above about 240 RPM at 8192 counts/rev, so compute it from position over a window (Shooter Test's `rpmWindowMs`).
+- **Flywheel RPM** from a Through Bore: the hub's 16-bit velocity overflows above about 240 RPM at 8192 counts/rev, so compute it from position over a window (Shooter Test's `rpmWindowMs`). Put the flywheel motor on port 0 or 3 with its Through Bore on the same-numbered encoder port, since it's read through the motor's port (two flywheels: 0 and 3 of one hub, or one per hub): ports 1 and 2 count in software and drop counts at that rate.
 - Single devices: the dashboard's Hardware View.
 
 **Control Hub bench** (`scripts/bench/`): read `docs/hub-bench-findings.md` before changing the planner, hub or I2C traffic, odometry, Limelight or stop paths.

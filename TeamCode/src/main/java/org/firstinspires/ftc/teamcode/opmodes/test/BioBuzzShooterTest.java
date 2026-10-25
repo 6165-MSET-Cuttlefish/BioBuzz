@@ -12,6 +12,7 @@ public class BioBuzzShooterTest extends BioBuzzOpMode {
 
     @Override
     protected void initialize() {
+        disableBallVision();
         shooter = new Shooter(hardwareMap);
     }
 
@@ -19,8 +20,14 @@ public class BioBuzzShooterTest extends BioBuzzOpMode {
     protected void gameLoop() {
         if (gamepad1.a) shooter.setState(Shooter.PollenState.ON);
         if (gamepad1.b) shooter.setState(Shooter.PollenState.OFF);
+        if (gamepad1.left_bumper) shooter.setState(Shooter.PollenState.OPEN_LOOP);
         if (gamepad1.x) shooter.setState(Shooter.NectarState.ON);
         if (gamepad1.y) shooter.setState(Shooter.NectarState.OFF);
+        if (gamepad1.right_bumper) shooter.setState(Shooter.NectarState.OPEN_LOOP);
     }
 
+    @Override
+    protected void telemetry() {
+        telemetry.addData("Controls", "A/B: pollen on/off, X/Y: nectar on/off, LB/RB: pollen/nectar open loop");
+    }
 }
