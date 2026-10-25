@@ -169,7 +169,8 @@ run() {
   local stamp backup
   stamp=$(date +%Y-%m-%d_%H%M%S)
   RESULTS="bench-results/$stamp"
-  backup="bench-results/$stamp-backup"
+  # Outside the worktree: removing a worktree deletes its ignored bench-results/ with it.
+  backup="$(git rev-parse --path-format=absolute --git-common-dir)/bench-backups/$stamp"
   mkdir -p "$RESULTS" "$backup/apk" "$backup/FIRST"
   exec > >(tee -i -a "$RESULTS/console.log") 2>&1
   caffeinate -dims -w $$ &
@@ -244,7 +245,7 @@ for e in root.iter("string"):
       die "adb couldn't check for $SLOTH_DIR on the hub (exit $rc): stopped before installing anything" ;;
   esac
   chmod 0644 "$backup/rc_preferences.xml"
-  local apks f reinstall="$PWD/$backup/REINSTALL.sh"
+  local apks f reinstall="$backup/REINSTALL.sh"
   apks=$(ls "$backup/apk"/*.apk | wc -l | tr -d ' ')
   {
     echo '#!/bin/bash'
@@ -252,19 +253,19 @@ for e in root.iter("string"):
     printf '"%s" connect %s || true\n' "$ADB" "$SERIAL"
     printf '"%s" -s %s wait-for-device\n' "$ADB" "$SERIAL"
     if [ "$apks" -eq 1 ]; then
-      printf '"%s" -s %s install -r -t -d "%s"\n' "$ADB" "$SERIAL" "$PWD/$(ls "$backup"/apk/*.apk)"
+      printf '"%s" -s %s install -r -t -d "%s"\n' "$ADB" "$SERIAL" "$(ls "$backup"/apk/*.apk)"
     else
       printf '"%s" -s %s install-multiple -r -t -d' "$ADB" "$SERIAL"
-      for f in "$backup"/apk/*.apk; do printf ' "%s"' "$PWD/$f"; done
+      for f in "$backup"/apk/*.apk; do printf ' "%s"' "$f"; done
       printf '\n'
     fi
     printf '"%s" -s %s shell "rm -rf %s/*"\n' "$ADB" "$SERIAL" "$SLOTH_DIR"
     if [ -n "$(ls -A "$backup/sloth" 2>/dev/null || true)" ]; then
-      printf '"%s" -s %s push "%s/." %s/\n' "$ADB" "$SERIAL" "$PWD/$backup/sloth" "$SLOTH_DIR"
+      printf '"%s" -s %s push "%s/." %s/\n' "$ADB" "$SERIAL" "$backup/sloth" "$SLOTH_DIR"
       printf '"%s" -s %s shell "touch %s/* 2>/dev/null; true"\n' "$ADB" "$SERIAL" "$SLOTH_DIR"
     fi
     if python3 -I -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$backup/rc_preferences.xml" 2>/dev/null; then
-      printf '"%s" -s %s push "%s" /data/local/tmp/bench_rc_prefs.xml\n' "$ADB" "$SERIAL" "$PWD/$backup/rc_preferences.xml"
+      printf '"%s" -s %s push "%s" /data/local/tmp/bench_rc_prefs.xml\n' "$ADB" "$SERIAL" "$backup/rc_preferences.xml"
       printf 'out=$("%s" -s %s shell "am force-stop %s && run-as %s cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/%s_preferences.xml && echo PREFS_OK; rm -f /data/local/tmp/bench_rc_prefs.xml")\n' \
         "$ADB" "$SERIAL" "$PACKAGE" "$PACKAGE" "$PACKAGE"
       printf 'case "$out" in *PREFS_OK*) ;; *) echo "the app is back, but its settings were not restored: $out" >&2 ;; esac\n'
@@ -321,10 +322,13 @@ for e in root.iter("string"):
   say "running the benches: about 45 minutes, at most 90, no keypresses; the runner puts the hardware config back at the end even if a step fails"
   local rc=0 entry_flag=()
   [ -z "$original_entry" ] || entry_flag=(--original-entry "$original_entry")
-  python3 scripts/bench/run_bench.py --ports-empty --gradle-offline --out "$RESULTS" $sloth_flag \
+  # A non-empty trap resets to default in the runner, which restores on Ctrl-C; this shell lives on to print the backup.
+  trap 'true' INT
+  python3 scripts/bench/run_bench.py --gradle-offline --out "$RESULTS" $sloth_flag \
     ${entry_flag[@]+"${entry_flag[@]}"} ${1+"$@"} || rc=$?
+  trap - INT
   echo
-  echo "Backup of the hub's app and configs: $PWD/$backup (to put that app and its settings back: bash $reinstall)"
+  echo "Backup of the hub's app and configs: $backup (to put that app and its settings back: bash $reinstall)"
   [ "$rc" -eq 0 ] || echo "The runner exited with status $rc; $RESULTS/summary.md says which checks failed or why it stopped."
   echo "Reconnect to the internet and tell Claude the run finished."
   return "$rc"

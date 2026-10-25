@@ -24,13 +24,15 @@ Wi-Fi), and checks it is a Control Hub with the RC app (the SDK's `persist.ftcan
 (`caffeinate`); stops, saying so and how to reconnect, if adb loses the hub at any step before the runner starts (told
 apart from a real answer by adb's exit status and `get-state`, never by empty output); checks Gradle builds offline,
 adding `--no-sloth` if not; copies the installed RC APKs (with sha256), its
-version, every `/sdcard/FIRST/*.xml`, the app's settings and the Sloth folder to `bench-results/<time>-backup/`, and
+version, every `/sdcard/FIRST/*.xml`, the app's settings and the Sloth folder to `.git/bench-backups/<time>/` in the
+main checkout (outside every worktree, so removing one can't delete it), and
 writes `REINSTALL.sh` there, which puts that app, its settings and its Sloth jar back; passes the active-config setting
 from before the install to the runner (`--original-entry`), so the runner restores that one; installs the stamped APK with `adb install -r -t -g` (`-g` so no permission prompt waits for a tap;
 a signature mismatch or downgrade stops it with the hub unchanged; it never uninstalls); deletes
 `/storage/emulated/0/FIRST/dairy/sloth/*` as the Run button's `removeSlothRemote` does; starts the RC's launcher activity
 and waits for `======= INIT FINISH =======` and the dashboard port; then runs
-`run_bench.py --ports-empty --gradle-offline --out bench-results/<time>`, the whole console in `console.log` there. The
+`run_bench.py --gradle-offline --out bench-results/<time>`, which refuses a hub whose configs name devices on the
+bench ports unless you add `--ports-empty` once they are unplugged,, the whole console in `console.log` there. The
 runner restores the hardware config in a `finally`, whatever fails.
 
 ## Run it
@@ -46,7 +48,7 @@ runner restores the hardware config in a `finally`, whatever fails.
    55 to 75 minutes with every device plugged in, about 45 on a bare hub. The longest newer ones: Thread Lifecycle 6
    (2 of them its Sloth reload), Freeze Dump 6 (five dashboard config changes; on slothboard 6165.6 or older each one
    freezes the app until it is killed and relaunched), Config by name 3 (three config switches), Turret PWM 2 (two
-   config switches), Limelight Hung 1.5. Don't touch the hub. Ctrl-C is safe: it still restores your hardware config.
+   config switches), Limelight Hung 1.5. Don't touch the hub. Ctrl-C once is safe: it restores your hardware config and ignores more Ctrl-C until that's done.
 6. When it prints `Nothing to send back`, tell Claude.
 
 The Sloth race and Thread Lifecycle's reload run `./gradlew :TeamCode:deploySloth` from the terminal: if

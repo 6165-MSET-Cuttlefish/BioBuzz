@@ -19,6 +19,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import socket
 import struct
 import subprocess
@@ -1153,6 +1154,7 @@ class Adb:
         self.serial = serial
         self.log = log
         self.private = False
+        self.dated_logcat = None
 
     def _raw(self, args, timeout=60):
         return subprocess.run([self.path] + args, capture_output=True, text=True, timeout=timeout)
@@ -1215,7 +1217,13 @@ class Adb:
         return None, [], tried
 
     def hub_time(self):
-        return self.run("shell", "date '+%m-%d %H:%M:%S'").strip() + ".000"
+        # logcat -T takes a missing year as the current one: a start before a clock set or local midnight reads nothing.
+        if self.dated_logcat is None:
+            probe = self.run("shell", "date '+%Y-%m-%d %H:%M:%S'").strip() + ".000"
+            self.mark("logcat year probe")
+            self.dated_logcat = "logcat year probe" in self.logcat_matches(probe, "logcat year probe")
+        fmt = "%Y-%m-%d %H:%M:%S" if self.dated_logcat else "%m-%d %H:%M:%S"
+        return self.run("shell", f"date '+{fmt}'").strip() + ".000"
 
     def hub_epoch_ms(self):
         return int(self.run("shell", "date +%s").strip()) * 1000
@@ -1518,7 +1526,7 @@ def http_request(method, url, timeout=3.0):
     return out
 
 
-LOGCAT_STAMP = re.compile(r"^(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)\.(\d{3})")
+LOGCAT_STAMP = re.compile(r"^(?:\d{4}-)?(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)\.(\d{3})")
 
 
 def logcat_time(line):
@@ -1587,6 +1595,13 @@ def lines_after(log_text, mark):
     lines = log_text.splitlines()
     start = next((i for i, line in enumerate(lines) if mark in line), None)
     return [] if start is None else lines[start:]
+
+
+def step_log(log_text, step):
+    """The log from the step's begin mark on: logcat -T has whole seconds, so the file can open on the previous step's
+    STOP-time crash report. The whole log when the step has no mark."""
+    own = lines_after(log_text, f"begin {step}")
+    return "\n".join(own) if own else log_text
 
 
 def error_lines_while(statuses, opmode, t0):
@@ -1679,7 +1694,10 @@ class Runner:
 
     def log(self, text):
         line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}"
-        print(line, flush=True)
+        try:
+            print(line, flush=True)
+        except OSError:
+            pass
         self.logfile.write(line + "\n")
         self.logfile.flush()
 
@@ -2200,6 +2218,7 @@ class Runner:
         outcome["dashboardCrashText"] = self.user_crash()
         log_text = self.adb.logcat_since(hub_t0)
         (self.out / "logs" / f"{step}.log").write_text(log_text)
+        log_text = step_log(log_text, step)
         outcome["appKilled"] = APP_KILLED in log_text or WATCHDOG_KILLED in log_text
         outcome["logMarkers"] = self._markers(log_text)
         for source, text in (("status", outcome["statusErrorMessage"]), ("dashboard logcat", outcome["dashboardCrashText"]),
@@ -2533,7 +2552,7 @@ class Runner:
             res = self.pull(step, required=False) or {}
             events = res.get("events", [])
             stops = [e.split()[1] for e in events if e.startswith("stop ")]
-            log_text = (self.out / "logs" / f"{step}.log").read_text()
+            log_text = step_log((self.out / "logs" / f"{step}.log").read_text(), step)
             line = o.get("statusErrorMessage") or ""
             expected_stops = ["A", "B"] if throw_in == "moduleInit" else ["A", "B", "C"]
             self.check(f"failure {throw_in}: module stops", stops == expected_stops, f"stops {stops}, expected {expected_stops}")
@@ -5346,10 +5365,10 @@ class Runner:
             self.dash.recover_for_restore()
             self.settle()
             if self.active_config() not in accept or entry is not None or xml is not None:
-                self.activate_config(target, xml, entry, accept=accept)
+                self.activate_config(target, xml, entry, accept=accept, battery=NO_CONFIG not in accept)
             if not self.args.keep_configs and self.remove_bench_configs(keep=target):
                 # slothboard lists configs from memory and re-reads the folder on a restart.
-                self.activate_config(target, config=entry, accept=accept)
+                self.activate_config(target, config=entry, accept=accept, battery=NO_CONFIG not in accept)
         except Exception as e:
             if not self.switch_with_adb:
                 raise
@@ -5481,36 +5500,42 @@ class Runner:
             error = f"{type(e).__name__}: {e}"
             self.log(f"STOPPED by {error}\n{traceback.format_exc()}")
         finally:
-            if self.dash is not None:
-                failure = None
-                deadline = time.monotonic() + RESTORE_WINDOW_S
-                attempt = 0
-                while True:
-                    attempt += 1
-                    try:
-                        if attempt > 1:
-                            self.adb.ensure_connected()
-                        self.restore_config()
-                        failure = None
-                        if attempt > 1:
-                            self.restore_notes.append(f"restored on attempt {attempt}")
-                        break
-                    except Exception as e:
-                        failure = e
-                        self.log(f"restore attempt {attempt} failed: {type(e).__name__}: {e}\n{traceback.format_exc()}")
-                        if time.monotonic() + RESTORE_RETRY_S > deadline:
+            # A second Ctrl-C or a closed terminal mid-restore would leave the hub on a bench config with no summary.
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGHUP, signal.SIG_IGN)
+            try:
+                if self.dash is not None:
+                    self.log("putting the hardware config back; Ctrl-C is ignored until that's done")
+                    failure = None
+                    deadline = time.monotonic() + RESTORE_WINDOW_S
+                    attempt = 0
+                    while True:
+                        attempt += 1
+                        try:
+                            if attempt > 1:
+                                self.adb.ensure_connected()
+                            self.restore_config()
+                            failure = None
+                            if attempt > 1:
+                                self.restore_notes.append(f"restored on attempt {attempt}")
                             break
-                        time.sleep(RESTORE_RETRY_S)
-                if failure is not None:
-                    error = (error + "; " if error else "") + f"restoring the config failed: {type(failure).__name__}: {failure}"
-                    self.log(f"RESTORE FAILED: {failure}")
-                    self.log(f"Switch the config back by hand: open http://{self.args.host}:8080/dash, add the Hardware "
-                             f"Config view, and activate {self.original or 'your usual config'}.")
-                try:
-                    self.copy_bench_folder()
-                except Exception as e:
-                    self.log(f"couldn't copy the hub's bench folder: {type(e).__name__}: {e}")
-            self.write_summary(error)
+                        except Exception as e:
+                            failure = e
+                            self.log(f"restore attempt {attempt} failed: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+                            if time.monotonic() + RESTORE_RETRY_S > deadline:
+                                break
+                            time.sleep(RESTORE_RETRY_S)
+                    if failure is not None:
+                        error = (error + "; " if error else "") + f"restoring the config failed: {type(failure).__name__}: {failure}"
+                        self.log(f"RESTORE FAILED: {failure}")
+                        self.log(f"Switch the config back by hand: open http://{self.args.host}:8080/dash, add the Hardware "
+                                 f"Config view, and activate {self.original or 'your usual config'}.")
+                    try:
+                        self.copy_bench_folder()
+                    except Exception as e:
+                        self.log(f"couldn't copy the hub's bench folder: {type(e).__name__}: {e}")
+            finally:
+                self.write_summary(error)
             if self.dash is not None:
                 self.dash.close()
         failed = [c for c in self.checks if c[1] == "FAIL"]
