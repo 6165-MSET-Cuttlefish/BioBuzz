@@ -37,8 +37,14 @@ public class Shooter extends Module {
         public double power = 0;
     }
 
+    public static class HardstopTuning {
+        public double blockedPosition = 0.6;
+        public double unblockedPosition = 0.3;
+    }
+
     public static FlywheelTuning pollenTuning = new FlywheelTuning();
     public static FlywheelTuning nectarTuning = new FlywheelTuning();
+    public static HardstopTuning hardstopTuning = new HardstopTuning();
 
     private enum Drive { OFF, RPM, POWER }
 
@@ -116,6 +122,8 @@ public class Shooter extends Module {
         bindTunable(NectarState.OPEN_LOOP, () -> nectarTuning.openLoopPower);
         bindTunable(PollenHoodState.POSITION, () -> pollenTuning.hoodPosition);
         bindTunable(NectarHoodState.POSITION, () -> nectarTuning.hoodPosition);
+        bindTunable(ShooterHardstopState.BLOCKED, () -> hardstopTuning.blockedPosition);
+        bindTunable(ShooterHardstopState.UNBLOCKED, () -> hardstopTuning.unblockedPosition);
     }
 
     @Override
