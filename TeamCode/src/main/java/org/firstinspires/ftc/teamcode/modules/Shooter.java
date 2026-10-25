@@ -19,6 +19,7 @@ public class Shooter extends Module {
     private final EnhancedMotor nectar;
     private final EnhancedServo pollenHood;
     private final EnhancedServo nectarHood;
+    private final EnhancedServo hardstop;
     public static class PollenShooterTuning {
         public double P_Kp = 0;
         public double P_Ki = 0;
@@ -81,11 +82,21 @@ public class Shooter extends Module {
             setValue(value);
         }
     }
+
+    public enum ShooterHardstopState implements  State {
+        BLOCKED(0.6),
+        UNBLOCKED(0.3);
+
+        ShooterHardstopState(double value) {
+            setValue(value);
+        }
+    }
     public Shooter(HardwareMap hardwareMap) {
         pollen = new EnhancedMotor(hardwareMap, "PollenShooter").withCachingTolerance(0.005).withVoltageCompensation(13.0);
         nectar = new EnhancedMotor(hardwareMap, "NectarShooter").withCachingTolerance(0.005).withVoltageCompensation(13.0);
         pollenHood = new EnhancedServo(hardwareMap, "PollenHood").withCachingTolerance(0.001);
         nectarHood = new EnhancedServo(hardwareMap, "NectarHood").withCachingTolerance(0.001);
+        hardstop = new EnhancedServo(hardwareMap, "hardstop").withCachingTolerance(0.001);
 
         pollen.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);
         nectar.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.FLOAT);
@@ -104,7 +115,7 @@ public class Shooter extends Module {
 
     @Override
     protected void initStates() {
-        setStates(PollenState.OFF, NectarState.OFF, PollenHoodState.POSITION, NectarHoodState.POSITION);
+        setStates(PollenState.OFF, NectarState.OFF, PollenHoodState.POSITION, NectarHoodState.POSITION, ShooterHardstopState.BLOCKED);
         bindTunable(PollenState.ON, () -> pollenTuning.targetRPM);
         bindTunable(NectarState.ON, () -> nectarTuning.targetRPM);
         bindTunable(PollenHoodState.POSITION, () -> pollenTuning.hoodPosition);
@@ -129,6 +140,7 @@ public class Shooter extends Module {
         nectar.setPower(nectarPidOutput);
         pollenHood.setPosition(getState(PollenHoodState.class).getValue());
         nectarHood.setPosition(getState(NectarHoodState.class).getValue());
+        hardstop.setPosition(getState(ShooterHardstopState.class).getValue());
     }
 
     @Override
