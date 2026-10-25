@@ -14,7 +14,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @Config("Pinpoint Localizer Test")

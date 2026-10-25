@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.modules.vision;
+package org.firstinspires.ftc.teamcode.biobuzz.modules.vision;
 
 /** One frame's raw detection; cameraX/cameraY are camera-frame ground inches, not field coordinates. */
 public final class BallDetection {

@@ -1,15 +1,12 @@
-package org.firstinspires.ftc.teamcode.modules;
+package org.firstinspires.ftc.teamcode.biobuzz.modules;
 
 import com.acmerobotics.dashboard.config.Config;
-import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
-import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
-import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 
 public class BettaShooter extends Module {
 

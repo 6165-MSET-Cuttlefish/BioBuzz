@@ -1,6 +1,6 @@
-package org.firstinspires.ftc.teamcode.modules.vision;
+package org.firstinspires.ftc.teamcode.biobuzz.modules.vision;
 
-import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+import static org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory.nowSeconds;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.hardware.limelightvision.LLResult;

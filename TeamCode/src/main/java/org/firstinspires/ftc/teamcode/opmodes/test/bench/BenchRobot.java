@@ -11,7 +11,7 @@ import org.firstinspires.ftc.teamcode.architecture.auto.FieldConfig;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 public class BenchRobot extends Robot {

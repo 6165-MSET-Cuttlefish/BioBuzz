@@ -5,7 +5,7 @@ import com.pedropathing.ivy.CommandBuilder;
 import com.pedropathing.ivy.groups.Groups;
 
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
-import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 
 public class RobotActions {
 

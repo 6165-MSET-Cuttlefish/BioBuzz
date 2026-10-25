@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 @TeleOp(name = "Mecanum", group = "Test")

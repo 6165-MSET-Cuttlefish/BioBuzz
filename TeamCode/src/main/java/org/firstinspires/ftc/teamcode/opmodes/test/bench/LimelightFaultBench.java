@@ -15,10 +15,10 @@ import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
-import org.firstinspires.ftc.teamcode.modules.Camera;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
-import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightBallSource;
 
 import java.util.ArrayList;
 import java.util.Collections;

@@ -17,9 +17,9 @@ import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteRun;
 import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
-import org.firstinspires.ftc.teamcode.modules.Camera;
-import org.firstinspires.ftc.teamcode.modules.vision.BallType;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.BallType;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
 
 final class CollectionDisplay {
     private static final int DRAW_SAMPLES = 20;

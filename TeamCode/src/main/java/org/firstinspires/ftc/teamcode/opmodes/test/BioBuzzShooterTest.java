@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.Shooter;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Shooter;
 
 @TeleOp(name = "BioBuzz Shooter Test", group = "Test")
 public class BioBuzzShooterTest extends BioBuzzOpMode {

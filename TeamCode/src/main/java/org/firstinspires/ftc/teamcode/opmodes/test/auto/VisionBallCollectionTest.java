@@ -26,9 +26,9 @@ import org.firstinspires.ftc.teamcode.architecture.planner.RouteRun;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
-import org.firstinspires.ftc.teamcode.modules.Camera;
-import org.firstinspires.ftc.teamcode.modules.vision.BallType;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.BallType;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
 
 @TeleOp(name = "Vision Ball Collection", group = "Test")
 public class VisionBallCollectionTest extends EnhancedOpMode {

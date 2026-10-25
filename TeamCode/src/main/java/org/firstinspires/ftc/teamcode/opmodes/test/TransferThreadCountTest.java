@@ -11,7 +11,7 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
-import org.firstinspires.ftc.teamcode.modules.TransferCounter;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.TransferCounter;
 
 @TeleOp(name = "Transfer Thread Count Test", group = "Test")
 @Config("Transfer Thread Count Test")
