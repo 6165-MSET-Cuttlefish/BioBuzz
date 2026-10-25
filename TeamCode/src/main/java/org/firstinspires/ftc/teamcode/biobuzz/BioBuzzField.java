@@ -25,6 +25,17 @@ public final class BioBuzzField {
         FieldConfig.setImage(IMAGE, FieldConfig.fieldWidthInches, 1);
     }
 
+    // Figs 9-9/9-10: HIVE centres 25.5 in apart; a CELL's centre is 15.44 in from the pivot along a bar tilted 30°, 13.37 in plan.
+    private static final double HIVE_PIVOT_FROM_CENTRE_IN = 12.75;
+    private static final double CELL_FROM_PIVOT_IN = 13.37;
+
+    /** The centre, in plan, of this alliance's HIVE CELL on the audience side, or else the rear one. */
+    public static Pose ownCell(boolean audienceSide) {
+        double centre = FieldConfig.fieldWidthInches / 2;
+        double pivotX = FieldPose.forAlliance(centre - HIVE_PIVOT_FROM_CENTRE_IN, centre, 0).x();
+        return new Pose(pivotX, audienceSide ? centre - CELL_FROM_PIVOT_IN : centre + CELL_FROM_PIVOT_IN);
+    }
+
     // Each rail is the foot bar of one A-frame with the feet and legs on it, from FIRST's field CAD, measured from the field's centre.
     private static final double HIVE_RAIL_NEAR_IN = 22.75;
     private static final double HIVE_RAIL_FAR_IN = 24.733;
