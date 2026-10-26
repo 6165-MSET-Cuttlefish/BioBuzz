@@ -13,7 +13,7 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 
 public class BettaShooter extends Module {
 
-    @Config("Betta Turret")
+    @Config("Betta Shooter")
     public static class Tuning {
         public static double OffPower = 0;
         public static double OnPower = 0.7;
