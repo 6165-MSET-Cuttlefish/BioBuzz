@@ -6,8 +6,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

@@ -12,11 +12,11 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.DualTelemetry;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.HtmlFormatter;
-import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
-import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
-import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightBallSource;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.BallFieldTransform;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBallTracker;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 import java.util.Collections;

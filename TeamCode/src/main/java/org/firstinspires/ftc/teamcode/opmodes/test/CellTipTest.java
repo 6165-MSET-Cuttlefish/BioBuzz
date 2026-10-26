@@ -7,7 +7,7 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 
 @TeleOp(name = "Cell Tip Test", group = "Test")
 public class CellTipTest extends BioBuzzOpMode {

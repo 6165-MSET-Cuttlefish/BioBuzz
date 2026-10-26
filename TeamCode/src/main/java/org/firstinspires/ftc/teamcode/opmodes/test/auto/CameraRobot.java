@@ -1,7 +1,7 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
-import org.firstinspires.ftc.teamcode.modules.Camera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
 
 public class CameraRobot extends BallCollectionRobot {
     public Camera camera;

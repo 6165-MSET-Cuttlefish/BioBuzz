@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.qualcomm.hardware.limelightvision.LLResult;
 
-import org.firstinspires.ftc.teamcode.modules.vision.LimelightSync;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightSync;
 import org.json.JSONException;
 import org.json.JSONObject;
 

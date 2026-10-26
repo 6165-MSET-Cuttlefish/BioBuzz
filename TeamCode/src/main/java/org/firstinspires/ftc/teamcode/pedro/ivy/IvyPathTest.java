@@ -34,8 +34,8 @@ import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.architecture.command.StateCommands;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.modules.BettaShooter;
-import org.firstinspires.ftc.teamcode.modules.BettaTurret;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.BettaShooter;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.BettaTurret;
 import org.firstinspires.ftc.teamcode.opmodes.test.auto.BallCollectionRobot;
 
 @Autonomous(name = "Ivy Path Test", group = "Test")

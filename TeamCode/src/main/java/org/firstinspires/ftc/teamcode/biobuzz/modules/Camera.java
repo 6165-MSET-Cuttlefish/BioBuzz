@@ -1,6 +1,6 @@
-package org.firstinspires.ftc.teamcode.modules;
+package org.firstinspires.ftc.teamcode.biobuzz.modules;
 
-import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+import static org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory.nowSeconds;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.follower.Follower;
@@ -10,12 +10,12 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
-import org.firstinspires.ftc.teamcode.modules.vision.BallFieldTransform;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBallTracker;
-import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
-import org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory;
-import org.firstinspires.ftc.teamcode.modules.vision.TrackedBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.BallFieldTransform;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBallTracker;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightBallSource;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.TrackedBall;
 import org.opencv.core.Point;
 
 import java.util.ArrayList;

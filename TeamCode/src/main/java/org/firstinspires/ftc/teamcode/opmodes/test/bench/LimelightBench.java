@@ -6,8 +6,8 @@ import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.modules.vision.LimelightBallSource;
-import org.firstinspires.ftc.teamcode.modules.vision.LimelightSync;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightBallSource;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightSync;
 import org.json.JSONException;
 import org.json.JSONObject;
 
