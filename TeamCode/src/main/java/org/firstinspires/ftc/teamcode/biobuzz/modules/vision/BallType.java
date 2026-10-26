@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.modules.vision;
+package org.firstinspires.ftc.teamcode.biobuzz.modules.vision;
 
 /** Codes match ball_contour_snapscript.py's llpython type codes. */
 public enum BallType {

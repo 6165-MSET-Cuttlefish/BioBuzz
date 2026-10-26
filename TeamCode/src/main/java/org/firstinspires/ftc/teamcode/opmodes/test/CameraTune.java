@@ -3,9 +3,9 @@ package org.firstinspires.ftc.teamcode.opmodes.test;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
-import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
-import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.WebcamControls;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.WebcamSession;
 import org.opencv.core.Mat;
 import org.openftc.easyopencv.OpenCvPipeline;
 

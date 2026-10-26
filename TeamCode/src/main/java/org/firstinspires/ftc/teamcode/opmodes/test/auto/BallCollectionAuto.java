@@ -19,7 +19,7 @@ import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
 import org.firstinspires.ftc.teamcode.biobuzz.BallCollection;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.RobotGeometry;
-import org.firstinspires.ftc.teamcode.modules.vision.FieldBall;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
 
 @Autonomous(name = "Ball Collection Auto", group = "Test")
 public class BallCollectionAuto extends BioBuzzOpMode {

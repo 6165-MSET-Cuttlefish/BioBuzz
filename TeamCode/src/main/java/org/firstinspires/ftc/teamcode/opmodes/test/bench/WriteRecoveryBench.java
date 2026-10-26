@@ -103,6 +103,7 @@ public class WriteRecoveryBench extends OpMode {
     @Override
     public void init() {
         report = new BenchReport("Write Recovery", "write_recovery");
+        PhotonSetup.fromParams(report);
         hub = HubRegisters.controlHub(hardwareMap, "Bench: Write Recovery");
         BenchIO.require(hardwareMap, DcMotorEx.class, "fl", BenchIO.RUNNER_HINT);
         BenchIO.require(hardwareMap, ServoImplEx.class, "benchServo2", BenchIO.RUNNER_HINT);

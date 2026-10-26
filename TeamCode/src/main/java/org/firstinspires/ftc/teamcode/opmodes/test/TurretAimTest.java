@@ -5,7 +5,7 @@ import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.Turret;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Turret;
 
 @TeleOp(name = "Turret Aim Test", group = "Test")
 @Config("Turret Aim Test")

@@ -6,7 +6,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
-import org.firstinspires.ftc.teamcode.modules.CellTipCamera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 
 @Config("BioBuzz Tele")
 @TeleOp(name = "BioBuzz Tele", group = "A")

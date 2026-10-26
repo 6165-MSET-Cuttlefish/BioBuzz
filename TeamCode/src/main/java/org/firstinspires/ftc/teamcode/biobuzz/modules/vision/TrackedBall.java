@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.modules.vision;
+package org.firstinspires.ftc.teamcode.biobuzz.modules.vision;
 
 import org.opencv.core.Point;
 

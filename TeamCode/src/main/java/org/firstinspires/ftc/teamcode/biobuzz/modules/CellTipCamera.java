@@ -1,6 +1,6 @@
-package org.firstinspires.ftc.teamcode.modules;
+package org.firstinspires.ftc.teamcode.biobuzz.modules;
 
-import static org.firstinspires.ftc.teamcode.modules.vision.RobotStateHistory.nowSeconds;
+import static org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory.nowSeconds;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -10,9 +10,9 @@ import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
-import org.firstinspires.ftc.teamcode.modules.vision.CellTipPipeline;
-import org.firstinspires.ftc.teamcode.modules.vision.WebcamControls;
-import org.firstinspires.ftc.teamcode.modules.vision.WebcamSession;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.CellTipPipeline;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.WebcamControls;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.WebcamSession;
 
 /** HIVE-cell tip verdict from {@link CellTipPipeline} on the webcam; the alliance is fixed at init. */
 @Config("Cell Tip Camera")

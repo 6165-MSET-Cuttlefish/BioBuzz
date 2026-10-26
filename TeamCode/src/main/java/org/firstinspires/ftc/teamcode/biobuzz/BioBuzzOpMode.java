@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.modules.Camera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
 
 public abstract class BioBuzzOpMode extends EnhancedOpMode {
 

@@ -74,6 +74,13 @@ public final class LoopProfiler {
         return sb.toString();
     }
 
+    /** Appends {@code name=microseconds;} for each section's latest sample. */
+    public void appendLastMicros(StringBuilder sb) {
+        for (Map.Entry<String, Bucket> e : sections.entrySet()) {
+            sb.append(e.getKey()).append('=').append(Math.round(e.getValue().last * 1000)).append(';');
+        }
+    }
+
     public void reset() {
         sections.clear();
         markAnchorNs = 0L;
@@ -98,6 +105,7 @@ public final class LoopProfiler {
         long count = 0;
         double total = 0;
         double peak = 0;
+        double last = 0;
         // True for a top-level stage (mark()); false for a nested drill-down (leaveSection()).
         boolean partition = false;
 
@@ -110,6 +118,7 @@ public final class LoopProfiler {
             count++;
             total += v;
             if (v > peak) peak = v;
+            last = v;
         }
 
         double avg() {

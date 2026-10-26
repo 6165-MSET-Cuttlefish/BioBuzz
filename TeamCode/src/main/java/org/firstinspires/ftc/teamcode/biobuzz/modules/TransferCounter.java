@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.modules;
+package org.firstinspires.ftc.teamcode.biobuzz.modules;
 
 import com.qualcomm.hardware.lynx.LynxAnalogInputController;
 import com.qualcomm.hardware.lynx.LynxModule;

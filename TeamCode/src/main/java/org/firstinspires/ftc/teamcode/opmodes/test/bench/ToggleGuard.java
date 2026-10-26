@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

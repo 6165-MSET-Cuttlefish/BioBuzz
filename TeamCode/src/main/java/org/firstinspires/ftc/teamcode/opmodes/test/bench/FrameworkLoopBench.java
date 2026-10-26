@@ -7,7 +7,7 @@ import org.firstinspires.ftc.robotcore.internal.network.NetworkConnectionHandler
 import org.firstinspires.ftc.teamcode.architecture.OptimizationToggles;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
-import org.firstinspires.ftc.teamcode.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.opmodes.test.auto.CloseFlowerPaths;
 
 import java.util.ArrayList;
@@ -65,6 +65,7 @@ public class FrameworkLoopBench extends EnhancedOpMode {
     protected void initialize() {
         report = new BenchReport("Framework Loop", "framework_loop");
         phaseSeconds = BenchIO.param(report.params, "phaseSeconds", 8);
+        PhotonSetup.fromParams(report);
 
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("dsMsTransmissionInterval", robot.telemetry.getMsTransmissionInterval());

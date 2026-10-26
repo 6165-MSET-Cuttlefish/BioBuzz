@@ -33,6 +33,7 @@ Missing hardware skips its benches, and the summary says so.
 | a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent) |
 | an OctoQuad MK2, pods on encoder ports 3 and 4, still | Control Hub I2C bus 2 | Bench: OctoQuad |
 | a REV Expansion Hub on its own 12 V | RS485, address 2 (`--expansion-address N`) | Bench: Expansion Hub (reads only) |
+| a REV Expansion Hub on its own 12 V, **nothing on its motor ports 0-3 or servo ports 0-1** (the bench drives them) | Control Hub USB to its mini-USB, no RS485 cable | Bench: Photon with `--usb-expansion` |
 
 `--interactive` adds terminal prompts: pull and replug the Limelight, Pinpoint and OctoQuad cables (pods stay in); move
 the Pinpoint and OctoQuad to the Expansion Hub's I2C ports 1 and 2 and back; open http://192.168.43.1:8080 during
@@ -82,6 +83,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Expansion Hub | an Expansion Hub | the same Lynx commands and odometry reads on each hub |
 | Bench: Write Recovery | nothing | EnhancedMotor and EnhancedServo reach the hub again within 500 ms of a `failSafe()` |
 | Bench: Drive Handover | nothing | `fl`'s SDK power matches Drivetrain's command from the 2nd loop after Pedro hands back |
+| Bench: Photon (`--photon`) | nothing; `--usb-expansion` a USB Expansion Hub, `--photon-i2c` a Pinpoint and an OctoQuad | SolversLib Photon off and at 8, 4 and 2 parallel commands: write costs with every write read back, bursts read back undrained, enable toggles after parallel writes, bulk/voltage/I2C reads, a 10 ms bulk-read thread; run twice so the second INIT shows what STOP left; then Framework Loop and Write Recovery with Photon on |
 | Hardware OpMode, then Bench: Power Readback | nothing | a stale Hardware-view Power edit doesn't drive `fl` under the next OpMode |
 | Bench: Gamepad, Gamepad Linear | nothing | dashboard gamepad delivery, one edge per press, sticks resting within 1 s of silence |
 | Bench: Limelight Fault | nothing | the `Limelight` fault with nothing answering: raised in INIT within 5 s, loop keeps running, collection ends SKIPPED |

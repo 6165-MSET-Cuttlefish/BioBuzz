@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.modules;
+package org.firstinspires.ftc.teamcode.biobuzz.modules;
 
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.follower.Follower;
