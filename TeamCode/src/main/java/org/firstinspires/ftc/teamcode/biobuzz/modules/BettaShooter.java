@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
+import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
 
 public class BettaShooter extends Module {
 
