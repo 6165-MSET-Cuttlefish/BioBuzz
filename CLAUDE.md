@@ -24,6 +24,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
+- `org.solverslib:photon` (for Bench: Photon) replaces every OpMode's `LynxModule`s with `PhotonLynxModule`s at INIT, even with Photon never enabled; it parallelizes only USB hubs' motor and servo writes, so not an Expansion Hub on RS485.
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
@@ -108,7 +109,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **Close Flower Auto**: the `toHive` leg puts part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
 - **Turret Aim Test**: calibrate `Turret.Tuning`'s `leftPosition`/`backPosition`/`rightPosition` first (dpad LEFT/BACK/RIGHT), each turret facing exactly robot-left, back and right, since AUTOAIM interpolates between them; set the start pose before INIT.
-- **Ivy Path Test** loops a curve to 4 ft ahead and 4 ft left of wherever the robot stands, and back: run it off the field with about 5.5 ft clear ahead and to the left.
+- **Ivy Path Test** loops a curve to 4 ft ahead and 4 ft left of wherever the robot stands, and back: run it off the field with about 5.5 ft clear ahead and to the left. It appends every loop's timings to `/sdcard/FIRST/looptimes/IvyPathTest.csv` (`adb pull` it); a run ended by a crash loses its last ~64 KB and its summary.
 - **OctoQuad**: use the SDK's own driver (type `OctoQuadFTC`); don't add DigitalChickenLabs' `OctoQuadFWv3`.
 - **Laser rangefinders** (Brushland): switch one to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, then set every reader's `maxRangeMm` to its `analogHighMm` (readers assume `analogLowMm` 0) or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta).
 - **Transfer Count Test** / **Transfer Thread Count Test**: `analog0` (A) sits upstream of `analog1` (B), close enough that one ball covers both; balls must only travel A to B and start with the chute clear.

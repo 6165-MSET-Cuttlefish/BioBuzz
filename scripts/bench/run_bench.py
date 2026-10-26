@@ -53,9 +53,10 @@ BENCH_OPMODES = [
     "Bench: Sloth Probe", "Bench: Gamepad", "Bench: Gamepad Linear", "Bench: Write Recovery", "Bench: Drive Handover",
     "Bench: Power Readback", "Bench: Overlay NaN", "Bench: Planner Stop", "Bench: Webcam Thread Failure",
     "Bench: Pinpoint", "Bench: Clock", "Bench: OctoQuad", "Bench: OctoQuad Absent", "Bench: Expansion Hub",
+    "Bench: Photon",
 ]
 
-BENCHES = ("baseline", "hub", "loop", "failure", "gamepad", "write_recovery", "handover", "hardware_view", "webcam",
+BENCHES = ("baseline", "hub", "loop", "failure", "gamepad", "write_recovery", "handover", "photon", "hardware_view", "webcam",
            "webcam_failure", "limelight", "llfault", "sloth", "clock", "pinpoint", "octoquad", "octoquad_absent",
            "expansion", "absent", "planner_stop", "overlay_nan")
 
@@ -68,8 +69,19 @@ CONFIG_OCTOQUAD = "bench_octoquad"
 CONFIG_OCTOQUAD_ABSENT = "bench_octoquad_absent"
 CONFIG_EXPANSION = "bench_expansion"
 CONFIG_EXPANSION_ODO = "bench_expansion_odo"
+CONFIG_PHOTON = "bench_photon"
 BENCH_CONFIGS = (CONFIG_MAIN, CONFIG_PINPOINT, CONFIG_NO_WEBCAM, CONFIG_LLFAULT, CONFIG_OCTOQUAD, CONFIG_OCTOQUAD_ABSENT,
-                 CONFIG_EXPANSION, CONFIG_EXPANSION_ODO, CONFIG_PROBE)
+                 CONFIG_EXPANSION, CONFIG_EXPANSION_ODO, CONFIG_PROBE, CONFIG_PHOTON)
+# A REV hub's FTDI USB bridge; the Control Hub's own module is on a serial port, not USB.
+REV_HUB_USB_ID = ("0403", "6015")
+PHOTON_EXPANSION_DEVICES = [
+    '<goBILDA5202SeriesMotor name="efl" port="0" />',
+    '<goBILDA5202SeriesMotor name="efr" port="1" />',
+    '<goBILDA5202SeriesMotor name="ebl" port="2" />',
+    '<goBILDA5202SeriesMotor name="ebr" port="3" />',
+    '<Servo name="eServo" port="0" />',
+    '<Servo name="eServo2" port="1" />',
+]
 # AppUtil.CONFIG_FILES_DIR; the app keeps the active config's name in its default SharedPreferences.
 CONFIG_DIR = "/sdcard/FIRST"
 RC_PREFS = f"shared_prefs/{RC_PACKAGE}_preferences.xml"
@@ -1072,7 +1084,7 @@ def attr(value):
     return xml.sax.saxutils.quoteattr(str(value))
 
 
-def hub_config(devices, extra=(), expansion=None):
+def hub_config(devices, extra=(), expansion=None, usb_expansion=None):
     body = "".join(f"            {d}\n" for d in devices)
     tail = "".join(f"    {e}\n" for e in extra)
     expansion_module = ""
@@ -1089,8 +1101,20 @@ def hub_config(devices, extra=(), expansion=None):
             "        </LynxModule>\n"
             f"{expansion_module}"
             "    </LynxUsbDevice>\n"
+            f"{usb_expansion_block(usb_expansion)}"
             f"{tail}"
             "</Robot>\n")
+
+
+def usb_expansion_block(usb_expansion):
+    if usb_expansion is None:
+        return ""
+    serial, address, devices = usb_expansion
+    return (f'    <LynxUsbDevice name="Expansion Hub Portal" serialNumber={attr(serial)} parentModuleAddress="{address}">\n'
+            f'        <LynxModule name="Expansion Hub {address}" port="{address}">\n'
+            + "".join(f"            {d}\n" for d in devices)
+            + "        </LynxModule>\n"
+            "    </LynxUsbDevice>\n")
 
 
 def pinpoint_tag(bus):
@@ -2272,6 +2296,195 @@ class Runner:
             case = cases.get(key) or {}
             self.check(f"drive handover {key}: the held stick reaches fl within 2 loops of writes coming back on "
                        f"({label})", handed_back(case), detail(case), HANDOVER_PENDING)
+
+    def usb_expansion_serial(self):
+        if self.args.usb_expansion_serial:
+            return self.args.usb_expansion_serial
+        vendor, product = REV_HUB_USB_ID
+        out = self.adb.run("shell", "for d in /sys/bus/usb/devices/*; do "
+                           f"[ \"$(cat $d/idVendor 2>/dev/null)\" = {vendor} ] && "
+                           f"[ \"$(cat $d/idProduct 2>/dev/null)\" = {product} ] && cat $d/serial; done; true")
+        serials = [line.strip() for line in out.splitlines() if line.strip()]
+        if len(serials) != 1:
+            raise BenchError(f"--usb-expansion found {len(serials)} REV hubs on the Control Hub's USB ports ({serials}): "
+                             "connect exactly one Expansion Hub by USB (no RS485 cable) on its own 12 V, or pass its "
+                             "serial with --usb-expansion-serial (the REV Hardware Client shows it)")
+        return serials[0]
+
+    def photon_config(self):
+        usb = None
+        if self.args.usb_expansion:
+            serial = self.usb_expansion_serial()
+            self.log(f"photon: USB Expansion Hub serial {serial}, address {self.args.expansion_address}")
+            usb = (serial, self.args.expansion_address, PHOTON_EXPANSION_DEVICES)
+        i2c = self.args.photon_i2c
+        return hub_config(main_devices(self.imu_type, pinpoint=i2c, octoquad_bus=OCTOQUAD_BUS if i2c else None),
+                          usb_expansion=usb)
+
+    def run_photon(self):
+        """Bench: Photon twice (the second INIT shows what STOP left with writes in flight and that Photon re-wraps the
+        hubs), then Framework Loop and Write Recovery with Photon off and on."""
+        loops = 150 if self.args.quick else 500
+        params = {"loops": loops, "usbExpansion": 1 if self.args.usb_expansion else 0,
+                  "i2c": 1 if self.args.photon_i2c else 0}
+        self.activate_config(CONFIG_PHOTON, self.photon_config())
+        runs = {}
+        for run_id, run_loops in (("1", loops), ("2", 100)):
+            o = self.run_opmode("Bench: Photon", f"photon_{run_id}", dict(params, runId=run_id, loops=run_loops),
+                                timeout=900, result_files=[f"photon_{run_id}"], status_every=15.0)
+            runs[run_id] = (o, self.pull(f"photon_{run_id}", required=not o["crashed"]) or {})
+        self.summary += self._photon_summary(runs)
+        self._photon_checks(runs)
+
+        self.activate_config(CONFIG_MAIN, self.main_config())
+        secs = 4 if self.args.quick else 8
+        loop_runs = {}
+        for parallel in (0, 8):
+            step = f"framework_loop_photon{parallel}"
+            o = self.run_opmode("Bench: Framework Loop", step, {"phaseSeconds": secs, "photon": parallel},
+                                timeout=30 * secs + 120, result_files=["framework_loop"], status_every=15.0,
+                                quiet_after=secs + 4)
+            res = self.pull("framework_loop", required=not o["crashed"])
+            if res is not None:
+                (self.out / "raw" / f"{step}.json").write_text(json.dumps(res, indent=1))
+            loop_runs[parallel] = (o, res)
+        s = ["### Framework Loop with Photon off and on (8 parallel)\n",
+             "| phase | loop period, Photon off | loop period, Photon on |", "|---|---|---|"]
+        off_phases = dig(loop_runs[0][1], "phases", default={}) or {}
+        on_phases = dig(loop_runs[8][1], "phases", default={}) or {}
+        for name in off_phases.keys() | on_phases.keys():
+            s.append(f"| {name} | {fmt_cell(dig(off_phases, name, 'loopPeriodMs'))} | "
+                     f"{fmt_cell(dig(on_phases, name, 'loopPeriodMs'))} |")
+        for parallel, (o, _) in loop_runs.items():
+            if o["crashed"]:
+                s.append(f"- Framework Loop with photon={parallel} CRASHED: {o['errorMessage']}")
+        s.append("")
+        self.summary += s
+        self.check("photon: Framework Loop (EnhancedOpMode + Pedro) runs to the end with Photon on",
+                   loop_runs[8][1] is not None and not loop_runs[8][0]["crashed"]
+                   and dig(loop_runs[8][1], "photonParallel") == 8,
+                   f"crashed {loop_runs[8][0]['crashed']}, error {loop_runs[8][0].get('errorMessage')!r}, "
+                   f"photonParallel {dig(loop_runs[8][1], 'photonParallel')}",
+                   "the framework's loop broke under Photon")
+
+        o = self.run_opmode("Bench: Write Recovery", "write_recovery_photon", {"photon": 8}, timeout=60,
+                            result_files=["write_recovery"])
+        res = self.pull("write_recovery", required=not o["crashed"]) or {}
+        if res:
+            (self.out / "raw" / "write_recovery_photon.json").write_text(json.dumps(res, indent=1))
+        channels = res.get("channels") or {}
+        s = ["### Write Recovery with Photon on (8 parallel)\n"]
+        if o["crashed"]:
+            s.append(f"- CRASHED: {o['errorMessage']}")
+        for name, c in channels.items():
+            s.append(f"- {name} ({'wrapped' if c.get('wrapped') else 'raw'} {c.get('kind')}): settled before failSafe "
+                     f"{c.get('settledBeforeFailSafe')}; back {c.get('recoveredMs')} ms after it; "
+                     f"{c.get('loopsAtTargetAfterFailSafe')} of {c.get('loopsAfterFailSafe')} loops at target")
+        s.append("")
+        self.summary += s
+        for name, c in channels.items():
+            if not c.get("wrapped"):
+                continue
+            ms = c.get("recoveredMs")
+            self.check(f"photon: wrapped {c.get('kind')} {name} reaches the hub within {WRITE_RECOVERY_LIMIT_MS} ms of a "
+                       "failSafe with Photon on", bool(c.get("settledBeforeFailSafe")) and ms is not None
+                       and ms <= WRITE_RECOVERY_LIMIT_MS, f"settled {c.get('settledBeforeFailSafe')}, back after {ms} ms",
+                       "WriteCache's re-send doesn't heal a hub reset under Photon")
+        if not channels:
+            self.check("photon: Write Recovery reported its channels", False, f"error {o.get('errorMessage')!r}")
+
+    def _photon_summary(self, runs):
+        s = ["## Bench: Photon\n"]
+        for run_id, (o, res) in runs.items():
+            s.append(f"### Run {run_id}\n")
+            if o["crashed"]:
+                s.append(f"- CRASHED: {o['errorMessage']}")
+            for h in dig(res, "info", "hubs", default=[]) or []:
+                s.append(f"- hub {h.get('address')} serial {h.get('serial')} parent {h.get('parent')}: {h.get('class')}")
+            s.append(f"- Photon's CONTROL_HUB is this Control Hub: {dig(res, 'info', 'photonControlHub')}; EXPANSION_HUB "
+                     f"is this Expansion Hub: {dig(res, 'info', 'photonExpansionHub')}")
+            s.append(f"- state at INIT, before writing: {res.get('initialState')}")
+            timing = res.get("timing") or {}
+            if timing:
+                s += ["", "| mode | write block | per hub | one motor write | one servo write | bulk read | loop period | "
+                      "max in flight | mismatches | poller command | not responding |",
+                      "|---|---|---|---|---|---|---|---|---|---|---|"]
+                for name, m in timing.items():
+                    per_hub = "; ".join(f"{a}: {fmt_cell(v)}" for a, v in (m.get("writeBlockPerHubMs") or {}).items())
+                    s.append(f"| {name} | {fmt_cell(m.get('writeBlockMs'))} | {per_hub} | "
+                             f"{fmt_cell(m.get('motorWriteMs'))} | {fmt_cell(m.get('servoWriteMs'))} | "
+                             f"{fmt_cell(m.get('bulkReadMs'))} | {fmt_cell(m.get('loopPeriodMs'))} | "
+                             f"{m.get('maxInFlight')} | {m.get('mismatches')} of {m.get('checks')} | "
+                             f"{fmt_cell(m.get('pollerCommandMs')) if m.get('pollerCommandMs') else '-'} | "
+                             f"{m.get('notResponding')} |")
+            for name, b in (res.get("burst") or {}).items():
+                s.append(f"- burst {name}: {b.get('mismatches')} of {b.get('iterations')} bursts read back wrong; one "
+                         f"burst {fmt_cell(b.get('burstMs'))}; not responding {b.get('notResponding')}")
+            for key in ("interleaveOff", "interleaveOn8"):
+                i = res.get(key)
+                if i:
+                    s.append(f"- {key}: value mismatches {i.get('valueMismatches')}, enable mismatches "
+                             f"{i.get('enableMismatches')} of {i.get('channelChecks')}; not responding {i.get('notResponding')}")
+            for name, r in (res.get("reads") or {}).items():
+                line = (f"- reads {name}: bulk {fmt_cell(r.get('bulkReadMs'))}, voltage {fmt_cell(r.get('inputVoltageMs'))}, "
+                        f"write mismatches {r.get('mismatches')} of {r.get('checks')}")
+                if "pinpointUpdateMs" in r:
+                    line += (f"; Pinpoint {fmt_cell(r.get('pinpointUpdateMs'))}, not READY {r.get('pinpointNotReady')}; "
+                             f"OctoQuad {fmt_cell(r.get('octoQuadReadMs'))}, CRC failures {r.get('octoQuadCrcFailures')}, "
+                             f"invalid {r.get('octoQuadInvalid')}")
+                s.append(line + f"; not responding {r.get('notResponding')}")
+            s.append("")
+        s += ["Cells are p50 / p95 / max ms.", ""]
+        return s
+
+    def _photon_checks(self, runs):
+        o1, r1 = runs["1"]
+        o2, r2 = runs["2"]
+        for run_id, (o, res) in runs.items():
+            hubs = dig(res, "info", "hubs", default=[]) or []
+            self.check(f"photon run {run_id}: Photon replaced every hub's LynxModule",
+                       bool(hubs) and all(h.get("photonSwapped") for h in hubs), f"{hubs}",
+                       "the installed APK lacks org.solverslib:photon, or Photon's INIT hook didn't run"
+                       + (" on this second INIT" if run_id == "2" else ""))
+            self.check(f"photon run {run_id}: Bench: Photon finished", res.get("complete") is True and not o["crashed"],
+                       f"crashed {o['crashed']}, error {o.get('errorMessage')!r}", "something under Photon threw")
+        if self.args.usb_expansion:
+            self.check("photon: Photon took the USB Expansion Hub as EXPANSION_HUB",
+                       dig(r1, "info", "photonExpansionHub") is True, f"{dig(r1, 'info')}",
+                       "Photon doesn't parallelize the Expansion Hub's writes")
+        stale = {name: st for name, st in (r2.get("initialState") or {}).items()
+                 if st.get("enabled") and abs(st.get("power", 0)) > 0.01}
+        self.check("photon: STOP with Photon writes in flight left no motor powered (run 2's INIT state)",
+                   bool(r2.get("initialState")) and not stale, f"powered at the next INIT: {stale or 'none'}",
+                   "a write Photon sent before STOP landed after the SDK's fail-safe, leaving a motor running")
+        for name, m in (r1.get("timing") or {}).items():
+            self.check(f"photon timing {name}: every read-back matched and nothing stopped responding",
+                       m.get("mismatches") == 0 and m.get("allAtLastAfterDrain") is True and not m.get("notResponding"),
+                       f"mismatches {m.get('mismatches')} of {m.get('checks')}, after drain {m.get('allAtLastAfterDrain')}, "
+                       f"not responding {m.get('notResponding')}, drain after {m.get('drainAfterMs')} ms",
+                       "writes were lost or a hub dropped out in this mode")
+        for name, b in (r1.get("burst") or {}).items():
+            self.check(f"photon burst {name}: writes read back right with nothing drained", b.get("mismatches") == 0
+                       and not b.get("notResponding"), f"{b.get('mismatches')} of {b.get('iterations')} wrong",
+                       "a read right after parallel writes saw old values: the hub reordered or dropped them")
+        off, on = r1.get("interleaveOff") or {}, r1.get("interleaveOn8") or {}
+        self.check("photon interleave: unparallelized enable toggles after parallel writes match Photon off",
+                   bool(on) and on.get("valueMismatches") == off.get("valueMismatches")
+                   and on.get("enableMismatches") == off.get("enableMismatches") and not on.get("notResponding"),
+                   f"off {off.get('valueMismatches')}/{off.get('enableMismatches')}, on {on.get('valueMismatches')}/"
+                   f"{on.get('enableMismatches')} (value/enable mismatches)",
+                   "a normal command overtook or was overtaken by a parallel write")
+        reads = r1.get("reads") or {}
+        on8, off_r = reads.get("on8") or {}, reads.get("off") or {}
+        ok = bool(on8) and on8.get("mismatches") == 0 and not on8.get("notResponding")
+        detail = f"write mismatches {on8.get('mismatches')} of {on8.get('checks')}"
+        if self.args.photon_i2c:
+            ok = ok and on8.get("octoQuadCrcFailures", 1) <= off_r.get("octoQuadCrcFailures", 0) \
+                and on8.get("pinpointNotReady", 1) <= off_r.get("pinpointNotReady", 0)
+            detail += (f"; OctoQuad CRC failures off {off_r.get('octoQuadCrcFailures')} / on {on8.get('octoQuadCrcFailures')}; "
+                       f"Pinpoint not READY off {off_r.get('pinpointNotReady')} / on {on8.get('pinpointNotReady')}")
+        self.check("photon reads: bulk, voltage" + (" and I2C" if self.args.photon_i2c else "") + " reads stay clean "
+                   "between parallel writes", ok, detail, "reads failed or degraded with Photon on")
 
     def run_baseline(self):
         seq = self.dash.baseline_seq
@@ -3972,6 +4185,14 @@ def parse_args(argv):
                    help="Bench: Write Recovery (whether EnhancedMotor/EnhancedServo writes reach the hub after a failSafe)")
     p.add_argument("--handover", action="store_true",
                    help="Bench: Drive Handover (Drivetrain taking the drive motors back from Pedro)")
+    p.add_argument("--photon", action="store_true",
+                   help="Bench: Photon twice, then Framework Loop and Write Recovery with Photon off and on")
+    p.add_argument("--usb-expansion", action="store_true",
+                   help="Bench: Photon also drives an Expansion Hub connected by USB (motor ports 0-3, servo ports 0-1)")
+    p.add_argument("--usb-expansion-serial", default=None,
+                   help="the USB Expansion Hub's serial, if the runner can't read it from the Control Hub")
+    p.add_argument("--photon-i2c", action="store_true",
+                   help="Bench: Photon also reads a Pinpoint (I2C bus 1) and an OctoQuad (I2C bus 2)")
     p.add_argument("--hardware-view", action="store_true",
                    help="the Hardware OpMode, then a Hardware view Power edit under Bench: Power Readback")
     p.add_argument("--planner-stop", action="store_true",

@@ -65,6 +65,7 @@ public class FrameworkLoopBench extends EnhancedOpMode {
     protected void initialize() {
         report = new BenchReport("Framework Loop", "framework_loop");
         phaseSeconds = BenchIO.param(report.params, "phaseSeconds", 8);
+        PhotonSetup.fromParams(report);
 
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("dsMsTransmissionInterval", robot.telemetry.getMsTransmissionInterval());

@@ -10,7 +10,7 @@
             <Servo name="TurretR" port="0" />
             <Servo name="TurretL" port="1" />
             <Servo name="hood" port="2" />
-<!--            <Servo name="hardstop" port="3" />-->
+            <Servo name="hardstop" port="3" />
 
             <AnalogInput name="floodgate" port="0" /> <!-- Not wired yet -->
 
