@@ -5,6 +5,17 @@ plugins {
     id 'dev.frozenmilk.sinister.sloth.load'
 }
 
+// Photon is @Pinned, so only a full install changes it on a hub; the bench compares this with the sources it was given.
+def photonSourceSha256 = {
+    def digest = java.security.MessageDigest.getInstance('SHA-256')
+    file('src/main/java/org/firstinspires/ftc/teamcode/architecture/hardware/photon').listFiles()
+            .findAll { it.name.endsWith('.java') }.sort { it.name }.each {
+        digest.update(it.name.getBytes('UTF-8'))
+        digest.update(it.getText('UTF-8').replace('\r\n', '\n').getBytes('UTF-8'))
+    }
+    digest.digest().encodeHex().toString()
+}
+
 android {
     compileSdk 35
     namespace = 'com.qualcomm.ftcrobotcontroller'
@@ -25,6 +36,7 @@ android {
         targetSdkVersion 28
         versionCode 63
         versionName "12.0"
+        buildConfigField "String", "PHOTON_SOURCE_SHA256", '"' + photonSourceSha256() + '"'
         buildConfigField "String", "APP_BUILD_TIME", '"' + (new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.ROOT).format(new Date())) + '"'
         ndk { abiFilters "arm64-v8a" }
     }
@@ -73,8 +85,6 @@ dependencies {
     implementation 'com.pedropathing:revhub:3.0.2'
     implementation 'com.pedropathing:tuning:1.0.1'
     implementation 'com.pedropathing.ivy:pedro:1.1.1'
-
-    implementation 'org.solverslib:photon:0.3.6'
 
     implementation 'dev.frozenmilk.sinister:Sloth:0.3.2'
     // 6165 slothboard build from TeamCode/libs/m2; the version prefix must match the Sloth version.

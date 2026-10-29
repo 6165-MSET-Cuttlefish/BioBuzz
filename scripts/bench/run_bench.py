@@ -11,11 +11,13 @@ Python 3 standard library only.
 
 import argparse
 import base64
+import collections
 import datetime
 import hashlib
 import json
 import math
 import os
+import random
 import re
 import shlex
 import shutil
@@ -53,7 +55,9 @@ BENCH_OPMODES = [
     "Bench: Sloth Probe", "Bench: Gamepad", "Bench: Gamepad Linear", "Bench: Write Recovery", "Bench: Drive Handover",
     "Bench: Power Readback", "Bench: Overlay NaN", "Bench: Planner Stop", "Bench: Webcam Thread Failure",
     "Bench: Pinpoint", "Bench: Clock", "Bench: OctoQuad", "Bench: OctoQuad Absent", "Bench: Expansion Hub",
-    "Bench: Photon",
+    "Bench: Photon", "Bench: Photon Stock", "Bench: Photon Faults", "Bench: Photon Routing", "Bench: Photon Stop",
+    "Bench: Photon Stop Linear", "Bench: Photon Stop Race", "Bench: Photon Crash", "Bench: Photon Replug",
+    "Bench: Framework Loop Photon", "Bench: Write Recovery Photon",
 ]
 
 BENCHES = ("baseline", "hub", "loop", "failure", "gamepad", "write_recovery", "handover", "photon", "hardware_view", "webcam",
@@ -82,6 +86,27 @@ PHOTON_EXPANSION_DEVICES = [
     '<Servo name="eServo" port="0" />',
     '<Servo name="eServo2" port="1" />',
 ]
+PHOTON_POWERS = ("0.2 and 0.25 alternating on motor ports 0-3 and 0.4/0.6 on servo ports 0-1 of the Control Hub and, "
+                 "wired, the Expansion Hub, in every Photon OpMode; 0.15-0.3 in the three-writes and reset phases; 0.1 "
+                 "for 0.2 s per motor port in the port probe; and in the STOP negative controls 0.2 on motor port 0 of "
+                 "each hub after STOP (once, or for 150 ms), past the SDK's STOP gate on purpose")
+PHOTON_STOP_TRIALS = 40
+PHOTON_SOAK_STOP_TRIALS = 200
+PHOTON_NEGATIVE_CONTROL_TRIALS = 5
+PHOTON_SAFE_STOP_TRIALS = 200
+PHOTON_RACE_TRIALS = 3
+PHOTON_CRASH_LOST_WRITES = 2
+PHOTON_DEPTH_REPS = 13
+PHOTON_SOAK_DEPTH_REPS = 25
+PHOTON_SUPERSEDED_REPS = 10
+PHOTON_STOP_DELAY_S = (1.0, 3.0)
+PHOTON_MIN_RESTARTS = 8
+PHOTON_MAX_RESTARTS = 16
+PHOTON_SOAK_MAX_S = 4 * 3600
+PHOTON_SOAK_WRITES_PER_HUB = 10_000_000
+PHOTON_SLOTH_SETTLE_S = 5.0
+PHOTON_SOURCE_DIR = "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/architecture/hardware/photon"
+PHOTON_WORKLOAD_MODE = {0: "off", 8: "on8"}
 # AppUtil.CONFIG_FILES_DIR; the app keeps the active config's name in its default SharedPreferences.
 CONFIG_DIR = "/sdcard/FIRST"
 RC_PREFS = f"shared_prefs/{RC_PACKAGE}_preferences.xml"
@@ -110,7 +135,7 @@ BENCH_POWERS = ("the Drivetrain module's creep, up to 0.35 on motor ports 0-3, f
                 "Framework Loop and Raw Loop; 0.1 and -0.1 on motor ports 0-3 and 0.4/0.6 on servo port 0 in Bench: Hub; "
                 "0.2 on motor ports 0-1 and 0.4 on servo ports 0-1 for 3 s in Write Recovery; a 0.3 stick and the "
                 "Pedro follower, capped at 0.2, on motor ports 0-3 for 12 s in Drive Handover; 0.2 on motor port 0 "
-                "from the dashboard's Hardware view for 4 s in the hardware-view step")
+                "from the dashboard's Hardware view for 4 s in the hardware-view step; with --photon, " + PHOTON_POWERS)
 
 NO_DS = "no Driver Station connected: no TelemetryMessage serialization or send"
 
@@ -908,6 +933,23 @@ def find_adb():
                      "platform-tools or add them to PATH.")
 
 
+class LogcatStream:
+    """Streams the hub's logcat into a file for a step too long for the hub's ring buffer."""
+
+    def __init__(self, adb, path):
+        self.path = path
+        self.file = open(path, "w")
+        self.proc = subprocess.Popen([adb.path, "-s", adb.serial, "shell", f"logcat -v threadtime -T '{adb.hub_time()}'"],
+                                     stdout=self.file, stderr=subprocess.STDOUT, text=True)
+
+    def stop(self):
+        self.proc.terminate()
+        try:
+            self.proc.wait(timeout=10)
+        finally:
+            self.file.close()
+
+
 class Adb:
     def __init__(self, serial, log):
         self.path = find_adb()
@@ -1171,15 +1213,21 @@ def bench_port_devices(xml_text):
         for module in usb.iter("LynxModule"):
             if module.get("port") != usb.get("parentModuleAddress"):
                 continue
-            for device in module:
-                port = device.get("port") or ""
-                if device.get("bus") is not None or not port.isdigit():
-                    continue
-                tag = device.tag.lower()
-                if "motor" in tag and int(port) in BENCH_MOTOR_PORTS:
-                    found.append(f"motor {device.get('name')} on port {port}")
-                elif ("servo" in tag or device.tag in SERVO_PORT_TAGS) and int(port) in BENCH_SERVO_PORTS:
-                    found.append(f"servo {device.get('name')} on port {port}")
+            found += module_port_hits(module)
+    return found
+
+
+def module_port_hits(module):
+    found = []
+    for device in module:
+        port = device.get("port") or ""
+        if device.get("bus") is not None or not port.isdigit():
+            continue
+        tag = device.tag.lower()
+        if "motor" in tag and int(port) in BENCH_MOTOR_PORTS:
+            found.append(f"motor {device.get('name')} on port {port}")
+        elif ("servo" in tag or device.tag in SERVO_PORT_TAGS) and int(port) in BENCH_SERVO_PORTS:
+            found.append(f"servo {device.get('name')} on port {port}")
     return found
 
 
@@ -1321,6 +1369,1108 @@ def mentions(text, phrase):
     return re.search(re.escape(phrase) + r"(?!\w)", text or "") is not None
 
 
+PhotonCheck = collections.namedtuple("PhotonCheck", "section name ok detail fail_means")
+
+PHOTON_DRAIN_LIMIT_MS = 50
+PHOTON_STALE_MS = 100
+PHOTON_CLEAR_LIMIT_MS = 50
+PHOTON_WRITE_CALL_LIMIT_MS = 20
+PHOTON_RETRANSMIT_WINDOWS_MS = ((100, 140), (200, 250))
+PHOTON_ABANDON_WINDOW_MS = (250, 310)
+PHOTON_SDK_CACHE_MS = 480
+PHOTON_STORM_STALL_MS = 50
+PHOTON_REPLUG_MARGIN_MS = 50
+PHOTON_REPLUG_SINGLE_WRITE_MS = 250 + PHOTON_REPLUG_MARGIN_MS
+PHOTON_REPLUG_RECOVER_MS = 1000
+PHOTON_RESET_MARGIN_MS = 50
+PHOTON_RESET_LIMIT_MS = 2000
+PHOTON_OFF_SLACK = (1.15, 0.3)
+PHOTON_SOAK_LOSS_TARGET = 4.4e-7
+PHOTON_POWER_VIOLATION_RAW = int(0.01 * 32767)
+PHOTON_LOG_NEEDLES = ("retransmitting", "timeout: abandoning waiting", "abandoning lock", "incorrect owner releasing",
+                      "releasing ownerless", "unable to find originating", "invalid checksum received")
+PHOTON_LOG_FORBIDDEN = PHOTON_LOG_NEEDLES[1:]
+PHOTON_SLOW_VERSION = "slow version-string reply"
+PHOTON_SLOW_VERSION_MARKS = ("cmd=LynxReadVersionStringCommand", "packetid=0x9030")
+PHOTON_COUNTERS_ZERO = ("retransmits", "abandonedWrites", "supersededWrites", "gateFallbacks", "postStopFailSafes",
+                        "notRespondingFallbacks", "deviceNotReadyFallbacks", "writeFailures", "clearedAtInit",
+                        "orphanDatagrams")
+PHOTON_LEFTOVERS = ("inFlight", "pendingEntries", "standIns", "routes")
+PHOTON_EARLY_LOST = ("writeFailures", "deviceNotReadyFallbacks", "notRespondingFallbacks", "abandonedWrites")
+PHOTON_PHASE_LINE = re.compile(r"\bBENCH\s*:\s*phase (.+?)\s*$")
+
+PHOTON_TESTS = (
+    ("install", "Installed Photon", "the hub runs the Photon built from these sources: Photon is pinned, so only a "
+                                    "full install changes it and a hot load never does"),
+    ("ports", "Port guard", "nothing is plugged into the motor ports the Photon benches drive, on either hub (servo "
+                            "ports aren't probed: check them by eye)"),
+    ("stock", "Stock baseline", "an OpMode Photon never touched, right after an app restart, writes every value exactly, "
+                                "and can't turn Photon on"),
+    ("gain", "Gain over stock", "how much faster Photon makes the writes, and that installed-but-disabled costs nothing"),
+    ("phases", "Every write lands", "with Photon off and at 8/4/2/1 parallel, every write leaves the exact register value "
+                                   "the SDK would, nothing is lost, retransmitted, left in flight (by Photon's count "
+                                   "and in the SDK's own command map), stale past one retransmit interval or over the "
+                                   "limit, and every write Photon should parallelize was parallelized"),
+    ("routing", "Routing", "every hub's replies reach the hub object the OpMode writes through, after every app restart "
+                           "and in both swap orders, so a hub marked unresponsive recovers on its next reply"),
+    ("lost", "Lost writes", "a parallel write whose ACK never comes is retransmitted and given up at the SDK's own "
+                            "intervals, with 0-7 other writes in flight around it, never blocks the caller, frees its "
+                            "slot and its SDK entry, and the next identical write really reaches the hub; one "
+                            "superseded by a newer write to the same channel ends quietly"),
+    ("storm", "Write storm", "writes past the parallel limit wait a bounded time and never stall the loop"),
+    ("threads", "Two writer threads", "parallel writes from two threads, with Photon toggled from a third, stay correct, "
+                                      "within the limit and leave nothing behind"),
+    ("stop", "STOP", "after STOP's fail-safe no motor is re-energized and no servo re-enabled, with STOP landing "
+                     "anywhere in the loop, iterative and linear, judged by a read of every channel after the "
+                     "fail-safe and by a sampler thread, both proven able to fail; no trial crashed or restarted"),
+    ("race", "STOP inside a write", "STOP landing between a motor write going out and the call returning leaves the "
+                                    "motor off"),
+    ("crash", "Crash with writes in flight", "an OpMode that throws with parallel writes that will never be acknowledged "
+                                             "leaves no motor powered, every such write accounted for, and nothing in "
+                                             "flight or in the SDK's command map at the next INIT"),
+    ("consecutive", "Consecutive OpModes", "Photon, non-Photon, Photon, crash, Photon: every INIT starts clean and "
+                                           "routed, and a non-Photon OpMode can't enable it"),
+    ("reset", "Hub reset recovery", "after a hub reset every output is back at target no later with Photon than "
+                                    "without (the summary says whether the SDK learned of the reset from the hub)"),
+    ("soak", "Write soak", "zero lost, stale or retransmitted writes over a production-rate run, with the 95% upper "
+                           "bound on the per-write loss rate"),
+    ("sloth", "deploySloth", "after a hot load a Photon OpMode still enables the one pinned PhotonCore and parallelizes"),
+    ("rs485", "RS485 Expansion Hub", "an Expansion Hub on RS485 is never parallelized, and the Control Hub's parallel "
+                                     "writes beside its locked ones and a poller's reads leave every value right and "
+                                     "no lock warning"),
+    ("replug", "Cable pulls", "pulling and replugging the Expansion Hub's USB or power stalls the loop no longer with "
+                              "Photon than without, its writes fall back while it's gone and are right again within 1 s"),
+    ("logcat", "SDK warnings", "no lock, ownership, checksum or abandon warnings from the SDK in any Photon step, "
+                               "except what a step causes on purpose, and every step's log is complete"),
+)
+
+
+PHOTON_TITLES = {section: title for section, title, _ in PHOTON_TESTS}
+
+
+def gain_text(gain):
+    return f"{gain:.2f}x" if finite(gain) else "-"
+
+
+def expansion_port_devices(xml_text, usb_serial, address):
+    """Devices a config puts on the bench ports of an Expansion Hub: a USB one (any, or the one with usb_serial) or an
+    RS485 child at address."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError as e:
+        raise BenchError(f"can't parse a hardware config to check the Expansion Hub's bench ports: {e}")
+    found = []
+    for usb in root.iter("LynxUsbDevice"):
+        embedded = usb.get("serialNumber") == "(embedded)"
+        for module in usb.iter("LynxModule"):
+            child = embedded and module.get("port") != usb.get("parentModuleAddress") and module.get("port") == str(address)
+            own_usb = not embedded and (usb_serial is None or usb.get("serialNumber") == usb_serial)
+            if child or own_usb:
+                found += [f"Expansion Hub {hit}" for hit in module_port_hits(module)]
+    return found
+
+
+def photon_events(readback, n=3):
+    events = (readback or {}).get("events") or []
+    return [{k: e.get(k) for k in ("phase", "channel", "hub", "expected", "got", "photonEnabled", "msSinceWrite",
+                                   "inFlightOnHub")} for e in events[:n]]
+
+
+def finite(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def photon_phase_problems(phase):
+    """What is wrong with one PhotonWorkload phase result; empty when it passed."""
+    if not isinstance(phase, dict) or not phase:
+        return ["no result"]
+    problems = []
+    par = phase.get("parallel")
+    on = isinstance(par, int) and par > 0
+    rb = phase.get("readback") or {}
+    if rb.get("mismatches") != 0:
+        problems.append(f"{rb.get('mismatches')} of {rb.get('checks')} read-backs wrong, e.g. {photon_events(rb)}")
+    end = phase.get("endReadback") or {}
+    if phase.get("allAtEnd") is not True or end.get("mismatches") != 0:
+        problems.append(f"after the drain {end.get('mismatches')} channel(s) not at their last value "
+                        f"{photon_events(end)}")
+    for key in ("drainBeforeMs", "drainAfterMs"):
+        v = phase.get(key)
+        if not finite(v) or v > PHOTON_DRAIN_LIMIT_MS:
+            problems.append(f"{key} {v} (must be finite and at most {PHOTON_DRAIN_LIMIT_MS} ms)")
+    if phase.get("inFlightAfterDrain") != 0:
+        problems.append(f"{phase.get('inFlightAfterDrain')} write(s) still in flight after the drain")
+    problems += leftover_problems(phase.get("leftoversAfterDrain"), "after the drain")
+    limit = par if on else 0
+    for key, what in (("maxInFlight", "writes in flight (Photon's slots)"),
+                      ("maxPendingEntries", "pending entries (Photon's map)"),
+                      ("maxStandIns", "stand-ins in the SDK's command map")):
+        counts = phase.get(key)
+        if not isinstance(counts, dict) or not counts:
+            problems.append(f"no {key}")
+            continue
+        for hub, n in counts.items():
+            if not isinstance(n, int) or n > limit:
+                problems.append(f"{hub} had {n} {what} at a limit of {limit}")
+    if on and phase.get("photonEnabled") is not True:
+        problems.append("Photon wasn't enabled")
+    for hub, ms in (phase.get("maxPendingMs") or {}).items():
+        if not finite(ms) or ms > PHOTON_STALE_MS:
+            problems.append(f"{hub} held an unacknowledged write for {ms} ms (stale past {PHOTON_STALE_MS} ms)")
+    c = phase.get("counters")
+    if not isinstance(c, dict):
+        return problems + ["no counters"]
+    for key in PHOTON_COUNTERS_ZERO:
+        if c.get(key, 0) != 0:
+            problems.append(f"{key} {c.get(key)}")
+    if c.get("nacks"):
+        problems.append(f"NACKs {c.get('nacks')}")
+    slot_waits_expected = on and (phase.get("burstPerHub") or 0) > par
+    if c.get("slotTimeouts", 0) and not slot_waits_expected:
+        problems.append(f"slotTimeouts {c.get('slotTimeouts')} with at most {phase.get('burstPerHub')} writes per hub "
+                        f"at a limit of {par}")
+    issued = phase.get("issuedOnParallelHubs")
+    parallel_writes = c.get("parallelWrites", 0)
+    if on and phase.get("countExact", True) and parallel_writes + c.get("slotTimeouts", 0) != issued:
+        problems.append(f"{parallel_writes} parallel writes + {c.get('slotTimeouts', 0)} slot timeouts for {issued} "
+                        "writes issued on parallel-capable hubs")
+    if not on and parallel_writes != 0:
+        problems.append(f"{parallel_writes} parallel writes with Photon {'off' if par == 0 else 'out of the OpMode'}")
+    if phase.get("notResponding"):
+        problems.append(f"not responding: {phase.get('notResponding')}")
+    if phase.get("voltageReadsUnder9V"):
+        problems.append(f"{phase.get('voltageReadsUnder9V')} hub voltage reads under 9 V")
+    return problems
+
+
+def leftover_problems(left, when):
+    """Problems in a {hub: PhotonProbe.leftovers} map: every count must be 0."""
+    if not isinstance(left, dict) or not left:
+        return [f"no leftover report {when}"]
+    bad = {hub: {k: v for k, v in (m or {}).items() if k in PHOTON_LEFTOVERS and v != 0} for hub, m in left.items()}
+    missing = [hub for hub, m in left.items() if not all(k in (m or {}) for k in PHOTON_LEFTOVERS)]
+    out = [f"{hub} left {b} {when}" for hub, b in bad.items() if b]
+    return out + [f"{hub}: incomplete leftover report {when}" for hub in missing]
+
+
+def photon_workload_checks(section, label, phases):
+    out = []
+    for name, phase in phases.items():
+        problems = photon_phase_problems(phase)
+        rb = (phase or {}).get("readback") or {}
+        c = (phase or {}).get("counters") or {}
+        detail = (f"{rb.get('checks')} read-backs, {rb.get('mismatches')} wrong; drain {fmt_ms(dig(phase, 'drainAfterMs'))}; "
+                  f"max in flight {dig(phase, 'maxInFlight')}, SDK stand-ins {dig(phase, 'maxStandIns')}; oldest "
+                  f"pending {dig(phase, 'maxPendingMs')} ms; parallel writes {c.get('parallelWrites')} of "
+                  f"{dig(phase, 'issuedOnParallelHubs')} issued; retransmits {c.get('retransmits')}")
+        out.append(PhotonCheck(section, f"{label} {name}".strip(), not problems,
+                               detail + ("" if not problems else "; " + "; ".join(problems)),
+                               "a write was lost, landed wrong, stayed in flight, went stale, overran the limit or "
+                               "skipped Photon in this mode"))
+    return out
+
+
+def fmt_ms(v):
+    return f"{v:.2f} ms" if finite(v) else str(v)
+
+
+def photon_source_sha256(photon_dir):
+    """Matches TeamCode/build.gradle's BuildConfig.PHOTON_SOURCE_SHA256."""
+    digest = hashlib.sha256()
+    for f in sorted(photon_dir.glob("*.java")):
+        digest.update(f.name.encode())
+        digest.update(f.read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()
+
+
+def photon_install_checks(stock, manifest):
+    installed = dig(stock, "info", "installedPhotonSourceSha256")
+    local = (manifest or {}).get("photonSourceSha256")
+    return [PhotonCheck("install", "the hub's installed Photon was built from the photon sources in this checkout",
+                        bool(local) and installed == local,
+                        f"installed {str(installed)[:16]}, local {str(local)[:16]}",
+                        "the hub runs Photon from another full install, so these results don't describe these sources: "
+                        "do a full install (Run) and rerun; deploySloth never changes pinned code")]
+
+
+def photon_stock_checks(stock):
+    out = []
+    hubs = dig(stock, "info", "hubs", default=[]) or []
+    out.append(PhotonCheck("stock", "the stock baseline ran on the SDK's own hub objects",
+                           bool(hubs) and not any(h.get("swapped") for h in hubs),
+                           f"hubs {[(h.get('address'), h.get('class')) for h in hubs]}",
+                           "Photon had already swapped these hubs, so this isn't a stock baseline: the app wasn't "
+                           "restarted before it, or a Photon OpMode ran first"))
+    refused = dig(stock, "enableRefused", "refused")
+    out.append(PhotonCheck("stock", "PhotonCore.enable() throws in an OpMode without @Photon", refused is True,
+                           f"refused {refused}: {dig(stock, 'enableRefused', 'message')}",
+                           "any OpMode can switch Photon on, so the opt-in isn't enforced"))
+    phases = {"timing": dig(stock, "timing", "stock")}
+    for key in ("burst", "interleave", "reads"):
+        if dig(stock, key) is not None:
+            phases[key] = dig(stock, key)
+    if dig(stock, "timing", "stock+poller") is not None:
+        phases["timing+poller"] = dig(stock, "timing", "stock+poller")
+    out += photon_workload_checks("stock", "stock", phases)
+    return out
+
+
+def photon_port_checks(stock):
+    probe = dig(stock, "portProbe") or {}
+    busy = [p for p in probe.get("ports") or [] if not p.get("empty")]
+    return [PhotonCheck("ports", f"no motor port draws over {probe.get('limitAmps')} A at {probe.get('power')} power",
+                        probe.get("empty") is True,
+                        f"{len(probe.get('ports') or [])} ports probed; drawing current: "
+                        f"{[(p.get('channel'), round(p.get('drivenAmps') or 0, 3)) for p in busy] or 'none'}",
+                        "something is plugged into a bench port: the Photon benches would drive it; unplug it")]
+
+
+def photon_gain_rows(stock, main):
+    rows = []
+    sources = [("stock", dig(stock, "timing", "stock")), ("stock+poller", dig(stock, "timing", "stock+poller"))]
+    sources += [(k, v) for k, v in (dig(main, "timing", default={}) or {}).items()]
+    base = dig(stock, "timing", "stock", "writeBlockMs", "p50")
+    for name, t in sources:
+        if not isinstance(t, dict):
+            continue
+        p50 = dig(t, "writeBlockMs", "p50")
+        rows.append({"mode": name, "writeBlock": dig(t, "writeBlockMs"), "perHub": dig(t, "writeBlockPerHubMs") or {},
+                     "loopPeriod": dig(t, "loopPeriodMs"),
+                     "gain": base / p50 if finite(base) and finite(p50) and p50 > 0 else None})
+    return rows
+
+
+def photon_gain_checks(stock, main, parallel_hubs):
+    out = []
+    stock_hubs = dig(stock, "timing", "stock", "writeBlockPerHubMs") or {}
+    on8 = dig(main, "timing", "on8", "writeBlockPerHubMs") or {}
+    off = dig(main, "timing", "off", "writeBlockPerHubMs") or {}
+    for hub in parallel_hubs:
+        s, o, d = dig(stock_hubs, hub, "p50"), dig(on8, hub, "p50"), dig(off, hub, "p50")
+        out.append(PhotonCheck("gain", f"{hub}: writes are faster at 8 parallel than stock", finite(s) and finite(o) and o < s,
+                               f"write block p50 stock {s} ms, on8 {o} ms", "Photon gives this hub no speed-up"))
+        slack_ratio, slack_ms = PHOTON_OFF_SLACK
+        out.append(PhotonCheck("gain", f"{hub}: Photon installed but disabled costs no more than stock",
+                               finite(s) and finite(d) and d <= s * slack_ratio + slack_ms,
+                               f"write block p50 stock {s} ms, off {d} ms (limit {slack_ratio:.2f}x + {slack_ms} ms)",
+                               "swapped-but-disabled hubs are slower than the SDK's own"))
+    return out
+
+
+def output_violates(kind, enabled, raw):
+    return bool(enabled) and (kind == "servo" or abs(raw or 0) > PHOTON_POWER_VIOLATION_RAW)
+
+
+def stop_trial_verdict(sampler, require_zeroing_read=False):
+    """Violations in one STOP sampler file: a motor enabled above 1% power, or a servo enabled, in the read of every
+    channel that stop() makes after the SDK's fail-safe and before it zeroes the motors, or in any sampler sweep after
+    the first sweep, begun with STOP's gate up, in which every channel on that hub read safe (disabled, or a motor at
+    1% power or less: zeroMotors re-enables them at 0)."""
+    v = {"problems": [], "violations": 0, "examples": [], "failSafeMsAfterGate": {}, "zeroingReadViolations": 0,
+         "samplerViolations": 0, "sweepMs": {}, "countersAtStop": None}
+    if not isinstance(sampler, dict) or not sampler:
+        v["problems"].append("no sampler file")
+        return v
+    if sampler.get("failure"):
+        v["problems"].append(f"the sampler failed: {sampler.get('failure')}")
+    if not sampler.get("gateSeen"):
+        v["problems"].append("STOP's gate was never seen")
+    extra = sampler.get("extra") or {}
+    v["countersAtStop"] = extra.get("countersAtStop")
+    seen = extra.get("stopSawBeforeZeroing")
+    if isinstance(seen, dict) and isinstance(seen.get("outputs"), list) and seen["outputs"]:
+        if seen.get("gateUp") is not True:
+            v["problems"].append("stop()'s read ran with STOP's gate down")
+        for o in seen["outputs"]:
+            if output_violates(o.get("kind"), o.get("enabled"), o.get("raw")):
+                v["zeroingReadViolations"] += 1
+                if len(v["examples"]) < 4:
+                    v["examples"].append({"at": "stop() before zeroing", "hub": o.get("hub"), "channel": o.get("channel"),
+                                          "raw": o.get("raw")})
+    elif require_zeroing_read:
+        v["problems"].append("no read of every channel in stop() before zeroing")
+    for hub in sampler.get("hubs") or []:
+        key = hub.get("key")
+        if hub.get("error"):
+            v["problems"].append(f"{key}: sampler thread failed: {hub.get('error')}")
+        kinds, names = hub.get("kinds") or [], hub.get("channels") or []
+        sweeps = hub.get("sweeps") or []
+        starts = [row[0] for row in sweeps if row]
+        gaps = sorted(b - a for a, b in zip(starts, starts[1:]))
+        if gaps:
+            v["sweepMs"][key] = round(gaps[len(gaps) // 2], 1)
+        observed = None
+        for row in sweeps:
+            if len(row) != 3 + 2 * len(kinds):
+                v["problems"].append(f"{key}: malformed sweep {row}")
+                break
+            enabled, raw = row[3::2], row[4::2]
+            if observed is None:
+                if row[2] and not any(output_violates(k, e, r) for k, e, r in zip(kinds, enabled, raw)):
+                    observed = row[0]
+                continue
+            for i, kind in enumerate(kinds):
+                if output_violates(kind, enabled[i], raw[i]):
+                    v["samplerViolations"] += 1
+                    if len(v["examples"]) < 4:
+                        v["examples"].append({"at": "sampler", "hub": key, "channel": names[i],
+                                              "msAfterGate": row[0] - (hub.get("gateMs") or 0), "raw": raw[i]})
+        if observed is None:
+            v["problems"].append(f"{key}: no sweep after STOP read every channel safe, so the fail-safe was never seen")
+        else:
+            v["failSafeMsAfterGate"][key] = observed - (hub.get("gateMs") or 0)
+    v["violations"] = v["zeroingReadViolations"] + v["samplerViolations"]
+    return v
+
+
+def stop_trial_problems(t, v):
+    """A STOP trial's own failures: the sampler's problems, plus a crash, an app restart or an error line."""
+    problems = list(v["problems"])
+    if t.get("crashed"):
+        problems.append(f"the OpMode crashed: {t.get('error')!r}")
+    if t.get("appRestarted"):
+        problems.append("the app restarted")
+    if t.get("error") and not t.get("crashed"):
+        problems.append(f"error line {t.get('error')!r}")
+    return problems
+
+
+def photon_stop_bound(n):
+    """The 95% upper bound (rule of three) on the per-STOP violation rate after n clean trials."""
+    return 3.0 / n if n else 1.0
+
+
+def photon_stop_checks(condition, trials, expect=None):
+    """expect: None for real trials, "held" for the 150 ms negative control (the sampler must see it), "once" for the
+    single late write (stop()'s read must see it)."""
+    if not trials:
+        return [PhotonCheck("stop", f"{condition}: trials ran", False, "no trials", "the STOP trials didn't run")]
+    verdicts = [(t, stop_trial_verdict(t.get("sampler"), require_zeroing_read=True)) for t in trials]
+    broken = [(t.get("trial"), stop_trial_problems(t, v)) for t, v in verdicts]
+    broken = [(tid, p) for tid, p in broken if p]
+    sweeps = {}
+    for _, v in verdicts:
+        for hub, ms in v["sweepMs"].items():
+            sweeps.setdefault(hub, []).append(ms)
+    sweep_text = ", ".join(f"{hub} {min(ms):.0f}-{max(ms):.0f} ms" for hub, ms in sorted(sweeps.items())) or "none"
+    if expect == "held":
+        fired = [v for _, v in verdicts if v["samplerViolations"] > 0]
+        first = [dig(t, "sampler", "extra", "negativeControl", "samplerSawFailSafeFirst") for t, _ in verdicts]
+        return [PhotonCheck("stop", f"{condition}: the sampler sees a motor re-energized for 150 ms after the fail-safe",
+                            len(fired) == len(trials) and all(first) and not broken,
+                            f"{len(fired)} of {len(trials)} trials registered violations; sampler saw the fail-safe "
+                            f"first in {sum(1 for f in first if f)}; sweep period {sweep_text}"
+                            + (f"; broken trials {broken[:2]}" if broken else ""),
+                            "the STOP sampler can't see a motor re-energized after the fail-safe, so a zero-violation "
+                            "result elsewhere proves nothing")]
+    if expect == "once":
+        fired = [v for _, v in verdicts if v["zeroingReadViolations"] > 0]
+        sampled = [v for _, v in verdicts if v["samplerViolations"] > 0]
+        return [PhotonCheck("stop", f"{condition}: one late write and enable after the fail-safe is caught every time",
+                            len(fired) == len(trials) and not broken,
+                            f"stop()'s read caught {len(fired)} of {len(trials)}, the sampler too in {len(sampled)}; "
+                            f"sweep period {sweep_text}" + (f"; broken trials {broken[:2]}" if broken else ""),
+                            "stop()'s read after the fail-safe can't see a single late re-energize, which is how a "
+                            "real Photon STOP failure would look")]
+    bad = [(t.get("trial"), v, stop_trial_problems(t, v)) for t, v in verdicts]
+    bad = [(tid, v, p) for tid, v, p in bad if v["violations"] or p]
+    total = sum(v["violations"] for _, v in verdicts)
+    fs = [x for _, v in verdicts for x in v["failSafeMsAfterGate"].values()]
+    windows = sum(1 for _, v in verdicts if (v["countersAtStop"] or {}).get("postStopFailSafes")
+                  or (v["countersAtStop"] or {}).get("gateFallbacks"))
+    detail = (f"{len(trials)} trials, {total} violations, {len(bad)} bad trials, 95% bound on the violation rate "
+              f"{photon_stop_bound(len(trials)):.1%}"
+              + (f", e.g. trial {bad[0][0]}: {bad[0][2][:2]} {bad[0][1]['examples'][:2]}" if bad else "")
+              + (f"; fail-safe seen {min(fs):.0f}-{max(fs):.0f} ms after the gate" if fs else "")
+              + f"; {windows} trials had a write in STOP's window (gate fallback or post-STOP fail-safe); sweep "
+              f"period {sweep_text}")
+    return [PhotonCheck("stop", f"{condition}: nothing re-energized after STOP's fail-safe", not bad, detail,
+                        "a write reached a hub after STOP's fail-safe and powered a motor or enabled a servo again, "
+                        "or a trial crashed or restarted the app (or couldn't be judged: see the problems)")]
+
+
+def photon_stop_coverage(condition, trials):
+    fractions = [dig(t, "sampler", "loopAtGate", "fractionOfLoop") for t in trials]
+    fractions = [f for f in fractions if finite(f)]
+    quarters = sorted({min(3, int(f * 4)) for f in fractions})
+    return PhotonCheck("stop", f"{condition}: STOP landed in every quarter of the loop", len(quarters) == 4,
+                       f"quarters hit {quarters} from {len(fractions)} trials with a known loop phase",
+                       "too few trials, or STOP always landed at the same point of the loop, so a race in another "
+                       "part of the loop could hide")
+
+
+def photon_race_checks(trials):
+    out = []
+    for parallel in sorted({dig(t, "result", "photon") for t in trials if dig(t, "result", "photon") is not None}):
+        mine = [t for t in trials if dig(t, "result", "photon") == parallel]
+        fired = [t for t in mine if dig(t, "result", "gateRaisedInsideWrite") is True]
+        bad = [t for t in fired if dig(t, "result", "violation") is not False]
+        label = "Photon on" if parallel > 0 else "Photon off (SDK path)"
+        out.append(PhotonCheck("race", f"{label}: the motor stays off when STOP lands inside its write",
+                               bool(mine) and len(fired) == len(mine) and not bad,
+                               f"{len(mine)} trials, the tap fired in {len(fired)}, violations in {len(bad)}"
+                               + (f": {dig(bad[0], 'result', 'hub')} reads {dig(bad[0], 'result', 'reads')}" if bad else ""),
+                               "STOP landing just after a write went out let the motor be re-enabled with that power"
+                               if fired else "the tap never saw the write, so the trial didn't test the window"))
+    return out
+
+
+def photon_lost_checks(faults, hubs=None, trials=None):
+    out = []
+    lost, over = dig(faults, "lostWrite", default=[]) or [], dig(faults, "lostOverLimit", default=[]) or []
+    if hubs is not None:
+        want = len(hubs) * 2 * trials
+        out.append(PhotonCheck("lost", "every lost-write trial ran", len(lost) == want and len(over) == len(hubs),
+                               f"{len(lost)} of {want} single lost writes, {len(over)} of {len(hubs)} full-limit trials",
+                               "Bench: Photon Faults stopped early, so some lost-write paths weren't tested"))
+    for r in lost:
+        problems = []
+        if r.get("primedLanded") is not True:
+            problems.append("the priming write didn't land")
+        if r.get("registerKeptOldValue") is not True:
+            problems.append("the tap didn't stop the write (the register changed), so the trial is invalid")
+        if not finite(r.get("writeCallMs")) or r["writeCallMs"] > PHOTON_WRITE_CALL_LIMIT_MS:
+            problems.append(f"the lost write's call took {r.get('writeCallMs')} ms")
+        lo, hi = PHOTON_ABANDON_WINDOW_MS
+        if not finite(r.get("abandonedAtMs")) or not lo <= r["abandonedAtMs"] <= hi:
+            problems.append(f"given up at {r.get('abandonedAtMs')} ms, not {lo}-{hi}")
+        retx = [e.get("msAfterArming") for e in r.get("tapLog") or [] if e.get("retransmit")]
+        if len(retx) != len(PHOTON_RETRANSMIT_WINDOWS_MS) or not all(
+                finite(t) and a <= t <= b for t, (a, b) in zip(retx, PHOTON_RETRANSMIT_WINDOWS_MS)):
+            problems.append(f"retransmits at {retx} ms, not one in each of {PHOTON_RETRANSMIT_WINDOWS_MS}")
+        if (r.get("inFlightAfterAbandon") != 0 or r.get("pendingEntriesAfterAbandon") != 0
+                or r.get("standInsAfterAbandon") != 0):
+            problems.append(f"in flight {r.get('inFlightAfterAbandon')}, pending {r.get('pendingEntriesAfterAbandon')}, "
+                            f"SDK stand-ins {r.get('standInsAfterAbandon')} after giving up")
+        if r.get("sdkCacheValidAfterAbandon") is not False:
+            problems.append("the SDK's cache for the channel was still valid")
+        if not finite(r.get("rewriteMsAfterLostWrite")) or r["rewriteMsAfterLostWrite"] > PHOTON_SDK_CACHE_MS:
+            problems.append(f"the identical re-write came {r.get('rewriteMsAfterLostWrite')} ms after the lost write, "
+                            "past the SDK's 500 ms cache, so it can't show the cache was dropped")
+        if r.get("rewriteLanded") is not True:
+            problems.append("the identical re-write never reached the hub")
+        if r.get("otherHubAllAt") is False:
+            problems.append("the other hub's writes went wrong meanwhile")
+        if not finite(dig(r, "otherWriteMs", "max", default=0)) or dig(r, "otherWriteMs", "max", default=0) > PHOTON_WRITE_CALL_LIMIT_MS:
+            problems.append(f"other writes meanwhile took up to {dig(r, 'otherWriteMs', 'max')} ms")
+        c = r.get("counters") or {}
+        if c.get("abandonedWrites") != 1:
+            problems.append(f"abandonedWrites {c.get('abandonedWrites')}, not 1")
+        for key in ("writeFailures", "deviceNotReadyFallbacks", "slotTimeouts", "orphanDatagrams", "gateFallbacks"):
+            if c.get(key, 0):
+                problems.append(f"{key} {c.get(key)}")
+        if c.get("nacks"):
+            problems.append(f"NACKs {c.get('nacks')}")
+        if not finite(r.get("drainAfterMs")) or r.get("notRespondingAtEnd") is not False:
+            problems.append(f"drain {r.get('drainAfterMs')}, not responding at the end {r.get('notRespondingAtEnd')}")
+        out.append(PhotonCheck("lost", f"{r.get('hub')} {r.get('kind')} {r.get('channel')}: a lost write is handled like "
+                               "the SDK's timeout", not problems,
+                               f"call {fmt_ms(r.get('writeCallMs'))}, retransmits {retx} ms, given up "
+                               f"{fmt_ms(r.get('abandonedAtMs'))}, re-write landed {r.get('rewriteLanded')}"
+                               + ("" if not problems else "; " + "; ".join(problems)),
+                               "a write whose ACK never came could block the caller, stay in flight, or be followed by an "
+                               "identical write the SDK silently skipped"))
+    for r in over:
+        problems = []
+        limit = r.get("limit")
+        if r.get("inFlightWithAllLost") != limit:
+            problems.append(f"{r.get('inFlightWithAllLost')} in flight with {limit} lost")
+        over = r.get("overflowWriteMs") or {}
+        if over.get("count") in (None, 0) or not finite(over.get("max")) or over["max"] > PHOTON_WRITE_CALL_LIMIT_MS:
+            problems.append(f"the writes past the limit took up to {over.get('max')} ms")
+        if r.get("slotTimeoutsSoFar") != over.get("count"):
+            problems.append(f"{r.get('slotTimeoutsSoFar')} slot timeouts for {over.get('count')} writes past the limit")
+        if r.get("registersKeptOldValues") is not True:
+            problems.append("the tap didn't stop the lost writes, so the trial is invalid")
+        lo, hi = PHOTON_ABANDON_WINDOW_MS
+        if not finite(r.get("allAbandonedAtMs")) or not lo <= r["allAbandonedAtMs"] <= hi + 20:
+            problems.append(f"all given up at {r.get('allAbandonedAtMs')} ms")
+        if r.get("inFlightAfterAbandon") != 0 or r.get("standInsAfterAbandon") != 0:
+            problems.append(f"{r.get('inFlightAfterAbandon')} still in flight, {r.get('standInsAfterAbandon')} SDK stand-ins")
+        if r.get("rewritesLanded") is not True:
+            problems.append("the identical re-writes didn't all land")
+        if dig(r, "counters", "abandonedWrites") != limit:
+            problems.append(f"abandonedWrites {dig(r, 'counters', 'abandonedWrites')}, not {limit}")
+        out.append(PhotonCheck("lost", f"{r.get('hub')}: a full limit of lost writes never blocks the next write",
+                               not problems, f"limit {limit}, writes past it up to {over.get('max')} ms, all given up at "
+                               f"{fmt_ms(r.get('allAbandonedAtMs'))}" + ("" if not problems else "; " + "; ".join(problems)),
+                               "lost writes can fill the slots and hang or stall the writer, which is the failure that "
+                               "froze stock Photon"))
+    return out
+
+
+def retransmit_problems(tap_log):
+    retx = [e.get("msAfterArming") for e in tap_log or [] if e.get("retransmit")]
+    if len(retx) != len(PHOTON_RETRANSMIT_WINDOWS_MS) or not all(
+            finite(t) and a <= t <= b for t, (a, b) in zip(retx, PHOTON_RETRANSMIT_WINDOWS_MS)):
+        return [f"retransmits at {retx} ms, not one in each of {PHOTON_RETRANSMIT_WINDOWS_MS}"]
+    return []
+
+
+def lost_depth_problems(r):
+    problems = []
+    if r.get("registerKeptOldValue") is not True:
+        problems.append("the tap didn't stop the write, so the trial is invalid")
+    if not finite(r.get("writeCallMs")) or r["writeCallMs"] > PHOTON_WRITE_CALL_LIMIT_MS:
+        problems.append(f"the lost write's call took {r.get('writeCallMs')} ms")
+    lo, hi = PHOTON_ABANDON_WINDOW_MS
+    if not finite(r.get("abandonedAtMs")) or not lo <= r["abandonedAtMs"] <= hi:
+        problems.append(f"given up at {r.get('abandonedAtMs')} ms, not {lo}-{hi}")
+    problems += retransmit_problems(r.get("tapLog"))
+    busy = dig(r, "busyWriteMs", "max", default=None)
+    if busy is not None and (not finite(busy) or busy > PHOTON_WRITE_CALL_LIMIT_MS):
+        problems.append(f"writes around it took up to {busy} ms")
+    problems += leftover_problems({r.get("hub"): r.get("leftoversAfterAbandon")}, "after giving up")
+    if r.get("rewriteLanded") is not True:
+        problems.append("the identical re-write never reached the hub")
+    if r.get("othersLanded") is not True:
+        problems.append("a write to another channel around it didn't land")
+    c = r.get("counters") or {}
+    if c.get("abandonedWrites") != 1 or c.get("supersededWrites", 0) != 0:
+        problems.append(f"abandoned {c.get('abandonedWrites')}, superseded {c.get('supersededWrites')}; want 1 and 0")
+    for key in ("writeFailures", "deviceNotReadyFallbacks", "orphanDatagrams", "gateFallbacks"):
+        if c.get(key, 0):
+            problems.append(f"{key} {c.get(key)}")
+    if c.get("nacks"):
+        problems.append(f"NACKs {c.get('nacks')}")
+    if not finite(r.get("drainAfterMs")) or r.get("notRespondingAtEnd") is not False:
+        problems.append(f"drain {r.get('drainAfterMs')}, not responding at the end {r.get('notRespondingAtEnd')}")
+    return problems
+
+
+def photon_lost_depth_checks(faults, hubs, reps, depths=8):
+    out = []
+    trials = dig(faults, "lostAmongWrites", default=[]) or []
+    for hub in hubs:
+        mine = [r for r in trials if r.get("hub") == hub]
+        by_depth = collections.Counter(r.get("depth") for r in mine)
+        short = {d: by_depth.get(d, 0) for d in range(depths) if by_depth.get(d, 0) < reps}
+        bad = [(r.get("depth"), r.get("channel"), p) for r in mine for p in [lost_depth_problems(r)] if p]
+        measured = collections.Counter(r.get("inFlightBeforeLostWrite") for r in mine)
+        kinds = collections.Counter(r.get("kind") for r in mine)
+        out.append(PhotonCheck("lost", f"{hub}: a lost write with 0-{depths - 1} other writes in flight is handled like "
+                               "the SDK's timeout", bool(mine) and not short and not bad,
+                               f"{len(mine)} lost writes ({dict(kinds)}), {reps} or more at each depth 0-{depths - 1}: "
+                               f"{'yes' if not short else f'short {short}'}; measured in flight before each "
+                               f"{dict(sorted(measured.items(), key=lambda kv: (kv[0] is None, kv[0])))}"
+                               + (f"; {len(bad)} failed, e.g. {bad[:2]}" if bad else ""),
+                               "a lost write mishandled only when other writes are in flight around it: a slot, an "
+                               "SDK entry or a newer write's ACK confused the give-up"))
+    return out
+
+
+def superseded_problems(r):
+    problems = []
+    if r.get("registerKeptOldValue") is not True:
+        problems.append("the tap didn't stop the write, so the trial is invalid")
+    at = r.get("newerWriteAtMs")
+    if not finite(at) or at >= PHOTON_RETRANSMIT_WINDOWS_MS[0][0]:
+        problems.append(f"the newer write went out at {at} ms, after the first retransmit was due")
+    log = r.get("tapLog") or []
+    if len(log) != 1 or log[0].get("retransmit"):
+        problems.append(f"the tap saw {len(log)} transmissions of the lost write, so it was retransmitted over the newer one")
+    problems += leftover_problems({r.get("hub"): r.get("leftovers")}, "after it ended")
+    if r.get("newerLanded") is not True:
+        problems.append("the newer write's value isn't in the register")
+    if r.get("notResponding") is not False:
+        problems.append("the hub was marked not responding")
+    c = r.get("counters") or {}
+    if c.get("supersededWrites") != 1 or c.get("abandonedWrites", 0) != 0 or c.get("retransmits", 0) != 0:
+        problems.append(f"superseded {c.get('supersededWrites')}, abandoned {c.get('abandonedWrites')}, retransmits "
+                        f"{c.get('retransmits')}; want 1, 0, 0")
+    for key in ("writeFailures", "deviceNotReadyFallbacks", "notRespondingFallbacks", "orphanDatagrams", "gateFallbacks",
+                "slotTimeouts"):
+        if c.get(key, 0):
+            problems.append(f"{key} {c.get(key)}")
+    if c.get("nacks"):
+        problems.append(f"NACKs {c.get('nacks')}")
+    return problems
+
+
+def photon_superseded_checks(faults, hubs, reps):
+    out = []
+    trials = dig(faults, "lostThenSuperseded", default=[]) or []
+    for hub in hubs:
+        mine = [r for r in trials if r.get("hub") == hub]
+        bad = [(r.get("channel"), p) for r in mine for p in [superseded_problems(r)] if p]
+        out.append(PhotonCheck("lost", f"{hub}: a lost write followed by a newer write to the same channel ends "
+                               "superseded, never given up or re-sent", len(mine) >= reps and not bad,
+                               f"{len(mine)} of {reps} trials" + (f"; {len(bad)} failed, e.g. {bad[:2]}" if bad else ""),
+                               "a lost write is retransmitted over a newer value, or marks the hub unresponsive while it "
+                               "keeps answering"))
+    return out
+
+
+def photon_write_failure_checks(faults, hubs=None):
+    out = []
+    results = dig(faults, "writeThrows", default=[]) or []
+    if hubs is not None and len(results) != len(hubs):
+        out.append(PhotonCheck("lost", "the USB write failure trial ran on every parallel hub", False,
+                               f"{len(results)} of {len(hubs)}", "Bench: Photon Faults stopped early"))
+    for r in results:
+        c = r.get("counters") or {}
+        problems = []
+        if r.get("thrown") != 1:
+            problems.append(f"the tap threw {r.get('thrown')} times, so the trial is invalid")
+        if c.get("writeFailures") != 1 or c.get("parallelWrites") != 0:
+            problems.append(f"writeFailures {c.get('writeFailures')}, parallel writes {c.get('parallelWrites')}")
+        if r.get("landed") is not True:
+            problems.append("the value never reached the hub by the SDK's path")
+        if r.get("inFlightAfter") != 0 or r.get("notResponding") is not False or r.get("shutdownReason") != "NORMAL":
+            problems.append(f"in flight {r.get('inFlightAfter')}, not responding {r.get('notResponding')}, USB device "
+                            f"{r.get('shutdownReason')}")
+        if not finite(r.get("writeCallMs")) or r["writeCallMs"] > PHOTON_WRITE_CALL_LIMIT_MS:
+            problems.append(f"the call took {r.get('writeCallMs')} ms")
+        for key in ("abandonedWrites", "slotTimeouts", "deviceNotReadyFallbacks", "orphanDatagrams"):
+            if c.get(key, 0):
+                problems.append(f"{key} {c.get(key)}")
+        out.append(PhotonCheck("lost", f"{r.get('hub')}: a USB write that throws falls back to the SDK's path and lands",
+                               not problems, f"call {fmt_ms(r.get('writeCallMs'))}, landed {r.get('landed')}"
+                               + ("" if not problems else "; " + "; ".join(problems)),
+                               "a failed USB write is swallowed, lost, or takes the link down"))
+    return out
+
+
+def photon_reset_checks(faults, hubs=None):
+    out = []
+    results = dig(faults, "resetRecovery", default={}) or {}
+    if hubs is not None:
+        out.append(PhotonCheck("reset", "the reset trial ran on every hub", sorted(results) == sorted(hubs),
+                               f"ran on {sorted(results)} of {sorted(hubs)}", "Bench: Photon Faults stopped early"))
+    for hub, modes in results.items():
+        off, on = modes.get("off") or {}, modes.get("on8") or {}
+        problems = []
+        for name, m in (("off", off), ("on8", on)):
+            if m.get("settledBeforeReset") is not True or m.get("resetSeen") is not True:
+                problems.append(f"{name}: settled {m.get('settledBeforeReset')}, reset seen {m.get('resetSeen')}")
+            rec = list((m.get("recoveredMs") or {}).values())
+            if not rec or not all(finite(x) and x <= PHOTON_RESET_LIMIT_MS for x in rec):
+                problems.append(f"{name}: not all back within {PHOTON_RESET_LIMIT_MS} ms: {m.get('recoveredMs')}")
+        off_max = max([x for x in (off.get("recoveredMs") or {}).values() if finite(x)], default=None)
+        on_max = max([x for x in (on.get("recoveredMs") or {}).values() if finite(x)], default=None)
+        if off_max is not None and on_max is not None and on_max > off_max + PHOTON_RESET_MARGIN_MS:
+            problems.append(f"slowest channel back after {on_max:.0f} ms with Photon, {off_max:.0f} ms without")
+        cache_path = off.get("sdkCacheValidAfterRawFailSafe") is True and on.get("sdkCacheValidAfterRawFailSafe") is True
+        how = ("the SDK's caches stayed valid, so this tested recovery by cache expiry and re-send" if cache_path else
+               "attention-driven recovery: the hub flagged the reset and the SDK dropped its caches at once, so the "
+               "cache-expiry path wasn't exercised")
+        out.append(PhotonCheck("reset", f"{hub}: outputs back after a hub reset no later than without Photon "
+                               f"(+{PHOTON_RESET_MARGIN_MS} ms, {'cache expiry' if cache_path else 'attention-driven'})",
+                               not problems,
+                               f"slowest channel off {off_max} ms, on8 {on_max} ms; {how} (caches valid after the raw "
+                               f"fail-safe: off {off.get('sdkCacheValidAfterRawFailSafe')}, on8 "
+                               f"{on.get('sdkCacheValidAfterRawFailSafe')}; attention in its ACK: off "
+                               f"{off.get('attentionInFailSafeAck')}, on8 {on.get('attentionInFailSafeAck')}; first seen "
+                               f"off {off.get('attentionSeenMs')} ms, on8 {on.get('attentionSeenMs')} ms)"
+                               + ("" if not problems else "; " + "; ".join(problems)),
+                               "a hub reset leaves outputs off longer under Photon: the reset's attention bit or the "
+                               "re-sends don't get through"))
+    return out
+
+
+def photon_storm_checks(storm):
+    problems = photon_phase_problems(storm)
+    stall = dig(storm, "maxStallMs")
+    if not finite(stall) or stall > PHOTON_STORM_STALL_MS:
+        problems.append(f"the writer stalled {stall} ms")
+    return [PhotonCheck("storm", f"{dig(storm, 'writes')} writes at a limit of 1 never stall the writer over "
+                        f"{PHOTON_STORM_STALL_MS} ms", not problems,
+                        f"longest stall {stall} ms, longest write {dig(storm, 'writeMs', 'max')} ms, slot timeouts "
+                        f"{dig(storm, 'counters', 'slotTimeouts')}" + ("" if not problems else "; " + "; ".join(problems)),
+                        "a full limit makes the writer wait without bound (the stock Photon hang)")]
+
+
+def photon_thread_checks(two):
+    problems = photon_phase_problems(two)
+    if (dig(two, "toggles") or 0) < 1 or (dig(two, "servoWrites") or 0) < 1:
+        problems.append(f"toggles {dig(two, 'toggles')}, servo writes {dig(two, 'servoWrites')}")
+    if not (dig(two, "readback", "checks") or 0) > 0:
+        problems.append("no motor read-backs during the phase")
+    return [PhotonCheck("threads", "servo writes from a second thread and Photon toggled from a third stay correct",
+                        not problems, f"{dig(two, 'motorWrites')} motor and {dig(two, 'servoWrites')} servo writes, "
+                        f"{dig(two, 'toggles')} toggles, {dig(two, 'readback', 'checks')} motor read-backs during it, "
+                        f"max in flight {dig(two, 'maxInFlight')}" + ("" if not problems else "; " + "; ".join(problems)),
+                        "parallel writes aren't safe from more than one thread: keep them on the OpMode thread")]
+
+
+def photon_soak_checks(soak, target_loss=PHOTON_SOAK_LOSS_TARGET):
+    problems = photon_phase_problems(soak)
+    issued = dig(soak, "issuedWrites", default={}) or {}
+    c = dig(soak, "counters", default={}) or {}
+    lost = (c.get("abandonedWrites") or 0) + (c.get("supersededWrites") or 0) + (dig(soak, "readback", "mismatches") or 0)
+    bounds = {hub: 3.0 / n for hub, n in issued.items() if isinstance(n, (int, float)) and n > 0}
+    need = math.ceil(3.0 / target_loss)
+    met = not problems and lost == 0 and bool(bounds) and all(b <= target_loss for b in bounds.values())
+    detail = (f"{dig(soak, 'seconds')} s, writes per hub {issued}, lost {lost}, retransmitted {c.get('retransmits')}, "
+              f"95% upper bound per write {({h: f'{b:.2e}' for h, b in bounds.items()})} (target {target_loss:.1e}, "
+              f"needs {need} writes per hub); oldest-pending samples by age {dig(soak, 'pendingAgeSamples')}")
+    return [PhotonCheck("soak", "zero lost, stale or retransmitted writes", not problems and lost == 0,
+                        detail + ("" if not problems else "; " + "; ".join(problems)),
+                        "writes were lost or went stale at production rate"),
+            PhotonCheck("soak", "the loss bound reaches the target", met, detail,
+                        "too few writes for the bound (run --photon-soak), or a write was lost")], met
+
+
+def photon_routing_problems(run, parallel_hubs=None):
+    problems = []
+    init = dig(run, "atInit") or {}
+    if not init:
+        return ["no result"]
+    if init.get("photonEnabled") is not False:
+        problems.append("Photon was enabled at INIT")
+    if init.get("swapFailures"):
+        problems.append(f"swap failures {init.get('swapFailures')}")
+    if init.get("routingProblems"):
+        problems.append(f"routing {init.get('routingProblems')}")
+    for key in ("inFlight", "pendingEntries", "standIns", "routes"):
+        if key not in init:
+            problems.append(f"no {key} at INIT")
+            continue
+        left = {h: n for h, n in (init.get(key) or {}).items() if n}
+        if left:
+            problems.append(f"{key} at INIT {left}")
+    for mode, hubs in (dig(run, "notRespondingRecovery") or {}).items():
+        for hub, m in hubs.items():
+            if m.get("visible") is not True:
+                problems.append(f"{mode} {hub}: noteNotResponding() didn't show")
+            if not finite(m.get("clearedMs")) or m["clearedMs"] > PHOTON_CLEAR_LIMIT_MS:
+                problems.append(f"{mode} {hub}: still not responding {m.get('clearedMs')} ms after a command")
+            if not finite(m.get("voltsAfter")) or m["voltsAfter"] < 9:
+                problems.append(f"{mode} {hub}: voltage read {m.get('voltsAfter')} V after")
+    if not dig(run, "notRespondingRecovery"):
+        problems.append("no not-responding recovery result")
+    check = dig(run, "parallelCheck") or {}
+    c = check.get("counters") or {}
+    if not check:
+        problems.append("no parallel check")
+    else:
+        if c.get("parallelWrites") != check.get("issuedOnParallelHubs"):
+            problems.append(f"parallel check: {c.get('parallelWrites')} parallel of {check.get('issuedOnParallelHubs')}")
+        if dig(check, "readback", "mismatches") != 0:
+            problems.append(f"parallel check read-backs {photon_events(check.get('readback'))}")
+        if not finite(check.get("drainMs")) or check["drainMs"] > PHOTON_DRAIN_LIMIT_MS:
+            problems.append(f"parallel check drain {check.get('drainMs')}")
+        if check.get("routingProblemsAfter"):
+            problems.append(f"routing after {check.get('routingProblemsAfter')}")
+        problems += [f"parallel check: {p}" for p in leftover_problems(check.get("leftoversAfterDrain"), "after the drain")]
+        for key in PHOTON_COUNTERS_ZERO:
+            if c.get(key, 0):
+                problems.append(f"parallel check {key} {c.get(key)}")
+    return problems
+
+
+def photon_main_init_checks(main):
+    info = dig(main, "info") or {}
+    problems = []
+    if not info:
+        problems.append("no result")
+    if info.get("routingProblems") != []:
+        problems.append(f"routing {info.get('routingProblems')}")
+    if info.get("photonSwapFailures") != []:
+        problems.append(f"swap failures {info.get('photonSwapFailures')}")
+    if info.get("inFlightAtInit") != 0 or info.get("photonEnabledAtInit") is not False:
+        problems.append(f"in flight {info.get('inFlightAtInit')}, Photon enabled {info.get('photonEnabledAtInit')} at INIT")
+    problems += leftover_problems(info.get("leftoversAtInit"), "at INIT")
+    hubs = info.get("hubs") or []
+    if not hubs or not all(h.get("swapped") for h in hubs):
+        problems.append(f"not every hub swapped: {[(h.get('address'), h.get('class')) for h in hubs]}")
+    return [PhotonCheck("routing", "Bench: Photon's INIT: every hub swapped and routed, nothing in flight", not problems,
+                        "; ".join(problems) or f"hubs {[h.get('address') for h in hubs]}",
+                        "Photon couldn't take over the hubs, or an earlier OpMode left state behind")]
+
+
+def photon_routing_checks(runs, min_restarts, hub_count):
+    out = []
+    for label, run in runs:
+        problems = photon_routing_problems(run)
+        out.append(PhotonCheck("routing", f"{label}: replies routed to Photon's hubs, unresponsive hubs recover", not problems,
+                               f"swap order {dig(run, 'atInit', 'swapOrder')}"
+                               + ("" if not problems else "; " + "; ".join(problems)),
+                               "a hub's replies go to a replaced object, so it can be marked unresponsive for good and "
+                               "its reads go blind"))
+    orders = [tuple(dig(r, "atInit", "swapOrder", default=[]) or []) for label, r in runs if label.startswith("restart")]
+    seen = sorted(set(orders))
+    both = hub_count < 2 or len({o[0] for o in seen if o}) >= 2
+    out.append(PhotonCheck("routing", f"at least {min_restarts} app restarts and both swap orders seen",
+                           len(orders) >= min_restarts and both and hub_count >= 2,
+                           f"{len(orders)} restarts, orders {[list(o) for o in orders]}",
+                           "only one hub" if hub_count < 2 else
+                           "a misroute that depends on which hub Photon swaps first could hide in the order not seen"))
+    return out, both and hub_count >= 2
+
+
+def photon_consecutive_checks(seq):
+    out = []
+    problems = []
+    for label, kind, res in seq:
+        if kind == "routing":
+            problems += [f"{label}: {p}" for p in photon_routing_problems(res)]
+        elif kind == "stock":
+            if dig(res, "info", "inFlightAtInit") != 0:
+                problems.append(f"{label}: {dig(res, 'info', 'inFlightAtInit')} in flight at INIT")
+            problems += [f"{label}: {p}" for p in leftover_problems(dig(res, "info", "leftoversAtInit"), "at INIT")]
+            if dig(res, "enableRefused", "refused") is not True:
+                problems.append(f"{label}: a non-Photon OpMode could enable Photon")
+            if dig(res, "info", "photonEnabledAtInit") is not False:
+                problems.append(f"{label}: Photon enabled at INIT")
+    routings = [res for _, kind, res in seq if kind == "routing"]
+    if len(routings) >= 2:
+        first, last = dig(routings[0], "atInit", "counters") or {}, dig(routings[-1], "atInit", "counters") or {}
+        for key in ("writeFailures", "deviceNotReadyFallbacks", "orphanDatagrams", "postStopFailSafes"):
+            if isinstance(first.get(key), int) and isinstance(last.get(key), int) and last[key] != first[key]:
+                problems.append(f"{key} rose by {last[key] - first[key]} across the sequence")
+        before_crash = dig(routings[-2], "atInit", "counters") or {}
+        ended = counter_rise(first, before_crash, PHOTON_WRITE_ENDINGS)
+        if ended is None:
+            problems.append("a routing run's INIT counters are missing")
+        elif ended != 0:
+            problems.append(f"{ended} writes abandoned, superseded or cleared at INIT before the crash")
+        ids = [tuple(h.get("identity") for h in dig(r, "atInit", "loaders", "hubs", default=[]) or []) for r in routings]
+        if len(set(ids)) != 1:
+            problems.append(f"hub objects changed between INITs without an app restart: {ids}")
+    else:
+        problems.append("fewer than two Photon INITs in the sequence")
+    out.append(PhotonCheck("consecutive", "every INIT in Photon / non-Photon / Photon / crash / Photon starts clean",
+                           not problems, f"{len(seq)} OpModes" + ("" if not problems else "; " + "; ".join(problems[:6])),
+                           "state from one OpMode (in-flight writes, Photon left on, a broken route) leaks into the next"))
+    return out
+
+
+PHOTON_WRITE_ENDINGS = ("abandonedWrites", "supersededWrites", "clearedAtInit")
+
+
+def counter_rise(before, after, keys):
+    if not all(isinstance(before.get(k), int) and isinstance(after.get(k), int) for k in keys):
+        return None
+    return sum(after[k] - before[k] for k in keys)
+
+
+def photon_crash_checks(crash, before=None, after=None):
+    """before/after: the routing runs whose INITs bracket the crash."""
+    v = stop_trial_verdict(dig(crash, "sampler"))
+    problems = list(v["problems"])
+    if v["violations"]:
+        problems.append(f"{v['violations']} violating samples {v['examples'][:2]}")
+    outcome = dig(crash, "outcome") or {}
+    if outcome.get("crashed") is not True:
+        problems.append("the OpMode didn't crash")
+    if outcome.get("appRestarted"):
+        problems.append("the app restarted")
+    if not (dig(crash, "main", "inFlightAtThrow") or 0) > 0:
+        problems.append(f"in flight at the throw {dig(crash, 'main', 'inFlightAtThrow')}, so it didn't test writes in flight")
+    lost = dig(crash, "main", "lostAtThrow") or {}
+    injected = sum(n for n in lost.values() if isinstance(n, int))
+    if not lost or not all(isinstance(n, int) and n > 0 for n in lost.values()):
+        problems.append(f"never-acknowledged writes at the throw {lost or 'none'}, so it didn't test a leak")
+    leak = []
+    if before is not None and after is not None:
+        ended = counter_rise(dig(before, "atInit", "counters") or {}, dig(after, "atInit", "counters") or {},
+                             PHOTON_WRITE_ENDINGS)
+        if ended != injected:
+            leak.append(f"{ended} writes abandoned, superseded or cleared at INIT for {injected} never acknowledged")
+        leak += [f"next INIT: {p}" for p in photon_routing_problems(after)]
+    out = [PhotonCheck("crash", "a crash with parallel writes in flight leaves every output off", not problems,
+                       f"in flight at the throw {dig(crash, 'main', 'inFlightAtThrow')}, never to be acknowledged "
+                       f"{lost}; fail-safe seen {v['failSafeMsAfterGate']} ms after the gate"
+                       + ("" if not problems else "; " + "; ".join(problems)),
+                       "a write in flight at a crash landed after the fail-safe")]
+    if before is not None and after is not None:
+        out.append(PhotonCheck("crash", "every write left unacknowledged by the crash is finished, and the next INIT "
+                               "starts with nothing in flight or in the SDK's command map", not leak and injected > 0,
+                               f"{injected} never acknowledged; next INIT leftovers: in flight "
+                               f"{dig(after, 'atInit', 'inFlight')}, SDK stand-ins {dig(after, 'atInit', 'standIns')}"
+                               + ("" if not leak else "; " + "; ".join(leak)),
+                               "writes in flight at a crash leak into the next OpMode, holding message numbers or slots"))
+    return out
+
+
+def photon_sloth_checks(before, after, load):
+    problems = []
+    lb, la = dig(before, "atInit", "loaders") or {}, dig(after, "atInit", "loaders") or {}
+    if not lb or not la:
+        problems.append("missing a routing run")
+    else:
+        if lb.get("pid") != la.get("pid"):
+            problems.append(f"the app restarted (pid {lb.get('pid')} -> {la.get('pid')}), so this wasn't a hot load")
+        if lb.get("photonCoreLoader") != la.get("photonCoreLoader"):
+            problems.append(f"PhotonCore came from {la.get('photonCoreLoader')} after the load, {lb.get('photonCoreLoader')} before")
+        if lb.get("benchLoader") == la.get("benchLoader"):
+            problems.append("the bench class loader didn't change, so the hot load didn't take effect and nothing was tested")
+        if la.get("photonCorePinned") is not True or la.get("photonModulePinned") is not True:
+            problems.append("PhotonCore or PhotonLynxModule isn't @Pinned at runtime")
+    if (load or {}).get("result") != "processed":
+        problems.append(f"the load ended {(load or {}).get('result')}")
+    problems += [f"after: {p}" for p in photon_routing_problems(after)]
+    return [PhotonCheck("sloth", "after deploySloth the same pinned PhotonCore takes the hubs and parallelizes",
+                        not problems, f"PhotonCore loader {la.get('photonCoreLoader')}, bench loader "
+                        f"{lb.get('benchLoader')} -> {la.get('benchLoader')}" + ("" if not problems else "; " + "; ".join(problems)),
+                        "a hot load gives Photon a second copy whose statics the hubs never see")]
+
+
+def photon_rs485_checks(main, logs):
+    """logs: photon_log_counts of Bench: Photon's step."""
+    out = []
+    phases = dig(main, "rs485SharedLink") or {}
+    on = phases.get("on8") or {}
+    problems = []
+    if not on:
+        problems.append("no rs485SharedLink on8 phase")
+    for key in ("maxInFlight", "maxPendingEntries", "maxStandIns"):
+        if dig(on, key, "expansionHub") != 0:
+            problems.append(f"{key} {dig(on, key, 'expansionHub')} on the RS485 hub")
+    ch = dig(on, "issuedWrites", "controlHub") or 0
+    if not ch or dig(on, "counters", "parallelWrites") != ch:
+        problems.append(f"{dig(on, 'counters', 'parallelWrites')} parallel writes for {ch} Control Hub writes, so the "
+                        "Control Hub's parallel writes didn't run beside the RS485 hub's")
+    out.append(PhotonCheck("rs485", "the RS485 Expansion Hub stays on the SDK's locked path while the Control Hub "
+                           "writes in parallel beside it", not problems,
+                           f"write block per hub on8 {fmt_cell(dig(on, 'writeBlockPerHubMs', 'expansionHub'))} (RS485) / "
+                           f"{fmt_cell(dig(on, 'writeBlockPerHubMs', 'controlHub'))} (Control Hub) vs off "
+                           f"{fmt_cell(dig(phases, 'off', 'writeBlockPerHubMs', 'expansionHub'))} / "
+                           f"{fmt_cell(dig(phases, 'off', 'writeBlockPerHubMs', 'controlHub'))} ms"
+                           + ("" if not problems else "; " + "; ".join(problems)),
+                           "Photon parallelized an RS485 child, which shares the Control Hub's link without its lock"))
+    out += photon_workload_checks("rs485", "shared link", phases)
+    for mode in ("off", "on8"):
+        name = f"rs485 shared link {mode}"
+        counts = (logs.get("phases") or {}).get(name)
+        bad = {k: n for k, n in (counts or {}).items() if k in PHOTON_LOG_FORBIDDEN and n}
+        out.append(PhotonCheck("rs485", f"{name}: no lock or abandon warnings with the poller running",
+                               counts is not None and not bad,
+                               f"{counts if counts is not None else 'no phase marker in the log'}",
+                               "commands on the shared RS485 link lost their lock or timed out, or the log was cut"))
+    return out
+
+
+def photon_replug_checks(off, on, mode):
+    out = []
+    ro, rn = dig(off, "result") or {}, dig(on, "result") or {}
+    for label, r in (("off", ro), ("on8", rn)):
+        problems = []
+        if r.get("faultSeen") is not True:
+            problems.append("the bench never saw the Expansion Hub go away")
+        if not finite(r.get("recoveryMsAfterBack")) or r["recoveryMsAfterBack"] > PHOTON_REPLUG_RECOVER_MS:
+            problems.append(f"writes right again {r.get('recoveryMsAfterBack')} ms after the hub was back")
+        if r.get("inFlightAtEnd") != 0 or not finite(r.get("drainMs")):
+            problems.append(f"in flight at the end {r.get('inFlightAtEnd')}, drain {r.get('drainMs')}")
+        problems += leftover_problems(r.get("leftoversAtEnd"), "at the end")
+        if dig(r, "controlHubReadback", "mismatches") != 0:
+            problems.append(f"Control Hub read-backs {photon_events(dig(r, 'controlHubReadback'))}")
+        if r.get("routingProblemsAfter"):
+            problems.append(f"routing after {r.get('routingProblemsAfter')}")
+        out.append(PhotonCheck("replug", f"{mode} pull, Photon {label}: writes right again within "
+                               f"{PHOTON_REPLUG_RECOVER_MS} ms, Control Hub unaffected", not problems,
+                               f"longest write block {r.get('maxWriteStallMs')} ms, longest single write "
+                               f"{r.get('maxSingleWriteMs')} ms, back at target {r.get('recoveryMsAfterBack')} ms after "
+                               f"the hub returned" + ("" if not problems else "; " + "; ".join(problems)),
+                               "a cable bump leaves the Expansion Hub's outputs wrong or upsets the Control Hub"))
+    problems = []
+    so, sn = ro.get("maxWriteStallMs"), rn.get("maxWriteStallMs")
+    if not finite(so) or not finite(sn) or sn > so + PHOTON_REPLUG_MARGIN_MS:
+        problems.append(f"longest write block {sn} ms with Photon, {so} ms without")
+    single = rn.get("maxSingleWriteMs")
+    if not finite(single) or single > PHOTON_REPLUG_SINGLE_WRITE_MS:
+        problems.append(f"one write call took {single} ms (limit {PHOTON_REPLUG_SINGLE_WRITE_MS})")
+    during = rn.get("countersDuringFault") or {}
+    fell_back = {k: during.get(k) for k in PHOTON_EARLY_LOST if during.get(k)}
+    if not fell_back:
+        problems.append(f"no Expansion Hub write fell back or was given up while it was gone: {during or 'no counters'}")
+    out.append(PhotonCheck("replug", f"{mode} pull: Photon stalls the loop no longer than the SDK, and falls back while "
+                           "the hub is gone", not problems,
+                           f"longest write block off {so} ms, on8 {sn} ms (margin {PHOTON_REPLUG_MARGIN_MS} ms); longest "
+                           f"single write on8 {single} ms; while gone {fell_back or during}; first parallel write "
+                           f"{rn.get('parallelWriteMsAfterBack')} ms after it was back"
+                           + ("" if not problems else "; " + "; ".join(problems)),
+                           "Photon makes a cable bump stall the loop longer than the SDK does, or keeps sending "
+                           "parallel writes into a hub that isn't there"))
+    return out
+
+
+def photon_log_counts(log_text):
+    """The SDK's warning lines per bench phase, from the phase markers BenchReport logs: {"lines": n, "phases":
+    {phase: {needle: count}}}, with every phase whose marker is in the log listed (lines before the first: "init")."""
+    keys = PHOTON_LOG_NEEDLES + (PHOTON_SLOW_VERSION,)
+    phases = {"init": {n: 0 for n in keys}}
+    phase = "init"
+    lines = 0
+    for line in (log_text or "").splitlines():
+        lines += 1
+        m = PHOTON_PHASE_LINE.search(line)
+        if m:
+            phase = m.group(1)
+            phases.setdefault(phase, {n: 0 for n in keys})
+            continue
+        for needle in PHOTON_LOG_NEEDLES:
+            if needle in line:
+                # The SDK's own Bench: Probe, with no Photon, times out on the hub's version string after a restart.
+                slow = needle in PHOTON_LOG_FORBIDDEN and any(mark in line for mark in PHOTON_SLOW_VERSION_MARKS)
+                phases[phase][PHOTON_SLOW_VERSION if slow else needle] += 1
+    return {"lines": lines, "phases": phases}
+
+
+def photon_log_problems(parsed, expected=(), exempt=()):
+    """exempt: phase-name prefixes whose warnings the step causes on purpose."""
+    if not parsed or not parsed.get("lines"):
+        return ["the log is empty"], {}
+    phases = parsed.get("phases") or {}
+    problems = []
+    missing = [p for p in expected if p not in phases]
+    if missing:
+        problems.append(f"no BENCH phase marker for {missing[:3]}{' ...' if len(missing) > 3 else ''} (the log was cut)")
+    bad = {phase: {k: n for k, n in c.items() if k in PHOTON_LOG_FORBIDDEN and n}
+           for phase, c in phases.items() if not any(phase.startswith(e) for e in exempt)}
+    bad = {p: c for p, c in bad.items() if c}
+    if bad:
+        problems.append(f"warnings {bad}")
+    retx = {p: c.get("retransmitting") for p, c in phases.items() if c.get("retransmitting")}
+    slow = sum(c.get(PHOTON_SLOW_VERSION, 0) for c in phases.values())
+    if slow:
+        retx["slowVersionStringReplies"] = slow
+    return problems, retx
+
+
+def photon_log_checks(label, entries, exempt=()):
+    """One check over the logs of one or more steps: entries are (step, parsed log, phase names the step entered)."""
+    bad, retx = [], {}
+    for step, parsed, expected in entries:
+        problems, r = photon_log_problems(parsed, expected, exempt)
+        if problems:
+            bad.append((step, problems))
+        if r:
+            retx[step] = r
+    return [PhotonCheck("logcat", f"{label}: no lock, ownership, checksum or abandon warnings, every log complete",
+                        bool(entries) and not bad,
+                        f"{len(entries)} step log(s); {len(bad)} with problems"
+                        + (f", e.g. {bad[:2]}" if bad else "")
+                        + f"; retransmits and slow version-string replies (not judged) {retx or 'none'}"
+                        + (f" (not judged: phases starting {list(exempt)})" if exempt else ""),
+                        "the SDK saw lock misuse, a write it had to give up on, or a corrupted reply, or the log that "
+                        "would show it is missing")]
+
+
+def photon_verdict(checks, negative_control_fired, orders_both, soak_ran, soak_met, stop_trials, not_run=(),
+                   still_needed=()):
+    """("SAFE" | "PASSED" | "NOT SAFE", blockers, still needed). PASSED: nothing in this run failed, but the go also
+    needs what this run didn't include (the soak, the cable pulls, the full STOP trial count)."""
+    blockers = [f"{c.section}: {c.name}" for c in checks if not c.ok]
+    if not negative_control_fired:
+        blockers.append("a STOP negative control didn't register every time, so the STOP checks prove nothing")
+    if not orders_both:
+        blockers.append("the routing check didn't see both module orders")
+    if soak_ran and not soak_met:
+        blockers.append("the soak didn't meet its loss bound")
+    blockers += [f"not run: {n}" for n in not_run]
+    needed = list(still_needed)
+    if not soak_ran:
+        needed.append("the soak (--photon-soak), which bounds the per-write loss rate")
+    if stop_trials < PHOTON_SAFE_STOP_TRIALS:
+        needed.append(f"{PHOTON_SAFE_STOP_TRIALS} STOP trials per condition (this run {stop_trials}: the violation rate is "
+                      f"bounded only below {photon_stop_bound(stop_trials):.1%}, 95%)")
+    if blockers:
+        return "NOT SAFE", blockers, needed
+    return ("PASSED" if needed else "SAFE"), [], needed
+
+
 class Runner:
     def __init__(self, args):
         self.args = args
@@ -1349,6 +2499,7 @@ class Runner:
         self.watch = None
         self.known_pid = None
         self.restarts = []
+        self.photon = None
 
     def log(self, text):
         line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}"
@@ -2311,180 +3462,444 @@ class Runner:
                              "serial with --usb-expansion-serial (the REV Hardware Client shows it)")
         return serials[0]
 
-    def photon_config(self):
-        usb = None
-        if self.args.usb_expansion:
-            serial = self.usb_expansion_serial()
-            self.log(f"photon: USB Expansion Hub serial {serial}, address {self.args.expansion_address}")
-            usb = (serial, self.args.expansion_address, PHOTON_EXPANSION_DEVICES)
+    def photon_topology(self):
+        a = self.args
+        if a.usb_expansion and a.photon_rs485:
+            raise BenchError("--usb-expansion and --photon-rs485 are two wirings of the same Expansion Hub: run them "
+                             "as two separate runs, recabling in between")
+        if a.photon_rs485:
+            if self.expansion is None:
+                raise BenchError(f"--photon-rs485: no Expansion Hub answered on RS485 at address {a.expansion_address}: "
+                                 "connect it to the Control Hub's RS485 port only (no USB cable), on 12 V, or pass "
+                                 "--expansion-address N")
+            return "rs485"
+        if a.usb_expansion:
+            if self.expansion is not None:
+                raise BenchError("--usb-expansion: an Expansion Hub also answers on RS485; a hub on both USB and RS485 "
+                                 "at once confuses the SDK. Unplug the RS485 cable")
+            return "usb"
+        return "none"
+
+    def photon_config(self, topology=None):
+        topology = topology or ("usb" if self.args.usb_expansion else "none")
         i2c = self.args.photon_i2c
-        return hub_config(main_devices(self.imu_type, pinpoint=i2c, octoquad_bus=OCTOQUAD_BUS if i2c else None),
-                          usb_expansion=usb)
+        devices = main_devices(self.imu_type, pinpoint=i2c, octoquad_bus=OCTOQUAD_BUS if i2c else None)
+        if topology == "usb":
+            serial = self.usb_expansion_serial()
+            self.photon_eh_serial = serial
+            self.log(f"photon: USB Expansion Hub serial {serial}, address {self.args.expansion_address}")
+            return hub_config(devices, usb_expansion=(serial, self.args.expansion_address, PHOTON_EXPANSION_DEVICES))
+        if topology == "rs485":
+            return hub_config(devices, expansion=(self.args.expansion_address, PHOTON_EXPANSION_DEVICES))
+        return hub_config(devices)
+
+    def photon_guard_ports(self, topology):
+        self.log(f"photon: this block drives {PHOTON_POWERS}")
+        self.log("photon: the stock bench's probe checks only motor ports for current; servo ports 0-1 on each hub "
+                 "aren't probed, so check them by eye")
+        if self.args.ports_empty and sys.stdin.isatty():
+            self.ask(">>> --ports-empty: confirm nothing is plugged into motor ports 0-3 or servo ports 0-1 of either hub")
+        if topology == "none":
+            return
+        found = []
+        for name in sorted(self.adb.config_names()):
+            if name in BENCH_CONFIGS:
+                continue
+            found += [f"{name}: {d}" for d in expansion_port_devices(
+                self.adb.read_config(name), getattr(self, "photon_eh_serial", None) if topology == "usb" else None,
+                self.args.expansion_address)]
+        if found and not self.args.ports_empty:
+            raise BenchError(f"{'; '.join(found)}. The Photon benches drive the Expansion Hub's motor ports 0-3 and "
+                             "servo ports 0-1 too. Unplug everything from them, then rerun with --ports-empty.")
+        if found:
+            self.log(f"--ports-empty: not stopping for Expansion Hub devices named in configs: {found}")
+
+    def photon_step(self, opmode, step, params, result, timeout=600, extra_files=(), **kw):
+        stream = self.logcat_stream(self.out / "logs" / f"{step}.stream.log") if kw.pop("stream_log", False) else None
+        try:
+            o = self.run_opmode(opmode, step, params, timeout=timeout, result_files=[result, *extra_files],
+                                status_every=kw.pop("status_every", 15.0), quiet_after=kw.pop("quiet_after", 20.0), **kw)
+        finally:
+            if stream is not None:
+                stream.stop()
+        res = self.pull(result, required=False) or {}
+        if res:
+            (self.out / "raw" / f"{step}.json").write_text(json.dumps(res, indent=1))
+        self.photon_note_log(step, list(res.get("phaseLog") or []), stream)
+        if o["crashed"] and not kw.get("expect_crash"):
+            self.photon_add(PhotonCheck("phases", f"{opmode} ({step}) ran to the end", False,
+                                        f"crashed: {o.get('errorMessage')!r}", "something under Photon threw"))
+        return o, res
+
+    def logcat_stream(self, path):
+        return LogcatStream(self.adb, path)
+
+    def photon_note_log(self, step, expected=(), stream=None):
+        log_file = stream.path if stream is not None else self.out / "logs" / f"{step}.log"
+        log_text = log_file.read_text() if log_file.exists() else ""
+        self.photon["logs"][step] = {"parsed": photon_log_counts(log_text), "expected": list(expected)}
+
+    def photon_log_entries(self, *steps):
+        return [(s, self.photon["logs"].get(s, {}).get("parsed"), self.photon["logs"].get(s, {}).get("expected", []))
+                for s in steps]
+
+    def photon_wait_file(self, name, timeout=12.0):
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < timeout:
+            res = self.pull(name, required=False)
+            if res:
+                (self.out / "raw" / f"{name}.json").write_text(json.dumps(res, indent=1))
+                return res
+            time.sleep(0.5)
+        return None
+
+    def photon_add(self, *checks):
+        for c in checks:
+            self.photon["checks"].append(c)
+            self.check(f"photon {PHOTON_TITLES[c.section].lower()}: {c.name}", c.ok, c.detail, c.fail_means)
+
+    def photon_routing(self, label, base, step=None):
+        rid = step or label
+        _, res = self.photon_step("Bench: Photon Routing", f"photon_routing_{rid}", dict(base, runId=rid),
+                                  f"photon_routing_{rid}", timeout=180)
+        self.photon["routing"].append((label, res, f"photon_routing_{rid}"))
+        self.log(f"photon routing {label}: swap order {dig(res, 'atInit', 'swapOrder')}, problems "
+                 f"{photon_routing_problems(res) or 'none'}")
+        return res
 
     def run_photon(self):
-        """Bench: Photon twice (the second INIT shows what STOP left with writes in flight and that Photon re-wraps the
-        hubs), then Framework Loop and Write Recovery with Photon off and on."""
-        loops = 150 if self.args.quick else 500
-        params = {"loops": loops, "usbExpansion": 1 if self.args.usb_expansion else 0,
-                  "i2c": 1 if self.args.photon_i2c else 0}
-        self.activate_config(CONFIG_PHOTON, self.photon_config())
-        runs = {}
-        for run_id, run_loops in (("1", loops), ("2", 100)):
-            o = self.run_opmode("Bench: Photon", f"photon_{run_id}", dict(params, runId=run_id, loops=run_loops),
-                                timeout=900, result_files=[f"photon_{run_id}"], status_every=15.0)
-            runs[run_id] = (o, self.pull(f"photon_{run_id}", required=not o["crashed"]) or {})
-        self.summary += self._photon_summary(runs)
-        self._photon_checks(runs)
+        """The Photon block (see scripts/bench/README.md): stock baseline first after a restart, then every Photon
+        check this topology allows, then the verdict."""
+        a = self.args
+        topology = self.photon_topology()
+        seed = a.photon_seed if a.photon_seed is not None else int(time.time())
+        rng = random.Random(seed)
+        hubs = ["controlHub"] + (["expansionHub"] if topology != "none" else [])
+        parallel_hubs = ["controlHub"] + (["expansionHub"] if topology == "usb" else [])
+        trials = a.photon_stop_trials or (PHOTON_SOAK_STOP_TRIALS if a.photon_soak else PHOTON_STOP_TRIALS)
+        self.photon = {"topology": topology, "seed": seed, "checks": [], "logs": {}, "routing": [], "notRun": [],
+                       "stopTrials": trials, "manifest": self.photon_manifest()}
+        self.log(f"=== photon: topology {topology}, seed {seed}")
+        try:
+            base = {"expansion": {"none": 0, "usb": 1, "rs485": 2}[topology], "i2c": 1 if a.photon_i2c else 0}
+            loops = 150 if a.quick else 500
+            config = self.photon_config(topology)
+            self.photon_guard_ports(topology)
+            self.activate_config(CONFIG_PHOTON, config)
 
+            _, stock = self.photon_step("Bench: Photon Stock", "photon_stock", dict(base, runId="1", loops=loops, portProbe=1),
+                                        "photon_stock_1", timeout=900)
+            self.photon["stock"] = stock
+            self.photon_add(*photon_install_checks(stock, self.photon["manifest"]))
+            self.photon_add(*photon_port_checks(stock))
+            if dig(stock, "portProbe", "empty") is not True:
+                raise BenchError("a bench motor port drew current in Bench: Photon Stock's port probe (see the summary): "
+                                 "unplug it before running the Photon benches")
+            self.photon_add(*photon_stock_checks(stock))
+            self.photon_add(*photon_log_checks("Bench: Photon Stock", self.photon_log_entries("photon_stock")))
+            self.photon_routing("first Photon INIT after the restart", base, "r01")
+
+            soak_seconds = PHOTON_SOAK_MAX_S if a.photon_soak else (20 if a.quick else 60)
+            soak_writes = PHOTON_SOAK_WRITES_PER_HUB if a.photon_soak else 0
+            _, main = self.photon_step("Bench: Photon", "photon_main",
+                                       dict(base, runId="1", loops=loops, soakSeconds=soak_seconds,
+                                            soakWritesPerHub=soak_writes, twoWriterSeconds=20 if a.photon_soak else 8),
+                                       "photon_1", timeout=soak_seconds + 1800, status_every=30.0, quiet_after=60.0,
+                                       stream_log=a.photon_soak)
+            self.photon["main"] = main
+            phases = {}
+            for group in ("timing", "burst", "lastWriterWins", "interleave", "reads"):
+                for name, ph in (dig(main, group, default={}) or {}).items():
+                    phases[f"{group} {name}"] = ph
+            self.photon_add(*photon_main_init_checks(main))
+            self.photon_add(*photon_workload_checks("phases", "", phases))
+            self.photon_add(*photon_gain_checks(stock, main, parallel_hubs))
+            if dig(main, "twoWriters") is not None:
+                self.photon_add(*photon_thread_checks(dig(main, "twoWriters")))
+            if dig(main, "storm") is not None:
+                self.photon_add(*photon_storm_checks(dig(main, "storm")))
+            soak_checks, soak_met = photon_soak_checks(dig(main, "soak"))
+            self.photon_add(*(soak_checks if a.photon_soak else soak_checks[:1]))
+            self.photon["soakMet"] = soak_met
+            main_log = self.photon["logs"].get("photon_main", {}).get("parsed") or {}
+            if topology == "rs485":
+                self.photon_add(*photon_rs485_checks(main, main_log))
+            self.photon_add(*photon_log_checks("Bench: Photon", self.photon_log_entries("photon_main")))
+
+            depth_reps = PHOTON_SOAK_DEPTH_REPS if a.photon_soak else PHOTON_DEPTH_REPS
+            _, faults = self.photon_step("Bench: Photon Faults", "photon_faults",
+                                         dict(base, runId="1", trials=3, depthReps=depth_reps,
+                                              supersededReps=PHOTON_SUPERSEDED_REPS),
+                                         "photon_faults_1", timeout=1800)
+            self.photon["faults"] = faults
+            self.photon_add(*photon_lost_checks(faults, parallel_hubs, 3))
+            self.photon_add(*photon_lost_depth_checks(faults, parallel_hubs, depth_reps))
+            self.photon_add(*photon_superseded_checks(faults, parallel_hubs, PHOTON_SUPERSEDED_REPS))
+            self.photon_add(*photon_write_failure_checks(faults, parallel_hubs))
+            self.photon_add(*photon_reset_checks(faults, hubs))
+            self.photon_add(*photon_log_checks("Bench: Photon Faults", self.photon_log_entries("photon_faults"),
+                                               exempt=("lost write", "lost over limit", "reset recovery")))
+
+            self.photon["race"] = race = []
+            race_steps = []
+            for parallel in (8, 0):
+                for hub in hubs:
+                    for t in range(PHOTON_RACE_TRIALS):
+                        tid = f"{'on' if parallel else 'off'}_{hub}_{t}"
+                        _, res = self.photon_step("Bench: Photon Stop Race", f"photon_race_{tid}",
+                                                  dict(base, trial=tid, photon=parallel, hub=hub), f"photon_stop_race_{tid}",
+                                                  timeout=60)
+                        race.append(res)
+                        race_steps.append(f"photon_race_{tid}")
+            self.photon_add(*photon_race_checks(race))
+            self.photon_add(*photon_log_checks("Bench: Photon Stop Race", self.photon_log_entries(*race_steps)))
+
+            self.photon["stop"] = stop = {}
+            conditions = (("iterative, Photon on8", "Bench: Photon Stop", 8, 0, trials, None),
+                          ("iterative, Photon off", "Bench: Photon Stop", 0, 0, trials, None),
+                          ("linear, Photon on8", "Bench: Photon Stop Linear", 8, 0, trials, None),
+                          ("negative control, held", "Bench: Photon Stop", 8, 1, PHOTON_NEGATIVE_CONTROL_TRIALS, "held"),
+                          ("negative control, once", "Bench: Photon Stop", 8, 2, PHOTON_NEGATIVE_CONTROL_TRIALS, "once"))
+            for label, opmode, parallel, control, n, _ in conditions:
+                stop[label] = [self.photon_stop_trial(opmode, label, base, parallel, control, i, rng) for i in range(n)]
+            fired = True
+            for label, _, _, control, _, expect in conditions:
+                checks = photon_stop_checks(label, stop[label], expect=expect)
+                self.photon_add(*checks)
+                if expect:
+                    fired &= all(c.ok for c in checks)
+                elif "off" not in label:
+                    self.photon_add(photon_stop_coverage(label, stop[label]))
+                self.photon_add(*photon_log_checks(f"STOP trials, {label}",
+                                                   self.photon_log_entries(*[t["step"] for t in stop[label]])))
+            self.photon["negativeControlFired"] = fired
+
+            self.photon_consecutive(base, rng)
+            if a.no_sloth:
+                self.photon["notRun"].append("deploySloth (--no-sloth)")
+            else:
+                self.photon_sloth(base)
+            self.photon_restarts(base, len(hubs))
+            routing_steps = [step for _, _, step in self.photon["routing"]]
+            self.photon_add(*photon_log_checks("Bench: Photon Routing (every INIT)", self.photon_log_entries(*routing_steps),
+                                               exempt=("not responding",)))
+            if a.interactive and topology == "usb":
+                self.photon_replug(base)
+            self.photon_framework()
+        finally:
+            self.photon_summary()
+
+    def photon_stop_trial(self, opmode, label, base, parallel, control, i, rng):
+        kind = {0: "on" if parallel else "off", 1: "held", 2: "once"}[control]
+        tid = f"{'linear' if 'Linear' in opmode else 'iter'}_{kind}_{i:03d}"
+        step = f"photon_stop_{tid}"
+        delay = round(rng.uniform(PHOTON_STOP_DELAY_S[0], PHOTON_STOP_DELAY_S[1]), 3)
+        self.log(f"photon STOP {label} trial {i}: STOP {delay} s after START")
+        o = self.run_opmode(opmode, step, dict(base, trial=tid, photon=parallel, control=control),
+                            timeout=delay, timeout_ok=True, result_files=[f"photon_stop_{tid}", f"photon_stop_main_{tid}"],
+                            status_every=1.0, quiet_after=5.0)
+        sampler = self.photon_wait_file(f"photon_stop_{tid}")
+        self.photon_note_log(step, ["writing"])
+        t = {"trial": tid, "step": step, "delayS": delay, "crashed": o["crashed"], "appRestarted": o.get("appRestarted"),
+             "error": o.get("statusErrorMessage") or o.get("errorMessage") or "", "sampler": sampler}
+        v = stop_trial_verdict(sampler, require_zeroing_read=True)
+        problems = stop_trial_problems(t, v)
+        self.log(f"photon STOP {label} trial {i}: {v['violations']} violations ({v['zeroingReadViolations']} in stop()'s "
+                 f"read), problems {problems or 'none'}")
+        return t
+
+    def photon_consecutive(self, base, rng):
+        seq = []
+        seq.append(("Photon OpMode", "routing", self.photon_routing("consecutive 1: Photon", base, "h1")))
+        _, stock = self.photon_step("Bench: Photon Stock", "photon_stock_h2", dict(base, runId="h2", loops=50, short=1),
+                                    "photon_stock_h2", timeout=300)
+        seq.append(("non-Photon OpMode", "stock", stock))
+        before = self.photon_routing("consecutive 3: Photon", base, "h3")
+        seq.append(("Photon OpMode again", "routing", before))
+        tid = "h4"
+        o, main = self.photon_step("Bench: Photon Crash", "photon_crash_h4",
+                                   dict(base, trial=tid, crashAfterMs=round(rng.uniform(800, 2000)),
+                                        lostWrites=PHOTON_CRASH_LOST_WRITES),
+                                   f"photon_crash_{tid}", timeout=60, expect_crash=True,
+                                   extra_files=[f"photon_crash_sampler_{tid}"])
+        crash = {"outcome": o, "main": main, "sampler": self.photon_wait_file(f"photon_crash_sampler_{tid}")}
+        self.photon["crash"] = crash
+        after = self.photon_routing("consecutive 5: after the crash", base, "h5")
+        seq.append(("INIT after the crash", "routing", after))
+        self.photon_add(*photon_crash_checks(crash, before, after))
+        self.photon_add(*photon_log_checks("Bench: Photon Crash", self.photon_log_entries("photon_crash_h4"),
+                                           exempt=("losing writes",)))
+        self.photon["consecutive"] = seq
+        self.photon_add(*photon_consecutive_checks(seq))
+
+    def photon_sloth(self, base):
+        gradlew = REPO_ROOT / "gradlew"
+        before = self.photon_routing("before deploySloth", base, "s1")
+        hub_t0 = self.adb.hub_time()
+        deploy = self._deploy_sloth("photon", gradlew, None)
+        load = self.sloth_load(hub_t0, "photon", deploy)
+        self.log(f"photon deploySloth: {load}")
+        time.sleep(PHOTON_SLOTH_SETTLE_S)
+        if self.adb.pid() != self.known_pid:
+            self.wait_restart("photon deploySloth")
+        after = self.photon_routing("after deploySloth", base, "s2")
+        self.photon["sloth"] = {"deploy": {k: v for k, v in deploy.items() if k != "connectionAtPush"}, "load": load}
+        self.photon_add(*photon_sloth_checks(before, after, load))
+
+    def photon_restarts(self, base, hub_count):
+        first = [r for l, r, _ in self.photon["routing"] if l == "first Photon INIT after the restart"]
+        runs = [("restart 1", first[0])] if first else []
+        orders = {tuple(dig(r, "atInit", "swapOrder", default=[]) or []) for _, r in runs}
+        n = len(runs)
+        while n < PHOTON_MAX_RESTARTS and (n < PHOTON_MIN_RESTARTS or (hub_count > 1 and len({o[0] for o in orders if o}) < 2)):
+            n += 1
+            self.activate_config(CONFIG_PHOTON)
+            res = self.photon_routing(f"restart {n}", base, f"x{n:02d}")
+            runs.append((f"restart {n}", res))
+            orders.add(tuple(dig(res, "atInit", "swapOrder", default=[]) or []))
+        others = [(l, r) for l, r, _ in self.photon["routing"]
+                  if not l.startswith("restart") and l != "first Photon INIT after the restart"]
+        checks, both = photon_routing_checks(runs + others, PHOTON_MIN_RESTARTS, hub_count)
+        self.photon["ordersBoth"] = both
+        self.photon_add(*checks)
+
+    def photon_replug(self, base):
+        what = {"usb": "unplug the Expansion Hub's USB cable, count to two, plug it back in",
+                "power": "pull the Expansion Hub's XT30 power lead (the one from the Control Hub's second XT30 port), "
+                         "count to one, plug it back in"}
+        for mode in ("usb", "power"):
+            res = {}
+            for parallel in (0, 8):
+                label = PHOTON_WORKLOAD_MODE[parallel]
+                self.ask(f">>> Next ({mode} pull, Photon {label}): {what[mode]}. Press Enter, then wait for the PULL NOW "
+                         "line (about 5 s). Its motor ports are empty, so nothing moves; the step ends by itself about "
+                         "3 s after the hub is back.")
+                _, res[parallel] = self.photon_step(
+                    "Bench: Photon Replug", f"photon_replug_{mode}_{label}", dict(base, mode=mode, photon=parallel,
+                                                                                 maxSeconds=90),
+                    f"photon_replug_{mode}_{label}", timeout=150, during=lambda m=mode: self.log(f">>> PULL NOW: {what[m]}"))
+                self.wait_ready()
+            self.photon[f"replug_{mode}"] = res
+            self.photon_add(*photon_replug_checks(res[0], res[8], mode))
+
+    def photon_framework(self):
         self.activate_config(CONFIG_MAIN, self.main_config())
         secs = 4 if self.args.quick else 8
-        loop_runs = {}
+        runs = {}
+        steps = []
         for parallel in (0, 8):
             step = f"framework_loop_photon{parallel}"
-            o = self.run_opmode("Bench: Framework Loop", step, {"phaseSeconds": secs, "photon": parallel},
+            o = self.run_opmode("Bench: Framework Loop Photon", step, {"phaseSeconds": secs, "photon": parallel},
                                 timeout=30 * secs + 120, result_files=["framework_loop"], status_every=15.0,
                                 quiet_after=secs + 4)
             res = self.pull("framework_loop", required=not o["crashed"])
             if res is not None:
                 (self.out / "raw" / f"{step}.json").write_text(json.dumps(res, indent=1))
-            loop_runs[parallel] = (o, res)
-        s = ["### Framework Loop with Photon off and on (8 parallel)\n",
-             "| phase | loop period, Photon off | loop period, Photon on |", "|---|---|---|"]
-        off_phases = dig(loop_runs[0][1], "phases", default={}) or {}
-        on_phases = dig(loop_runs[8][1], "phases", default={}) or {}
-        for name in off_phases.keys() | on_phases.keys():
-            s.append(f"| {name} | {fmt_cell(dig(off_phases, name, 'loopPeriodMs'))} | "
-                     f"{fmt_cell(dig(on_phases, name, 'loopPeriodMs'))} |")
-        for parallel, (o, _) in loop_runs.items():
-            if o["crashed"]:
-                s.append(f"- Framework Loop with photon={parallel} CRASHED: {o['errorMessage']}")
-        s.append("")
-        self.summary += s
-        self.check("photon: Framework Loop (EnhancedOpMode + Pedro) runs to the end with Photon on",
-                   loop_runs[8][1] is not None and not loop_runs[8][0]["crashed"]
-                   and dig(loop_runs[8][1], "photonParallel") == 8,
-                   f"crashed {loop_runs[8][0]['crashed']}, error {loop_runs[8][0].get('errorMessage')!r}, "
-                   f"photonParallel {dig(loop_runs[8][1], 'photonParallel')}",
-                   "the framework's loop broke under Photon")
-
-        o = self.run_opmode("Bench: Write Recovery", "write_recovery_photon", {"photon": 8}, timeout=60,
+            self.photon_note_log(step)
+            steps.append(step)
+            runs[parallel] = (o, res)
+        self.photon["framework"] = {k: dig(v[1], "phases", default={}) for k, v in runs.items()}
+        o8, r8 = runs[8]
+        self.photon_add(PhotonCheck("phases", "Framework Loop (EnhancedOpMode and Pedro) runs to the end with Photon on",
+                                    r8 is not None and not o8["crashed"] and dig(r8, "photonParallel") == 8,
+                                    f"crashed {o8['crashed']}, error {o8.get('errorMessage')!r}, photonParallel "
+                                    f"{dig(r8, 'photonParallel')}", "the framework's loop broke under Photon"))
+        o = self.run_opmode("Bench: Write Recovery Photon", "write_recovery_photon", {"photon": 8}, timeout=60,
                             result_files=["write_recovery"])
         res = self.pull("write_recovery", required=not o["crashed"]) or {}
         if res:
             (self.out / "raw" / "write_recovery_photon.json").write_text(json.dumps(res, indent=1))
-        channels = res.get("channels") or {}
-        s = ["### Write Recovery with Photon on (8 parallel)\n"]
-        if o["crashed"]:
-            s.append(f"- CRASHED: {o['errorMessage']}")
-        for name, c in channels.items():
-            s.append(f"- {name} ({'wrapped' if c.get('wrapped') else 'raw'} {c.get('kind')}): settled before failSafe "
-                     f"{c.get('settledBeforeFailSafe')}; back {c.get('recoveredMs')} ms after it; "
-                     f"{c.get('loopsAtTargetAfterFailSafe')} of {c.get('loopsAfterFailSafe')} loops at target")
-        s.append("")
-        self.summary += s
-        for name, c in channels.items():
+        self.photon_note_log("write_recovery_photon")
+        steps.append("write_recovery_photon")
+        self.photon["writeRecovery"] = res
+        for name, c in (res.get("channels") or {}).items():
             if not c.get("wrapped"):
                 continue
             ms = c.get("recoveredMs")
-            self.check(f"photon: wrapped {c.get('kind')} {name} reaches the hub within {WRITE_RECOVERY_LIMIT_MS} ms of a "
-                       "failSafe with Photon on", bool(c.get("settledBeforeFailSafe")) and ms is not None
-                       and ms <= WRITE_RECOVERY_LIMIT_MS, f"settled {c.get('settledBeforeFailSafe')}, back after {ms} ms",
-                       "WriteCache's re-send doesn't heal a hub reset under Photon")
-        if not channels:
-            self.check("photon: Write Recovery reported its channels", False, f"error {o.get('errorMessage')!r}")
+            self.photon_add(PhotonCheck("reset", f"WriteCache {c.get('kind')} {name} is back within "
+                                        f"{WRITE_RECOVERY_LIMIT_MS} ms of failSafe() with Photon on",
+                                        bool(c.get("settledBeforeFailSafe")) and finite(ms) and ms <= WRITE_RECOVERY_LIMIT_MS,
+                                        f"settled {c.get('settledBeforeFailSafe')}, back after {ms} ms",
+                                        "WriteCache's re-send doesn't heal a failSafe() under Photon"))
+        if not res.get("channels"):
+            self.photon_add(PhotonCheck("reset", "Write Recovery with Photon on reported its channels", False,
+                                        f"error {o.get('errorMessage')!r}", "Bench: Write Recovery crashed under Photon"))
+        self.photon_add(*photon_log_checks("Framework Loop and Write Recovery with Photon", self.photon_log_entries(*steps)))
+        self.log("photon: restarting the app so the benches after this block get the SDK's own hub objects")
+        self.activate_config(CONFIG_MAIN)
 
-    def _photon_summary(self, runs):
-        s = ["## Bench: Photon\n"]
-        for run_id, (o, res) in runs.items():
-            s.append(f"### Run {run_id}\n")
-            if o["crashed"]:
-                s.append(f"- CRASHED: {o['errorMessage']}")
-            for h in dig(res, "info", "hubs", default=[]) or []:
-                s.append(f"- hub {h.get('address')} serial {h.get('serial')} parent {h.get('parent')}: {h.get('class')}")
-            s.append(f"- Photon's CONTROL_HUB is this Control Hub: {dig(res, 'info', 'photonControlHub')}; EXPANSION_HUB "
-                     f"is this Expansion Hub: {dig(res, 'info', 'photonExpansionHub')}")
-            s.append(f"- state at INIT, before writing: {res.get('initialState')}")
-            timing = res.get("timing") or {}
-            if timing:
-                s += ["", "| mode | write block | per hub | one motor write | one servo write | bulk read | loop period | "
-                      "max in flight | mismatches | poller command | not responding |",
-                      "|---|---|---|---|---|---|---|---|---|---|---|"]
-                for name, m in timing.items():
-                    per_hub = "; ".join(f"{a}: {fmt_cell(v)}" for a, v in (m.get("writeBlockPerHubMs") or {}).items())
-                    s.append(f"| {name} | {fmt_cell(m.get('writeBlockMs'))} | {per_hub} | "
-                             f"{fmt_cell(m.get('motorWriteMs'))} | {fmt_cell(m.get('servoWriteMs'))} | "
-                             f"{fmt_cell(m.get('bulkReadMs'))} | {fmt_cell(m.get('loopPeriodMs'))} | "
-                             f"{m.get('maxInFlight')} | {m.get('mismatches')} of {m.get('checks')} | "
-                             f"{fmt_cell(m.get('pollerCommandMs')) if m.get('pollerCommandMs') else '-'} | "
-                             f"{m.get('notResponding')} |")
-            for name, b in (res.get("burst") or {}).items():
-                s.append(f"- burst {name}: {b.get('mismatches')} of {b.get('iterations')} bursts read back wrong; one "
-                         f"burst {fmt_cell(b.get('burstMs'))}; not responding {b.get('notResponding')}")
-            for key in ("interleaveOff", "interleaveOn8"):
-                i = res.get(key)
-                if i:
-                    s.append(f"- {key}: value mismatches {i.get('valueMismatches')}, enable mismatches "
-                             f"{i.get('enableMismatches')} of {i.get('channelChecks')}; not responding {i.get('notResponding')}")
-            for name, r in (res.get("reads") or {}).items():
-                line = (f"- reads {name}: bulk {fmt_cell(r.get('bulkReadMs'))}, voltage {fmt_cell(r.get('inputVoltageMs'))}, "
-                        f"write mismatches {r.get('mismatches')} of {r.get('checks')}")
-                if "pinpointUpdateMs" in r:
-                    line += (f"; Pinpoint {fmt_cell(r.get('pinpointUpdateMs'))}, not READY {r.get('pinpointNotReady')}; "
-                             f"OctoQuad {fmt_cell(r.get('octoQuadReadMs'))}, CRC failures {r.get('octoQuadCrcFailures')}, "
-                             f"invalid {r.get('octoQuadInvalid')}")
-                s.append(line + f"; not responding {r.get('notResponding')}")
+    def photon_manifest(self):
+        def git(*args):
+            r = subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True)
+            return r.stdout.strip() if r.returncode == 0 else f"git failed: {r.stderr.strip()[:200]}"
+
+        return {"gitHead": git("rev-parse", "HEAD"), "gitDirty": bool(git("status", "--porcelain")),
+                "photonSourceSha256": photon_source_sha256(REPO_ROOT / PHOTON_SOURCE_DIR),
+                "probeFirmware": [h.get("firmware") for h in (self.probe or {}).get("hubs", [])]}
+
+    def photon_summary(self):
+        p = self.photon
+        checks = p["checks"]
+        s = [f"## Photon ({p['topology']}, seed {p['seed']})\n",
+             f"- source: git {p['manifest']['gitHead'][:12]}{' (dirty tree)' if p['manifest']['gitDirty'] else ''}, "
+             f"photon sources sha256 {p['manifest']['photonSourceSha256'][:16]} (installed on the hub: "
+             f"{str(dig(p, 'stock', 'info', 'installedPhotonSourceSha256'))[:16]}); SDK {dig(p, 'stock', 'info', 'sdkVersion')}; "
+             f"hubs {[(h.get('key'), h.get('address'), h.get('firmware')) for h in dig(p, 'stock', 'info', 'hubs', default=[]) or []]}",
+             f"- drives {PHOTON_POWERS}",
+             f"- STOP trials: {p['stopTrials']} per condition; with none violating, the 95% upper bound on the per-STOP "
+             f"violation rate is {photon_stop_bound(p['stopTrials']):.1%} per condition", ""]
+        rows = photon_gain_rows(p.get("stock"), p.get("main"))
+        if rows:
+            hubs = sorted({h for r in rows for h in r["perHub"]})
+            s += ["### Write block per loop (4 motors + 2 servos changing on each hub), p50 / p95 / max ms\n",
+                  "| mode | both hubs | " + " | ".join(hubs) + " | loop period | p50 gain over stock |",
+                  "|---|---|" + "---|" * len(hubs) + "---|---|"]
+            for r in rows:
+                s.append(f"| {r['mode']} | {fmt_cell(r['writeBlock'])} | "
+                         + " | ".join(fmt_cell(r["perHub"].get(h)) for h in hubs)
+                         + f" | {fmt_cell(r['loopPeriod'])} | {gain_text(r['gain'])} |")
             s.append("")
-        s += ["Cells are p50 / p95 / max ms.", ""]
-        return s
-
-    def _photon_checks(self, runs):
-        o1, r1 = runs["1"]
-        o2, r2 = runs["2"]
-        for run_id, (o, res) in runs.items():
-            hubs = dig(res, "info", "hubs", default=[]) or []
-            self.check(f"photon run {run_id}: Photon replaced every hub's LynxModule",
-                       bool(hubs) and all(h.get("photonSwapped") for h in hubs), f"{hubs}",
-                       "the installed APK lacks org.solverslib:photon, or Photon's INIT hook didn't run"
-                       + (" on this second INIT" if run_id == "2" else ""))
-            self.check(f"photon run {run_id}: Bench: Photon finished", res.get("complete") is True and not o["crashed"],
-                       f"crashed {o['crashed']}, error {o.get('errorMessage')!r}", "something under Photon threw")
-        if self.args.usb_expansion:
-            self.check("photon: Photon took the USB Expansion Hub as EXPANSION_HUB",
-                       dig(r1, "info", "photonExpansionHub") is True, f"{dig(r1, 'info')}",
-                       "Photon doesn't parallelize the Expansion Hub's writes")
-        stale = {name: st for name, st in (r2.get("initialState") or {}).items()
-                 if st.get("enabled") and abs(st.get("power", 0)) > 0.01}
-        self.check("photon: STOP with Photon writes in flight left no motor powered (run 2's INIT state)",
-                   bool(r2.get("initialState")) and not stale, f"powered at the next INIT: {stale or 'none'}",
-                   "a write Photon sent before STOP landed after the SDK's fail-safe, leaving a motor running")
-        for name, m in (r1.get("timing") or {}).items():
-            self.check(f"photon timing {name}: every read-back matched and nothing stopped responding",
-                       m.get("mismatches") == 0 and m.get("allAtLastAfterDrain") is True and not m.get("notResponding"),
-                       f"mismatches {m.get('mismatches')} of {m.get('checks')}, after drain {m.get('allAtLastAfterDrain')}, "
-                       f"not responding {m.get('notResponding')}, drain after {m.get('drainAfterMs')} ms",
-                       "writes were lost or a hub dropped out in this mode")
-        for name, b in (r1.get("burst") or {}).items():
-            self.check(f"photon burst {name}: writes read back right with nothing drained", b.get("mismatches") == 0
-                       and not b.get("notResponding"), f"{b.get('mismatches')} of {b.get('iterations')} wrong",
-                       "a read right after parallel writes saw old values: the hub reordered or dropped them")
-        off, on = r1.get("interleaveOff") or {}, r1.get("interleaveOn8") or {}
-        self.check("photon interleave: unparallelized enable toggles after parallel writes match Photon off",
-                   bool(on) and on.get("valueMismatches") == off.get("valueMismatches")
-                   and on.get("enableMismatches") == off.get("enableMismatches") and not on.get("notResponding"),
-                   f"off {off.get('valueMismatches')}/{off.get('enableMismatches')}, on {on.get('valueMismatches')}/"
-                   f"{on.get('enableMismatches')} (value/enable mismatches)",
-                   "a normal command overtook or was overtaken by a parallel write")
-        reads = r1.get("reads") or {}
-        on8, off_r = reads.get("on8") or {}, reads.get("off") or {}
-        ok = bool(on8) and on8.get("mismatches") == 0 and not on8.get("notResponding")
-        detail = f"write mismatches {on8.get('mismatches')} of {on8.get('checks')}"
-        if self.args.photon_i2c:
-            ok = ok and on8.get("octoQuadCrcFailures", 1) <= off_r.get("octoQuadCrcFailures", 0) \
-                and on8.get("pinpointNotReady", 1) <= off_r.get("pinpointNotReady", 0)
-            detail += (f"; OctoQuad CRC failures off {off_r.get('octoQuadCrcFailures')} / on {on8.get('octoQuadCrcFailures')}; "
-                       f"Pinpoint not READY off {off_r.get('pinpointNotReady')} / on {on8.get('pinpointNotReady')}")
-        self.check("photon reads: bulk, voltage" + (" and I2C" if self.args.photon_i2c else "") + " reads stay clean "
-                   "between parallel writes", ok, detail, "reads failed or degraded with Photon on")
+        for section, title, proves in PHOTON_TESTS:
+            mine = [c for c in checks if c.section == section]
+            if not mine:
+                continue
+            ok = all(c.ok for c in mine)
+            s.append(f"### {title}: {'PASS' if ok else 'FAIL'}\n")
+            s.append(f"_Proves: {proves}._\n")
+            for c in mine:
+                s.append(f"- {'PASS' if c.ok else 'FAIL'} {c.name}: {c.detail}"
+                         + ("" if c.ok else f" **FAIL means:** {c.fail_means}"))
+            s.append("")
+        required = [sec for sec, _, _ in PHOTON_TESTS
+                    if sec not in ("sloth", "rs485", "replug") or (sec == "sloth" and not self.args.no_sloth)
+                    or (sec == "rs485" and p["topology"] == "rs485")
+                    or (sec == "replug" and self.args.interactive and p["topology"] == "usb")]
+        missing = [f"{PHOTON_TITLES[sec]} (no result)" for sec in required if not any(c.section == sec for c in checks)]
+        still = ["the cable pulls (--interactive)"] if p["topology"] == "usb" and not self.args.interactive else []
+        level, blockers, needed = photon_verdict(checks, p.get("negativeControlFired", False), p.get("ordersBoth", False),
+                                                 self.args.photon_soak, p.get("soakMet", False), p["stopTrials"],
+                                                 p["notRun"] + missing, still)
+        s.append("### Photon verdict\n")
+        if level == "SAFE":
+            s.append(f"**SAFE TO TRY ON THE ROBOT** ({p['topology']} wiring): every Photon check passed, both STOP negative "
+                     "controls fired, the routing check saw both module orders, the soak met its loss bound"
+                     + (" and the cable pulls passed." if p["topology"] == "usb" else "."))
+        elif level == "PASSED":
+            s.append(f"**PASSED THIS RUN, NOT YET SAFE** ({p['topology']} wiring): every check here passed, but "
+                     "the go needs a run that also includes:")
+            s += [f"- {n}" for n in needed]
+        else:
+            s.append(f"**NOT SAFE YET** ({p['topology']} wiring). Blockers:")
+            s += [f"- {b}" for b in blockers]
+            if needed:
+                s.append("\nAlso still needed for the go:")
+                s += [f"- {n}" for n in needed]
+        s.append("")
+        self.summary += s
+        self.results["photon"] = {k: v for k, v in p.items() if k not in ("checks",)}
+        self.results["photon"]["checks"] = [c._asdict() for c in checks]
+        self.results["photon"]["verdict"] = {"level": level, "safe": level == "SAFE", "blockers": blockers,
+                                             "stillNeeded": needed}
 
     def run_baseline(self):
         seq = self.dash.baseline_seq
@@ -4115,8 +5530,9 @@ class Runner:
             self.check(f"{name} bench completed", False, str(e))
             self.summary.append(f"## {name}\n\n**FAILED: {e}**\n")
             self.settle()
-            if (name not in ("pinpoint", "octoquad", "octoquad_absent", "expansion", "absent", "overlay_nan")
-                    and self.active_config() != CONFIG_MAIN):
+            # A Photon OpMode leaves its hubs swapped until the map is rebuilt, even under CONFIG_MAIN.
+            if name == "photon" or (name not in ("pinpoint", "octoquad", "octoquad_absent", "expansion", "absent",
+                                                 "overlay_nan") and self.active_config() != CONFIG_MAIN):
                 self.activate_config(CONFIG_MAIN, self.main_config())
 
     def settle(self):
@@ -4140,7 +5556,7 @@ class Runner:
         chosen = {n for n in every if getattr(a, n)}
         explicit = bool(chosen) or a.all
         if not chosen:
-            chosen = set(every)
+            chosen = set(every) - {"photon"}
         if "octoquad" in chosen:
             chosen.add("octoquad_absent")
         if a.no_sloth:
@@ -4186,9 +5602,23 @@ def parse_args(argv):
     p.add_argument("--handover", action="store_true",
                    help="Bench: Drive Handover (Drivetrain taking the drive motors back from Pedro)")
     p.add_argument("--photon", action="store_true",
-                   help="Bench: Photon twice, then Framework Loop and Write Recovery with Photon off and on")
+                   help="the Photon block: stock baseline, Bench: Photon, Faults, STOP trials, routing over app "
+                        "restarts, consecutive OpModes, deploySloth, then Framework Loop off and on and Write Recovery "
+                        "on (about 55 min; not part of a run without bench flags, nor of --all)")
     p.add_argument("--usb-expansion", action="store_true",
-                   help="Bench: Photon also drives an Expansion Hub connected by USB (motor ports 0-3, servo ports 0-1)")
+                   help="the Photon block also drives an Expansion Hub connected by USB alone (motor ports 0-3, servo "
+                        "ports 0-1)")
+    p.add_argument("--photon-rs485", action="store_true",
+                   help="the Photon block with the Expansion Hub on RS485 at --expansion-address: it must stay on the "
+                        "SDK's path")
+    p.add_argument("--photon-soak", action="store_true",
+                   help="the Photon block with its long write soak (up to 1e7 writes per hub, about 3 h), 200 STOP "
+                        "trials per condition and more lost-write trials; with --usb-expansion --interactive it is the "
+                        "run whose verdict can say SAFE")
+    p.add_argument("--photon-stop-trials", type=int, default=None,
+                   help=f"STOP trials per condition (default {PHOTON_STOP_TRIALS}, {PHOTON_SOAK_STOP_TRIALS} with "
+                        "--photon-soak)")
+    p.add_argument("--photon-seed", type=int, default=None, help="seed for the STOP delays (default: the time)")
     p.add_argument("--usb-expansion-serial", default=None,
                    help="the USB Expansion Hub's serial, if the runner can't read it from the Control Hub")
     p.add_argument("--photon-i2c", action="store_true",
@@ -4220,19 +5650,20 @@ def parse_args(argv):
     p.add_argument("--clock", action="store_true",
                    help="Bench: Clock (PathCommands.timeout against wall-clock jumps on the hub)")
     p.add_argument("--all", action="store_true",
-                   help="every bench, and fail if the webcam, Limelight or Expansion Hub is missing")
-    p.add_argument("--no-sloth", action="store_true", help="skip the Sloth race")
+                   help="every bench but the Photon block, and fail if the webcam, Limelight or Expansion Hub is missing")
+    p.add_argument("--no-sloth", action="store_true", help="skip the Sloth race and the Photon block's deploySloth step")
     p.add_argument("--interactive", action="store_true",
                    help="in the gamepad bench, has you drive the dashboard's Gamepad view (keyboard, on-screen stick, "
                         "USB pad); after the Limelight bench, prompts you to unplug and replug it and times the fault; "
                         "after Bench: Pinpoint and Bench: OctoQuad, to unplug and replug each; after Bench: Expansion "
                         "Hub, to move the Pinpoint and OctoQuad to the Expansion Hub and back; in Bench: Clock, to "
-                        "open the RC's web page")
+                        "open the RC's web page; in the Photon block (USB wiring), to pull the Expansion Hub's USB and "
+                        "power cables, each once with Photon off and once on")
     p.add_argument("--quick", action="store_true", help="shorter phases (numbers are noisier)")
     p.add_argument("--keep-configs", action="store_true", help="leave the bench_* hardware configs on the hub")
     p.add_argument("--ports-empty", action="store_true",
-                   help="Control Hub motor ports 0-3 and servo ports 0-1 are empty: run even if a config names devices "
-                        "there")
+                   help="motor ports 0-3 and servo ports 0-1 are empty on the Control Hub and, for the Photon block, "
+                        "on the Expansion Hub: run even if a config names devices there")
     p.add_argument("--other-pipeline", type=int, default=0, help="the non-ball Limelight pipeline to switch to")
     p.add_argument("--host", default=HUB_IP)
     p.add_argument("--serial", default=None, help=f"adb serial (default {HUB_IP}:{ADB_PORT})")
@@ -4241,6 +5672,10 @@ def parse_args(argv):
         p.error(f"--other-pipeline must be a Limelight pipeline 0-9 other than the ball pipeline {BALL_PIPELINE}")
     if not 1 <= args.expansion_address <= EXPANSION_MAX_ADDRESS:
         p.error(f"--expansion-address must be 1-{EXPANSION_MAX_ADDRESS}: the SDK reserves higher module addresses")
+    if args.usb_expansion or args.photon_rs485 or args.photon_soak:
+        args.photon = True
+    if args.photon_stop_trials is not None and args.photon_stop_trials < 1:
+        p.error("--photon-stop-trials must be at least 1")
     return args
 
 

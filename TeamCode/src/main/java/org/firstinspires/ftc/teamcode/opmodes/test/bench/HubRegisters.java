@@ -9,6 +9,7 @@ import com.qualcomm.hardware.lynx.commands.core.LynxGetMotorConstantPowerCommand
 import com.qualcomm.hardware.lynx.commands.core.LynxGetServoEnableCommand;
 import com.qualcomm.hardware.lynx.commands.core.LynxGetServoPulseWidthCommand;
 import com.qualcomm.hardware.lynx.commands.core.LynxSetMotorConstantPowerCommand;
+import com.qualcomm.hardware.lynx.commands.standard.LynxFailSafeCommand;
 import com.qualcomm.robotcore.exception.RobotCoreException;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
@@ -34,8 +35,11 @@ final class HubRegisters {
     }
 
     static double motorPower(LynxModule hub, int port) {
-        return send(new LynxGetMotorConstantPowerCommand(hub, port)).getPower()
-                / (double) LynxSetMotorConstantPowerCommand.apiPowerLast;
+        return motorPowerRaw(hub, port) / (double) LynxSetMotorConstantPowerCommand.apiPowerLast;
+    }
+
+    static int motorPowerRaw(LynxModule hub, int port) {
+        return send(new LynxGetMotorConstantPowerCommand(hub, port)).getPower();
     }
 
     static boolean motorEnabled(LynxModule hub, int port) {
@@ -54,7 +58,16 @@ final class HubRegisters {
         try {
             hub.failSafe();
         } catch (RobotCoreException | InterruptedException | LynxNackException e) {
-            throw new IllegalStateException("failSafe() on the Control Hub failed", e);
+            throw new IllegalStateException("failSafe() on REV Hub #" + hub.getModuleAddress() + " failed", e);
+        }
+    }
+
+    // A hub reset's effect on the outputs without failSafe()'s forgetLastKnown(): the SDK's caches stay valid.
+    static void rawFailSafe(LynxModule hub) {
+        try {
+            new LynxFailSafeCommand(hub).send();
+        } catch (InterruptedException | LynxNackException e) {
+            throw new IllegalStateException("LynxFailSafeCommand to REV Hub #" + hub.getModuleAddress() + " failed", e);
         }
     }
 

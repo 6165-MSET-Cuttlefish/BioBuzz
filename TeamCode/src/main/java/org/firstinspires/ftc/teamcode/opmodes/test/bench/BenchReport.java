@@ -6,7 +6,9 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -23,6 +25,7 @@ final class BenchReport {
     final String fileName;
     final Map<String, Object> root = new LinkedHashMap<>();
     final Map<String, Object> phases = new LinkedHashMap<>();
+    final List<String> phaseLog = new ArrayList<>();
     final Map<String, Object> params;
     private String phase = "init";
     private String status = "";
@@ -37,12 +40,14 @@ final class BenchReport {
         root.put("device", BenchIO.deviceInfo());
         root.put("params", params);
         root.put("phases", phases);
+        root.put("phaseLog", phaseLog);
         BenchIO.log("%s starting, results in %s/%s.json", benchName, BenchIO.dir(), fileName);
     }
 
     void phase(String name) {
         phase = name;
         status = "";
+        phaseLog.add(name);
         BenchIO.log("phase %s", name);
         sendNow(NO_EXTRA);
     }

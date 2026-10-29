@@ -92,8 +92,28 @@ value changes, a skipped (cached) write about 0.
 
 ## Photon
 
-SolversLib Photon (`org.solverslib:photon`) sends motor and servo writes without waiting for each one's ACK, so it
-could remove most of the per-write cost above. It is unstable, and installing it alone changes every OpMode (see
-CLAUDE.md, Dependencies). Bench: Photon (`scripts/bench/run_bench.py --photon --usb-expansion`) checks write costs,
-lost or reordered writes, bursts, reads, a poller thread, STOP with writes in flight, and the framework loop with it on.
-It hasn't run yet: decide on Photon only from its results.
+Photon (`architecture/hardware/photon/`, the team's fork of SolversLib Photon) sends motor and servo writes without
+waiting for each one's ACK. Only a `@Photon` OpMode's INIT swaps the hubs; OpModes after it keep the swapped hubs,
+disabled, until the hardware map is rebuilt (config change or Restart Robot). See CLAUDE.md, Framework layout.
+
+Measured on 2026-10-28 with stock SolversLib Photon 0.3.6 (before the fork), Control Hub plus an Expansion Hub on USB,
+nothing on the ports; 4 motors and 2 servos changing on each hub every loop, p50 (p95):
+
+| | write block, both hubs | Expansion Hub | Control Hub | loop period |
+|---|---|---|---|---|
+| Photon off | 25.9 (41.0) ms | 15.9 ms, ≈2.65 ms a write | 9.35 ms, ≈1.56 ms a write | 31.8 ms |
+| 8 parallel | 6.0 (12.3) ms | 3.95 ms | 2.06 ms | 11.5 ms |
+| 2 parallel | 6.8 ms | 4.39 ms | 2.31 ms | 12.4 ms |
+
+That run also showed why stock Photon can't go on the robot: at INIT it registered the Control Hub's replacement module
+in the Expansion Hub's USB device, so the Control Hub's own replies went to the replaced object, and a timed-out command
+would have left that hub marked unresponsive for good. Its read-back failures there were the bench's own sign error
+(goBILDA 5202 motors are CCW, so the hub's register holds minus the power), and its STOP check could not fail.
+
+The fork changes that, but only the rebuilt Photon block (`scripts/bench/run_bench.py --photon`, see
+`scripts/bench/README.md`) decides it: exact read-backs with Photon off and on, a stock baseline from an OpMode Photon
+never touched, routing and not-responding recovery over 8-16 app restarts, real lost writes, STOP at random points of the
+loop with negative controls, STOP inside a write, crashes and consecutive OpModes, deploySloth, a hub reset, the RS485
+wiring, cable pulls, and a soak that bounds the per-write loss rate. Use Photon on the robot only once its summary says
+SAFE TO TRY ON THE ROBOT for the robot's wiring: only the go run for that wiring (the soak, plus the cable pulls on USB;
+see the README's table) can say it, and a shorter run says PASSED at best.

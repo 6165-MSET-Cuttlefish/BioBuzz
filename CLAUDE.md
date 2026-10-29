@@ -15,7 +15,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 ## Build & deploy
 
-- **TeamCode** (Run button, full install): on a fresh hub and after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`).
+- **TeamCode** (Run button, full install): on a fresh hub, after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`), and after any change to a `@Pinned` class (`architecture/hardware/photon/`): deploySloth never reloads those, and says nothing.
 - **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; about 5 s) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
 - The hub's clock reads about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth.
 - Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK); after an AGP or Gradle bump, also `:TeamCode:assembleSloth`, which hooks AGP's dex task by name.
@@ -24,7 +24,6 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
-- `org.solverslib:photon` (for Bench: Photon) replaces every OpMode's `LynxModule`s with `PhotonLynxModule`s at INIT, even with Photon never enabled; it parallelizes only USB hubs' motor and servo writes, so not an Expansion Hub on RS485.
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
@@ -50,6 +49,8 @@ Pedro Pathing 3:
 
 - The planner doesn't map alliances: pass mapped coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles.
 - Drive a plan only with `RouteRun`: `Plan.intake`/`Plan.back` are for drawing. They join the drives without the plan's turns in place, and Pedro moves to a compound path's next piece as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting reversals.
+
+**Photon** (`architecture/hardware/photon/`, the team's fork of SolversLib Photon): only an OpMode annotated `@Photon` gets its hubs swapped for `PhotonLynxModule`s at INIT, and they stay swapped until the hardware map is rebuilt (config change or Restart Robot). `PhotonCore.enable()` throws unless that swap worked; it then sends RUN_WITHOUT_ENCODER `setPower` and servo pulse-width writes without waiting for each ACK, from any thread, on hubs with their own USB link. An RS485 Expansion Hub, and every command while disabled, takes the SDK's path. Every class there, nested ones included, must be `@Pinned`, with no lambdas or anonymous classes: an unpinned one is reloaded by deploySloth with its own copy of the statics. `@Photon` isn't inherited: a Photon variant of an OpMode is a subclass annotated `@Photon` (`FrameworkLoopPhotonBench`).
 
 **Faults** (`core/Faults`) show only in an `EnhancedOpMode`; a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
 
@@ -125,13 +126,15 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - Single devices: the dashboard's Hardware View.
 
 **Control Hub bench** (`scripts/bench/`): read `docs/hub-bench-findings.md` before changing the planner, hub or I2C traffic, odometry, Limelight or stop paths.
+- **Photon block** (`run_bench.py --photon`, with `--usb-expansion` or `--photon-rs485`): its verdict in `summary.md` is the only go/no-go for Photon on the robot, and only the go run for the robot's wiring can say SAFE (`--photon-soak`, plus `--interactive` cable pulls on USB; `scripts/bench/README.md`); a shorter run says PASSED at best. Its stock baseline must be the first OpMode after an app restart. Bench: Photon Stop's negative controls deliberately breach STOP's gate, and Bench: Photon Stop Race raises it mid-write and leaves it raised until the next INIT: run them only through the runner, with the bench ports empty.
+- A goBILDA 5202 motor is CCW, so its hub register holds minus the commanded power: compare register read-backs through `PhotonChannel.motorRegister`.
 
 ## Conventions
 
 - An SDK bump sets `versionCode`/`versionName` to that SDK's FtcRobotController manifest values.
 - Comments: none by default, in any language; only a one-line WHY a competent reader would otherwise get wrong. Usage notes go in this file.
 - Vendored, never hand-edited, never holding tuned values (those go in `BettaConstants`/`OctoQuadLocalizerTest`): `vendor/<source>/` (its `*_REV` names upstream and the only edits), `pedro/procedures/`, `robotcontroller/` and every `res/` file but the hardware configs. Refresh Prism and the procedures with `scripts/update-*.sh`, one commit each; the procedures' commit also carries any Pedro version bump the Quickstart made, in `TeamCode/build.gradle` (the script doesn't touch it); `robotcontroller/` and `res/` from the SDK's FtcRobotController at its tag; the rest by recopying upstream and reapplying its `*_REV` edits.
-- Fail fast: no catch to keep a loop alive, no silent fallback, no optional devices (`hardwareMap.get`, never `tryGet`); numeric guards and try/finally are fine. Only exceptions: a webcam setting the camera rejects raises the `Webcam` fault and a Limelight problem the `Limelight` fault instead of throwing, with Limelight-dependent actions falling back.
+- Fail fast: no catch to keep a loop alive, no silent fallback, no optional devices (`hardwareMap.get`, never `tryGet`); numeric guards and try/finally are fine. Only exceptions: a webcam setting the camera rejects raises the `Webcam` fault and a Limelight problem the `Limelight` fault instead of throwing, with Limelight-dependent actions falling back; a Photon swap failure at INIT (then `PhotonCore.enable()` throws) or a dead Photon sweeper raises a global warning and leaves writes on the SDK's path.
 - `Limelight3A`:
   - Every `boolean` call but `isRunning`/`isConnected` is an HTTP POST or DELETE that blocks up to 15 s and fails as a bare `false`: make them only from `LimelightSync`'s one background thread (newest request wins), and only when what's wanted changes.
   - `LLResult.getPipelineType()` is always empty (use `getStatus()`); llpython keeps the last script's output on every pipeline.
