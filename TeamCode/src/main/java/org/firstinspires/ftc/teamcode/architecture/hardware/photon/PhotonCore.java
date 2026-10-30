@@ -48,7 +48,9 @@ public final class PhotonCore implements Runnable, OpModeManagerNotifier.Notific
     private static final Set<String> SYSTEM_OPMODES = new HashSet<>(Arrays.asList(
             OpModeManagerImpl.DEFAULT_OP_MODE_NAME, "$Manual$Control$", "$Process$Load$Event$"));
     private static final PhotonCore INSTANCE = new PhotonCore();
+    private static final int MAX_PARALLEL_WRITES = 64;
     private static volatile int maxParallelWrites = 8;
+    private static volatile boolean writeProfiling;
 
     final CopyOnWriteArrayList<PhotonLynxModule> hubs = new CopyOnWriteArrayList<>();
     final AtomicLong parallelWrites = new AtomicLong();
@@ -63,6 +65,7 @@ public final class PhotonCore implements Runnable, OpModeManagerNotifier.Notific
     final AtomicLong writeFailures = new AtomicLong();
     final AtomicLong clearedAtInit = new AtomicLong();
     final AtomicLong orphanDatagrams = new AtomicLong();
+    final AtomicLong numberClashes = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> nacks = new ConcurrentHashMap<>();
 
     private volatile boolean enabled;
@@ -98,9 +101,12 @@ public final class PhotonCore implements Runnable, OpModeManagerNotifier.Notific
         return INSTANCE.enabled;
     }
 
-    /** Per hub. */
+    /** Per hub, 1 to 64: every slot holds one of the hub's 255 message numbers until its ACK arrives. */
     public static void setMaxParallelWrites(int writes) {
-        if (writes < 1) throw new IllegalArgumentException("Photon needs at least 1 parallel write per hub, got " + writes);
+        if (writes < 1 || writes > MAX_PARALLEL_WRITES) {
+            throw new IllegalArgumentException("Photon takes 1 to " + MAX_PARALLEL_WRITES + " parallel writes per hub, got "
+                    + writes);
+        }
         maxParallelWrites = writes;
     }
 
@@ -127,11 +133,33 @@ public final class PhotonCore implements Runnable, OpModeManagerNotifier.Notific
         return new Counters(INSTANCE);
     }
 
+    /** Times each step of every parallel write on every hub while on; costs a few volatile reads per write while off. */
+    public static void setWriteProfiling(boolean on) {
+        writeProfiling = on;
+    }
+
+    static boolean writeProfiling() {
+        return writeProfiling;
+    }
+
+    public static void resetWriteProfile() {
+        for (PhotonLynxModule hub : INSTANCE.hubs) hub.profile.reset();
+    }
+
+    /**
+     * Per step of this hub's parallel writes since {@link #resetWriteProfile()}: count, meanUs, and p50Us/p95Us to 5 us
+     * (over2500Us counts the samples past the last bucket).
+     */
+    public static Map<String, Map<String, Double>> writeProfile(LynxModule hub) {
+        if (!INSTANCE.owns(hub)) throw new IllegalArgumentException("hub #" + hub.getModuleAddress() + " isn't Photon's");
+        return ((PhotonLynxModule) hub).profile.snapshot();
+    }
+
     public static void resetCounters() {
         PhotonCore c = INSTANCE;
         for (AtomicLong counter : new AtomicLong[] {c.parallelWrites, c.retransmits, c.abandonedWrites,
                 c.supersededWrites, c.gateFallbacks, c.postStopFailSafes, c.slotTimeouts, c.notRespondingFallbacks,
-                c.deviceNotReadyFallbacks, c.writeFailures, c.clearedAtInit, c.orphanDatagrams}) {
+                c.deviceNotReadyFallbacks, c.writeFailures, c.clearedAtInit, c.orphanDatagrams, c.numberClashes}) {
             counter.set(0);
         }
         c.nacks.clear();
@@ -426,6 +454,8 @@ public final class PhotonCore implements Runnable, OpModeManagerNotifier.Notific
         public final long clearedAtInit;
         /** Replies routed to a replaced hub object because a command was still sent through it. */
         public final long orphanDatagrams;
+        /** Replies dropped because both hub objects held their message number. */
+        public final long numberClashes;
         /** NACKs of parallel writes, by reason. */
         public final Map<String, Long> nacks;
 
@@ -442,6 +472,7 @@ public final class PhotonCore implements Runnable, OpModeManagerNotifier.Notific
             writeFailures = c.writeFailures.get();
             clearedAtInit = c.clearedAtInit.get();
             orphanDatagrams = c.orphanDatagrams.get();
+            numberClashes = c.numberClashes.get();
             Map<String, Long> byReason = new LinkedHashMap<>();
             for (Map.Entry<String, AtomicLong> e : c.nacks.entrySet()) byReason.put(e.getKey(), e.getValue().get());
             nacks = Collections.unmodifiableMap(byReason);

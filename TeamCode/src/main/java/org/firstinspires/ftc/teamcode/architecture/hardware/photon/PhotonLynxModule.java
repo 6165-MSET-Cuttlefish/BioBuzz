@@ -9,6 +9,7 @@ import com.qualcomm.hardware.lynx.LynxNackException;
 import com.qualcomm.hardware.lynx.LynxUnsupportedCommandException;
 import com.qualcomm.hardware.lynx.LynxUsbDevice;
 import com.qualcomm.hardware.lynx.LynxUsbDeviceImpl;
+import com.qualcomm.hardware.lynx.Supplier;
 import com.qualcomm.hardware.lynx.commands.LynxDatagram;
 import com.qualcomm.hardware.lynx.commands.LynxMessage;
 import com.qualcomm.hardware.lynx.commands.LynxRespondable;
@@ -33,12 +34,14 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.concurrent.locks.LockSupport;
 
 import dev.frozenmilk.sinister.loading.Pinned;
@@ -53,6 +56,7 @@ public final class PhotonLynxModule extends LynxModule {
     private static final int STOCK_LATE = 2;
     private static final long SLOT_WAIT_NS = 5_000_000L;
     private static final long SLOT_PARK_NS = 50_000L;
+    private static final long PING_RESET_NS = 100_000_000L;
     private static final ThreadLocal<Boolean> FAKING_ACK = new ThreadLocal<>();
 
     private static final Set<String> COPIED = names("lynxUsbDevice", "controllers", "moduleAddress",
@@ -80,7 +84,9 @@ public final class PhotonLynxModule extends LynxModule {
     private final AtomicInteger slots = new AtomicInteger();
     private final AtomicBoolean sweeping = new AtomicBoolean();
     private final AtomicBoolean batteryWarned = new AtomicBoolean();
+    final WriteProfile profile = new WriteProfile();
     private volatile long lastDatagramNanos;
+    private volatile long lastPingResetNanos = System.nanoTime() - PING_RESET_NS;
 
     @SuppressWarnings("unchecked")
     PhotonLynxModule(PhotonCore core, LynxModule original, LynxUsbDevice usb, PhotonCore.Fields fields)
@@ -162,10 +168,13 @@ public final class PhotonLynxModule extends LynxModule {
 
     @Override
     public void acquireNetworkTransmissionLock(@NonNull LynxMessage message) throws InterruptedException {
+        boolean on = PhotonCore.writeProfiling();
+        long t = on ? System.nanoTime() : 0;
         Integer route = routes.get(message);
         if (route != null && route == PARALLEL) return;
         if (route == null && wantsParallel(message)) {
             routes.put(message, PARALLEL);
+            lap(on, WriteProfile.ROUTE, t);
             return;
         }
         super.acquireNetworkTransmissionLock(message);
@@ -185,8 +194,13 @@ public final class PhotonLynxModule extends LynxModule {
 
     @Override
     public void releaseNetworkTransmissionLock(@NonNull LynxMessage message) throws InterruptedException {
+        boolean on = PhotonCore.writeProfiling();
+        long t = on ? System.nanoTime() : 0;
         Integer route = routes.remove(message);
-        if (route != null && route == PARALLEL) return;
+        if (route != null && route == PARALLEL) {
+            lap(on, WriteProfile.RELEASE, t);
+            return;
+        }
         super.releaseNetworkTransmissionLock(message);
     }
 
@@ -199,7 +213,10 @@ public final class PhotonLynxModule extends LynxModule {
         if (LynxUsbDeviceImpl.DEBUG_LOG_DATAGRAMS_FINISH) {
             RobotLog.vv("LynxModule", "finishing mod=%d msg#=%d", message.getModuleAddress(), message.getMessageNumber());
         }
-        end((ParallelWrite) message, ParallelWrite.DONE);
+        ParallelWrite write = (ParallelWrite) message;
+        if (end(write, ParallelWrite.DONE) && PhotonCore.writeProfiling()) {
+            profile.record(WriteProfile.ACK_RTT, System.nanoTime() - write.firstSentNanos);
+        }
     }
 
     @Override
@@ -235,16 +252,51 @@ public final class PhotonLynxModule extends LynxModule {
         }
     }
 
+    // I2C clients outside the hardware map keep the replaced module, so every I2C transaction on the hub must take its lock.
+    @Override
+    public <T> T acquireI2cLockWhile(Supplier<T> supplier) throws InterruptedException, RobotCoreException, LynxNackException {
+        warnIfClosed();
+        return orphan.acquireI2cLockWhile(supplier);
+    }
+
+    // The replaced module shares nextMessageNumber, and the SDK's loop only skips numbers pending in this module's map.
+    @Override
+    protected byte getNewMessageNumber() {
+        for (int tries = 0; tries < 256; tries++) {
+            byte number = super.getNewMessageNumber();
+            if (!orphanUnfinished.containsKey(number & 0xFF)) return number;
+        }
+        throw new IllegalStateException("REV Hub #" + getModuleAddress() + " has no free message number");
+    }
+
     @Override
     public void onIncomingDatagramReceived(LynxDatagram datagram) {
         int reference = datagram.getReferenceNumber();
-        if (!unfinishedCommands.containsKey(reference) && orphanUnfinished.containsKey(reference)) {
-            core.orphanDatagrams.incrementAndGet();
+        if (orphanUnfinished.containsKey(reference)) {
             noteDatagramReceived();
+            // An ACK or NACK names only the reference number, so a reply to a number both modules hold can't be routed.
+            if (unfinishedCommands.containsKey(reference)) {
+                core.numberClashes.incrementAndGet();
+                return;
+            }
+            core.orphanDatagrams.incrementAndGet();
             orphan.onIncomingDatagramReceived(datagram);
             return;
         }
+        if (!PhotonCore.writeProfiling() || !parallelWrites.containsKey(reference)) {
+            super.onIncomingDatagramReceived(datagram);
+            return;
+        }
+        long t = System.nanoTime();
         super.onIncomingDatagramReceived(datagram);
+        profile.record(WriteProfile.ACK_HANDLING, System.nanoTime() - t);
+    }
+
+    private long lap(boolean on, int step, long since) {
+        if (!on) return 0;
+        long now = System.nanoTime();
+        profile.record(step, now - since);
+        return now;
     }
 
     private boolean wantsParallel(LynxMessage message) {
@@ -260,7 +312,10 @@ public final class PhotonLynxModule extends LynxModule {
     }
 
     private boolean sendParallel(LynxRespondable<?> command) throws InterruptedException, LynxUnsupportedCommandException {
-        sweep(System.nanoTime());
+        boolean on = PhotonCore.writeProfiling();
+        long start = System.nanoTime();
+        sweep(start);
+        long t = lap(on, WriteProfile.SWEEP, start);
         if (isNotResponding()) {
             core.notRespondingFallbacks.incrementAndGet();
             return false;
@@ -269,18 +324,21 @@ public final class PhotonLynxModule extends LynxModule {
             core.slotTimeouts.incrementAndGet();
             return false;
         }
+        t = lap(on, WriteProfile.SLOT, t);
         ParallelWrite write = null;
         boolean sent = false;
         try {
             command.setMessageNumber(getNewMessageNumber());
             LynxDatagram datagram = new LynxDatagram(command);
             command.setSerialization(datagram);
-            write = new ParallelWrite(this, command);
-            write.setSerialization(datagram);
+            t = lap(on, WriteProfile.SERIALIZE, t);
+            write = new ParallelWrite(this, command, datagram);
+            t = lap(on, WriteProfile.STAND_IN, t);
             supersede(write.key, write);
             unfinishedCommands.put(write.getMessageNumber(), write);
             parallelWrites.put(write.getMessageNumber(), write);
-            sent = transmitParallel(write, command, datagram);
+            lap(on, WriteProfile.TRACK, t);
+            sent = transmitParallel(write, command, datagram, on);
         } finally {
             if (!sent) {
                 if (write == null) slots.decrementAndGet();
@@ -288,6 +346,7 @@ public final class PhotonLynxModule extends LynxModule {
             }
         }
         if (!sent) return false;
+        t = on ? System.nanoTime() : 0;
         core.parallelWrites.incrementAndGet();
         boolean stopped = write.dangerous && OpModeManagerImpl.shouldPreventDangerousHardwareAccess();
         if (stopped) {
@@ -304,7 +363,9 @@ public final class PhotonLynxModule extends LynxModule {
         command.forgetSerialization();
         // send()'s await may still NACK-finish this command; msg# 0 is never issued, so that can't drop the stand-in.
         command.setMessageNumber(0);
+        lap(on, WriteProfile.FAKE_ACK, t);
         if (stopped) failSafeAfterStop();
+        lap(on, WriteProfile.SEND_PARALLEL, start);
         return true;
     }
 
@@ -322,9 +383,13 @@ public final class PhotonLynxModule extends LynxModule {
         }
     }
 
-    private boolean transmitParallel(ParallelWrite write, LynxRespondable<?> command, LynxDatagram datagram)
+    private boolean transmitParallel(ParallelWrite write, LynxRespondable<?> command, LynxDatagram datagram, boolean on)
             throws InterruptedException {
+        long t = on ? System.nanoTime() : 0;
+        Exception failure = null;
+        long sentNanos;
         synchronized (engageLock) {
+            t = lap(on, WriteProfile.LOCK_WAIT, t);
             if (write.dangerous && OpModeManagerImpl.shouldPreventDangerousHardwareAccess()) {
                 core.gateFallbacks.incrementAndGet();
                 return false;
@@ -339,24 +404,40 @@ public final class PhotonLynxModule extends LynxModule {
             }
             if (LynxUsbDeviceImpl.DEBUG_LOG_DATAGRAMS || LynxUsbDeviceImpl.DEBUG_LOG_MESSAGES) {
                 RobotLog.vv("LynxUsb", "xmit'ing: mod=%d cmd=0x%02x(%s) msg#=%d ref#=%d ", getModuleAddress(),
-                        write.getCommandNumber(), write.commandName, write.getMessageNumber(), write.getReferenceNumber());
+                        write.getCommandNumber(), write.commandName(), write.getMessageNumber(), write.getReferenceNumber());
             }
+            t = lap(on, WriteProfile.CHECKS, t);
             try {
                 device.write(datagram.toByteArray());
             } catch (RobotUsbException | RuntimeException e) {
-                RobotLog.ww(PhotonCore.TAG, e, "parallel write to REV Hub #%d failed; sending it the SDK's way",
-                        getModuleAddress());
-                core.writeFailures.incrementAndGet();
-                return false;
+                failure = e;
             }
-            long now = System.nanoTime();
-            write.setNanotimeLastTransmit(now);
-            write.firstSentNanos = now;
-            command.setNanotimeLastTransmit(now);
-            command.resetModulePingTimer();
+            sentNanos = System.nanoTime();
+            if (failure == null) {
+                write.setNanotimeLastTransmit(sentNanos);
+                write.firstSentNanos = sentNanos;
+                command.setNanotimeLastTransmit(sentNanos);
+            }
         }
+        if (failure != null) {
+            core.writeFailures.incrementAndGet();
+            RobotLog.ww(PhotonCore.TAG, "parallel write to REV Hub #%d failed (%s); sending it the SDK's way",
+                    getModuleAddress(), failure);
+            return false;
+        }
+        if (on) profile.record(WriteProfile.USB_WRITE, sentNanos - t);
+        t = on ? System.nanoTime() : 0;
+        resetPingTimerIfDue(command, sentNanos);
+        lap(on, WriteProfile.PING_RESET, t);
         command.noteHasBeenTransmitted();
         return true;
+    }
+
+    // Each reset reschedules the keep-alive 1950 ms out, so skipping resets within 100 ms of the last one only ever pings early.
+    private void resetPingTimerIfDue(LynxMessage command, long now) {
+        if (now - lastPingResetNanos < PING_RESET_NS) return;
+        lastPingResetNanos = now;
+        command.resetModulePingTimer();
     }
 
     private boolean implEngaged() {
@@ -430,7 +511,7 @@ public final class PhotonLynxModule extends LynxModule {
         if (!end(write, ParallelWrite.ABANDONED)) return;
         int address = getModuleAddress();
         RobotLog.ee("LynxModule", "timeout: abandoning waiting %dms for %s: cmd=%s mod=%d msg#=%d", write.msAwait(),
-                "ack", write.commandName, address, write.getMessageNumber());
+                "ack", write.commandName(), address, write.getMessageNumber());
         RobotLog.ee("LynxModule", "Marking module #%d as unresponsive until we receive some data back", address);
         if (isOpen()) LynxModuleWarningManager.getInstance().reportModuleUnresponsive(this);
         noteNotResponding();
@@ -457,14 +538,14 @@ public final class PhotonLynxModule extends LynxModule {
     void onParallelWriteNack(ParallelWrite write, LynxNack nack) {
         LynxNack.ReasonCode reason = nack.getNackReasonCode();
         core.countNack(reason.toString());
-        handleException(new LynxNackException(write, "%s: nack received: %s:%d", write.commandName, reason.toString(),
+        handleException(new LynxNackException(write, "%s: nack received: %s:%d", write.commandName(), reason.toString(),
                 reason.getValue()));
         LynxNack.StandardReasonCode code = nack.getNackReasonCodeAsEnum();
         boolean batteryLow = code == LynxNack.StandardReasonCode.BATTERY_TOO_LOW_TO_RUN_MOTOR
                 || code == LynxNack.StandardReasonCode.BATTERY_TOO_LOW_TO_RUN_SERVO;
         if (batteryLow && batteryWarned.compareAndSet(false, true)) {
             RobotLog.addGlobalWarningMessage(String.format(Locale.US, "REV Hub #%d refused a %s: %s",
-                    getModuleAddress(), write.commandName, code));
+                    getModuleAddress(), write.commandName(), code));
         }
     }
 
@@ -478,7 +559,7 @@ public final class PhotonLynxModule extends LynxModule {
         static final int DISCARDED = 5;
 
         final PhotonLynxModule hub;
-        final String commandName;
+        final Class<?> commandClass;
         final int commandNumber;
         final byte[] payload;
         final int key;
@@ -487,15 +568,20 @@ public final class PhotonLynxModule extends LynxModule {
         volatile long firstSentNanos;
         volatile boolean superseded;
 
-        ParallelWrite(PhotonLynxModule hub, LynxRespondable<?> command) {
+        ParallelWrite(PhotonLynxModule hub, LynxRespondable<?> command, LynxDatagram datagram) {
             super(hub);
             this.hub = hub;
-            commandName = command.getClass().getSimpleName();
+            commandClass = command.getClass();
             commandNumber = command.getCommandNumber();
-            payload = command.toPayloadByteArray();
+            payload = datagram.getPayloadData();
             key = keyOf(command, payload);
             dangerous = command.isDangerous();
             setMessageNumber(command.getMessageNumber());
+            setSerialization(datagram);
+        }
+
+        String commandName() {
+            return commandClass.getSimpleName();
         }
 
         static int keyOf(LynxMessage command, byte[] payload) {
@@ -538,6 +624,75 @@ public final class PhotonLynxModule extends LynxModule {
         public void onNackReceived(LynxNack nack) {
             super.onNackReceived(nack);
             hub.onParallelWriteNack(this, nack);
+        }
+    }
+
+    @Pinned
+    static final class WriteProfile {
+        static final String[] STEPS = {"route", "sweep", "slot", "serialize", "standIn", "track", "lockWait", "checks",
+                "usbWrite", "pingReset", "fakeAck", "sendParallel", "release", "ackRtt", "ackHandling"};
+        static final int ROUTE = 0;
+        static final int SWEEP = 1;
+        static final int SLOT = 2;
+        static final int SERIALIZE = 3;
+        static final int STAND_IN = 4;
+        static final int TRACK = 5;
+        static final int LOCK_WAIT = 6;
+        static final int CHECKS = 7;
+        static final int USB_WRITE = 8;
+        static final int PING_RESET = 9;
+        static final int FAKE_ACK = 10;
+        static final int SEND_PARALLEL = 11;
+        static final int RELEASE = 12;
+        static final int ACK_RTT = 13;
+        static final int ACK_HANDLING = 14;
+        static final long BUCKET_NS = 5_000L;
+        static final int BUCKETS = 500;
+
+        private final AtomicLongArray counts = new AtomicLongArray(STEPS.length * (BUCKETS + 1));
+        private final AtomicLongArray sums = new AtomicLongArray(STEPS.length);
+
+        void record(int step, long nanos) {
+            int bucket = (int) Math.max(0, Math.min(BUCKETS, nanos / BUCKET_NS));
+            counts.incrementAndGet(step * (BUCKETS + 1) + bucket);
+            sums.addAndGet(step, nanos);
+        }
+
+        void reset() {
+            for (int i = 0; i < counts.length(); i++) counts.set(i, 0);
+            for (int i = 0; i < sums.length(); i++) sums.set(i, 0);
+        }
+
+        Map<String, Map<String, Double>> snapshot() {
+            Map<String, Map<String, Double>> out = new LinkedHashMap<>();
+            for (int step = 0; step < STEPS.length; step++) {
+                long[] row = new long[BUCKETS + 1];
+                long n = 0;
+                for (int b = 0; b <= BUCKETS; b++) {
+                    row[b] = counts.get(step * (BUCKETS + 1) + b);
+                    n += row[b];
+                }
+                Map<String, Double> m = new LinkedHashMap<>();
+                m.put("count", (double) n);
+                if (n > 0) {
+                    m.put("meanUs", sums.get(step) / 1e3 / n);
+                    m.put("p50Us", percentileUs(row, n, 0.50));
+                    m.put("p95Us", percentileUs(row, n, 0.95));
+                    m.put("over2500Us", (double) row[BUCKETS]);
+                }
+                out.put(STEPS[step], m);
+            }
+            return out;
+        }
+
+        private static double percentileUs(long[] row, long n, double p) {
+            long rank = (long) Math.ceil(p * n);
+            long seen = 0;
+            for (int b = 0; b <= BUCKETS; b++) {
+                seen += row[b];
+                if (seen >= rank) return (b + 0.5) * BUCKET_NS / 1e3;
+            }
+            return Double.NaN;
         }
     }
 }
