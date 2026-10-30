@@ -28,6 +28,7 @@ public class PhotonBench extends PhotonWorkload {
         info.put("maxParallelWritesAtInit", PhotonCore.maxParallelWrites());
         info.put("routingProblems", PhotonProbe.routingProblems(hardwareMap));
         report.put("info", info);
+        if (i2c != null) report.put("i2cInfo", i2c.info());
         report.save();
         for (LynxModule h : rig.hubs) {
             if (!PhotonCore.isSwapped(h)) {
@@ -66,6 +67,9 @@ public class PhotonBench extends PhotonWorkload {
             timing.put(name, timing("timing " + name, m[0], m[1] == 1));
             report.save();
         }
+        if (!opModeIsActive()) return;
+        timing.put("on8 profiled", timing("timing on8 profiled", 8, false, true));
+        report.save();
         Map<String, Object> burst = new LinkedHashMap<>();
         report.put("burst", burst);
         for (int parallel : new int[] {0, 8, 2, 1}) {
@@ -96,6 +100,15 @@ public class PhotonBench extends PhotonWorkload {
             reads.put(modeName(parallel), reads("reads " + modeName(parallel), parallel, Math.max(100, loops / 2)));
             report.save();
         }
+        if (i2c != null) {
+            Map<String, Object> i2cPhases = new LinkedHashMap<>();
+            report.put("i2c", i2cPhases);
+            for (int parallel : new int[] {0, 2, 8}) {
+                if (!opModeIsActive()) return;
+                i2cPhases.put(modeName(parallel), i2cReads("i2c " + modeName(parallel), parallel, parallel == 0, loops));
+                report.save();
+            }
+        }
         if (rig.topology == PhotonRig.RS485) {
             Map<String, Object> rs485 = new LinkedHashMap<>();
             report.put("rs485SharedLink", rs485);
@@ -111,6 +124,14 @@ public class PhotonBench extends PhotonWorkload {
         if (!opModeIsActive()) return;
         report.put("storm", storm((int) BenchIO.param(report.params, "stormWrites", 3000)));
         report.save();
+        if (i2c != null) {
+            if (!opModeIsActive()) return;
+            report.put("i2cControl", i2cControl((int) BenchIO.param(report.params, "i2cControlAttempts", 200)));
+            report.save();
+            if (!opModeIsActive()) return;
+            report.put("i2cAfterControl", i2cReads("i2c after control", 0, false, Math.max(50, loops / 5)));
+            report.save();
+        }
         if (!opModeIsActive()) return;
         report.put("soak", soak(BenchIO.param(report.params, "soakSeconds", 60),
                 BenchIO.param(report.params, "soakWritesPerHub", 0)));
@@ -217,14 +238,28 @@ public class PhotonBench extends PhotonWorkload {
         return p.end();
     }
 
+    private Map<String, Object> i2cControl(int attempts) {
+        report.phase("i2c control");
+        PhotonCore.disable();
+        try {
+            return i2c.control(attempts);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted in the unlocked-I2C negative control", e);
+        }
+    }
+
     private Map<String, Object> soak(double seconds, double writesPerHub) {
         Phase p = new Phase("soak", 8);
         Poller poller = new Poller(Thread.currentThread());
         poller.start();
+        PhotonI2c.Readers readers = i2c == null ? null : i2c.readers(false, PhotonI2c.PERIOD_NS);
+        if (readers != null) readers.start();
         long t0 = System.nanoTime();
         long deadline = t0 + (long) (seconds * 1e9);
         long loop = 0;
         long lastSave = t0;
+        boolean finished = false;
         try {
             while (opModeIsActive()) {
                 long now = System.nanoTime();
@@ -232,23 +267,31 @@ public class PhotonBench extends PhotonWorkload {
                 for (PhotonChannel c : rig.channels) p.write(c);
                 p.step = loop;
                 if (loop % 50 == 49) p.verifyAll(false);
-                if (loop % 200 == 0) poller.check();
+                if (loop % 200 == 0) {
+                    poller.check();
+                    if (readers != null) readers.check();
+                }
                 loop++;
                 if (now - lastSave > 30_000_000_000L) {
                     lastSave = now;
-                    report.put("soakProgress", progress(p, loop, (now - t0) / 1e9));
+                    Map<String, Object> progress = progress(p, loop, (now - t0) / 1e9);
+                    if (readers != null) progress.put("i2cReads", readers.reads());
+                    report.put("soakProgress", progress);
                     report.save();
                 }
                 report.status("soak %.0f s, %d loops", (now - t0) / 1e9, loop);
                 report.sendIfDue();
             }
+            finished = true;
         } finally {
             poller.halt();
+            if (readers != null) readers.halt(finished);
         }
         p.result.put("seconds", (System.nanoTime() - t0) / 1e9);
         p.result.put("loops", loop);
         p.result.put("targetWritesPerHub", writesPerHub);
         p.result.put("pollerCommandMs", poller.summary());
+        if (readers != null) p.result.put("i2cReaders", readers.summary());
         return p.end();
     }
 

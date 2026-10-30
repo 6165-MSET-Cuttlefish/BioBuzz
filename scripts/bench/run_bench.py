@@ -1388,16 +1388,35 @@ PHOTON_OFF_SLACK = (1.15, 0.3)
 PHOTON_SOAK_LOSS_TARGET = 4.4e-7
 PHOTON_POWER_VIOLATION_RAW = int(0.01 * 32767)
 PHOTON_LOG_NEEDLES = ("retransmitting", "timeout: abandoning waiting", "abandoning lock", "incorrect owner releasing",
-                      "releasing ownerless", "unable to find originating", "invalid checksum received")
+                      "releasing ownerless", "unable to find originating", "invalid checksum received", "placeholder: ",
+                      "exception thrown during lynx communication", "readStatusQuery: cbExpected")
 PHOTON_LOG_FORBIDDEN = PHOTON_LOG_NEEDLES[1:]
 PHOTON_SLOW_VERSION = "slow version-string reply"
 PHOTON_SLOW_VERSION_MARKS = ("cmd=LynxReadVersionStringCommand", "packetid=0x9030")
 PHOTON_COUNTERS_ZERO = ("retransmits", "abandonedWrites", "supersededWrites", "gateFallbacks", "postStopFailSafes",
                         "notRespondingFallbacks", "deviceNotReadyFallbacks", "writeFailures", "clearedAtInit",
-                        "orphanDatagrams")
+                        "orphanDatagrams", "numberClashes")
 PHOTON_LEFTOVERS = ("inFlight", "pendingEntries", "standIns", "routes")
 PHOTON_EARLY_LOST = ("writeFailures", "deviceNotReadyFallbacks", "notRespondingFallbacks", "abandonedWrites")
 PHOTON_PHASE_LINE = re.compile(r"\bBENCH\s*:\s*phase (.+?)\s*$")
+# The SDK's xmit lock gives up on its owner after 500 ms and rechecks every timeout/4.
+PHOTON_LOCK_TIMEOUT_MS = 500
+PHOTON_LOCK_RECHECK_MS = 125
+# STOP mark to LinearOpMode's interrupt: OpModeManagerImpl.callActiveOpModeStop fail-safes every hub first (seen <= 37 ms).
+PHOTON_STOP_INTERRUPT_MS = 60
+PHOTON_STOP_LEAK_MS = (PHOTON_LOCK_TIMEOUT_MS - 5,
+                       PHOTON_STOP_INTERRUPT_MS + PHOTON_LOCK_TIMEOUT_MS + PHOTON_LOCK_RECHECK_MS + 15)
+PHOTON_STOP_BLIND_MS = PHOTON_STOP_LEAK_MS[1]
+PHOTON_LEAK_ALPHA = 0.05
+PHOTON_LEAK_BASE_RATE = 1 / 40
+PHOTON_LEAK_RISES = (1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 40)
+PHOTON_STOP_MARK = "auto-stopping OpMode"
+PHOTON_ABANDON = re.compile(r"abandoning lock: old=(\w+)\((-?\d+)\)")
+PHOTON_EH_PINPOINT_BUS = 1
+PHOTON_I2C_MIN_READS = 50
+PHOTON_I2C_CONTROL_ATTEMPTS = 200
+PHOTON_I2C_PHASES = ("off", "on2", "on8")
+PHOTON_I2C_DEVICES = (("pinpoint", "goBILDA Pinpoint", 0x31), ("octoquad", "OctoQuad", 0x30))
 
 PHOTON_TESTS = (
     ("install", "Installed Photon", "the hub runs the Photon built from these sources: Photon is pinned, so only a "
@@ -1421,8 +1440,10 @@ PHOTON_TESTS = (
     ("threads", "Two writer threads", "parallel writes from two threads, with Photon toggled from a third, stay correct, "
                                       "within the limit and leave nothing behind"),
     ("stop", "STOP", "after STOP's fail-safe no motor is re-energized and no servo re-enabled, with STOP landing "
-                     "anywhere in the loop, iterative and linear, judged by a read of every channel after the "
-                     "fail-safe and by a sampler thread, both proven able to fail; no trial crashed or restarted"),
+                     "anywhere in the loop, iterative and linear (Photon on and off), judged by a read of every channel "
+                     "after the fail-safe and by a sampler thread, both proven able to fail; no trial crashed or "
+                     "restarted; a LinearOpMode's STOP interrupt leaks the SDK's network lock no more often with Photon "
+                     "than without"),
     ("race", "STOP inside a write", "STOP landing between a motor write going out and the call returning leaves the "
                                     "motor off"),
     ("crash", "Crash with writes in flight", "an OpMode that throws with parallel writes that will never be acknowledged "
@@ -1440,8 +1461,12 @@ PHOTON_TESTS = (
                                      "no lock warning"),
     ("replug", "Cable pulls", "pulling and replugging the Expansion Hub's USB or power stalls the loop no longer with "
                               "Photon than without, its writes fall back while it's gone and are right again within 1 s"),
-    ("logcat", "SDK warnings", "no lock, ownership, checksum or abandon warnings from the SDK in any Photon step, "
-                               "except what a step causes on purpose, and every step's log is complete"),
+    ("i2c", "I2C", "two threads per device read constant registers of the Pinpoint and the OctoQuad every 10 ms while the "
+                   "OpMode thread writes every channel, with Photon off, at 2 and at 8 parallel, and every byte is right; "
+                   "after Photon's INIT every I2C client is Photon's; a client still on the replaced hub object shares "
+                   "its I2C lock; and unlocked transactions beside a locked reader show whether a wrong byte would be seen"),
+    ("logcat", "SDK warnings", "no lock, ownership, checksum, abandon, I2C or placeholder warnings from the SDK in any "
+                               "Photon step, except what a step causes on purpose, and every step's log is complete"),
 )
 
 
@@ -1520,9 +1545,15 @@ def photon_phase_problems(phase):
     c = phase.get("counters")
     if not isinstance(c, dict):
         return problems + ["no counters"]
+    replaced = replaced_reads(phase)
     for key in PHOTON_COUNTERS_ZERO:
+        if key == "orphanDatagrams" and replaced is not None:
+            continue
         if c.get(key, 0) != 0:
             problems.append(f"{key} {c.get(key)}")
+    if replaced is not None and (not replaced or c.get("orphanDatagrams", 0) < 2 * replaced):
+        problems.append(f"orphanDatagrams {c.get('orphanDatagrams')} for {replaced} reads through the replaced hub object "
+                        "(each needs at least its ACK and its data back)")
     if c.get("nacks"):
         problems.append(f"NACKs {c.get('nacks')}")
     slot_waits_expected = on and (phase.get("burstPerHub") or 0) > par
@@ -1541,6 +1572,13 @@ def photon_phase_problems(phase):
     if phase.get("voltageReadsUnder9V"):
         problems.append(f"{phase.get('voltageReadsUnder9V')} hub voltage reads under 9 V")
     return problems
+
+
+def replaced_reads(phase):
+    """Reads through the replaced hub object in an I2C phase that ran them (its replies are routed there on purpose)."""
+    if (phase or {}).get("i2cReplacedReader") is not True:
+        return None
+    return sum(r.get("reads") or 0 for r in phase.get("i2cReaders") or [] if r.get("client") == "replaced")
 
 
 def leftover_problems(left, when):
@@ -1689,6 +1727,8 @@ def stop_trial_verdict(sampler, require_zeroing_read=False):
                                           "raw": o.get("raw")})
     elif require_zeroing_read:
         v["problems"].append("no read of every channel in stop() before zeroing")
+    if require_zeroing_read:
+        v["problems"] += linear_trial_problems(sampler)
     for hub in sampler.get("hubs") or []:
         key = hub.get("key")
         if hub.get("error"):
@@ -1856,7 +1896,8 @@ def photon_lost_checks(faults, hubs=None, trials=None):
         c = r.get("counters") or {}
         if c.get("abandonedWrites") != 1:
             problems.append(f"abandonedWrites {c.get('abandonedWrites')}, not 1")
-        for key in ("writeFailures", "deviceNotReadyFallbacks", "slotTimeouts", "orphanDatagrams", "gateFallbacks"):
+        for key in ("writeFailures", "deviceNotReadyFallbacks", "slotTimeouts", "orphanDatagrams", "numberClashes",
+                    "gateFallbacks"):
             if c.get(key, 0):
                 problems.append(f"{key} {c.get(key)}")
         if c.get("nacks"):
@@ -1928,7 +1969,7 @@ def lost_depth_problems(r):
     c = r.get("counters") or {}
     if c.get("abandonedWrites") != 1 or c.get("supersededWrites", 0) != 0:
         problems.append(f"abandoned {c.get('abandonedWrites')}, superseded {c.get('supersededWrites')}; want 1 and 0")
-    for key in ("writeFailures", "deviceNotReadyFallbacks", "orphanDatagrams", "gateFallbacks"):
+    for key in ("writeFailures", "deviceNotReadyFallbacks", "orphanDatagrams", "numberClashes", "gateFallbacks"):
         if c.get(key, 0):
             problems.append(f"{key} {c.get(key)}")
     if c.get("nacks"):
@@ -1978,8 +2019,8 @@ def superseded_problems(r):
     if c.get("supersededWrites") != 1 or c.get("abandonedWrites", 0) != 0 or c.get("retransmits", 0) != 0:
         problems.append(f"superseded {c.get('supersededWrites')}, abandoned {c.get('abandonedWrites')}, retransmits "
                         f"{c.get('retransmits')}; want 1, 0, 0")
-    for key in ("writeFailures", "deviceNotReadyFallbacks", "notRespondingFallbacks", "orphanDatagrams", "gateFallbacks",
-                "slotTimeouts"):
+    for key in ("writeFailures", "deviceNotReadyFallbacks", "notRespondingFallbacks", "orphanDatagrams", "numberClashes",
+                "gateFallbacks", "slotTimeouts"):
         if c.get(key, 0):
             problems.append(f"{key} {c.get(key)}")
     if c.get("nacks"):
@@ -2021,7 +2062,7 @@ def photon_write_failure_checks(faults, hubs=None):
                             f"{r.get('shutdownReason')}")
         if not finite(r.get("writeCallMs")) or r["writeCallMs"] > PHOTON_WRITE_CALL_LIMIT_MS:
             problems.append(f"the call took {r.get('writeCallMs')} ms")
-        for key in ("abandonedWrites", "slotTimeouts", "deviceNotReadyFallbacks", "orphanDatagrams"):
+        for key in ("abandonedWrites", "slotTimeouts", "deviceNotReadyFallbacks", "orphanDatagrams", "numberClashes"):
             if c.get(key, 0):
                 problems.append(f"{key} {c.get(key)}")
         out.append(PhotonCheck("lost", f"{r.get('hub')}: a USB write that throws falls back to the SDK's path and lands",
@@ -2216,7 +2257,7 @@ def photon_consecutive_checks(seq):
     routings = [res for _, kind, res in seq if kind == "routing"]
     if len(routings) >= 2:
         first, last = dig(routings[0], "atInit", "counters") or {}, dig(routings[-1], "atInit", "counters") or {}
-        for key in ("writeFailures", "deviceNotReadyFallbacks", "orphanDatagrams", "postStopFailSafes"):
+        for key in ("writeFailures", "deviceNotReadyFallbacks", "orphanDatagrams", "numberClashes", "postStopFailSafes"):
             if isinstance(first.get(key), int) and isinstance(last.get(key), int) and last[key] != first[key]:
                 problems.append(f"{key} rose by {last[key] - first[key]} across the sequence")
         before_crash = dig(routings[-2], "atInit", "counters") or {}
@@ -2408,8 +2449,8 @@ def photon_log_counts(log_text):
     return {"lines": lines, "phases": phases}
 
 
-def photon_log_problems(parsed, expected=(), exempt=()):
-    """exempt: phase-name prefixes whose warnings the step causes on purpose."""
+def photon_log_problems(parsed, expected=(), exempt=(), ignore=()):
+    """exempt: phase-name prefixes whose warnings the step causes on purpose; ignore: needles another check judges."""
     if not parsed or not parsed.get("lines"):
         return ["the log is empty"], {}
     phases = parsed.get("phases") or {}
@@ -2417,7 +2458,7 @@ def photon_log_problems(parsed, expected=(), exempt=()):
     missing = [p for p in expected if p not in phases]
     if missing:
         problems.append(f"no BENCH phase marker for {missing[:3]}{' ...' if len(missing) > 3 else ''} (the log was cut)")
-    bad = {phase: {k: n for k, n in c.items() if k in PHOTON_LOG_FORBIDDEN and n}
+    bad = {phase: {k: n for k, n in c.items() if k in PHOTON_LOG_FORBIDDEN and k not in ignore and n}
            for phase, c in phases.items() if not any(phase.startswith(e) for e in exempt)}
     bad = {p: c for p, c in bad.items() if c}
     if bad:
@@ -2429,23 +2470,346 @@ def photon_log_problems(parsed, expected=(), exempt=()):
     return problems, retx
 
 
-def photon_log_checks(label, entries, exempt=()):
+def photon_log_checks(label, entries, exempt=(), ignore=()):
     """One check over the logs of one or more steps: entries are (step, parsed log, phase names the step entered)."""
     bad, retx = [], {}
     for step, parsed, expected in entries:
-        problems, r = photon_log_problems(parsed, expected, exempt)
+        problems, r = photon_log_problems(parsed, expected, exempt, ignore)
         if problems:
             bad.append((step, problems))
         if r:
             retx[step] = r
-    return [PhotonCheck("logcat", f"{label}: no lock, ownership, checksum or abandon warnings, every log complete",
+    return [PhotonCheck("logcat", f"{label}: no lock, ownership, checksum, abandon, I2C or placeholder warnings, every log complete",
                         bool(entries) and not bad,
                         f"{len(entries)} step log(s); {len(bad)} with problems"
                         + (f", e.g. {bad[:2]}" if bad else "")
                         + f"; retransmits and slow version-string replies (not judged) {retx or 'none'}"
-                        + (f" (not judged: phases starting {list(exempt)})" if exempt else ""),
+                        + (f" (not judged: phases starting {list(exempt)})" if exempt else "")
+                        + (f" ({list(ignore)} judged by its own check)" if ignore else ""),
                         "the SDK saw lock misuse, a write it had to give up on, or a corrupted reply, or the log that "
                         "would show it is missing")]
+
+
+def log_ms(line):
+    m = LOGCAT_STAMP.match(line or "")
+    if not m:
+        return None
+    mo, d, h, mi, s, ms = (int(x) for x in m.groups())
+    return ((((mo * 31 + d) * 24 + h) * 60 + mi) * 60 + s) * 1000 + ms
+
+
+def stop_lock_events(log_text):
+    """Each 'abandoning lock' in a STOP trial's log, in ms after its STOP mark; stopLeak: where a STOP leak would land."""
+    stop = None
+    events = []
+    for line in (log_text or "").splitlines():
+        if stop is None and PHOTON_STOP_MARK in line:
+            stop = log_ms(line)
+            continue
+        m = PHOTON_ABANDON.search(line)
+        if not m:
+            continue
+        t = log_ms(line)
+        after = None if stop is None or t is None else t - stop
+        events.append({"msAfterStop": after, "old": m.group(1), "oldMsg": int(m.group(2)),
+                       "stopLeak": after is not None and PHOTON_STOP_LEAK_MS[0] < after <= PHOTON_STOP_LEAK_MS[1]})
+    return {"stopMark": stop is not None, "events": events}
+
+
+def fisher_greater(a, n1, b, n2):
+    """One-sided Fisher exact p that a/n1 is above b/n2 by chance alone."""
+    k, n = a + b, n1 + n2
+    if k == 0:
+        return 1.0
+    total = math.comb(n, k)
+    return sum(math.comb(n1, i) * math.comb(n2, k - i) for i in range(a, min(n1, k) + 1)) / total
+
+
+def binomial_pmf(n, p, x):
+    return math.comb(n, x) * p ** x * (1 - p) ** (n - x)
+
+
+def fisher_power(n1, n2, base, rise, alpha=PHOTON_LEAK_ALPHA):
+    """Chance fisher_greater(a, n1, b, n2) < alpha when a ~ Binomial(n1, rise * base) and b ~ Binomial(n2, base)."""
+    p1 = min(1.0, rise * base)
+    power = 0.0
+    for b in range(n2 + 1):
+        pb = binomial_pmf(n2, base, b)
+        if pb < 1e-12 and b > n2 * base:
+            break
+        a = next((a for a in range(n1 + 1) if fisher_greater(a, n1, b, n2) < alpha), None)
+        if a is not None:
+            power += pb * sum(binomial_pmf(n1, p1, x) for x in range(a, n1 + 1))
+    return power
+
+
+def smallest_detectable_rise(n1, n2, base, alpha=PHOTON_LEAK_ALPHA):
+    """The smallest listed rise in the leak rate that fisher_greater catches in at least half of all blocks, or None."""
+    for rise in PHOTON_LEAK_RISES:
+        if rise * base > 1:
+            return None
+        if fisher_power(n1, n2, base, rise, alpha) >= 0.5:
+            return rise
+    return None
+
+
+def photon_linear_lock_checks(on, off, controls=(), alpha=PHOTON_LEAK_ALPHA):
+    """controls: linear negative-control trials, judged for stray abandons but left out of the Fisher comparison."""
+    on, off, controls = list(on), list(off), list(controls)
+    every = on + off + controls
+    stray = [(tid, e) for tid, s in every for e in (s or {}).get("events", []) if not e["stopLeak"]]
+    unmarked = [tid for tid, s in every if not (s or {}).get("stopMark")]
+    a = sum(1 for _, s in on if any(e["stopLeak"] for e in (s or {}).get("events", [])))
+    b = sum(1 for _, s in off if any(e["stopLeak"] for e in (s or {}).get("events", [])))
+    p = fisher_greater(a, len(on), b, len(off)) if on and off else 0.0
+    owners = sorted({e["old"] for _, s in every for e in (s or {}).get("events", []) if e["stopLeak"]})
+    fail_safe = [tid for tid, s in every for e in (s or {}).get("events", []) if e["stopLeak"] and e["old"] == "LynxFailSafeCommand"]
+    count = sum(len((s or {}).get("events", [])) for _, s in every)
+    base = b / len(off) if off and b else PHOTON_LEAK_BASE_RATE
+    rise = smallest_detectable_rise(len(on), len(off), base, alpha) if on and off else None
+    power = (f"at these counts and a {base:.1%} base rate it catches a {rise:g}x rise in at least half of all blocks"
+             if rise else f"at these counts and a {base:.1%} base rate it can't catch even a "
+                          f"{PHOTON_LEAK_RISES[-1]:g}x rise in half of all blocks")
+    where = (f"abandoned outside the STOP-interrupt window: {stray[:2]}" if stray else
+             f"{count} abandoned lock(s), all {PHOTON_STOP_LEAK_MS[0]}-{PHOTON_STOP_LEAK_MS[1]} ms after STOP")
+    if unmarked:
+        where += f"; no STOP mark in {unmarked[:3]}"
+    return [
+        PhotonCheck("logcat", "linear STOP trials: every abandoned network lock is one STOP's interrupt leaked",
+                    bool(on) and bool(off) and not stray and not unmarked, where,
+                    "a network lock was held 500 ms for some other reason than LinearOpMode's STOP interrupt landing "
+                    "between a command's last wait and its release, or a trial's log can't be timed"),
+        PhotonCheck("logcat", "linear STOP trials: Photon leaks the SDK's lock at STOP no more often than the SDK alone",
+                    bool(on) and bool(off) and p >= alpha and not fail_safe,
+                    (f"STOP-interrupt leaks in {a} of {len(on)} Photon on8 trials and {b} of {len(off)} Photon off trials; "
+                     f"one-sided Fisher p {p:.3f} (fails below {alpha}); {power}; owners {owners or 'none'}"
+                     + (f"; leaked by a fail-safe on the OpMode thread, which only Photon's post-STOP fail-safe sends: "
+                        f"{fail_safe[:3]}" if fail_safe else "")
+                     if on and off else "the Photon-off linear control didn't run"),
+                    "Photon makes the SDK's network lock leak at STOP more often than the SDK's own path does, its own "
+                    "post-STOP fail-safe leaked it, or there was no control to compare with"),
+    ]
+
+
+def max_gap_after_gate(hub):
+    gate = hub.get("gateMs")
+    starts = [row[0] for row in hub.get("sweeps") or [] if row]
+    if gate is None or len(starts) < 2:
+        return None
+    gaps = [b - a for a, b in zip(starts, starts[1:]) if b > gate]
+    return max(gaps) if gaps else None
+
+
+def linear_trial_problems(sampler):
+    problems = []
+    extra = (sampler or {}).get("extra") or {}
+    if ((sampler or {}).get("info") or {}).get("variant") == "linear" and extra.get("interruptedAtStop") is not True:
+        problems.append("the OpMode thread never saw LinearOpMode's STOP interrupt")
+    if not isinstance(extra.get("countersAtStop"), dict):
+        problems.append("no Photon counters at STOP, so a write in STOP's window can't be counted")
+    for hub in (sampler or {}).get("hubs") or []:
+        gap = max_gap_after_gate(hub)
+        if gap is not None and gap > PHOTON_STOP_BLIND_MS:
+            problems.append(f"{hub.get('key')}: no sweep for {gap:.0f} ms after STOP")
+    return problems
+
+
+def i2c_hub_plan(topology):
+    eh = topology != "none"
+    return {"pinpoint": ("expansionHub", PHOTON_EH_PINPOINT_BUS) if eh else ("controlHub", 1),
+            "octoquad": ("controlHub", OCTOQUAD_BUS)}
+
+
+def i2c_reader_problems(readers, swapped, plan, min_reads=PHOTON_I2C_MIN_READS):
+    """swapped: every reader but a replaced one should be on Photon's hub objects (True) or the SDK's (False)."""
+    if not isinstance(readers, list) or not readers:
+        return ["no I2C readers"]
+    problems = []
+    for r in readers:
+        who = f"{r.get('device')} {r.get('client')}"
+        if r.get("failure") or r.get("haltProblems"):
+            problems.append(f"{who}: {r.get('failure') or r.get('haltProblems')}")
+        if not isinstance(r.get("reads"), int) or r["reads"] < min_reads:
+            problems.append(f"{who}: {r.get('reads')} reads (at least {min_reads})")
+        if r.get("wrong") != 0 or r.get("placeholders") != 0:
+            problems.append(f"{who}: {r.get('wrong')} wrong (first {r.get('firstWrong')}, want {r.get('expected')}) and "
+                            f"{r.get('placeholders')} all-zero reads of {r.get('reads')}")
+        want = False if r.get("client") == "replaced" else swapped
+        if r.get("moduleSwapped") is not want:
+            problems.append(f"{who}: read through {'Photon' if r.get('moduleSwapped') else 'the SDK'}'s hub object")
+        hub, bus = plan.get(r.get("device"), (None, None))
+        if r.get("hub") != hub or r.get("bus") != bus:
+            problems.append(f"{who}: on {r.get('hub')} bus {r.get('bus')}, not {hub} bus {bus}")
+    for device in plan:
+        clients = {r.get("client") for r in readers if r.get("device") == device}
+        if "driver" not in clients or len(clients) < 2:
+            problems.append(f"{device}: readers {sorted(c for c in clients if c)}, not the driver's client and a second one")
+    return problems
+
+
+def i2c_reads_text(readers):
+    n = sum(r.get("reads") or 0 for r in readers or [])
+    per = ", ".join(f"{r.get('device')} {r.get('client')} {r.get('reads')} reads p95 "
+                    f"{fmt_ms(dig(r, 'readMs', 'p95'))}" for r in readers or [])
+    return f"{n} reads ({per})"
+
+
+def i2c_clean_reads(phases):
+    return sum(r.get("reads") or 0 for ph in phases for r in (ph or {}).get("i2cReaders") or []
+               if r.get("wrong") == 0 and r.get("placeholders") == 0)
+
+
+def i2c_info_problems(info, swapped, plan):
+    problems = []
+    devices = {d.get("device"): d for d in (info or {}).get("devices") or []}
+    for name, title, address in PHOTON_I2C_DEVICES:
+        d = devices.get(name)
+        if d is None:
+            problems.append(f"no {title}")
+            continue
+        hub, bus = plan[name]
+        if d.get("hub") != hub:
+            problems.append(f"{title} planned on {d.get('hub')}, not {hub}")
+        for client, where in (("driver", (d.get("clientHub"), d.get("bus"), d.get("i2cAddress"))),
+                              ("second", (d.get("secondHub"), d.get("secondBus"), d.get("secondI2cAddress")))):
+            if where != (hub, bus, address):
+                problems.append(f"{title}'s {client} client on {where[0]} bus {where[1]} at {where[2]}, not {hub} bus {bus} "
+                                f"at {address}")
+        for key in ("expectedA", "expectedB"):
+            v = d.get(key)
+            if not isinstance(v, str) or not v or set(v) == {"0"}:
+                problems.append(f"{title} {key} {v!r}: a failed read couldn't be told apart")
+        if d.get("clientModuleSwapped") is not swapped or d.get("secondModuleSwapped") is not swapped:
+            problems.append(f"{title}'s I2C clients on {'the SDK' if swapped else 'Photon'}'s hub objects "
+                            f"(driver {d.get('clientModuleSwapped')}, second {d.get('secondModuleSwapped')})")
+    if swapped and (info or {}).get("photonSwapFailures") != []:
+        problems.append(f"swap failures {(info or {}).get('photonSwapFailures')}")
+    return problems
+
+
+def photon_i2c_checks(stock, main, topology):
+    """Everything --photon-i2c adds; a missing result fails, never passes."""
+    plan = i2c_hub_plan(topology)
+    out = []
+    stock_info, main_info = dig(stock, "i2cInfo"), dig(main, "i2cInfo")
+    p = i2c_info_problems(stock_info, False, plan)
+    out.append(PhotonCheck("i2c", "the stock baseline's Pinpoint and OctoQuad answered at INIT on the SDK's own hub objects",
+                           not p, "; ".join(p) or str([(d.get("device"), d.get("hub"), d.get("bus"), d.get("expectedA"),
+                                                         d.get("expectedB")) for d in stock_info.get("devices") or []]),
+                           "a device isn't plugged in where the block wants it, or isn't answering, or Photon had already "
+                           "swapped the stock baseline's hubs"))
+    p = i2c_info_problems(main_info, True, plan)
+    same = [d.get("device") for d in (dig(main_info, "devices", default=[]) or [])
+            for e in (dig(stock_info, "devices", default=[]) or []) if d.get("device") == e.get("device")
+            and (d.get("expectedA"), d.get("expectedB")) != (e.get("expectedA"), e.get("expectedB"))]
+    if same:
+        p.append(f"{same}: constant registers read differently in the stock baseline and after Photon's INIT")
+    out.append(PhotonCheck("i2c", "after Photon's INIT every I2C client is Photon's, no swap failed, and the constant "
+                                  "registers read as in the stock baseline", not p, "; ".join(p) or "both devices swapped",
+                           "Photon left an I2C device on the SDK's hub object, couldn't take over, or a constant register "
+                           "read back differently through Photon's hubs"))
+    phases = [("stock", dig(stock, "i2c", "stock"), False)]
+    phases += [(mode, dig(main, "i2c", mode), True) for mode in PHOTON_I2C_PHASES]
+    phases.append(("after the negative control", dig(main, "i2cAfterControl"), True))
+    phases.append(("soak", dig(main, "soak"), True))
+    for label, ph, swapped in phases:
+        problems = i2c_reader_problems((ph or {}).get("i2cReaders"), swapped, plan)
+        if label == "off" and (ph or {}).get("i2cReplacedReader") is not True:
+            problems.append("the second readers didn't go through the replaced hub objects")
+        left = {k: v for k, v in ((ph or {}).get("replacedPendingAfter") or {}).items() if v}
+        if left:
+            problems.append(f"commands left pending on the replaced hub objects {left}")
+        out.append(PhotonCheck("i2c", f"I2C {label}: every read of a constant register is byte-exact, from both threads on "
+                                      "every hub", not problems,
+                               i2c_reads_text((ph or {}).get("i2cReaders")) + ("; " + "; ".join(problems) if problems else ""),
+                               "an I2C read came back wrong or as the SDK's all-zero placeholder, a reader failed or fell "
+                               "short, or a device sat on the wrong hub object"))
+    control = dig(main, "i2cControl") or {}
+    rows, problems = [], []
+    for name, title, _ in PHOTON_I2C_DEVICES:
+        c = control.get(name) or {}
+        locked = c.get("lockedReader") or {}
+        if c.get("attempted") != PHOTON_I2C_CONTROL_ATTEMPTS or (c.get("unlockedRight") or 0) + (c.get("unlockedWrong") or 0) \
+                + sum((c.get("unlockedRefused") or {}).values()) != c.get("attempted"):
+            problems.append(f"{title}: {c.get('attempted')} of {PHOTON_I2C_CONTROL_ATTEMPTS} unlocked transactions accounted for")
+        rows.append(f"{title} on {c.get('hub')}: {c.get('attempted')} unlocked, {c.get('unlockedWrong')} wrong, refused "
+                    f"{c.get('unlockedRefused') or {}}; the locked reader beside it {locked.get('wrong')} wrong and "
+                    f"{locked.get('placeholders')} all-zero of {locked.get('reads')}; {i2c_control_verdict(title, c)}")
+    out.append(PhotonCheck("i2c", "negative control: unlocked I2C transactions beside a locked reader ran on every hub",
+                           not problems and bool(control), "; ".join(rows) + ("; " + "; ".join(problems) if problems else ""),
+                           "the negative control didn't run on every device, so how much the byte compares can see is "
+                           "unknown"))
+    return out
+
+
+def i2c_control_caught(c):
+    locked = c.get("lockedReader") or {}
+    return (c.get("unlockedWrong") or 0) + sum((c.get("unlockedRefused") or {}).values()) \
+        + (locked.get("wrong") or 0) + (locked.get("placeholders") or 0)
+
+
+def i2c_control_verdict(title, c):
+    caught = i2c_control_caught(c)
+    if caught:
+        return f"{title} on {c.get('hub')}: the byte compares saw {caught} anomalies of {c.get('attempted')}"
+    return (f"{title} on {c.get('hub')}: 0 of {c.get('attempted')} caught, so the lock check couldn't be shown to fail "
+            "on this hub")
+
+
+def photon_i2c_summary(stock, main):
+    phases = [("stock", dig(stock, "i2c", "stock"))] + [(m, dig(main, "i2c", m)) for m in PHOTON_I2C_PHASES]
+    phases.append(("after control", dig(main, "i2cAfterControl")))
+    phases.append(("soak", dig(main, "soak")))
+    lines = ["### I2C reads (constant registers, every 10 ms, while every channel is written), read ms p50 / p95 / max\n",
+             "| phase | device | client | hub | reads | wrong | all-zero | read ms |", "|---|---|---|---|---|---|---|---|"]
+    for label, ph in phases:
+        for r in (ph or {}).get("i2cReaders") or []:
+            lines.append(f"| {label} | {r.get('device')} | {r.get('client')} | {r.get('hub')} bus {r.get('bus')} | "
+                         f"{r.get('reads')} | {r.get('wrong')} | {r.get('placeholders')} | {fmt_cell(r.get('readMs'))} |")
+    clean = i2c_clean_reads([ph for _, ph in phases])
+    lines += ["", f"- {clean} clean reads in all: with none wrong, the 95% upper bound on the per-read corruption rate is "
+                  f"{photon_stop_bound(clean):.2g} (rule of three)"]
+    off = {(r.get("device"), r.get("client") if r.get("client") != "replaced" else "second"): dig(r, "readMs", "p95")
+           for r in dig(main, "i2c", "off", "i2cReaders", default=[]) or []}
+    ratios = []
+    for mode in ("on2", "on8"):
+        for r in dig(main, "i2c", mode, "i2cReaders", default=[]) or []:
+            base, now = off.get((r.get("device"), r.get("client"))), dig(r, "readMs", "p95")
+            if finite(base) and finite(now) and base > 0:
+                ratios.append(f"{r.get('device')} {r.get('client')} {mode} {now / base:.2f}x")
+    lines.append(f"- read time p95 against Photon off: {', '.join(ratios) or 'not measured'}")
+    control = dig(main, "i2cControl") or {}
+    for name, title, _ in PHOTON_I2C_DEVICES:
+        lines.append(f"- negative control, {i2c_control_verdict(title, control.get(name) or {})}")
+    lines.append("")
+    return lines
+
+
+def i2c_control_blind(main):
+    control = dig(main, "i2cControl") or {}
+    return [i2c_control_verdict(title, control.get(name) or {}) for name, title, _ in PHOTON_I2C_DEVICES
+            if not i2c_control_caught(control.get(name) or {})]
+
+
+def photon_profile_summary(main):
+    prof = dig(main, "timing", "on8 profiled", "writeProfile") or {}
+    if not prof:
+        return []
+    hubs = sorted(prof)
+    steps = list(next(iter(prof.values())).keys())
+    lines = ["### Parallel write path at 8 parallel, per step, p50 / p95 / mean us (timing on8 profiled)\n",
+             "| step | " + " | ".join(hubs) + " |", "|---|" + "---|" * len(hubs)]
+    for step in steps:
+        cells = []
+        for h in hubs:
+            st = (prof.get(h) or {}).get(step) or {}
+            cells.append(f"{st.get('p50Us', '-')} / {st.get('p95Us', '-')} / "
+                         f"{round(st['meanUs'], 1) if finite(st.get('meanUs')) else '-'} ({int(st.get('count') or 0)})")
+        lines.append(f"| {step} | " + " | ".join(cells) + " |")
+    t = dig(main, "timing", "on8 profiled") or {}
+    lines += ["", f"- bench side per loop: prepare {fmt_cell(t.get('prepareMs'))} ms, write bookkeeping "
+                  f"{fmt_cell(t.get('noteWritesMs'))} ms (both outside the write block)", ""]
+    return lines
 
 
 def photon_verdict(checks, negative_control_fired, orders_both, soak_ran, soak_met, stop_trials, not_run=(),
@@ -2510,6 +2874,13 @@ class Runner:
     def ask(self, text):
         self.log(text)
         input(">>> press Enter: ")
+
+    def tell(self, text):
+        """ask() at a terminal; otherwise just the log line, so an unattended run doesn't stop for it."""
+        if sys.stdin.isatty():
+            self.ask(text)
+        else:
+            self.log(text)
 
     def check(self, name, ok, detail, fail_means=None):
         self.checks.append((name, "PASS" if ok else "FAIL", detail, fail_means))
@@ -3483,15 +3854,24 @@ class Runner:
     def photon_config(self, topology=None):
         topology = topology or ("usb" if self.args.usb_expansion else "none")
         i2c = self.args.photon_i2c
-        devices = main_devices(self.imu_type, pinpoint=i2c, octoquad_bus=OCTOQUAD_BUS if i2c else None)
+        plan = i2c_hub_plan(topology)
+        on_ch = plan["pinpoint"][0] == "controlHub"
+        devices = main_devices(self.imu_type, pinpoint=i2c and on_ch, octoquad_bus=plan["octoquad"][1] if i2c else None)
+        eh_devices = PHOTON_EXPANSION_DEVICES + ([pinpoint_tag(plan["pinpoint"][1])] if i2c and not on_ch else [])
         if topology == "usb":
             serial = self.usb_expansion_serial()
             self.photon_eh_serial = serial
             self.log(f"photon: USB Expansion Hub serial {serial}, address {self.args.expansion_address}")
-            return hub_config(devices, usb_expansion=(serial, self.args.expansion_address, PHOTON_EXPANSION_DEVICES))
+            return hub_config(devices, usb_expansion=(serial, self.args.expansion_address, eh_devices))
         if topology == "rs485":
-            return hub_config(devices, expansion=(self.args.expansion_address, PHOTON_EXPANSION_DEVICES))
+            return hub_config(devices, expansion=(self.args.expansion_address, eh_devices))
         return hub_config(devices)
+
+    def photon_i2c_where(self, topology):
+        plan = i2c_hub_plan(topology)
+        names = {"controlHub": "Control Hub", "expansionHub": "Expansion Hub"}
+        return (f"the goBILDA Pinpoint in {names[plan['pinpoint'][0]]} I2C port {plan['pinpoint'][1]} and the OctoQuad in "
+                f"{names[plan['octoquad'][0]]} I2C port {plan['octoquad'][1]}")
 
     def photon_guard_ports(self, topology):
         self.log(f"photon: this block drives {PHOTON_POWERS}")
@@ -3537,7 +3917,8 @@ class Runner:
     def photon_note_log(self, step, expected=(), stream=None):
         log_file = stream.path if stream is not None else self.out / "logs" / f"{step}.log"
         log_text = log_file.read_text() if log_file.exists() else ""
-        self.photon["logs"][step] = {"parsed": photon_log_counts(log_text), "expected": list(expected)}
+        self.photon["logs"][step] = {"parsed": photon_log_counts(log_text), "expected": list(expected),
+                                     "stopLocks": stop_lock_events(log_text)}
 
     def photon_log_entries(self, *steps):
         return [(s, self.photon["logs"].get(s, {}).get("parsed"), self.photon["logs"].get(s, {}).get("expected", []))
@@ -3585,13 +3966,21 @@ class Runner:
             loops = 150 if a.quick else 500
             config = self.photon_config(topology)
             self.photon_guard_ports(topology)
+            if a.photon_i2c:
+                where = self.photon_i2c_where(topology)
+                self.log(f"photon: --photon-i2c reads {where}; nothing is written to them but the OctoQuad driver's own "
+                         "read-parameter commands")
+                self.tell(f">>> --photon-i2c: plug {where} (nothing else on those ports)")
             self.activate_config(CONFIG_PHOTON, config)
 
-            _, stock = self.photon_step("Bench: Photon Stock", "photon_stock", dict(base, runId="1", loops=loops, portProbe=1),
-                                        "photon_stock_1", timeout=900)
+            stock_run, stock = self.photon_step("Bench: Photon Stock", "photon_stock",
+                                                dict(base, runId="1", loops=loops, portProbe=1), "photon_stock_1", timeout=900)
             self.photon["stock"] = stock
             self.photon_add(*photon_install_checks(stock, self.photon["manifest"]))
             self.photon_add(*photon_port_checks(stock))
+            if not isinstance(stock.get("portProbe"), dict):
+                raise BenchError(f"Bench: Photon Stock {'crashed' if stock_run['crashed'] else 'ended'} before its port "
+                                 f"probe ran" + (f": {stock_run['errorMessage']}" if stock_run.get("errorMessage") else ""))
             if dig(stock, "portProbe", "empty") is not True:
                 raise BenchError("a bench motor port drew current in Bench: Photon Stock's port probe (see the summary): "
                                  "unplug it before running the Photon benches")
@@ -3603,14 +3992,17 @@ class Runner:
             soak_writes = PHOTON_SOAK_WRITES_PER_HUB if a.photon_soak else 0
             _, main = self.photon_step("Bench: Photon", "photon_main",
                                        dict(base, runId="1", loops=loops, soakSeconds=soak_seconds,
-                                            soakWritesPerHub=soak_writes, twoWriterSeconds=20 if a.photon_soak else 8),
+                                            soakWritesPerHub=soak_writes, twoWriterSeconds=20 if a.photon_soak else 8,
+                                            i2cControlAttempts=PHOTON_I2C_CONTROL_ATTEMPTS),
                                        "photon_1", timeout=soak_seconds + 1800, status_every=30.0, quiet_after=60.0,
                                        stream_log=a.photon_soak)
             self.photon["main"] = main
             phases = {}
-            for group in ("timing", "burst", "lastWriterWins", "interleave", "reads"):
+            for group in ("timing", "burst", "lastWriterWins", "interleave", "reads", "i2c"):
                 for name, ph in (dig(main, group, default={}) or {}).items():
                     phases[f"{group} {name}"] = ph
+            if dig(main, "i2cAfterControl") is not None:
+                phases["i2c after control"] = dig(main, "i2cAfterControl")
             self.photon_add(*photon_main_init_checks(main))
             self.photon_add(*photon_workload_checks("phases", "", phases))
             self.photon_add(*photon_gain_checks(stock, main, parallel_hubs))
@@ -3624,7 +4016,10 @@ class Runner:
             main_log = self.photon["logs"].get("photon_main", {}).get("parsed") or {}
             if topology == "rs485":
                 self.photon_add(*photon_rs485_checks(main, main_log))
-            self.photon_add(*photon_log_checks("Bench: Photon", self.photon_log_entries("photon_main")))
+            if a.photon_i2c:
+                self.photon_add(*photon_i2c_checks(stock, main, topology))
+            self.photon_add(*photon_log_checks("Bench: Photon", self.photon_log_entries("photon_main"),
+                                               exempt=("i2c control",) if a.photon_i2c else ()))
 
             depth_reps = PHOTON_SOAK_DEPTH_REPS if a.photon_soak else PHOTON_DEPTH_REPS
             _, faults = self.photon_step("Bench: Photon Faults", "photon_faults",
@@ -3658,21 +4053,29 @@ class Runner:
             conditions = (("iterative, Photon on8", "Bench: Photon Stop", 8, 0, trials, None),
                           ("iterative, Photon off", "Bench: Photon Stop", 0, 0, trials, None),
                           ("linear, Photon on8", "Bench: Photon Stop Linear", 8, 0, trials, None),
+                          ("linear, Photon off", "Bench: Photon Stop Linear", 0, 0, trials, None),
                           ("negative control, held", "Bench: Photon Stop", 8, 1, PHOTON_NEGATIVE_CONTROL_TRIALS, "held"),
-                          ("negative control, once", "Bench: Photon Stop", 8, 2, PHOTON_NEGATIVE_CONTROL_TRIALS, "once"))
+                          ("negative control, once", "Bench: Photon Stop", 8, 2, PHOTON_NEGATIVE_CONTROL_TRIALS, "once"),
+                          ("negative control, linear once", "Bench: Photon Stop Linear", 8, 2,
+                           PHOTON_NEGATIVE_CONTROL_TRIALS, "once"))
             for label, opmode, parallel, control, n, _ in conditions:
                 stop[label] = [self.photon_stop_trial(opmode, label, base, parallel, control, i, rng) for i in range(n)]
             fired = True
-            for label, _, _, control, _, expect in conditions:
+            for label, opmode, _, control, _, expect in conditions:
                 checks = photon_stop_checks(label, stop[label], expect=expect)
                 self.photon_add(*checks)
                 if expect:
                     fired &= all(c.ok for c in checks)
                 elif "off" not in label:
                     self.photon_add(photon_stop_coverage(label, stop[label]))
+                linear = opmode == "Bench: Photon Stop Linear"
                 self.photon_add(*photon_log_checks(f"STOP trials, {label}",
-                                                   self.photon_log_entries(*[t["step"] for t in stop[label]])))
+                                                   self.photon_log_entries(*[t["step"] for t in stop[label]]),
+                                                   ignore=("abandoning lock",) if linear else ()))
             self.photon["negativeControlFired"] = fired
+            self.photon_add(*photon_linear_lock_checks(
+                *[[(t["trial"], self.photon["logs"].get(t["step"], {}).get("stopLocks")) for t in stop[label]]
+                  for label in ("linear, Photon on8", "linear, Photon off", "negative control, linear once")]))
 
             self.photon_consecutive(base, rng)
             if a.no_sloth:
@@ -3687,7 +4090,12 @@ class Runner:
                 self.photon_replug(base)
             self.photon_framework()
         finally:
-            self.photon_summary()
+            try:
+                self.photon_summary()
+            finally:
+                if a.photon_i2c and topology != "none":
+                    self.write_summary()
+                    self.tell(f">>> --photon-i2c done: put the Pinpoint back in Control Hub I2C port 1")
 
     def photon_stop_trial(self, opmode, label, base, parallel, control, i, rng):
         kind = {0: "on" if parallel else "off", 1: "held", 2: "once"}[control]
@@ -3847,7 +4255,9 @@ class Runner:
              f"hubs {[(h.get('key'), h.get('address'), h.get('firmware')) for h in dig(p, 'stock', 'info', 'hubs', default=[]) or []]}",
              f"- drives {PHOTON_POWERS}",
              f"- STOP trials: {p['stopTrials']} per condition; with none violating, the 95% upper bound on the per-STOP "
-             f"violation rate is {photon_stop_bound(p['stopTrials']):.1%} per condition", ""]
+             f"violation rate is {photon_stop_bound(p['stopTrials']):.1%} per condition",
+             f"- I2C: {self.photon_i2c_where(p['topology'])}, two readers each every 10 ms, read only"
+             if self.args.photon_i2c else "- I2C: not run (--photon-i2c)", ""]
         rows = photon_gain_rows(p.get("stock"), p.get("main"))
         if rows:
             hubs = sorted({h for r in rows for h in r["perHub"]})
@@ -3859,6 +4269,9 @@ class Runner:
                          + " | ".join(fmt_cell(r["perHub"].get(h)) for h in hubs)
                          + f" | {fmt_cell(r['loopPeriod'])} | {gain_text(r['gain'])} |")
             s.append("")
+        if self.args.photon_i2c:
+            s += photon_i2c_summary(p.get("stock"), p.get("main"))
+        s += photon_profile_summary(p.get("main"))
         for section, title, proves in PHOTON_TESTS:
             mine = [c for c in checks if c.section == section]
             if not mine:
@@ -3871,19 +4284,22 @@ class Runner:
                          + ("" if c.ok else f" **FAIL means:** {c.fail_means}"))
             s.append("")
         required = [sec for sec, _, _ in PHOTON_TESTS
-                    if sec not in ("sloth", "rs485", "replug") or (sec == "sloth" and not self.args.no_sloth)
+                    if sec not in ("sloth", "rs485", "replug", "i2c") or (sec == "sloth" and not self.args.no_sloth)
                     or (sec == "rs485" and p["topology"] == "rs485")
-                    or (sec == "replug" and self.args.interactive and p["topology"] == "usb")]
+                    or (sec == "replug" and self.args.interactive and p["topology"] == "usb")
+                    or (sec == "i2c" and self.args.photon_i2c)]
         missing = [f"{PHOTON_TITLES[sec]} (no result)" for sec in required if not any(c.section == sec for c in checks)]
         still = ["the cable pulls (--interactive)"] if p["topology"] == "usb" and not self.args.interactive else []
+        if not self.args.photon_i2c:
+            still.append("I2C reads through Photon's hubs on every hub (--photon-i2c)")
         level, blockers, needed = photon_verdict(checks, p.get("negativeControlFired", False), p.get("ordersBoth", False),
                                                  self.args.photon_soak, p.get("soakMet", False), p["stopTrials"],
                                                  p["notRun"] + missing, still)
         s.append("### Photon verdict\n")
         if level == "SAFE":
-            s.append(f"**SAFE TO TRY ON THE ROBOT** ({p['topology']} wiring): every Photon check passed, both STOP negative "
-                     "controls fired, the routing check saw both module orders, the soak met its loss bound"
-                     + (" and the cable pulls passed." if p["topology"] == "usb" else "."))
+            s.append(f"**SAFE TO TRY ON THE ROBOT** ({p['topology']} wiring): every Photon check passed, every STOP negative "
+                     "control fired, the routing check saw both module orders, the soak met its loss bound, I2C read "
+                     "right on every hub" + (" and the cable pulls passed." if p["topology"] == "usb" else "."))
         elif level == "PASSED":
             s.append(f"**PASSED THIS RUN, NOT YET SAFE** ({p['topology']} wiring): every check here passed, but "
                      "the go needs a run that also includes:")
@@ -3894,6 +4310,9 @@ class Runner:
             if needed:
                 s.append("\nAlso still needed for the go:")
                 s += [f"- {n}" for n in needed]
+        blind = i2c_control_blind(p.get("main")) if self.args.photon_i2c else []
+        if blind:
+            s.append("\nNot shown by the I2C negative control: " + "; ".join(blind) + ".")
         s.append("")
         self.summary += s
         self.results["photon"] = {k: v for k, v in p.items() if k not in ("checks",)}
@@ -5604,7 +6023,8 @@ def parse_args(argv):
     p.add_argument("--photon", action="store_true",
                    help="the Photon block: stock baseline, Bench: Photon, Faults, STOP trials, routing over app "
                         "restarts, consecutive OpModes, deploySloth, then Framework Loop off and on and Write Recovery "
-                        "on (about 55 min; not part of a run without bench flags, nor of --all)")
+                        "on (about 50 min with a USB Expansion Hub and --photon-i2c; not part of a run without bench flags, nor of "
+                        "--all)")
     p.add_argument("--usb-expansion", action="store_true",
                    help="the Photon block also drives an Expansion Hub connected by USB alone (motor ports 0-3, servo "
                         "ports 0-1)")
@@ -5613,8 +6033,8 @@ def parse_args(argv):
                         "SDK's path")
     p.add_argument("--photon-soak", action="store_true",
                    help="the Photon block with its long write soak (up to 1e7 writes per hub, about 3 h), 200 STOP "
-                        "trials per condition and more lost-write trials; with --usb-expansion --interactive it is the "
-                        "run whose verdict can say SAFE")
+                        "trials per condition and more lost-write trials; with --photon-i2c (and on USB wiring "
+                        "--usb-expansion --interactive too) it is the run whose verdict can say SAFE")
     p.add_argument("--photon-stop-trials", type=int, default=None,
                    help=f"STOP trials per condition (default {PHOTON_STOP_TRIALS}, {PHOTON_SOAK_STOP_TRIALS} with "
                         "--photon-soak)")
@@ -5622,7 +6042,10 @@ def parse_args(argv):
     p.add_argument("--usb-expansion-serial", default=None,
                    help="the USB Expansion Hub's serial, if the runner can't read it from the Control Hub")
     p.add_argument("--photon-i2c", action="store_true",
-                   help="Bench: Photon also reads a Pinpoint (I2C bus 1) and an OctoQuad (I2C bus 2)")
+                   help="the Photon block also reads an OctoQuad (Control Hub I2C port 2) and a goBILDA Pinpoint "
+                        "(Expansion Hub I2C port 1; Control Hub port 1 with no Expansion Hub), two threads per device every "
+                        "10 ms, Photon off, on2 and on8 and through the soak, plus an unlocked-I2C negative control "
+                        "(about 2 min of the block); a wiring's verdict can only say SAFE with it")
     p.add_argument("--hardware-view", action="store_true",
                    help="the Hardware OpMode, then a Hardware view Power edit under Bench: Power Readback")
     p.add_argument("--planner-stop", action="store_true",

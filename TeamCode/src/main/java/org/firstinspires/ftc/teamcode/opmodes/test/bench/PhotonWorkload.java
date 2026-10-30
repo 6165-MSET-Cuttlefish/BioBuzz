@@ -1,16 +1,13 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
-import com.qualcomm.hardware.digitalchickenlabs.OctoQuad;
-import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.hardware.lynx.commands.core.LynxGetBulkInputDataCommand;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.firstinspires.ftc.robotcore.external.navigation.VoltageUnit;
 import org.firstinspires.ftc.teamcode.architecture.hardware.photon.PhotonCore;
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,18 +21,14 @@ abstract class PhotonWorkload extends LinearOpMode {
 
     protected BenchReport report;
     protected PhotonRig rig;
+    protected PhotonI2c i2c;
     protected int loops;
-    private GoBildaPinpointDriver pinpoint;
-    private OctoQuad octoQuad;
 
     protected void setUp(String benchName, String fileName) {
         report = new BenchReport(benchName, fileName);
         loops = (int) BenchIO.param(report.params, "loops", 500);
         rig = new PhotonRig(hardwareMap, report.params, benchName);
-        if (BenchIO.param(report.params, "i2c", 0) != 0) {
-            pinpoint = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, BettaConstants.pinpoint.name, BenchIO.RUNNER_HINT);
-            octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
-        }
+        if (BenchIO.param(report.params, "i2c", 0) != 0) i2c = new PhotonI2c(hardwareMap, rig);
     }
 
     static void setMode(int parallel) {
@@ -90,9 +83,17 @@ abstract class PhotonWorkload extends LinearOpMode {
         }
 
         void noteWrite(PhotonChannel c) {
+            countWrite(c);
+            sampleInFlight(c.hub);
+        }
+
+        void countWrite(PhotonChannel c) {
             issued.get(c.hub).incrementAndGet();
-            int f = PhotonProbe.inFlight(c.hub);
-            AtomicInteger max = maxInFlight.get(c.hub);
+        }
+
+        void sampleInFlight(LynxModule hub) {
+            int f = PhotonProbe.inFlight(hub);
+            AtomicInteger max = maxInFlight.get(hub);
             int was = max.get();
             while (f > was && !max.compareAndSet(was, f)) was = max.get();
         }
@@ -145,6 +146,11 @@ abstract class PhotonWorkload extends LinearOpMode {
     }
 
     protected Map<String, Object> timing(String name, int parallel, boolean withPoller) {
+        return timing(name, parallel, withPoller, false);
+    }
+
+    // Bookkeeping stays off the clock so the write block measures only what the robot's loop pays.
+    protected Map<String, Object> timing(String name, int parallel, boolean withPoller, boolean profiled) {
         Phase p = new Phase(name, parallel);
         Poller poller = withPoller ? new Poller(Thread.currentThread()) : null;
         if (poller != null) poller.start();
@@ -153,10 +159,20 @@ abstract class PhotonWorkload extends LinearOpMode {
         Samples motorWrite = new Samples();
         Samples servoWrite = new Samples();
         Samples writeBlock = new Samples();
+        Samples prepare = new Samples();
+        Samples note = new Samples();
         Map<LynxModule, Samples> perHub = new LinkedHashMap<>();
-        for (LynxModule h : rig.hubs) perHub.put(h, new Samples());
+        Map<LynxModule, List<PhotonChannel>> byHub = new LinkedHashMap<>();
+        for (LynxModule h : rig.hubs) {
+            perHub.put(h, new Samples());
+            byHub.put(h, rig.on(h));
+        }
         long lastStart = 0;
         boolean lastVerified = false;
+        if (profiled) {
+            PhotonCore.resetWriteProfile();
+            PhotonCore.setWriteProfiling(true);
+        }
         try {
             for (int i = 0; i < loops && opModeIsActive(); i++) {
                 long start = System.nanoTime();
@@ -165,17 +181,27 @@ abstract class PhotonWorkload extends LinearOpMode {
                 long t = System.nanoTime();
                 bulkRead();
                 bulk.addNanos(System.nanoTime() - t);
-                long blockStart = System.nanoTime();
-                for (LynxModule h : rig.hubs) {
-                    long hubStart = System.nanoTime();
-                    for (PhotonChannel c : rig.on(h)) {
+                t = System.nanoTime();
+                for (PhotonChannel c : rig.channels) c.prepare();
+                prepare.addNanos(System.nanoTime() - t);
+                long blockNanos = 0;
+                for (Map.Entry<LynxModule, List<PhotonChannel>> e : byHub.entrySet()) {
+                    long hubNanos = 0;
+                    for (PhotonChannel c : e.getValue()) {
                         t = System.nanoTime();
-                        p.write(c);
-                        (c.isMotor() ? motorWrite : servoWrite).addNanos(System.nanoTime() - t);
+                        c.send();
+                        long sent = System.nanoTime() - t;
+                        hubNanos += sent;
+                        (c.isMotor() ? motorWrite : servoWrite).addNanos(sent);
+                        p.sampleInFlight(c.hub);
                     }
-                    perHub.get(h).addNanos(System.nanoTime() - hubStart);
+                    perHub.get(e.getKey()).addNanos(hubNanos);
+                    blockNanos += hubNanos;
                 }
-                writeBlock.addNanos(System.nanoTime() - blockStart);
+                writeBlock.addNanos(blockNanos);
+                t = System.nanoTime();
+                for (PhotonChannel c : rig.channels) p.countWrite(c);
+                note.addNanos(System.nanoTime() - t);
                 p.step = i;
                 lastVerified = i % VERIFY_EVERY == VERIFY_EVERY - 1;
                 if (lastVerified) p.verifyAll(false);
@@ -184,6 +210,7 @@ abstract class PhotonWorkload extends LinearOpMode {
                 report.sendIfDue();
             }
         } finally {
+            if (profiled) PhotonCore.setWriteProfiling(false);
             if (poller != null) poller.halt();
         }
         p.result.put("loops", loops);
@@ -192,10 +219,19 @@ abstract class PhotonWorkload extends LinearOpMode {
         p.result.put("motorWriteMs", motorWrite.summary());
         p.result.put("servoWriteMs", servoWrite.summary());
         p.result.put("writeBlockMs", writeBlock.summary());
+        p.result.put("prepareMs", prepare.summary());
+        p.result.put("noteWritesMs", note.summary());
         Map<String, Object> hubBlocks = new LinkedHashMap<>();
         for (Map.Entry<LynxModule, Samples> e : perHub.entrySet()) hubBlocks.put(rig.key(e.getKey()), e.getValue().summary());
         p.result.put("writeBlockPerHubMs", hubBlocks);
         if (poller != null) p.result.put("pollerCommandMs", poller.summary());
+        if (profiled) {
+            Map<String, Object> profile = new LinkedHashMap<>();
+            for (LynxModule h : rig.hubs) {
+                if (PhotonCore.isSwapped(h)) profile.put(rig.key(h), PhotonCore.writeProfile(h));
+            }
+            p.result.put("writeProfile", profile);
+        }
         return p.end();
     }
 
@@ -269,13 +305,7 @@ abstract class PhotonWorkload extends LinearOpMode {
         Phase p = new Phase(name, parallel);
         Samples bulk = new Samples();
         Samples voltage = new Samples();
-        Samples pinpointMs = new Samples();
-        Samples octoQuadMs = new Samples();
-        int pinpointNotReady = 0;
-        int octoQuadCrcFailures = 0;
-        int octoQuadInvalid = 0;
         int lowVoltage = 0;
-        OctoQuad.LocalizerDataBlock block = new OctoQuad.LocalizerDataBlock();
         for (int i = 0; i < iterations && opModeIsActive(); i++) {
             for (PhotonChannel c : rig.channels) p.write(c);
             long t = System.nanoTime();
@@ -286,17 +316,6 @@ abstract class PhotonWorkload extends LinearOpMode {
                 if (h.getInputVoltage(VoltageUnit.VOLTS) < 9) lowVoltage++;
                 voltage.addNanos(System.nanoTime() - t);
             }
-            if (pinpoint != null) {
-                t = System.nanoTime();
-                pinpoint.update();
-                pinpointMs.addNanos(System.nanoTime() - t);
-                if (pinpoint.getDeviceStatus() != GoBildaPinpointDriver.DeviceStatus.READY) pinpointNotReady++;
-                t = System.nanoTime();
-                octoQuad.readLocalizerData(block);
-                octoQuadMs.addNanos(System.nanoTime() - t);
-                if (!block.crcOk) octoQuadCrcFailures++;
-                else if (!block.isDataValid()) octoQuadInvalid++;
-            }
             p.step = i;
             if (i % VERIFY_EVERY == VERIFY_EVERY - 1) p.verifyAll(false);
             report.status("%s %d/%d", name, i + 1, iterations);
@@ -306,13 +325,39 @@ abstract class PhotonWorkload extends LinearOpMode {
         p.result.put("bulkReadMs", bulk.summary());
         p.result.put("inputVoltageMs", voltage.summary());
         p.result.put("voltageReadsUnder9V", lowVoltage);
-        if (pinpoint != null) {
-            p.result.put("pinpointUpdateMs", pinpointMs.summary());
-            p.result.put("pinpointNotReady", pinpointNotReady);
-            p.result.put("octoQuadReadMs", octoQuadMs.summary());
-            p.result.put("octoQuadCrcFailures", octoQuadCrcFailures);
-            p.result.put("octoQuadInvalid", octoQuadInvalid);
+        return p.end();
+    }
+
+    protected Map<String, Object> i2cReads(String name, int parallel, boolean replaced, int iterations) {
+        Phase p = new Phase(name, parallel);
+        Samples period = new Samples();
+        PhotonI2c.Readers readers = i2c.readers(replaced, PhotonI2c.PERIOD_NS);
+        readers.start();
+        boolean finished = false;
+        try {
+            for (int i = 0; i < iterations && opModeIsActive(); i++) {
+                period.tick(System.nanoTime());
+                bulkRead();
+                for (PhotonChannel c : rig.channels) p.write(c);
+                readers.check();
+                p.step = i;
+                if (i % VERIFY_EVERY == VERIFY_EVERY - 1) p.verifyAll(false);
+                report.status("%s %d/%d", name, i + 1, iterations);
+                report.sendIfDue();
+            }
+            finished = true;
+        } finally {
+            readers.halt(finished);
         }
+        p.result.put("iterations", iterations);
+        p.result.put("loopPeriodMs", period.summary());
+        p.result.put("i2cReplacedReader", replaced);
+        p.result.put("i2cReaders", readers.summary());
+        Map<String, Object> replacedLeft = new LinkedHashMap<>();
+        if (replaced) {
+            for (PhotonI2c.Device d : i2c.devices) replacedLeft.put(d.name, PhotonProbe.unfinished(PhotonProbe.replaced(d.module())));
+        }
+        p.result.put("replacedPendingAfter", replacedLeft);
         return p.end();
     }
 

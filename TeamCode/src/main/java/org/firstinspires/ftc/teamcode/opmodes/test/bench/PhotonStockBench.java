@@ -27,6 +27,7 @@ public class PhotonStockBench extends PhotonWorkload {
         for (LynxModule h : rig.hubs) left.put(rig.key(h), PhotonProbe.leftovers(h));
         info.put("leftoversAtInit", left);
         report.put("info", info);
+        if (i2c != null) report.put("i2cInfo", i2c.info());
         report.put("enableRefused", enableRefused());
         report.save();
         boolean probe = BenchIO.param(report.params, "portProbe", 0) != 0;
@@ -51,6 +52,11 @@ public class PhotonStockBench extends PhotonWorkload {
             report.put("burst", burst("burst stock", -1, Math.max(50, loops / 2)));
             report.put("interleave", interleave("interleave stock", -1, Math.max(30, loops / 5)));
             report.put("reads", reads("reads stock", -1, Math.max(100, loops / 2)));
+            if (i2c != null) {
+                Map<String, Object> i2cPhases = new LinkedHashMap<>();
+                i2cPhases.put("stock", i2cReads("i2c stock", -1, false, loops));
+                report.put("i2c", i2cPhases);
+            }
         }
         rig.zeroMotors();
         rig.disableServos();

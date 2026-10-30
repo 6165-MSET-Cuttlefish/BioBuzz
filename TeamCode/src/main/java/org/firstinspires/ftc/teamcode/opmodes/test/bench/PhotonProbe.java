@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.qualcomm.hardware.lynx.LynxController;
+import com.qualcomm.hardware.lynx.LynxI2cDeviceSynch;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.hardware.lynx.LynxUsbDevice;
 import com.qualcomm.hardware.lynx.LynxUsbDeviceImpl;
@@ -63,6 +64,7 @@ final class PhotonProbe {
     private static final Field CORE_INSTANCE = field(PhotonCore.class, "INSTANCE");
     private static final Field CORE_HUBS = field(PhotonCore.class, "hubs");
     private static final Field GATE = field(OpModeManagerImpl.class, "preventDangerousHardwareAccess");
+    private static final Field I2C_BUS = field(LynxI2cDeviceSynch.class, "bus");
 
     static LynxUsbDeviceImpl impl(LynxModule hub) {
         return ((LynxUsbDevice) get(MODULE_USB, hub)).getDelegationTarget();
@@ -79,6 +81,19 @@ final class PhotonProbe {
 
     static int inFlight(LynxModule hub) {
         return PhotonCore.isSwapped(hub) ? PhotonCore.inFlight(hub) : 0;
+    }
+
+    static LynxModule replaced(LynxModule hub) {
+        if (!PhotonCore.isSwapped(hub)) throw new IllegalStateException("REV Hub #" + hub.getModuleAddress() + " isn't Photon's");
+        return (LynxModule) get(ORPHAN, hub);
+    }
+
+    static LynxModule moduleOf(LynxController controller) {
+        return (LynxModule) get(CONTROLLER_MODULE, controller);
+    }
+
+    static int i2cBus(LynxI2cDeviceSynch client) {
+        return (Integer) get(I2C_BUS, client);
     }
 
     static boolean gateUp() {
@@ -240,6 +255,7 @@ final class PhotonProbe {
         m.put("writeFailures", c.writeFailures);
         m.put("clearedAtInit", c.clearedAtInit);
         m.put("orphanDatagrams", c.orphanDatagrams);
+        m.put("numberClashes", c.numberClashes);
         m.put("stockFallbacks", c.stockFallbacks());
         m.put("nacks", new LinkedHashMap<>(c.nacks));
         return m;

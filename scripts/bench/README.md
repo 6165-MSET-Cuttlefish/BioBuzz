@@ -37,6 +37,7 @@ Missing hardware skips its benches, and the summary says so.
 | a REV Expansion Hub on its own 12 V | RS485, address 2 (`--expansion-address N`) | Bench: Expansion Hub (reads only) |
 | a REV Expansion Hub on 12 V, **nothing on its motor ports 0-3 or servo ports 0-1** (the Photon block drives them) | Control Hub USB to its mini-USB, no RS485 cable | the Photon block with `--usb-expansion` |
 | the same Expansion Hub, same empty ports | RS485 only, address 2 (`--expansion-address N`) | the Photon block with `--photon-rs485` |
+| the Pinpoint and the OctoQuad, for the Photon block's I2C reads | OctoQuad: Control Hub I2C port 2; Pinpoint: **Expansion Hub I2C port 1** (Control Hub port 1 with no Expansion Hub) | the Photon block with `--photon-i2c` |
 
 `--interactive` adds terminal prompts: pull and replug the Limelight, Pinpoint and OctoQuad cables (pods stay in); move
 the Pinpoint and OctoQuad to the Expansion Hub's I2C ports 1 and 2 and back; open http://192.168.43.1:8080 during
@@ -54,6 +55,7 @@ on-screen stick and a USB pad (close the tab afterwards).
 | `--usb-expansion` / `--photon-rs485` | the Photon block with the Expansion Hub on USB / on RS485 (implies `--photon`) |
 | `--photon-soak` | the Photon block's long soak, 200 STOP trials per condition and more lost-write trials (implies `--photon`) |
 | `--photon-stop-trials N`, `--photon-seed N` | STOP trials per condition (default 40); the seed for the STOP delays (default: the time, logged) |
+| `--photon-i2c` | the Photon block also reads the Pinpoint and the OctoQuad over I2C on both hubs (about 2 min more); a wiring's verdict can only say SAFE with it |
 | `--quick` | shorter phases, noisier numbers |
 | `--all` | every bench but the Photon block; stops if no webcam, Limelight or Expansion Hub is plugged in |
 | `--keep-configs` | leaves the `bench_*` hardware configs on the hub |
@@ -66,9 +68,9 @@ on-screen stick and a USB pad (close the tab afterwards).
 `--photon` checks `architecture/hardware/photon/` against everything the robot code could do with a hub, and ends its
 section of `summary.md` with a **Photon verdict**, for the wiring it ran on:
 
-- **SAFE TO TRY ON THE ROBOT**: every Photon check passed, both STOP negative controls fired, the routing check saw both
-  hub swap orders, the soak met its loss bound, there were 200 STOP trials per condition and, on USB wiring, the cable
-  pulls passed. Only the go runs in the table below can say it.
+- **SAFE TO TRY ON THE ROBOT**: every Photon check passed, every STOP negative control fired, the routing check saw both
+  hub swap orders, the soak met its loss bound, there were 200 STOP trials per condition, the I2C reads ran right on
+  every hub (`--photon-i2c`) and, on USB wiring, the cable pulls passed. Only the go runs in the table below can say it.
 - **PASSED THIS RUN, NOT YET SAFE**: nothing failed, but the run left out something the go needs; it lists what.
 - **NOT SAFE YET**: it lists the blockers.
 
@@ -80,15 +82,25 @@ prints exactly what before it starts). For `--usb-expansion` the Expansion Hub i
 for `--photon-rs485` on the RS485 cable only. Pass `--ports-empty` once the ports are empty: a config on the hub that
 names devices on either hub's bench ports stops the run without it, and from a terminal it asks you to confirm. The
 stock bench then drives each motor port at 0.1 for 0.2 s and refuses to go on if one draws over 0.1 A. It can't probe
-servo ports, and a free-spinning motor may draw less than that: check every bench port by eye. `--photon-i2c` adds a
-Pinpoint (I2C bus 1) and an OctoQuad (bus 2) to the read phase.
+servo ports, and a free-spinning motor may draw less than that: check every bench port by eye.
+
+**I2C (`--photon-i2c`).** Plug the OctoQuad into Control Hub I2C port 2, where the robot has it, and the goBILDA
+Pinpoint into **Expansion Hub I2C port 1** (with no Expansion Hub, Control Hub port 1), nothing else on those ports; the
+same config serves USB and RS485 wiring. From a terminal the runner asks you to plug them in before the block and to move
+the Pinpoint back to Control Hub port 1 after it. Both devices are read only: the bench reads the Pinpoint's device ID and version registers
+(1 and 2) and the OctoQuad's chip ID and firmware version (registers 0-3), byte for byte against what each driver read at
+INIT; the only I2C writes are the OctoQuad driver's own read-parameter commands (its uptime at INIT, its diagnostics at
+that OpMode's STOP). A device that isn't answering stops its OpMode at INIT with a message that names its port, and the
+I2C checks fail; nothing passes without reads.
 
 | run | command | about |
 |---|---|---|
-| USB Expansion Hub, short (PASSED at best) | `python3 scripts/bench/run_bench.py --photon --usb-expansion --ports-empty` | 55 min |
-| RS485 Expansion Hub, short (recable first) | `python3 scripts/bench/run_bench.py --photon --photon-rs485 --ports-empty` | 55 min |
-| **go, USB wiring** | `python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-soak --interactive --ports-empty` | 6-7 h, 4 prompts at the end |
-| **go, RS485 wiring** | `python3 scripts/bench/run_bench.py --photon --photon-rs485 --photon-soak --ports-empty` | 6-7 h |
+| USB Expansion Hub, short (PASSED at best) | `python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty` | 50 min; from a terminal, 2 prompts at the start and 1 at the end |
+| RS485 Expansion Hub, short (recable first) | `python3 scripts/bench/run_bench.py --photon --photon-rs485 --photon-i2c --ports-empty` | 50 min; from a terminal, 2 prompts at the start and 1 at the end |
+| **go, USB wiring** | `python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-soak --photon-i2c --interactive --ports-empty` | 6-7 h, 2 prompts at the start and 5 at the end |
+| **go, RS485 wiring** | `python3 scripts/bench/run_bench.py --photon --photon-rs485 --photon-soak --photon-i2c --ports-empty` | 6-7 h; from a terminal, 2 prompts at the start and 1 at the end |
+
+`summary.md` is written with the Photon verdict before the last prompt, so an unattended run's results don't wait on it.
 
 The steps, in order (each OpMode is `Bench: Photon ...`):
 
@@ -98,11 +110,21 @@ The steps, in order (each OpMode is `Bench: Photon ...`):
 2. **Routing**, the first Photon INIT: every `LynxUsbDeviceImpl.knownModules` entry is the hardware map's
    `PhotonLynxModule`, every motor/servo controller points at it, nothing is in flight; then each hub is marked not
    responding and must clear within 50 ms of its next command, Photon off and on; then a parallel burst.
-3. **Photon**: write block per hub and loop period off and at 8/4/2 parallel (a 10 ms poller thread off and at 8),
-   undrained bursts at 8/2/1, three writes per channel back to back (the last must win), SDK-path enable toggles between
+3. **Photon**: write block per hub and loop period off and at 8/4/2 parallel (a 10 ms poller thread off and at 8; the
+   block times only the SDK calls: each value is chosen before it, writes in flight are sampled after each call off the clock, and the rest of the bookkeeping comes after), once more at 8 with
+   Photon's per-step write timing on (`timing on8 profiled`, summarized per hub in `summary.md`), undrained bursts at 8/2/1, three writes per channel back to back (the last must win), SDK-path enable toggles between
    parallel writes, bulk/voltage reads, servo writes from a second thread while the OpMode thread writes and reads back
    the motors and a third toggles Photon, 3000 writes at a limit of 1 under a 50 ms stall watchdog, and a
-   production-rate soak (60 s; with `--photon-soak` up to 1e7 writes per hub, about 3 h). Every phase must have zero
+   production-rate soak (60 s; with `--photon-soak` up to 1e7 writes per hub, about 3 h). With `--photon-i2c`: I2C
+   phases off, at 2 and at 8, where two threads per device (the driver's own client and a second one, every 10 ms, the
+   robot's sensor-thread period and rules) read their device's constant registers while the OpMode thread writes every
+   channel; with Photon off the second readers go through the replaced hub objects Photon keeps, so they must share the
+   hub's I2C lock; the soak keeps all four readers running. Then a negative control: 200 raw I2C write-reads per device
+   sent without the hub's I2C lock beside a locked reader at full speed, reported as caught of attempted (zero caught
+   on a hub means it tolerated them and the lock check couldn't be shown to fail on that hub), and a clean I2C phase
+   after it. Every read must be byte-exact (never the SDK's all-zero placeholder), every reader must reach 50 reads, and
+   `summary.md` prints the read times per phase against Photon off and the rule-of-three bound on per-read corruption.
+   The stock bench runs the same I2C phase on the SDK's own hubs. Every phase must have zero
    wrong read-backs, finite drains under 50 ms, nothing left after (Photon's slots and map, and its stand-ins in the
    SDK's own command map), in-flight never over the limit by either count, no write pending 100 ms or more, no
    retransmit, abandoned write, NACK or unexpected fallback, and exactly one parallel write per write it should have
@@ -116,12 +138,21 @@ The steps, in order (each OpMode is `Bench: Photon ...`):
    on, labelled by whether the SDK learned of the reset from the hub.
 5. **Stop Race** (6 runs per hub): STOP's gate raised the instant a motor write goes out; the motor must stay off.
 6. **Stop** and **Stop Linear**: 40 STOPs each (200 with `--photon-soak`) at a random 1-3 s, seeded (`--photon-seed`),
-   iterative at 8 parallel and off, linear at 8 (which keeps writing for 200 ms after STOP). `stop()` reads every
+   iterative and linear, each at 8 parallel and off. The linear bench clears the interrupt LinearOpMode sends at STOP
+   (and records that it came), then keeps writing for 200 ms, so its late writes reach both STOP gates and its read
+   runs. `stop()` reads every
    channel on both hubs after the SDK's fail-safe and before zeroing the motors, and a sampler thread reads them until
    1.5 s after the OpMode ends: any motor enabled above 1% power, or servo enabled, in that read or in a sweep after the
-   first one that read every channel safe, fails, and so does a trial that crashed or restarted the app. Two negative
+   first one that read every channel safe, fails, and so does a trial that crashed or restarted the app. Three negative
    controls, five runs each, re-energize motor port 0 of each hub after the fail-safe on purpose: once, the way a real
-   Photon failure would (`stop()`'s read must catch every one), and for 150 ms (the sampler must catch every one).
+   Photon failure would, iterative and linear (`stop()`'s read must catch every one), and for 150 ms (the sampler must
+   catch every one). The SDK itself can leak its network lock for 500 ms when the STOP interrupt lands at the end of a
+   command (logcat's `abandoning lock`); in every linear trial, the linear negative control included, each such leak
+   must fall in that window after STOP, none may be a fail-safe's (STOP's own fail-safes run on the event loop, which
+   that interrupt never reaches, so only Photon's post-STOP fail-safe can leak one), and Photon on must not leak more
+   often than Photon off (one-sided Fisher, p >= 0.05). That comparison is weak: the check prints the smallest rise it
+   catches in half of all blocks at the trial count run (about 8x at 40 trials, 3x at 200, at the SDK's own 1-in-40
+   rate), so a short block's pass rules out only a large rise.
 7. Photon, non-Photon, Photon, **Crash** (throws with writes in flight, two per hub swallowed so they're never
    acknowledged), Photon: every INIT must start clean, with each swallowed write finished (superseded, given up or
    cleared at INIT) and nothing left in the SDK's command map.
@@ -137,10 +168,11 @@ The steps, in order (each OpMode is `Bench: Photon ...`):
 11. Framework Loop off and on, and Write Recovery on (their `Photon` variants), then an app restart so the benches after
     the block get the SDK's own hubs.
 
-The SDK warnings in logcat are judged for every step but the cable pulls, except the ones a step causes on purpose (the
-lost-write and reset phases, the routing bench's own not-responding test) and a hub answering the firmware-version read
-late after a restart, which Bench: Probe shows without Photon too (counted, not judged); a step whose log is empty or
-lacks one of its phase markers fails. The soak's step streams logcat to a file instead of relying on the hub's ring
+The SDK warnings in logcat (lock, ownership, checksum, abandon, I2C and placeholder lines) are judged for every step but
+the cable pulls, except the ones a step causes on purpose (the lost-write and reset phases, the routing bench's own
+not-responding test, the I2C negative control), the linear STOP trials' lock leaks (judged against their Photon-off
+control instead) and a hub answering the firmware-version read late after a restart, which Bench: Probe shows without
+Photon too (counted, not judged); a step whose log is empty or lacks one of its phase markers fails. The soak's step streams logcat to a file instead of relying on the hub's ring
 buffer.
 
 With `--photon-rs485`, Bench: Photon adds a shared-link phase, off and on, with the poller running: the Control Hub's

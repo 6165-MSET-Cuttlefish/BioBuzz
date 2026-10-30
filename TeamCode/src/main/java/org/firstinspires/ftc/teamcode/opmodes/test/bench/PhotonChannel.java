@@ -64,19 +64,29 @@ final class PhotonChannel {
         return motor != null;
     }
 
-    // Always a new value, so the SDK never skips it as unchanged and every write is counted.
     void write() {
+        prepare();
+        send();
+    }
+
+    // Always a new value, so the SDK never skips it as unchanged and every write is counted.
+    void prepare() {
         double value = isMotor() ? (step % 2 == 0 ? POWER_A : POWER_B) : (step % 2 == 0 ? POSITION_A : POSITION_B);
         step++;
-        set(value);
+        commanded = value;
+        expected = isMotor() ? motorRegister(motor, value) : servoPulse(servo, value);
+    }
+
+    void send() {
+        if (isMotor()) motorOut.setPower(commanded);
+        else servoOut.setPosition(commanded);
+        lastWriteNs = System.nanoTime();
     }
 
     void set(double value) {
         commanded = value;
         expected = isMotor() ? motorRegister(motor, value) : servoPulse(servo, value);
-        if (isMotor()) motorOut.setPower(value);
-        else servoOut.setPosition(value);
-        lastWriteNs = System.nanoTime();
+        send();
     }
 
     void zero() {
