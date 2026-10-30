@@ -110,10 +110,25 @@ in the Expansion Hub's USB device, so the Control Hub's own replies went to the 
 would have left that hub marked unresponsive for good. Its read-back failures there were the bench's own sign error
 (goBILDA 5202 motors are CCW, so the hub's register holds minus the power), and its STOP check could not fail.
 
+The fork (commit c825493) on the same hubs, 2026-10-29, same workload, p50 (p95):
+
+| | write block, both hubs | Expansion Hub | Control Hub | loop period |
+|---|---|---|---|---|
+| stock (an OpMode Photon never touched) | 24.96 (41.7) ms | 15.43 ms | 9.28 ms | 30.7 ms |
+| fork, 8 parallel | 10.84 (14.2) ms | 6.20 ms | 4.66 ms | 16.0 ms |
+| stock SolversLib Photon, 8 parallel (2026-10-28, above) | 6.0 (12.3) ms | 3.95 ms | 2.06 ms | 11.5 ms |
+
+So the fork cut the write block 2.3x and the loop period from 30.7 to 16.0 ms, against 4.2x and 11.5 ms for stock
+Photon, which skips the fork's safety checks and is unsafe on the robot. Each parallel write cost the fork about 0.4 ms
+more than stock Photon (motor write p50 0.91 against 0.40 ms); a desktop comparison ranked its ping-timer reset on every
+write as the biggest part of that. The current tree resets it at most every 100 ms and can time each step of the write
+path (`timing on8 profiled` in the Photon block), but neither is measured on a hub yet; its write block also leaves out
+the bench's own bookkeeping, at most about 0.05 ms a write, so compare its numbers with these loosely.
+
 The fork changes that, but only the rebuilt Photon block (`scripts/bench/run_bench.py --photon`, see
 `scripts/bench/README.md`) decides it: exact read-backs with Photon off and on, a stock baseline from an OpMode Photon
 never touched, routing and not-responding recovery over 8-16 app restarts, real lost writes, STOP at random points of the
 loop with negative controls, STOP inside a write, crashes and consecutive OpModes, deploySloth, a hub reset, the RS485
-wiring, cable pulls, and a soak that bounds the per-write loss rate. Use Photon on the robot only once its summary says
-SAFE TO TRY ON THE ROBOT for the robot's wiring: only the go run for that wiring (the soak, plus the cable pulls on USB;
-see the README's table) can say it, and a shorter run says PASSED at best.
+wiring, cable pulls, I2C reads on both hubs, and a soak that bounds the per-write loss rate. Use Photon on the robot only
+once its summary says SAFE TO TRY ON THE ROBOT for the robot's wiring: only the go run for that wiring (the soak and
+`--photon-i2c`, plus the cable pulls on USB; see the README's table) can say it, and a shorter run says PASSED at best.
