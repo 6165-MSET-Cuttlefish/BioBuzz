@@ -1,0 +1,251 @@
+Offline Photon suites (scripts/bench/photon-offline/), run 2026-11-02 at 576b300, java version "22.0.2" 2024-07-16, Python 3.13.0
+
+harness      108 passed, 0 failed
+mutants      mutants: 16 of 16 caught
+runner       FAILED: KeyError: 'photon_stop_linear_on_018' (runner/fixtures/logs/ was never committed: .gitignore's *.log excludes it)
+dryrun       FAILURES: none
+lockleak     13 passed, 0 failed
+
+===== harness =====
+Note: scripts/bench/photon-offline/harness/fakes/android/os/Process.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+scripts/bench/photon-offline/harness/src/com/qualcomm/hardware/lynx/PhotonHarness.java:68: warning: Unsafe is internal proprietary API and may be removed in a future release
+    static sun.misc.Unsafe UNSAFE;
+                   ^
+scripts/bench/photon-offline/harness/src/com/qualcomm/hardware/lynx/PhotonHarness.java:467: warning: Unsafe is internal proprietary API and may be removed in a future release
+        Field u = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+                          ^
+scripts/bench/photon-offline/harness/src/com/qualcomm/hardware/lynx/PhotonHarness.java:469: warning: Unsafe is internal proprietary API and may be removed in a future release
+        UNSAFE = (sun.misc.Unsafe) u.get(null);
+                          ^
+3 warnings
+PASS PhotonLynxModule loads against SDK 12 classes
+PASS SDK 12 LynxModule fields are exactly the ones the transplant handles
+PASS take-over reports no problems []
+PASS hardware map hub is Photon's
+PASS replies route to Photon's module
+PASS device fields re-pointed, including through a wrapper and an interface-typed field
+PASS embedded Control Hub module re-pointed
+PASS serial-number lookup returns Photon's module
+PASS DEKA interface carried over
+PASS second INIT on the same map keeps the same module
+PASS disabled: every write takes the SDK path
+PASS disabled: no routes left behind
+PASS enabled: 6 writes return before their 20 ms ACKs (0.6 ms)
+PASS enabled: 6 writes in flight right after (6)
+PASS enabled: all in-flight writes drained by their real ACKs
+PASS enabled: 6 parallel writes, no retransmits
+PASS enabled: each write sent once
+PASS enabled: no routes left behind
+PASS slot limit: third write falls back after the bounded wait
+PASS slot limit: never more than 2 in flight (2)
+PASS slot limit: the fallback waits for its own ACK the SDK way (46.0 ms)
+PASS slot limit: the late-locked fallback released the network lock (2.7 ms)
+    log E/LynxModule: timeout: abandoning waiting 250ms for ack: cmd=LynxSetMotorConstantPowerCommand mod=2 msg#=16
+    log E/LynxModule: Marking module #2 as unresponsive until we receive some data back
+PASS lost ACK: write sent 3 times (initial + 2 retransmits), got 3
+PASS lost ACK: counted 2 retransmits and 1 abandoned
+PASS lost ACK: hub marked not responding like the SDK timeout
+PASS lost ACK: logged exactly like the SDK timeout
+PASS lost ACK: reported to the warning manager once, like the SDK timeout
+PASS lost ACK: entry removed
+PASS not responding: next write takes the SDK path, which NACKs it at once
+    log E/LynxModule: unable to find originating LynxRespondable for mod=2 msg#=17 ref#=17
+PASS not responding: cleared by the hub's next reply to Photon's module
+PASS superseded: the older write is never retransmitted over the newer one
+PASS superseded: finished quietly while the hub kept answering
+PASS attention: the fake ACK leaves the module's attention state alone
+PASS attention: the real ACK's bit is applied
+PASS attention: a real ACK with attention set reaches the module
+PASS NACK: counted by reason {BATTERY_TOO_LOW_TO_RUN_MOTOR=1}
+PASS NACK: battery-too-low raises a global warning
+PASS NACK: entry finished
+PASS STOP gate: a dangerous write takes the SDK path and is refused, nothing sent
+PASS STOP gate: a zero-power write still goes parallel
+PASS STOP race: the hub is fail-safed right after the write
+PASS STOP race: send() ends in the SDK gate's CANCELLED_FOR_SAFETY NACK, so the motor enable after it is skipped
+PASS STOP race: the stand-in still finishes on the real ACK
+PASS STOP between decision and write: refused the SDK way, nothing sent
+PASS after STOP: a pending dangerous write is never retransmitted
+PASS after STOP: it finishes quietly once the fail-safe is acknowledged
+PASS device not ready: SDK path pretends, nothing written to the stale device
+PASS device not ready: shut down abnormally, the SDK path pretends and nothing is written (1 fallbacks, 0 written) 
+PASS device not ready: disengaged, the SDK path pretends and nothing is written (1 fallbacks, 0 written) 
+PASS device not ready: no USB device, the SDK path pretends and nothing is written (1 fallbacks, 0 written) 
+PASS write failure: entry removed, then sent once the SDK way
+PASS write failure: logged as one line naming the exception, no stack trace (1 Photon lines, 1 text lines)
+PASS write failure: logged after the USB device's write lock is released [false]
+PASS INIT clear: 3 unacknowledged writes in flight
+PASS INIT clear: all dropped at the next INIT
+PASS INIT clear: INIT disables Photon
+PASS INIT clear: cleared writes are never abandoned later
+PASS interrupt: the slot wait honors it and leaves no route
+PASS orphan: a command sent through the replaced module gets its reply (2.7 ms)
+PASS orphan flag: noteNotResponding on Photon's module marks the replaced one too
+    log E/LynxModule: unable to find originating LynxRespondable for mod=2 msg#=32 ref#=48
+PASS orphan flag: the next reply to Photon's module clears both
+PASS orphan flag: a flag set on the replaced module alone clears on Photon's next reply
+PASS orphan ping: a re-armed keep-alive on the replaced module is cancelled within a sweep (armed true, still armed after 30 ms false)
+PASS orphan ping: Photon's own keep-alive stays armed
+PASS threads: no errors []
+PASS threads: every write accounted for (800 parallel, 0 fallbacks)
+PASS threads: nothing leaked
+PASS keep-alive: 200 parallel writes over 509 ms reschedule the ping 5 times (at most 7)
+PASS keep-alive: none sent while writes come every 50 ms for 2.4 s (0)
+PASS keep-alive: the hub hears one 1800-1990 ms after the last write (the SDK's own interval is 1950 ms) (1953 ms)
+PASS write profile: off by default, nothing recorded
+PASS write profile: 50 parallel writes counted once in each of the 15 steps []
+PASS write profile: switched off again, nothing more recorded
+PASS I2C: take-over with an I2C device in the map
+PASS I2C: the mapped device's I2C client is re-pointed at Photon's module
+PASS I2C lock: a transaction through Photon's module holds the replaced module's lock
+PASS I2C lock: a transaction through Photon's module shuts out one through the replaced module
+PASS I2C lock: a transaction through the replaced module shuts out one through Photon's module
+PASS I2C lock: nesting it through both module objects on one thread doesn't deadlock
+PASS I2C clients: 120 reads through the replaced module and Photon's (two buses) all reached the hub (120, 488 ms) []
+PASS I2C clients: no transaction on the hub began before the previous one was read back (0 overlaps)
+PASS I2C clients: every read returned its own register's bytes (0 wrong, 0 placeholders)
+PASS I2C clients: every reply to the replaced module's transactions reached it (120 of 120: ACK, in-progress NACK, data)
+PASS I2C clients: parallel writes on the same link alongside are all accounted for (300 parallel, 0 fallbacks) []
+PASS I2C clients: nothing leaked
+    log E/LynxModule: java.lang.RuntimeException
+    log E/LynxModule: 	at com.qualcomm.hardware.lynx.LynxModule.warnIfClosed(LynxModule.java:581)
+    log E/LynxModule: 	at org.firstinspires.ftc.teamcode.architecture.hardware.photon.PhotonLynxModule.acquireI2cLockWhile(PhotonLynxModule.java:258)
+    log E/LynxModule: 	at com.qualcomm.hardware.lynx.PhotonHarness.run(PhotonHarness.java:1005)
+    log E/LynxModule: 	at com.qualcomm.hardware.lynx.PhotonHarness.main(PhotonHarness.java:457)
+PASS I2C lock: Photon's module, once closed, still warns like the SDK's and still runs the transaction
+PASS message numbers: take-over
+PASS message numbers: 300 parallel and 300 SDK-path writes through Photon's module skip every number pending on the replaced one (0 reused, 0 abandoned, 252 distinct numbers)
+    log E/LynxModule: timeout: abandoning waiting 250ms for ack: cmd=LynxSetServoPulseWidthCommand mod=8 msg#=99
+    log E/LynxModule: Marking module #8 as unresponsive until we receive some data back
+PASS message numbers: a write through the replaced module whose ACK never comes is held the SDK's 250 ms under one number (sent at 0, ~100 and ~200 ms and in the deadline's last ms, abandoned at 250 ms): sent at [0.0, 105.2, 207.2, 254.3] ms, abandoned at 254.6 ms, 4 of 4 sends under its number []
+PASS message numbers: Photon's parallel writes meanwhile wrap the counter and never take its number (1576 writes, 0 clashes)
+PASS message numbers: with all 255 pending on the replaced module, a write throws at once on both paths and leaves nothing behind (parallel: java.lang.IllegalStateException: REV Hub #8 has no free message number, SDK path: java.lang.IllegalStateException: REV Hub #8 has no free message number)
+PASS shared number: a dropped reply still counts as hearing from the hub, on both module objects
+PASS shared number: a NACK, an ACK and a response to a number both modules hold complete neither command and are counted (3 counted)
+    log E/LynxModule: timeout: abandoning waiting 250ms for ack: cmd=LynxSetMotorConstantPowerCommand mod=8 msg#=155
+    log E/LynxModule: Marking module #8 as unresponsive until we receive some data back
+PASS shared number: Photon's write is then abandoned like the SDK's own timeout (253 ms)
+PASS shared number: the replaced module's query takes the next reply once the number is only its own
+PASS message numbers: nothing leaked, and the one abandoned write is the clashed one
+PASS RS485: take-over of parent and child
+PASS RS485: child swapped and routed
+PASS RS485: child write waits for its ACK the SDK way (21.1 ms)
+PASS RS485: the parent on the same link still goes parallel
+PASS final field: take-over refused with nothing changed [device "pinned" (FinalDevice.pinnedHub) is final]
+PASS INIT hook: an OpMode without @Photon keeps the SDK's hubs and can't enable
+PASS INIT hook: a system OpMode name is never touched, even annotated
+PASS INIT hook: an @Photon OpMode's hubs are taken over and enable() works
+PASS STOP disables Photon
+PASS enable() throws outside a @Photon OpMode
+PASS setMaxParallelWrites(0) throws
+PASS setMaxParallelWrites(65) throws, so every hub keeps message numbers free
+108 passed, 0 failed
+
+===== mutants =====
+CAUGHT unbounded message-number loop: 1 failing check(s)
+CAUGHT no message-number override: 3 failing check(s)
+CAUGHT replies routed by guessing from the reply type: 5 failing check(s)
+CAUGHT replies routed to Photon's map first: 5 failing check(s)
+CAUGHT a dropped clashed reply not counted as hearing from the hub: 1 failing check(s)
+CAUGHT write failure logged with its stack trace under the write lock: 2 failing check(s)
+CAUGHT ping timer reset on every write: 1 failing check(s)
+CAUGHT no ping-timer reset on parallel writes: 2 failing check(s)
+CAUGHT I2C lock not delegated to the replaced module: 7 failing check(s)
+CAUGHT no shutdown-reason check before a parallel write: 1 failing check(s)
+CAUGHT no engaged check before a parallel write: 1 failing check(s)
+CAUGHT no null-device or shutdown-reason check before a parallel write: 2 failing check(s)
+CAUGHT no upper bound on parallel writes: 1 failing check(s)
+CAUGHT write profiling on by default: 3 failing check(s)
+CAUGHT c825493's Photon: 20 failing check(s)
+CAUGHT the unfinished draft: 13 failing check(s)
+mutants: 16 of 16 caught
+
+===== runner =====
+FAIL real: 40 linear on8 trial logs
+FAIL real: every STOP trial log has its STOP mark
+FAIL real: the one abandoned lock is trial 018's, 508 ms after STOP, a STOP-interrupt leak of the gated servo enable
+FAIL real: with a clean 40-trial Photon-off control, Photon on passes both lock checks (1 vs 0, p 0.5)
+Traceback (most recent call last):
+  File "scripts/bench/photon-offline/runner/test_photon_checks.py", line 885, in <module>
+    parsed018 = rb.photon_log_counts(linear_on["photon_stop_linear_on_018"])
+                                     ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'photon_stop_linear_on_018'
+
+===== dryrun =====
+usb verdict: PASSED [] ['the cable pulls (--interactive)', "I2C reads through Photon's hubs on every hub (--photon-i2c)", 'the soak (--photon-soak), which bounds the per-write loss rate', '200 STOP trials per condition (this run 40: the violation rate is bounded only below 7.5%, 95%)']
+restarts: 10 STOP runs: 90 linear STOP runs: 85
+full usb verdict without --photon-i2c: PASSED [] ["I2C reads through Photon's hubs on every hub (--photon-i2c)"]
+full usb verdict: SAFE [] []
+linear once leak: SAFE []
+linear once stray: NOT SAFE ["logcat: linear STOP trials: every abandoned network lock is one STOP's interrupt leaked"]
+lost write in on8: NOT SAFE, blockers ['phases: timing on8', 'phases: interleave on8', 'phases: reads on8']
+race: NOT SAFE, blockers ['race: Photon on: the motor stays off when STOP lands inside its write']
+silent control: NOT SAFE, blockers ['stop: negative control, once: one late write and enable after the fail-safe is caught every time', 'stop: negative control, linear once: one late write and enable after the fail-safe is caught every time', "a STOP negative control didn't register every time, so the STOP checks prove nothing"]
+one order: NOT SAFE, blockers ['routing: at least 8 app restarts and both swap orders seen', "the routing check didn't see both module orders"]
+faults stopped early: NOT SAFE, blockers ['lost: every lost-write trial ran']
+stale install: NOT SAFE, blockers ["install: the hub's installed Photon was built from the photon sources in this checkout"]
+crash leak: NOT SAFE, blockers ["crash: every write left unacknowledged by the crash is finished, and the next INIT starts with nothing in flight or in the SDK's command map"]
+lost at depth: NOT SAFE, blockers ["lost: expansionHub: a lost write with 0-7 other writes in flight is handled like the SDK's timeout"]
+late write: NOT SAFE, blockers ["stop: iterative, Photon on8: nothing re-energized after STOP's fail-safe"]
+crashed STOP trial: NOT SAFE, blockers ["stop: iterative, Photon on8: nothing re-energized after STOP's fail-safe"]
+abandon in a STOP trial: NOT SAFE, blockers ['logcat: STOP trials, iterative, Photon on8: no lock, ownership, checksum, abandon, I2C or placeholder warnings, every log complete']
+number clash: NOT SAFE, blockers ['phases: timing on8', 'phases: interleave on8', 'phases: reads on8']
+linear interrupt missed: NOT SAFE, blockers ["stop: linear, Photon on8: nothing re-energized after STOP's fail-safe"]
+linear leaks: NOT SAFE, blockers ["logcat: linear STOP trials: Photon leaks the SDK's lock at STOP no more often than the SDK alone"]
+i2c wrong byte: NOT SAFE, blockers ['i2c: I2C on8: every read of a constant register is byte-exact, from both threads on every hub']
+i2c device missing: NOT SAFE, blockers ["i2c: the stock baseline's Pinpoint and OctoQuad answered at INIT on the SDK's own hub objects"]
+no replaced reader: NOT SAFE, blockers ['i2c: I2C off: every read of a constant register is byte-exact, from both threads on every hub']
+i2c warning: NOT SAFE, blockers ['logcat: Bench: Photon: no lock, ownership, checksum, abandon, I2C or placeholder warnings, every log complete']
+rs485 --no-sloth: NOT SAFE ['not run: deploySloth (--no-sloth)']
+rs485: PASSED [] ["I2C reads through Photon's hubs on every hub (--photon-i2c)", 'the soak (--photon-soak), which bounds the per-write loss rate', '200 STOP trials per condition (this run 4: the violation rate is bounded only below 75.0%, 95%)']
+rs485 --photon-i2c: PASSED [] ['the soak (--photon-soak), which bounds the per-write loss rate', '200 STOP trials per condition (this run 4: the violation rate is bounded only below 75.0%, 95%)']
+Control Hub only --photon-i2c: NOT SAFE ['lost: every lost-write trial ran', 'lost: the USB write failure trial ran on every parallel hub', 'reset: the reset trial ran on every hub']
+busy port stops the block: a bench motor port drew current in Bench: Photon Stock's port probe (see the summary): unplug it before running the Photon benches
+stock init crash stops the block: Bench: Photon Stock crashed before its port probe ran: IllegalStateException: the Pinpoint on expansionHub I2C bus 1 read device ID 0, version 0: it isn't answering
+early stop verdict: NOT SAFE ['ports: no motor port draws over 0.1 A at 0.1 power', "a STOP negative control didn't register every time, so the STOP checks prove nothing", "the routing check didn't see both module orders"]
+FAILURES: none
+
+===== lockleak =====
+Note: scripts/bench/photon-offline/lockleak/../harness/fakes/android/os/Process.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+scripts/bench/photon-offline/lockleak/../harness/src/com/qualcomm/hardware/lynx/PhotonHarness.java:68: warning: Unsafe is internal proprietary API and may be removed in a future release
+    static sun.misc.Unsafe UNSAFE;
+                   ^
+scripts/bench/photon-offline/lockleak/../harness/src/com/qualcomm/hardware/lynx/PhotonHarness.java:467: warning: Unsafe is internal proprietary API and may be removed in a future release
+        Field u = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+                          ^
+scripts/bench/photon-offline/lockleak/../harness/src/com/qualcomm/hardware/lynx/PhotonHarness.java:469: warning: Unsafe is internal proprietary API and may be removed in a future release
+        UNSAFE = (sun.misc.Unsafe) u.get(null);
+                          ^
+scripts/bench/photon-offline/lockleak/src/com/qualcomm/hardware/lynx/LockLeakHarness.java:124: warning: Unsafe is internal proprietary API and may be removed in a future release
+        Field u = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+                          ^
+scripts/bench/photon-offline/lockleak/src/com/qualcomm/hardware/lynx/LockLeakHarness.java:126: warning: Unsafe is internal proprietary API and may be removed in a future release
+        PhotonHarness.UNSAFE = (sun.misc.Unsafe) u.get(null);
+                                        ^
+5 warnings
+PASS stock: a plain SDK LynxModule (no Photon class anywhere) takes and frees its network lock
+    log E/RobotCore: lynx xmit lock: #### abandoning lock: old=LynxSetServoEnableCommand(0)
+    log E/RobotCore: lynx xmit lock:                       new=LynxGetModuleStatusCommand(0)
+PASS stock, STOP gate up: an interrupt landing after the gate's NACK and before the release throws InterruptedException out of send(), leaves the lock owned by the NACKed command, sends nothing, and leaves the flag clear (java.lang.InterruptedException)
+PASS stock, STOP gate up: the next command from another thread waits 519 ms and logs trial 018's line: E/RobotCore: lynx xmit lock: #### abandoning lock: old=LynxSetServoEnableCommand(0)
+    log E/RobotCore: lynx xmit lock: #### abandoning lock: old=LynxSetMotorConstantPowerCommand(3)
+    log E/RobotCore: lynx xmit lock:                       new=LynxGetModuleStatusCommand(0)
+PASS stock, gate down: an ACKed write leaks the lock the same way (519 ms)
+PASS stock, negative control: an interrupt landing during the ACK wait is consumed by the wait, the release succeeds, nothing leaks (next command 3.1 ms)
+PASS stock, negative control: with the flag already set, as the SDK's controllers leave it for a LinearOpMode's writes after STOP, a write throws at the lock acquisition before reaching the STOP gate (no NACK logged), holds nothing and leaks nothing
+PASS Photon rig taken over
+    log E/RobotCore: lynx xmit lock: #### abandoning lock: old=LynxSetServoEnableCommand(0)
+    log E/RobotCore: lynx xmit lock:                       new=LynxGetModuleStatusCommand(0)
+PASS Photon off: the same injected interrupt leaks the lock exactly as the stock SDK does (514 ms)
+    log E/RobotCore: lynx xmit lock: #### abandoning lock: old=LynxSetServoEnableCommand(0)
+    log E/RobotCore: lynx xmit lock:                       new=LynxGetModuleStatusCommand(0)
+PASS Photon on, gate up: a gated SDK-path command leaks the same way, no worse (519 ms)
+PASS Photon on, gate up, flag already set: a late write is routed off the parallel path and then throws at the SDK lock acquisition, so it never reaches the SDK's STOP gate either
+PASS Photon on, gate down, flag already set: unlike the SDK path, the parallel write still goes out before send() throws in its ACK wait (flag left set false)
+PASS Photon on, gate down: a parallel write never holds the SDK lock, so an interrupt inside it can't leak it (java.lang.InterruptedException; next command 3.4 ms)
+    log E/RobotCore: lynx xmit lock: #### abandoning lock: old=LynxFailSafeCommand(7)
+    log E/RobotCore: lynx xmit lock:                       new=LynxGetModuleStatusCommand(0)
+PASS Photon on, STOP landing just after a parallel write went out: Photon's own post-STOP fail-safe is an SDK-locked command on the writer's thread, so it is one more place the interrupt can leak the lock (owner LynxFailSafeCommand, 516 ms)
+13 passed, 0 failed
