@@ -65,6 +65,8 @@ on-screen stick and a USB pad (close the tab afterwards).
 
 ## The Photon block
 
+Where Photon stands and the hub runs still to do: [`docs/photon-bench.md`](../../docs/photon-bench.md).
+
 `--photon` checks `architecture/hardware/photon/` against everything the robot code could do with a hub, and ends its
 section of `summary.md` with a **Photon verdict**, for the wiring it ran on:
 
