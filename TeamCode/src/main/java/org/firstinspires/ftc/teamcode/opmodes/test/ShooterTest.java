@@ -9,7 +9,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.ServoImplEx;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.Range;
 
@@ -21,24 +21,29 @@ import java.util.List;
 @TeleOp(name = "Shooter Test", group = "Test")
 @Config("Shooter Test")
 public class ShooterTest extends OpMode {
-    public static String flywheelName = "flywheel";
-    public static String encoderName = "flywheel";
-    public static String hoodName = "hood";
-    public static boolean reverseFlywheel = false;
-    public static boolean reverseEncoder = false;
+    public static class ShooterSettings {
+        public double targetRpm = 0;
+        public double power = 0;
+        public double kV = 0;
+        public double kP = 0;
+        public double hoodPosition = 0.5;
+        public boolean reverseFlywheel = false;
+        public boolean reverseEncoder = false;
+    }
+
+    public static ShooterSettings nectar = new ShooterSettings();
+    public static ShooterSettings pollen = new ShooterSettings();
+
     public static double ticksPerRev = 8192;
     public static double rpmWindowMs = 50;
-    public static double hoodPosition = 0.5;
-    public static double power = 0;
-    public static double targetRpm = 0;
-    public static double kV = 0;
-    public static double kP = 0;
 
-    private final ArrayDeque<double[]> history = new ArrayDeque<>();
+    private final ArrayDeque<double[]> nectarHistory = new ArrayDeque<>();
+    private final ArrayDeque<double[]> pollenHistory = new ArrayDeque<>();
     private List<LynxModule> hubs;
-    private DcMotorEx flywheel;
-    private DcMotorEx encoder;
-    private Servo hood;
+    private DcMotorEx nectarFlywheel;
+    private DcMotorEx pollenFlywheel;
+    private ServoImplEx nectarHood;
+    private ServoImplEx pollenHood;
     private VoltageSensor battery;
     private long lastLoopNs;
 
@@ -46,11 +51,13 @@ public class ShooterTest extends OpMode {
     public void init() {
         hubs = hardwareMap.getAll(LynxModule.class);
         for (LynxModule hub : hubs) hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
-        flywheel = hardwareMap.get(DcMotorEx.class, flywheelName);
-        encoder = hardwareMap.get(DcMotorEx.class, encoderName);
-        hood = hardwareMap.get(Servo.class, hoodName);
+        nectarFlywheel = hardwareMap.get(DcMotorEx.class, "nectarFlywheel");
+        pollenFlywheel = hardwareMap.get(DcMotorEx.class, "pollenFlywheel");
+        nectarHood = hardwareMap.get(ServoImplEx.class, "nectarHood");
+        pollenHood = hardwareMap.get(ServoImplEx.class, "pollenHood");
         battery = hardwareMap.voltageSensor.iterator().next();
-        flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        nectarFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+        pollenFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
 
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
     }
@@ -63,37 +70,58 @@ public class ShooterTest extends OpMode {
     @Override
     public void loop() {
         for (LynxModule hub : hubs) hub.clearBulkCache();
-        long t0 = System.nanoTime();
-        int ticks = encoder.getCurrentPosition();
-        long t1 = System.nanoTime();
-        double rpm = rpm((t0 + (t1 - t0) / 2) / 1e9, reverseEncoder ? -ticks : ticks);
+        long loopStartNs = System.nanoTime();
 
-        boolean closedLoop = targetRpm > 0;
-        double out = closedLoop ? Range.clip(kV * targetRpm + kP * (targetRpm - rpm), 0, 1) : power;
-        flywheel.setDirection(reverseFlywheel ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD);
-        flywheel.setPower(out);
-        hood.setPosition(hoodPosition);
+        double nectarRpm = rpm(nectarHistory, nectarFlywheel, nectar.reverseEncoder);
+        double pollenRpm = rpm(pollenHistory, pollenFlywheel, pollen.reverseEncoder);
+        double nectarOut = power(nectar, nectarRpm);
+        double pollenOut = power(pollen, pollenRpm);
 
-        telemetry.addData("Target RPM", targetRpm);
-        telemetry.addData("RPM", rpm);
-        telemetry.addData("Error (RPM)", closedLoop ? targetRpm - rpm : 0);
-        telemetry.addData("Power", out);
-        if (!closedLoop && rpm > 0) telemetry.addData("kV estimate (power / RPM)", "%.7f", out / rpm);
-        if (rpm < -50 && out > 0.1) telemetry.addLine("RPM reads negative while driven forward: flip reverseEncoder");
-        telemetry.addData("Hood position", hoodPosition);
-        telemetry.addData("Flywheel current (A)", flywheel.getCurrent(CurrentUnit.AMPS));
+        nectarFlywheel.setDirection(direction(nectar.reverseFlywheel));
+        pollenFlywheel.setDirection(direction(pollen.reverseFlywheel));
+        nectarFlywheel.setPower(nectarOut);
+        pollenFlywheel.setPower(pollenOut);
+        nectarHood.setPosition(nectar.hoodPosition);
+        pollenHood.setPosition(pollen.hoodPosition);
+
+        telemetry.addData("Nectar target RPM", nectar.targetRpm);
+        telemetry.addData("Nectar RPM", nectarRpm);
+        telemetry.addData("Nectar power", nectarOut);
+        if (nectar.targetRpm <= 0 && nectarRpm > 0) telemetry.addData("Nectar kV estimate (power / RPM)", "%.7f", nectarOut / nectarRpm);
+        telemetry.addData("Nectar current (A)", nectarFlywheel.getCurrent(CurrentUnit.AMPS));
+
+        telemetry.addData("Pollen target RPM", pollen.targetRpm);
+        telemetry.addData("Pollen RPM", pollenRpm);
+        telemetry.addData("Pollen power", pollenOut);
+        if (pollen.targetRpm <= 0 && pollenRpm > 0) telemetry.addData("Pollen kV estimate (power / RPM)", "%.7f", pollenOut / pollenRpm);
+        telemetry.addData("Pollen current (A)", pollenFlywheel.getCurrent(CurrentUnit.AMPS));
+
         telemetry.addData("Battery (V)", battery.getVoltage());
-        telemetry.addData("Encoder ticks", ticks);
-        telemetry.addData("Loop (ms)", (t0 - lastLoopNs) / 1e6);
-        lastLoopNs = t0;
+        telemetry.addData("Loop (ms)", (loopStartNs - lastLoopNs) / 1e6);
+        lastLoopNs = loopStartNs;
     }
 
     @Override
     public void stop() {
-        flywheel.setPower(0);
+        nectarFlywheel.setPower(0);
+        pollenFlywheel.setPower(0);
     }
 
-    private double rpm(double seconds, int ticks) {
+    private static double power(ShooterSettings shooter, double rpm) {
+        if (shooter.targetRpm <= 0) return shooter.power;
+        return Range.clip(shooter.kV * shooter.targetRpm + shooter.kP * (shooter.targetRpm - rpm), 0, 1);
+    }
+
+    private static DcMotorSimple.Direction direction(boolean reverse) {
+        return reverse ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD;
+    }
+
+    private static double rpm(ArrayDeque<double[]> history, DcMotorEx motor, boolean reverse) {
+        long before = System.nanoTime();
+        int ticks = motor.getCurrentPosition();
+        double seconds = (before + (System.nanoTime() - before) / 2) / 1e9;
+        if (reverse) ticks = -ticks;
+
         history.addLast(new double[] {seconds, ticks});
         while (history.size() > 2 && seconds - history.peekFirst()[0] > rpmWindowMs / 1000) history.removeFirst();
         if (history.size() < 2) return 0;
