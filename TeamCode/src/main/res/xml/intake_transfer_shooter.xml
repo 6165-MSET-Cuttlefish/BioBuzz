@@ -10,6 +10,7 @@
             <Servo name="pollenHood" port="0" />
             <Servo name="nectarHood" port="1" />
             <Servo name="blocker" port="2" />
+            <ContinuousRotationServo name="melonbotics" port="3" />
         </LynxModule>
     </LynxUsbDevice>
 </Robot>

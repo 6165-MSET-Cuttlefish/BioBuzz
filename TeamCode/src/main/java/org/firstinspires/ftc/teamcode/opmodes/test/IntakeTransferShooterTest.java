@@ -6,6 +6,7 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.CRServoImplEx;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
@@ -50,6 +51,8 @@ public class IntakeTransferShooterTest extends OpMode {
     public static class Transfer {
         public double power = 0;
         public boolean reverse = false;
+        public double melonboticsPower = 0;
+        public boolean reverseMelonbotics = false;
     }
 
     public static class Blocker {
@@ -79,6 +82,7 @@ public class IntakeTransferShooterTest extends OpMode {
     private ServoImplEx pollenHood;
     private DcMotorEx intakeMotor;
     private DcMotorEx transferMotor;
+    private CRServoImplEx melonbotics;
     private ServoImplEx blockerServo;
     private VoltageSensor battery;
     private long lastLoopNs;
@@ -95,6 +99,7 @@ public class IntakeTransferShooterTest extends OpMode {
         pollenHood = hardwareMap.get(ServoImplEx.class, "pollenHood");
         intakeMotor = hardwareMap.get(DcMotorEx.class, "intake");
         transferMotor = hardwareMap.get(DcMotorEx.class, "transfer");
+        melonbotics = hardwareMap.get(CRServoImplEx.class, "melonbotics");
         blockerServo = hardwareMap.get(ServoImplEx.class, "blocker");
         battery = hardwareMap.voltageSensor.iterator().next();
         nectarFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
@@ -139,6 +144,8 @@ public class IntakeTransferShooterTest extends OpMode {
         transferMotor.setDirection(direction(transfer.reverse));
         intakeMotor.setPower(intake.power);
         transferMotor.setPower(transfer.power);
+        melonbotics.setDirection(direction(transfer.reverseMelonbotics));
+        melonbotics.setPower(transfer.melonboticsPower);
         double blockerPosition = blocker.open ? blocker.openPosition : blocker.closedPosition;
         blockerServo.setPosition(blockerPosition);
 
@@ -158,6 +165,7 @@ public class IntakeTransferShooterTest extends OpMode {
         telemetry.addData("Intake current (A)", intakeMotor.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("Transfer power", transfer.power);
         telemetry.addData("Transfer current (A)", transferMotor.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData("Melonbotics power", transfer.melonboticsPower);
         telemetry.addData("Blocker", "%s (%.3f)", blocker.open ? "open" : "closed", blockerPosition);
 
         telemetry.addData("Battery (V)", battery.getVoltage());
@@ -172,6 +180,7 @@ public class IntakeTransferShooterTest extends OpMode {
         pollenFlywheel.setPower(0);
         intakeMotor.setPower(0);
         transferMotor.setPower(0);
+        melonbotics.setPower(0);
     }
 
     private static double power(double targetRpm, double openLoopPower, double kV, double kP, double rpm) {
