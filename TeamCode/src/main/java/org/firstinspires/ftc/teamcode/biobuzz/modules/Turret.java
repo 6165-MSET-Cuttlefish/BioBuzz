@@ -37,6 +37,8 @@ public class Turret extends Module {
         LEFT(-90),
         RIGHT(90),
         AUTOAIM(0),
+        /** Follows {@link #setSotmAngles}. */
+        SOTM(0),
         HOLD(0);
 
         TurretState(double angleFromBackDeg) {
@@ -55,8 +57,17 @@ public class Turret extends Module {
         this.follower = follower;
         goal = this::ownCell;
 
-        nectar = new TurretServos(hardwareMap, "NectarTurretL", "NectarTurretR", Tuning.nectar);
-        pollen = new TurretServos(hardwareMap, "PollenTurretL", "PollenTurretR", Tuning.pollen);
+        nectar = new TurretServos(hardwareMap, Tuning.nectar, "NectarTurretL", "NectarTurretR");
+        pollen = new TurretServos(hardwareMap, Tuning.pollen, "PollenTurret");
+    }
+
+    private double sotmPollenDeg;
+    private double sotmNectarDeg;
+
+    /** Angles from back for {@link TurretState#SOTM}, lead included. */
+    public void setSotmAngles(double pollenDeg, double nectarDeg) {
+        sotmPollenDeg = pollenDeg;
+        sotmNectarDeg = nectarDeg;
     }
 
     public void setGoal(Supplier<Pose> goal) {
@@ -83,7 +94,7 @@ public class Turret extends Module {
             Pose target = goal.get();
             nectar.aim(robot, target);
             pollen.aim(robot, target);
-        } else if (state != TurretState.HOLD) {
+        } else if (state != TurretState.HOLD && state != TurretState.SOTM) {
             nectar.point(state.getValue());
             pollen.point(state.getValue());
         }
@@ -91,6 +102,11 @@ public class Turret extends Module {
 
     @Override
     protected void write() {
+        // Here, not in read(): the solver runs in gameLoop, after this loop's read.
+        if (getState(TurretState.class) == TurretState.SOTM) {
+            nectar.point(clamp(sotmNectarDeg, -90, 90));
+            pollen.point(clamp(sotmPollenDeg, -90, 90));
+        }
         nectar.write();
         pollen.write();
     }
@@ -137,16 +153,16 @@ public class Turret extends Module {
     }
 
     private static final class TurretServos {
-        private final EnhancedServo left;
-        private final EnhancedServo right;
+        private final EnhancedServo[] servos;
         private final TurretTuning tuning;
         private double goalAngleDeg;
         private double angleDeg;
         private double position;
 
-        TurretServos(HardwareMap hardwareMap, String leftName, String rightName, TurretTuning tuning) {
-            left = new EnhancedServo(hardwareMap, leftName).withCachingTolerance(0.001);
-            right = new EnhancedServo(hardwareMap, rightName).withCachingTolerance(0.001);
+        /** The second servo, if any, runs {@code offset} above the first. */
+        TurretServos(HardwareMap hardwareMap, TurretTuning tuning, String... names) {
+            servos = new EnhancedServo[names.length];
+            for (int i = 0; i < names.length; i++) servos[i] = new EnhancedServo(hardwareMap, names[i]).withCachingTolerance(0.001);
             this.tuning = tuning;
             position = tuning.backPosition;
         }
@@ -169,13 +185,11 @@ public class Turret extends Module {
         }
 
         void write() {
-            left.setPosition(position);
-            right.setPosition(position + tuning.offset);
+            for (int i = 0; i < servos.length; i++) servos[i].setPosition(position + (i == 0 ? 0 : tuning.offset));
         }
 
         void disable() {
-            left.setPwmDisable();
-            right.setPwmDisable();
+            for (EnhancedServo servo : servos) servo.setPwmDisable();
         }
     }
 }

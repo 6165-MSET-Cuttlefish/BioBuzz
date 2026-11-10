@@ -51,6 +51,8 @@ public class Shooter extends Module {
     public enum PollenState implements State {
         OFF(Drive.OFF),
         ON(Drive.RPM),
+        /** Follows {@link #setSotmTargets}. */
+        SOTM(Drive.RPM),
         OPEN_LOOP(Drive.POWER);
 
         private final Drive drive;
@@ -64,6 +66,8 @@ public class Shooter extends Module {
     public enum NectarState implements State {
         OFF(Drive.OFF),
         ON(Drive.RPM),
+        /** Follows {@link #setSotmTargets}. */
+        SOTM(Drive.RPM),
         OPEN_LOOP(Drive.POWER);
 
         private final Drive drive;
@@ -75,7 +79,8 @@ public class Shooter extends Module {
     }
 
     public enum PollenHoodState implements State {
-        POSITION(0.5);
+        POSITION(0.5),
+        SOTM(0.5);
 
         PollenHoodState(double value) {
             setValue(value);
@@ -83,7 +88,8 @@ public class Shooter extends Module {
     }
 
     public enum NectarHoodState implements State {
-        POSITION(0.5);
+        POSITION(0.5),
+        SOTM(0.5);
 
         NectarHoodState(double value) {
             setValue(value);
@@ -104,6 +110,7 @@ public class Shooter extends Module {
     private final EnhancedServo pollenHood;
     private final EnhancedServo nectarHood;
     private final EnhancedServo hardstop;
+    private double sotmPollenRpm, sotmPollenHood = 0.5, sotmNectarRpm, sotmNectarHood = 0.5;
 
     public Shooter(HardwareMap hardwareMap) {
         pollen = new Flywheel(hardwareMap, "PollenShooter", "Pollen", pollenTuning);
@@ -124,6 +131,18 @@ public class Shooter extends Module {
         bindTunable(NectarHoodState.POSITION, () -> nectarTuning.hoodPosition);
         bindTunable(ShooterHardstopState.BLOCKED, () -> hardstopTuning.blockedPosition);
         bindTunable(ShooterHardstopState.UNBLOCKED, () -> hardstopTuning.unblockedPosition);
+        bindTunable(PollenState.SOTM, () -> sotmPollenRpm);
+        bindTunable(NectarState.SOTM, () -> sotmNectarRpm);
+        bindTunable(PollenHoodState.SOTM, () -> sotmPollenHood);
+        bindTunable(NectarHoodState.SOTM, () -> sotmNectarHood);
+    }
+
+    /** Targets for the SOTM states; they take effect at the next loop's tunable refresh. */
+    public void setSotmTargets(double pollenRpm, double pollenHood, double nectarRpm, double nectarHood) {
+        sotmPollenRpm = pollenRpm;
+        sotmPollenHood = pollenHood;
+        sotmNectarRpm = nectarRpm;
+        sotmNectarHood = nectarHood;
     }
 
     @Override
