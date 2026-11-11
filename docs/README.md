@@ -46,6 +46,12 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 | [`toolchain-findings.md`](toolchain-findings.md) | changing AGP, Gradle or a dependency, or when deploySloth, a hardware config or adb misbehaves |
 | [`dashboard-findings.md`](dashboard-findings.md) | using the dashboard's Hardware Config View or Enable/Disable switch, replacing or bumping the dashboard, or writing a test OpMode's `@Config` knobs |
 
+**Other teams' code**
+
+| page | read it before |
+|---|---|
+| [`decode-code-survey.md`](decode-code-survey.md) | looking for how other teams handle loop time, ball counting, TeleOp automation or code structure: the same 23 repositories |
+
 **Files**
 
 | page | read it before |
