@@ -27,6 +27,7 @@ public class ShotSolverTest {
         ShotTuning.alpha = 0.2;
         ShotTuning.phaseDelayS = 0;
         ShotTuning.velocityFilterS = 0;
+        ShotTuning.minSotmSpeedInPerS = 0;
         ShotTuning.maxShotSpeedInPerS = 1000;
         ShotTuning.maxIterations = 50;
         ShotTuning.convergenceIn = 1e-6;
@@ -304,13 +305,54 @@ public class ShotSolverTest {
     @Test
     public void closingRobotLeadsTheFlywheelDownTheTable() {
         ShotTuning.ShooterTuning t = new ShotTuning.ShooterTuning();
-        t.flywheelLeadS = 0.2;
+        t.flywheelSpinUpLeadS = 0.5;
+        t.flywheelSpinDownLeadS = 0.2;
         ShotSolver s = new ShotSolver(shooter(Element.POLLEN, 0, 0));
         s.setTuning(0, t);
         Result r = s.solve(new Motion(58, 10, FACING_AUDIENCE, 0, 30, 0), new Cell[] {Cell.STARTS_UP}, false, W, 0)[0];
-        assertEquals(-30, r.distanceRateInPerS, 1e-6);
-        assertEquals(ShotSolver.lookupRpm(ShotTuning.pollen.table, r.distanceIn - 6), r.rpm, 1e-6);
+        double tofSlope = (0.85 - 0.55) / 120;
+        double rate = -30 / (1 + 30 * tofSlope);
+        assertEquals(rate, r.distanceRateInPerS, 1e-6);
+        assertEquals(ShotSolver.lookupRpm(ShotTuning.pollen.table, r.distanceIn + rate * 0.2), r.rpm, 1e-6);
         assertEquals(ShotSolver.lookupHood(ShotTuning.pollen.table, r.distanceIn), r.hoodPosition, 1e-9);
+    }
+
+    @Test
+    public void recedingRobotUsesTheSpinUpLead() {
+        ShotTuning.ShooterTuning t = new ShotTuning.ShooterTuning();
+        t.flywheelSpinUpLeadS = 0.5;
+        t.flywheelSpinDownLeadS = 0.2;
+        ShotSolver s = new ShotSolver(shooter(Element.POLLEN, 0, 0));
+        s.setTuning(0, t);
+        Result r = s.solve(new Motion(58, 10, FACING_AUDIENCE, 0, -30, 0), new Cell[] {Cell.STARTS_UP}, false, W, 0)[0];
+        assertTrue(r.distanceRateInPerS > 0);
+        assertEquals(ShotSolver.lookupRpm(ShotTuning.pollen.table, r.distanceIn + r.distanceRateInPerS * 0.5), r.rpm, 1e-6);
+    }
+
+    @Test
+    public void analyticRateMatchesAFiniteDifferenceOfTheBearing() {
+        ShotSolver s = new ShotSolver(shooter(Element.POLLEN, 0, 0));
+        Cell[] one = {Cell.STARTS_UP};
+        double vx = 25;
+        double vy = 35;
+        double dt = 1e-5;
+        Result a = s.solve(new Motion(40, 10, FACING_AUDIENCE, vx, vy, 0), one, false, W, 0)[0];
+        Result b = new ShotSolver(shooter(Element.POLLEN, 0, 0))
+                .solve(new Motion(40 + vx * dt, 10 + vy * dt, FACING_AUDIENCE, vx, vy, 0), one, false, W, dt)[0];
+        assertEquals((b.turretDeg - a.turretDeg) / dt, a.analyticRateDegPerS, 1e-3 * Math.abs(a.analyticRateDegPerS));
+        assertEquals((b.distanceIn - a.distanceIn) / dt, a.distanceRateInPerS, 1e-3 * Math.abs(a.distanceRateInPerS));
+    }
+
+    @Test
+    public void slowDriftFadesOutTheLead() {
+        ShotTuning.minSotmSpeedInPerS = 2;
+        Cell[] one = {Cell.STARTS_UP};
+        Result still = new ShotSolver(shooter(Element.POLLEN, 0, 0)).solve(new Motion(58, 10, FACING_AUDIENCE, 1.5, 0, 0), one, false, W, 0)[0];
+        assertEquals(0, still.shooterVxInPerS, 1e-9);
+        Result half = new ShotSolver(shooter(Element.POLLEN, 0, 0)).solve(new Motion(58, 10, FACING_AUDIENCE, 3, 0, 0), one, false, W, 0)[0];
+        assertEquals(1.5, half.shooterVxInPerS, 1e-9);
+        Result full = new ShotSolver(shooter(Element.POLLEN, 0, 0)).solve(new Motion(58, 10, FACING_AUDIENCE, 5, 0, 0), one, false, W, 0)[0];
+        assertEquals(5, full.shooterVxInPerS, 1e-9);
     }
 
     @Test

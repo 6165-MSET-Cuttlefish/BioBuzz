@@ -123,9 +123,10 @@ Now drive. Change one thing at a time, and test each with the motion that isolat
 | 3 | `servoLagS` (per shooter) | Spin in place, and strafe close in | Turret trails the target while turning → raise; overshoots or twitches → lower |
 | 4 | `maxTurretRateDegPerS` | Spin faster and faster | Set just under the rate where the turret visibly falls behind |
 | 5 | `alpha` | Start and stop sharply while shooting | Misses only while speeding up or braking → raise toward 0.5; twitchy with stick movement → lower |
-| 6 | `flywheelLeadS`, `hoodLeadS` | Drive straight toward, then away from, the CELL | Short while backing away / long while closing → raise |
+| 6 | `flywheelSpinUpLeadS`, `flywheelSpinDownLeadS`, `hoodLeadS` | Drive straight away from the CELL (spin-up), then toward it (spin-down) | Short while backing away → raise spin-up; long while closing → raise spin-down. Expect these to end up well above the aim lead, often more than the time of flight; spin-down usually more than spin-up |
 | 7 | `velocityFilterS` | Watch the turret at a steady drive | Jitters → raise in 0.01 steps (it adds lag, so use as little as possible) |
-| 8 | `transferTimeS` | — | Leave 0. Only raise it if shots still land ahead of travel after 1 to 3 |
+| 8 | `minSotmSpeedInPerS` | Stand still, then creep | Turret twitches while parked → raise; creeping shots land ahead of travel → lower |
+| 9 | `transferTimeS` | — | Leave 0. Only raise it if shots still land ahead of travel after 1 to 3 |
 
 How to tell time-of-flight errors from delay errors: a wrong `tofS` or `kDragPerS` gives a miss that grows with **distance**; a wrong `phaseDelayS` or `servoLagS` gives a miss that grows with **speed** but is the same at every distance.
 

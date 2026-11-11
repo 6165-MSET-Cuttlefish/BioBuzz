@@ -60,8 +60,10 @@ public final class ShotTuning {
         public double servoLagS = 0.05;
         /** Fastest the turret can turn; a shot needing more is invalid. TODO: tune. */
         public double maxTurretRateDegPerS = 300;
-        /** Flywheel target leads the table by its rate of change times this. TODO: tune. */
-        public double flywheelLeadS = 0;
+        /** Flywheel target leads the table by its rate of change times this while the target rpm rises. TODO: tune. */
+        public double flywheelSpinUpLeadS = 0;
+        /** The same while the target rpm falls; a flywheel that only coasts down needs more. TODO: tune. */
+        public double flywheelSpinDownLeadS = 0;
         /** Hood target leads the table by its rate of change times this. TODO: tune. */
         public double hoodLeadS = 0;
         public double rpmTrim = 0;
@@ -72,12 +74,14 @@ public final class ShotTuning {
     }
 
     /** Off: stationary auto-aim (robot velocity taken as zero). */
-    public static boolean sotmEnabled = true;
+    public static boolean sotmEnabled = false;
     /** Weight toward the commanded velocity; 0 when there is no command (e.g. auto paths). */
     public static double alpha = 0.2;
     public static double phaseDelayS = 0.03;
     /** Low-pass time constant on the measured velocity; 0 is unfiltered. TODO: tune. */
     public static double velocityFilterS = 0;
+    /** Below this speed the robot counts as still, fading to full SOTM at twice it; 0 is off. TODO: tune. */
+    public static double minSotmSpeedInPerS = 2;
     /** Robot speed above which no shot is valid. TODO: tune. */
     public static double maxShotSpeedInPerS = 60;
     /** How long a shot may drop out of ready before feeding stops. */

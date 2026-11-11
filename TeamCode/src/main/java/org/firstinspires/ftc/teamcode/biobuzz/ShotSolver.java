@@ -27,7 +27,7 @@ public final class ShotSolver {
 
         public Motion() {}
 
-        public Motion(double xIn, double yIn, double headingRad, double vxInPerS, double vyInPerS, double omegaRadPerS) {
+            public Motion(double xIn, double yIn, double headingRad, double vxInPerS, double vyInPerS, double omegaRadPerS) {
             this.xIn = xIn;
             this.yIn = yIn;
             this.headingRad = headingRad;
@@ -178,6 +178,12 @@ public final class ShotSolver {
             vx += ShotTuning.alpha * (m.commandVxInPerS - vx);
             vy += ShotTuning.alpha * (m.commandVyInPerS - vy);
         }
+        double fadeIn = ShotTuning.minSotmSpeedInPerS;
+        if (fadeIn > 0) {
+            double fade = Math.min(1, Math.max(0, (Math.hypot(vx, vy) - fadeIn) / fadeIn));
+            vx *= fade;
+            vy *= fade;
+        }
         if (!ShotTuning.sotmEnabled) {
             vx = 0;
             vy = 0;
@@ -265,8 +271,16 @@ public final class ShotSolver {
 
         double rx = vtx - px;
         double ry = vty - py;
-        r.distanceRateInPerS = -(ux * rx + uy * ry) / distance;
-        r.rpm = lead(e.table, distance, Column.RPM, r.distanceRateInPerS, t == null ? 0 : t.flywheelLeadS);
+        // The virtual target drifts by -u * dT/dt as the flight time changes: u * (1 + dT/dt) solves to u / closing.
+        double fixedTargetRate = -(ux * rx + uy * ry) / distance;
+        double tofSlope = (dragTime(lookup(e.table, distance + 0.5, Column.TOF), e.kDragPerS)
+                - dragTime(lookup(e.table, distance - 0.5, Column.TOF), e.kDragPerS));
+        double closing = 1 - tofSlope * fixedTargetRate;
+        double scale = 1;
+        if (closing > 0) scale = 1 / closing;
+        else r.invalidate(Invalid.NOT_CONVERGED);
+        r.distanceRateInPerS = fixedTargetRate * scale;
+        r.rpm = flywheelTarget(e.table, distance, r.distanceRateInPerS, t);
         r.hoodDistanceIn = distance + r.distanceRateInPerS * (t == null ? 0 : t.hoodLeadS);
         double bearing = Math.atan2(ry, rx);
         double ratio = g.exitLeftIn / distance;
@@ -282,7 +296,7 @@ public final class ShotSolver {
             r.turretDeg = clampToRange(raw, g);
         }
 
-        double fieldRate = fieldBearingRateRadPerS(ux, uy, rx, ry);
+        double fieldRate = fieldBearingRateRadPerS(ux * scale, uy * scale, rx, ry);
         r.analyticRateDegPerS = g.sign * Math.toDegrees(fieldRate - predictedOmegaRadPerS);
 
         checkEntry(g, e, opening, r, px, py, ux, uy, aim);
@@ -414,6 +428,14 @@ public final class ShotSolver {
         double toMin = Math.abs(wrapDeg(angleDeg - g.minAngleDeg));
         double toMax = Math.abs(wrapDeg(angleDeg - g.maxAngleDeg));
         return toMin < toMax ? g.minAngleDeg : g.maxAngleDeg;
+    }
+
+    /** The rpm led by the spin-up or spin-down lead, whichever way the target is moving along the table. */
+    private static double flywheelTarget(ShotTuning.ShotPoint[] table, double distanceIn, double rateInPerS, ShotTuning.ShooterTuning t) {
+        if (t == null) return lookup(table, distanceIn, Column.RPM);
+        double slope = lookup(table, distanceIn + 0.5, Column.RPM) - lookup(table, distanceIn - 0.5, Column.RPM);
+        double leadS = slope * rateInPerS > 0 ? t.flywheelSpinUpLeadS : t.flywheelSpinDownLeadS;
+        return lead(table, distanceIn, Column.RPM, rateInPerS, leadS);
     }
 
     /** The table's value where the distance will be {@code leadS} from now, so a lagging flywheel or hood arrives on time. */
