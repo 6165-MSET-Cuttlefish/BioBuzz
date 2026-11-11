@@ -8,6 +8,7 @@
 - `decode/` runs only on the Cuttle bot (`cuttle_decode.xml`) and shares `biobuzz/modules/Drivetrain`. Run nothing built on `BettaConstants` there: Cuttle's config has every device a BioBuzz OpMode uses, so one starts with Betta's constants and no error.
 - In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
+- At events the dashboard stays off: R704(D) bans dashboard-style streaming and the FTC Q&A extends that to the pit and practice field. Run `Enable/Disable Dashboard` before load-in (`docs/game-findings.md`).
 
 ## Keep this file fresh
 

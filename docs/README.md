@@ -5,6 +5,14 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 
 ## Pages
 
+**The robot and the game**
+
+| page | read it before |
+|---|---|
+| [`robots-findings.md`](robots-findings.md) | writing code for the BIOBUZZ robot's shooters, turrets or cameras, running anything on the Cuttle bot, or setting a robot's size in code or a `.pp` file |
+| [`game-findings.md`](game-findings.md) | packing for an event, adding anything that talks over Wi-Fi or USB, changing HIVE numbers in `BioBuzzField`, or planning routes under the HIVE |
+| [`camera-findings.md`](camera-findings.md) | changing the AprilTag webcam, its mount, cable, USB port, resolution or exposure, or trusting a cell-tip verdict |
+
 **Shooting**
 
 | page | read it before |
