@@ -26,6 +26,9 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 | page | read it before |
 |---|---|
 | [`framework-findings.md`](framework-findings.md) | changing `OptimizationToggles` for a match, feeding a Module per-loop setpoints, relying on Module order or `BatteryVoltage`, or deleting framework code that looks unused |
+| [`pedro-findings.md`](pedro-findings.md) | building paths or headings by hand, changing the follower setup, or running or bumping AutoTune |
+| [`ball-planner-findings.md`](ball-planner-findings.md) | changing the ball route planner, ball selection or the number of balls planned |
+| [`limelight-findings.md`](limelight-findings.md) | changing `LimelightSync` or `LimelightBallSource`, moving the Limelight, or reaching it from a laptop |
 | [`hsv-tuning-prompt.md`](hsv-tuning-prompt.md) | retuning ball-detection HSV ranges for a venue, ball batch or ball type |
 
 **Tools**

@@ -43,6 +43,7 @@ Pedro Pathing 3:
 - `follow`/`followThrough` brake at the end; legs keep speed through a join only as segments of one `Paths.path(...)` or via a `followUntilRemaining` handover before braking.
 - A heading jump over 11.25° at a join gives turning priority over driving; `architecture/auto/PathHeadings` gives headings that avoid it.
 - A lambda passed to `path.heading(...)` gets path completion (per piece inside `piecewise`), not the curve's `t`: wrap it in `Interpolator.geometric(...)` for `t`. `reverse()` drops `geometric`, so `reverseTangent()` and `facingPoint(...).reverse()` are wrong on curves: use `PathHeadings` (`backwardTangent` to drive one backwards).
+- Pedro ignores a NaN or infinite drive power and leaves each motor at its last power, so the robot drives on: check `Double.isFinite` before a value reaches a path or the follower (`docs/pedro-findings.md`).
 
 ## Framework layout
 
