@@ -13,6 +13,12 @@
 
 Claude updates this file unasked, in the same commit as any change it describes. Only current rules, locations and footguns the code doesn't show; no history, no value lists.
 
+## Findings
+
+- Whatever a session learns that the code doesn't show (a measurement, research, a part's specs, an SDK or hub behaviour, a dead end) goes into `docs/` and is committed to main before the session ends, unasked: `docs/README.md` lists every page and says where a finding goes and how to write it.
+- Read a topic's page before working on it.
+- This file gets only the one-line rule or footgun, pointing at the page.
+
 ## Build & deploy
 
 - **TeamCode** (Run button, full install): on a fresh hub, after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`), and after any change to a `@Pinned` class (`architecture/hardware/photon/`): deploySloth never reloads those, and says nothing.
