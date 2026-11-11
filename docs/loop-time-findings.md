@@ -1,7 +1,26 @@
 # Loop-time findings
 
-What costs loop time on the Betta bot, and what to change. Hub command costs come from `docs/hub-bench-findings.md`;
-re-measure with Ivy Path Test's log (`scripts/looptimes/analyze_ivy.py`) after any hardware or layout change.
+What costs loop time on the Betta bot and in the SDK, and what to change; read it before shortening the loop or adding
+per-loop hub commands. Hub command costs come from [`hub-bench-findings.md`](hub-bench-findings.md); re-measure with
+Ivy Path Test's log (`scripts/looptimes/analyze_ivy.py`) after any hardware or layout change.
+
+## What to do
+
+- **Wire the planned hardware as in [Layout](#layout)**: no inputs on the Expansion Hub, so each loop pays one bulk
+  read.
+- **OctoQuad for odometry**: 3.2 ms against the Pinpoint's 5.8 ms every loop, with far less heading drift. Needs the
+  guarded localizer [`hub-bench-findings.md`](hub-bench-findings.md) describes (a missing OctoQuad hangs INIT).
+- **Write tolerances** (other teams' are [below](#other-teams-decode-code-2026-10-25)): `Shooter`'s flywheels already
+  use `withCachingTolerance(0.005)`; try 0.002–0.005 on its hoods (0.001 now) and keep 0.001 on the turret. `Intran`'s
+  intake and transfer switch between fixed powers, so they already write only on a change; give them 0.02 if they
+  ever get a computed power.
+- **Fewer per-loop allocations**, to cut collector pauses.
+- **A rangefinder poller thread** costs about 3 ms while driving: use one only to read faster than the loop.
+- **Count about 1.4 ms of SDK time in every `EnhancedOpMode` loop** ([below](#what-the-sdk-costs-every-loop)).
+- **Don't lower `WriteCache`'s re-send period**: the SDK lets only every second re-send through, so a lost write is
+  repaired in about 0.5 s either way ([below](#how-often-a-write-re-send-reaches-the-hub)).
+- **Photon**, which sends writes without waiting for each ACK, cut the time spent writing 2.3x on the bench, but stays
+  off the robot until its bench block says it is safe ([below](#photon)).
 
 ## Ivy Path Test log (2026-10-25, Betta bot, Pinpoint odometry)
 
@@ -22,15 +41,37 @@ after boot) averaged 23 ms with one 130 ms loop: the code was still warming up, 
 | `updateTelemetry` | 2.7 | 16.6 |
 | `writeModules` | 0.6 | 17.4 |
 | everything else | ≈0.9 | |
-| unprofiled (SDK between loops) | 1.4 | |
+| unprofiled: the SDK between loops ([below](#what-the-sdk-costs-every-loop)) | 1.4 | |
 
 - **Pedro is the loop.** `follower.update` costs 7.7 ms with the robot paused, mostly the Pinpoint read (5.8 ms on the
   bench), and 13.4 ms while driving, adding path math and four drive writes, two of them on the Expansion Hub.
 - **`write.BettaShooter` spikes to 5–17 ms every ~0.4 s** and is 0.03 ms otherwise: the SDK re-reading each motor's
-  mode and re-sending its enable, not our code.
+  mode and re-sending its power and enable, not our code ([below](#how-often-a-write-re-send-reaches-the-hub)).
 - **`updateTelemetry` passes 4 ms about 6 times a second**: the DS frame and its field map.
 - **Garbage collection:** 17 collections took 1.1 s of 19.6 s. Some 20–46 ms `follower.update` spikes match nothing
   else and are probably collector pauses; the log can't prove it.
+
+## What the SDK costs every loop
+
+Every `EnhancedOpMode` loop spends about 1.4 ms in the SDK between `loop()` calls, the Ivy log's unprofiled 1.4 ms:
+count it in every loop budget. A `LinearOpMode` loop doesn't pay it, so driving the framework loop from one should save
+about 1.2 ms; not tried.
+
+- After each `init_loop()` or `loop()` call, SDK 12.0.0's `OpMode.internalRunOpMode` calls `telemetry.update()` and
+  then `Thread.sleep(1)`, and it copies both gamepads before each call (read from source, RobotCore 12.0.0
+  `OpMode.java`). `EnhancedOpMode` extends `OpMode` (`architecture/core/EnhancedOpMode.java:35`), so every framework
+  loop pays it.
+- Measured on the bench Control Hub (setup in [`hub-bench-findings.md`](hub-bench-findings.md)) on 2026-10-09, and
+  again in a 2026-10-24 rerun of the same bench:
+
+  | loop | p50 | p95 |
+  |---|---|---|
+  | iterative `OpMode` whose `loop()` does nothing | 1.42 ms | 1.68–1.69 ms |
+  | `LinearOpMode` running Pedro's follower (software localizer), Pedro's Ivy command scheduler and `telemetry.update()` (Bench: Raw Loop, idle) | 0.20–0.22 ms | 0.35–0.38 ms |
+
+- The `LinearOpMode` loop does real work and is still ≈1.2 ms faster: about 8% of the Ivy log's 15.3 ms mean loop.
+  `LoopProfiler` reports the SDK's share as `unprofiled`: loop time minus the top-level sections
+  (`architecture/telemetry/LoopProfiler.java:51`).
 
 ## Estimated per-loop costs of the planned hardware
 
@@ -49,6 +90,8 @@ value changes, a skipped (cached) write about 0.
   (≈3.1 ms). Hardstop, intake servo, intake and transfer motors change rarely (≈0).
 - **Worst case while driving and auto-aiming**: ≈36 ms (28 Hz) with the layout below, ≈44 ms with inputs split across
   hubs and the turret on the Expansion Hub; about 22 ms with turret and hood still and fixed-power shooters.
+- These estimates and the layout below assume 4 turret servos; `biobuzz/modules/Turret.java` now drives 3, one write
+  fewer while auto-aiming.
 
 ### Layout
 
@@ -61,21 +104,67 @@ value changes, a skipped (cached) write about 0.
 | I2C | odometry | none |
 
 - Flywheels go on ports 0 and 3 of one hub with their encoders on the same ports: ports 1 and 2 count in software and
-  drop counts at flywheel speed (CLAUDE.md, Flywheel RPM). One hub keeps a single bulk read.
+  drop counts at flywheel speed ([`CLAUDE.md`](../CLAUDE.md), Flywheel RPM). One hub keeps a single bulk read.
 - Leave the Expansion Hub with no inputs, so its bulk read never runs, and give it outputs that rarely change.
 - Two drive motors stay on the Expansion Hub, as today (+≈1.8 ms while driving).
 - Through Bores on the OctoQuad instead: its full read is 6.6 ms against 3.2 ms for odometry alone (+3.4 ms every
   loop), while on the Control Hub they ride the bulk read the rangefinders already need. Use the OctoQuad only for its
   on-board velocity or if the hub's encoder ports run out.
 
-## What saves more than the layout
+## How often a write re-send reaches the hub
 
-1. **Write tolerances**: we use `withCachingTolerance(0.001)` on 16 devices; other teams skip far more (below). Try
-   0.005 on the shooter PID output, 0.02 on intake and transfer, 0.002–0.005 on the hood; keep 0.001 on the turret.
-2. **OctoQuad for odometry**: 3.2 ms against the Pinpoint's 5.8 ms every loop, with far less heading drift. Needs the
-   guarded localizer `docs/hub-bench-findings.md` describes (a missing OctoQuad hangs INIT).
-3. **Fewer per-loop allocations**, to cut collector pauses.
-4. **A rangefinder poller thread** costs about 3 ms while driving: use one only to read faster than the loop.
+`WriteCache` re-sends an unchanged value every 250 ms (`RESEND_NANOS`, `architecture/hardware/WriteCache.java:4`), but
+for motor powers and servo positions only every second re-send reaches the hub, about every 0.5 s. So a dropped or
+NACKed write is repaired about 0.5 s later, and lowering `RESEND_NANOS` doesn't make that faster. Keep the re-send
+([`CLAUDE.md`](../CLAUDE.md), Module pattern).
+
+- The SDK caches each commanded motor power and servo position in a `LastKnown` that stays fresh for 500 ms, and skips
+  a write equal to a fresh value. It stores the new value before sending and keeps it when the send fails or is
+  NACKed, so it skips our re-sends of a lost value until 500 ms have passed (read from source, SDK 12.0.0: `LastKnown`,
+  `LynxDcMotorController.internalSetMotorPower`, `LynxServoController.setServoPosition`).
+- The SDK caches each motor's run mode and each motor's and servo's enable the same way. `DcMotorImpl.setPower` asks for the mode on
+  every call, and the SDK re-reads it from the hub once its copy is over 500 ms old; each write that gets through
+  re-sends the enable once that copy is over 500 ms old. So a motor held at one power costs about three hub commands
+  every 0.5 s (mode read, power, enable) and a servo two (position, enable), and the calls in between ≈0.03 ms each.
+  A write costs ≈1.6 ms on the Control Hub and ≈2.5 ms on the Expansion Hub (bench p50s,
+  [`hub-bench-findings.md`](hub-bench-findings.md)). The same expiry, on a motor written every loop, is the ~500 ms
+  loop spike in [`CLAUDE.md`](../CLAUDE.md) (Dependencies). Read from source, SDK 12.0.0: `DcMotorImpl.setPower`,
+  `LynxDcMotorController.internalSetMotorEnable`, `LynxServoController.internalSetPulseWidth`.
+- `setVelocity` is the exception: the SDK doesn't cache it (`LynxDcMotorController.setMotorVelocity` sends on every
+  call), so `EnhancedMotor.setVelocity`'s 250 ms re-send (`architecture/hardware/EnhancedMotor.java:63`) reaches the
+  hub every time.
+
+## Fixed-period loops
+
+Intake Transfer Shooter Test runs `loop()` on a fixed period, `loopMs` (15 ms by default), and shows `Loop (ms)` and
+`Late loops (over loopMs + 1 ms)`. None of it is measured on the robot yet. Expect late loops about every 0.5 s
+whatever the budget: the test sets every device every loop through the plain SDK classes, so as the SDK's 500 ms
+caches expire it re-reads four motor modes and re-sends the unchanged powers, the servo positions and every enable,
+about 18 hub commands every 0.5 s, in one loop or a few ([above](#how-often-a-write-re-send-reaches-the-hub); read
+from source). By the per-command costs below, 15 ms is also tight between those loops with both flywheels in closed
+loop: if `Late loops` climbs faster than a few every 0.5 s, read the motor currents less often first.
+
+How it works (`opmodes/test/IntakeTransferShooterTest.java:120–128`):
+
+- At the top of `loop()`, park until the deadline: `while ((waitNs = nextLoopNs - System.nanoTime()) > 0)
+  LockSupport.parkNanos(waitNs)`. The `while` covers early or spurious wake-ups.
+- If the loop starts more than 1 ms (`LATE_TOLERANCE_NS`) after its deadline, count it as late and restart the schedule
+  from now, instead of running short loops to catch up.
+- Then move the deadline on by one period.
+- Waiting at the top puts the SDK's time between `loop()` calls (1.42 ms p50 for an empty loop, above) inside the
+  period instead of on top of it.
+
+Estimated cost per loop, from the bench p50s (unverified on the robot; `intake_transfer_shooter.xml` puts every device
+on the Control Hub):
+
+| | ms |
+|---|---|
+| one bulk read, covering both flywheel encoders | 2.2–2.5 |
+| four motor current reads | ≈5.4 |
+| battery voltage | ≈1.3 |
+| two flywheel power writes, changing every loop in closed loop | ≈3.3 |
+| unchanged powers and positions (the SDK skips them) | ≈0.03 each |
+| total, before telemetry and the SDK's time between loops | ≈12 |
 
 ## Other teams' Decode code (2026-10-25)
 
@@ -94,7 +183,8 @@ value changes, a skipped (cached) write about 0.
 
 Photon (`architecture/hardware/photon/`, the team's fork of SolversLib Photon) sends motor and servo writes without
 waiting for each one's ACK. Only a `@Photon` OpMode's INIT swaps the hubs; OpModes after it keep the swapped hubs,
-disabled, until the hardware map is rebuilt (config change or Restart Robot). See CLAUDE.md, Framework layout.
+disabled, until the hardware map is rebuilt (config change or Restart Robot). See [`CLAUDE.md`](../CLAUDE.md),
+Framework layout.
 
 Measured on 2026-10-28 with stock SolversLib Photon 0.3.6 (before the fork), Control Hub plus an Expansion Hub on USB,
 nothing on the ports; 4 motors and 2 servos changing on each hub every loop, p50 (p95):
@@ -110,7 +200,7 @@ in the Expansion Hub's USB device, so the Control Hub's own replies went to the 
 would have left that hub marked unresponsive for good. Its read-back failures there were the bench's own sign error
 (goBILDA 5202 motors are CCW, so the hub's register holds minus the power), and its STOP check could not fail.
 
-The fork (commit c825493) on the same hubs, 2026-10-29, same workload, p50 (p95):
+The fork as first committed, on the same hubs, 2026-10-29, same workload, p50 (p95):
 
 | | write block, both hubs | Expansion Hub | Control Hub | loop period |
 |---|---|---|---|---|
@@ -132,3 +222,16 @@ loop with negative controls, STOP inside a write, crashes and consecutive OpMode
 wiring, cable pulls, I2C reads on both hubs, and a soak that bounds the per-write loss rate. Use Photon on the robot only
 once its summary says SAFE TO TRY ON THE ROBOT for the robot's wiring: only the go run for that wiring (the soak and
 `--photon-i2c`, plus the cable pulls on USB; see the README's table) can say it, and a shorter run says PASSED at best.
+
+## Still unknown
+
+- **Intake Transfer Shooter Test's real period**: set both flywheels to a target RPM (closed loop) on the dashboard,
+  close its tab ([`CLAUDE.md`](../CLAUDE.md), Dependencies), and watch `Loop (ms)` and `Late loops` on the DS; check
+  whether the late loops come about every 0.5 s.
+- **How accurately `LockSupport.parkNanos` wakes on the Control Hub**: in that OpMode with the loop body emptied, log
+  how far past its deadline each loop starts.
+- **What a `LinearOpMode`-driven framework loop saves** (≈1.2 ms estimated): compare Bench: Framework Loop's period with
+  the same loop driven from a `LinearOpMode`.
+- **The ≈0.5 s repair time** (read from source): on the bench, while an `EnhancedMotor` holds a power, overwrite that
+  port's power with a raw Lynx command that bypasses the SDK, and poll the hub's power register until it comes back;
+  expect within about 0.5 s, not 0.25 s.

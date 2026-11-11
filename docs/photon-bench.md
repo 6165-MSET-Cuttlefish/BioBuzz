@@ -1,29 +1,53 @@
 # Photon bench status
 
 Photon (`architecture/hardware/photon/`) is the team's fork of SolversLib Photon. It sends motor and servo writes
-without waiting for each one's ACK, which on the bench cut a loop with 12 changing writes from 30.7 ms to 16.0 ms. No
-robot OpMode uses it yet, and none may until the hub bench's Photon block says **SAFE TO TRY ON THE ROBOT** for the
-robot's wiring. This page is where that stands and how to run the rest. How the block works and what each check
-proves: [`scripts/bench/README.md`, The Photon block](../scripts/bench/README.md#the-photon-block).
+without waiting for each one's ACK (the hub's acknowledgement), which on the bench cut a loop with 12 changing writes
+from 30.7 ms to 16.0 ms. No robot OpMode uses it yet, and none may until the hub bench's Photon block says **SAFE TO
+TRY ON THE ROBOT** for the robot's wiring. This page is where that stands, how to run the rest, and what the one hub
+run of the fork measured. How the block works and what each check proves:
+[`scripts/bench/README.md`, The Photon block](../scripts/bench/README.md#the-photon-block).
 
 ## Why a fork
 
-Stock SolversLib Photon 0.3.6 is unsafe on our hubs. Never put that jar, or the SolversLib Photon dependency, back on
-the robot:
+Stock SolversLib Photon 0.3.6 is unsafe on our hubs. Never put that jar, or the SolversLib Photon dependency
+(`org.solverslib:photon`), back on the robot:
 
 - A lost ACK leaks an in-flight slot until the app restarts; once enough have leaked, the next write spins forever.
 - It never retransmits, so a lost `setPower(0)` leaves a wheel running.
 - It takes over every OpMode's hubs, and with a USB Expansion Hub it registers the Control Hub's replacement with the
   wrong USB device, so the Control Hub's replies go to an orphaned hub object, even with Photon disabled.
 - After a USB detach it keeps writing to the stale device and the OpMode hangs.
-- Its writes skip STOP's gate for the rest of that loop and through `stop()`, up to about 1 s.
+- Its writes skip STOP's gate (once STOP is pressed the SDK refuses commands that could move hardware,
+  `OpModeManagerImpl.shouldPreventDangerousHardwareAccess()`) for the rest of that loop and through `stop()`, up to
+  about 1 s.
+- It acknowledges each motor and servo write itself right after the USB write (`PhotonCore`,
+  `shouldAckImmediately`), so the caller never sees the hub's real reply: a write the hub refuses with a NACK still
+  looks done.
+- While enabled, it skips the SDK's network transmission lock (one per USB link, held by `LynxRespondable.send()`
+  from sending a command until the hub answers) for every motor and servo write, even one it can't parallelize: an
+  RS485 Expansion Hub's writes take the SDK's path without that lock
+  (`PhotonLynxModule.acquireNetworkTransmissionLock`).
+- When it swaps the hubs at INIT it re-points every I2C device at the replacement hubs by reflection inside
+  `catch (Exception ignored)` (`PhotonCore`): a device it fails to re-point stays on the replaced hub object,
+  silently.
+
+The last three are read from the 0.3.6 source (`org.solverslib:photon:0.3.6`, package
+`com.seattlesolvers.solverslib.photon`).
+
+**Spotting the misrouting in logcat.** At INIT, tag `LynxUsb` logs `removeConfiguredModule(): mod#=173 wasn't there`
+(173 is the Control Hub's module address; seen on 2026-10-28 with stock Photon and a USB Expansion Hub). After that, a
+Control Hub command that times out logs `Marking module #173 as unresponsive until we receive some data back` (tag
+`LynxModule`) with no `REV Hub #173 has reconnected` after it, and every later Control Hub command is given up at
+once: the SDK clears the mark only when a datagram reaches the hub object it marked
+(`LynxModule.noteDatagramReceived`), and the Control Hub's datagrams now reach the orphan. That part is read from the
+SDK 12 source (`LynxRespondable.awaitAndRetransmit`); no Control Hub command timed out after the swap on 2026-10-28.
 
 ## Where it stands
 
 | date | Photon at | wiring | run | verdict | notes |
 |---|---|---|---|---|---|
 | 2026-10-28 | stock SolversLib Photon 0.3.6 | USB | speed only, earlier bench | none | write block 25.9 to 6.0 ms p50 at 8 parallel, loop 31.8 to 11.5 ms; showed the misrouted replies |
-| 2026-10-29 | `c825493` | USB | short, no I2C | NOT SAFE YET | 3 problems, all fixed since (below); write block 24.96 to 10.84 ms p50, loop 30.7 to 16.0 ms |
+| 2026-10-29 | `c825493` | USB | short, no I2C | NOT SAFE YET | 3 problems, all fixed since (below); write block 24.96 to 10.84 ms p50, loop 30.7 to 16.0 ms; other timings [below](#how-the-fork-behaved-on-a-hub-2026-10-29) |
 
 The 2026-10-29 problems, and what changed:
 
@@ -129,8 +153,24 @@ the cable pulls are USB only).
 needs 6,818,182 writes per hub: about 474 a second for 4 hours. The short run for the same wiring soaks for 60 s with
 the same I2C readers: in its `summary.md`, **Write soak** gives `writes per hub`. Under about 28,400 there, that rate
 can't reach the bound in 4 hours, so the go run would end NOT SAFE however well Photon behaves: record it and don't
-start the go run. The only soak on a hub so far (USB, no I2C) did 30,510. On RS485 the Expansion Hub's writes go the
-SDK's way at about 2.5 ms each, so expect that wiring to fall short.
+start the go run. The only soak on a hub so far (2026-10-29, USB, no I2C) did 30,510 in 60.01 s, about 508 a second
+per hub, 7% above what the bound needs: the bound in about 3.7 h, 16 minutes inside the cap. The `--photon-i2c`
+readers keep running through the soak, and on RS485 the Expansion Hub's writes go the SDK's way at about 2.5 ms each,
+so expect both go runs to fall short.
+
+Whether to raise `PHOTON_SOAK_MAX_S` or re-derive the loss target from a measured loop rate is not decided. Settle it
+before the first go run, not after one fails. Where the numbers come from (`scripts/bench/run_bench.py`):
+
+- **Loss target:** `PHOTON_SOAK_LOSS_TARGET` = 4.4e-7 lost writes per write (line 1388), at most 0.1 lost writes per
+  match. It assumes about 6 changing writes a loop on the Control Hub at 150 Hz for 150 s, 1.35e5 parallel writes a
+  match, or 2.25e5 with a USB Expansion Hub (0.1 / 2.25e5 = 4.4e-7). That is a design estimate, not a measurement: the
+  fork's bench loop with 12 changing writes ran at 16 ms, about 62 Hz
+  ([`loop-time-findings.md`](loop-time-findings.md#photon)). A write lost anyway through `EnhancedMotor` or
+  `EnhancedServo` goes out again once 250 ms have passed since its last send (`WriteCache.RESEND_NANOS`).
+- **Writes needed:** with zero losses in n writes the 95% upper bound on the loss rate is 3/n (the rule of three,
+  `photon_soak_checks`), so the bound needs ceil(3 / 4.4e-7) = 6,818,182 writes per hub.
+- **Caps:** `PHOTON_SOAK_MAX_S` = 4 h and `PHOTON_SOAK_WRITES_PER_HUB` = 1e7 (lines 105-106), whichever comes first.
+  At 508 writes a second, 1e7 takes about 5.5 h, so the 4 h cap ends the soak.
 
 The go run adds 200 STOP trials per condition, more lost-write trials and the long soak. `--interactive` needs a
 terminal: it asks twice at the start and five times near the end, about 6 h in (four cable pulls, then the Pinpoint).
@@ -170,3 +210,54 @@ Record every run:
 Photon may then go on the robot, for the wiring that said SAFE only: annotate the OpMode `@Photon` and call
 `PhotonCore.enable()`. The rules are in the Photon paragraph of [CLAUDE.md](../CLAUDE.md#framework-layout). Not before:
 PASSED or NOT SAFE means no Photon on the robot.
+
+A USB-connected Expansion Hub is legal in BIOBUZZ (R707; the rule reading is in
+[`game-findings.md`](game-findings.md#usb-r707-r708)). Without Photon it gains nothing: a changed write cost about
+2.6 ms on a USB Expansion Hub (2026-10-28 and 2026-10-29, [`loop-time-findings.md`](loop-time-findings.md#photon))
+against about 2.5 ms over RS485
+([`loop-time-findings.md`](loop-time-findings.md#estimated-per-loop-costs-of-the-planned-hardware)). Recable it to USB
+only when Photon goes on the robot for that wiring.
+
+## How the fork behaved on a hub (2026-10-29)
+
+The write-block and loop numbers are in [`loop-time-findings.md`](loop-time-findings.md#photon); these are the rest.
+Measured on 2026-10-29: Control Hub plus an Expansion Hub on USB, both firmware 1.8.2, SDK 12.0.0, nothing on the
+ports, no I2C devices, 4 motors and 2 servos changing on each hub every loop, Photon at `c825493`. Photon has changed
+since (above), so rerun before relying on any of these.
+
+- **Parallel limit:** write block p50 for both hubs was 10.96 ms at 2 parallel, 10.66 at 4 and 10.84 at 8, loop period
+  about 16 ms at each: with 6 writes per hub per loop, more than 2 in flight gained nothing. Installed but disabled:
+  22.95 ms against 24.96 stock, so no cost. With a second thread doing a Control Hub bulk read every 10 ms: 25.01 ms
+  disabled, 10.52 at 8 parallel.
+- **Lost writes** (ACK swallowed on purpose, 12 trials over both hubs): retransmitted at 101-106 and 203-210 ms, given
+  up at 253-296 ms; the write call returned in 0.58-1.13 ms and the next identical write reached the hub. 104 more per
+  hub with 0-3 other writes in flight were all handled. With the limit (4) full of lost writes the next write still
+  went out (calls up to 6.7 ms on the Control Hub, 8.1 ms on the Expansion Hub), and all four were given up at about
+  264 ms.
+- **Write storm:** 3000 writes at a limit of 1 stalled the writer 6.8 ms at most.
+- **Hub reset** (a raw fail-safe): the slowest output was back after 194.7 ms Photon off and 198.8 ms at 8 parallel on
+  the Control Hub, 197.2 and 189.7 ms on the Expansion Hub. Each hub flagged the reset in its ACK and the SDK dropped
+  its caches at once, so the cache-expiry path wasn't exercised.
+- **`WriteCache` after `failSafe()`, Photon on** (Bench: Write Recovery Photon, one trial): the wrapped servo was back
+  after 1.9 ms, the wrapped motor after 232.8 ms. Without Photon (Bench: Write Recovery, one trial each) the wrapped
+  motor and servo came back in the same loop, 1.9 ms after `failSafe()` on 2026-10-09 and 21.5 ms after on 2026-10-24.
+  `WriteCache` sends an unchanged value again only once 250 ms have passed since its last send
+  (`architecture/hardware/WriteCache.java`), so up to 250 ms plus a loop is expected with or without Photon
+  ([`hub-bench-findings.md`](hub-bench-findings.md#design-around-these)); the motor lagging the servo is not.
+- **STOP and crashes:** after an iterative STOP, the hub's fail-safe was seen 0-37 ms after STOP's gate rose, Photon
+  off or at 8 parallel. After a crash with 4 parallel writes in flight, none of them ever acknowledged, it was seen
+  539-542 ms after the gate; every output was off, and the next INIT started with nothing in flight. The bench's
+  sampler reads every channel of a hub every 8-12 ms (Control Hub) or 14-24 ms (Expansion Hub), which limits how
+  finely these are timed.
+
+## Still unknown
+
+- **Whether Photon delays a motor's recovery after `failSafe()`.** Bench: Write Recovery writes the wrapped motor and
+  servo in the same loop from START, yet with Photon on the motor came back 231 ms after the servo. Test: run Bench:
+  Write Recovery and Bench: Write Recovery Photon several times each with the current fork, logging per loop whether
+  each wrapped write went to the hub or was skipped by `WriteCache`.
+- **Whether a crash takes about 540 ms to reach the hub's fail-safe without Photon too.** Test: Bench: Photon Crash
+  with Photon left off, same sampler. It always enables Photon at 8 parallel today, so it needs a Photon-off option
+  first.
+- **Whether the go run's soak can reach the loss bound** with `--photon-i2c`, and on RS485. Test: the short run's
+  **Write soak** rate for that wiring (see [Check the soak rate first](#3-go-run-6-7-h-only-after-1-and-2-pass)).
