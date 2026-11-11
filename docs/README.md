@@ -12,12 +12,15 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 | [`robots-findings.md`](robots-findings.md) | writing code for the BIOBUZZ robot's shooters, turrets or cameras, running anything on the Cuttle bot, or setting a robot's size in code or a `.pp` file |
 | [`wiring-findings.md`](wiring-findings.md) | wiring the BIOBUZZ robot, writing its hardware config, or moving a device between hubs or ports |
 | [`game-findings.md`](game-findings.md) | packing for an event, adding anything that talks over Wi-Fi or USB, changing HIVE numbers in `BioBuzzField`, or planning routes under the HIVE |
+| [`parts-findings.md`](parts-findings.md) | buying or swapping a Through Bore encoder or a flywheel motor |
 | [`camera-findings.md`](camera-findings.md) | changing the AprilTag webcam, its mount, cable, USB port, resolution or exposure, or trusting a cell-tip verdict |
 
 **Shooting**
 
 | page | read it before |
 |---|---|
+| [`flywheel-control-findings.md`](flywheel-control-findings.md) | changing the flywheel controller or its RPM measurement, or deciding where the flywheel encoders plug in |
+| [`shot-calculation-findings.md`](shot-calculation-findings.md) | changing `ShotSolver`, the shot tables in `ShotTuning`, or the tuning guide below |
 | [`sotm-tuning.md`](sotm-tuning.md) | tuning SOTM Test, or changing `ShotTuning` |
 
 **Hubs, SDK and loop time**
@@ -51,6 +54,7 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 
 | page | read it before |
 |---|---|
+| [`decode-shooter-survey.md`](decode-shooter-survey.md) | looking for how other teams choose a shot or control a flywheel: 23 DECODE-season repositories |
 | [`decode-code-survey.md`](decode-code-survey.md) | looking for how other teams handle loop time, ball counting, TeleOp automation or code structure: the same 23 repositories |
 
 **Files**

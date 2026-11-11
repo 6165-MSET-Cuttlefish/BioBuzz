@@ -1,0 +1,13 @@
+# Everything the simulations write is regenerable; only the scripts and README.md are tracked.
+__pycache__/
+*.py[cod]
+*.json
+*.txt
+*.log
+*.out
+*.npy
+*.npz
+cache/
+results/
+out/
+rerun_out/
