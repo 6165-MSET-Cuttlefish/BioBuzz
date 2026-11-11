@@ -5,14 +5,40 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 
 ## Pages
 
+**Shooting**
+
 | page | read it before |
 |---|---|
-| [`hub-bench-findings.md`](hub-bench-findings.md) | changing the planner, hub or I2C traffic, odometry, Limelight or stop paths |
+| [`sotm-tuning.md`](sotm-tuning.md) | tuning SOTM Test, or changing `ShotTuning` |
+
+**Hubs, SDK and loop time**
+
+| page | read it before |
+|---|---|
+| [`sdk-hub-findings.md`](sdk-hub-findings.md) | writing a hardware wrapper, sensor thread or voltage compensation, or trusting a hub's encoder velocity |
+| [`hub-bench-findings.md`](hub-bench-findings.md) | changing the planner, hub or I2C traffic, odometry, the Limelight, background threads or stop paths |
 | [`loop-time-findings.md`](loop-time-findings.md) | trying to shorten the loop, or adding per-loop hub commands |
 | [`photon-bench.md`](photon-bench.md) | using Photon in a robot OpMode, or running its hub bench |
 | [`photon-offline-results.txt`](photon-offline-results.txt) | trusting the offline Photon suites: their last recorded run |
-| [`sotm-tuning.md`](sotm-tuning.md) | tuning SOTM Test, or changing `ShotTuning` |
+
+**Framework, pathing and vision**
+
+| page | read it before |
+|---|---|
+| [`framework-findings.md`](framework-findings.md) | changing `OptimizationToggles` for a match, feeding a Module per-loop setpoints, relying on Module order or `BatteryVoltage`, or deleting framework code that looks unused |
 | [`hsv-tuning-prompt.md`](hsv-tuning-prompt.md) | retuning ball-detection HSV ranges for a venue, ball batch or ball type |
+
+**Tools**
+
+| page | read it before |
+|---|---|
+| [`toolchain-findings.md`](toolchain-findings.md) | changing AGP, Gradle or a dependency, or when deploySloth, a hardware config or adb misbehaves |
+| [`dashboard-findings.md`](dashboard-findings.md) | using the dashboard's Hardware Config View or Enable/Disable switch, replacing or bumping the dashboard, or writing a test OpMode's `@Config` knobs |
+
+**Files**
+
+| page | read it before |
+|---|---|
 | [`paths/`](paths) | editing an auto's poses: one Pedro visualizer export per auto |
 | [`calibration-chessboard-3in-letter.pdf`](calibration-chessboard-3in-letter.pdf) | recalibrating a camera lens: the board to print |
 | [`legal/`](legal) | nothing: licence texts the SDK ships |

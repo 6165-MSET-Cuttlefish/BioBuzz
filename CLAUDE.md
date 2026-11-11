@@ -25,6 +25,9 @@ Claude updates this file unasked, in the same commit as any change it describes.
 - **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; about 5 s) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
 - The hub's clock reads about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth.
 - Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK); after an AGP or Gradle bump, also `:TeamCode:assembleSloth`, which hooks AGP's dex task by name. Unit tests (no hardware): `./gradlew :TeamCode:testDebugUnitTest`.
+- Decline Android Studio's AGP upgrade: AGP 9 breaks `assembleSloth`, so deploySloth, and Gradle 9.6 or later won't load AGP 8 (`docs/toolchain-findings.md`).
+- After a full install that adds, renames or deletes a `res/xml` file, re-activate the hub's hardware config on the DS: the hub stores it by resource ID, which shifts, so it can load another config's devices under the old name (`docs/toolchain-findings.md`).
+- Switch, save and delete hardware configs on the DS (Configure Robot), never in the dashboard's Hardware Config View, which freezes the app until the hub relaunches it (`docs/dashboard-findings.md`).
 
 ## Dependencies
 
@@ -58,7 +61,7 @@ Pedro Pathing 3:
 
 **Photon** (`architecture/hardware/photon/`, the team's fork of SolversLib Photon): only an OpMode annotated `@Photon` gets its hubs swapped for `PhotonLynxModule`s at INIT, and they stay swapped until the hardware map is rebuilt (config change or Restart Robot). `PhotonCore.enable()` throws unless that swap worked; it then sends RUN_WITHOUT_ENCODER `setPower` and servo pulse-width writes without waiting for each ACK, from any thread, on hubs with their own USB link. An RS485 Expansion Hub, and every command while disabled, takes the SDK's path. Every class there, nested ones included, must be `@Pinned`, with no lambdas or anonymous classes: an unpinned one is reloaded by deploySloth with its own copy of the statics. `@Photon` isn't inherited: a Photon variant of an OpMode is a subclass annotated `@Photon` (`FrameworkLoopPhotonBench`). `setMaxParallelWrites` takes 1 to 64. Don't send commands through a replaced hub object (an I2C client built on one shares its I2C lock, but a reply to a message number both objects hold is dropped and counted as `numberClashes`, and both commands time out). `PhotonCore.setWriteProfiling(true)` times every step of each parallel write, read per hub with `writeProfile(hub)`: bench use only.
 
-**Faults** (`core/Faults`) show only in an `EnhancedOpMode`; a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
+**Faults** (`core/Faults`) show only in an `EnhancedOpMode`, and on the Driver Station only while `OptimizationToggles.dsTelemetry` is on (`docs/framework-findings.md`); a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
 
 **Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision calls `disableBallVision()` in `initialize()`.
 
@@ -88,7 +91,8 @@ In INIT the follower and Ivy scheduler run but module writes don't (unless `shou
 - Safe state lives in `stop()`, never only in a command's `end()`, which doesn't run at OpMode stop; stop motors with `EnhancedMotor.stop()`, since the write cache can drop `setPower(0)`.
 - Keep `WriteCache`'s periodic re-send of an unchanged value, and add one to any new write cache: a hub reset or NACK drops a write silently.
 - `stop()` can only de-energize: on a normal STOP the SDK has already fail-safed the hubs and silently drops any move, so stow a mechanism at the end of its routine.
-- A State setpoint follows the dashboard only through `bindTunable(state, () -> Tuning.x)`; `Tuning.x` passed to the enum constructor is read once, and `setStates()` resets every variant, undoing a `setValue` made in a Module's constructor.
+- A State setpoint follows the dashboard only through `bindTunable(state, () -> Tuning.x)`; `Tuning.x` passed to the enum constructor is read once, and `setStates()` resets every variant, undoing a `setValue` made in a Module's constructor. A value set in `gameLoop()` or by a command reaches `write()` a loop late, since tunables refresh just before `read()` (`docs/framework-findings.md`).
+- A failed hub read (bulk, ADC or I2C) returns zeros, 0.0 V for the battery, without throwing: guard anything that divides by a reading or acts on a sudden zero (`docs/sdk-hub-findings.md`).
 
 ## Commands
 
