@@ -8,7 +8,8 @@ anything on the Cuttle bot, or before putting a robot's size into code or a `.pp
 ## The BIOBUZZ robot, from CAD
 
 From the team's CAD as analysed on 2026-11-10. **Nothing here is measured on a robot, and the CAD is still changing.**
-Port assignments, servo directions and ranges, turret zero positions and every control constant are undecided: ask
+Nothing is wired: the recommended port for every device is in [`wiring-findings.md`](wiring-findings.md). Servo
+directions and ranges, turret zero positions and every control constant are undecided: ask
 or measure before putting any of these numbers in code. "Inferred" marks a number estimated from the CAD rather than
 read from it.
 
@@ -23,7 +24,7 @@ shooter has one flywheel motor and a servo hood that sets the launch angle.
 | Turret axis from the robot's centre (inferred, ±1 in) | about 5.3 in behind | about 3.3 in ahead |
 | Turret drive | Axon Mini, about 1:1 (48T to 20T, then 59T to 140T) | Axon Mini, about 1:1 (48T to 20T, then 63T to 150T) |
 | Turret servos | 2 | 1 |
-| Turret encoder | none | REV Through Bore on the OctoQuad |
+| Turret encoder | none | REV Through Bore; the CAD notes plan it on the OctoQuad, [`wiring-findings.md`](wiring-findings.md) on a hub encoder port |
 | Turret hard stops | none in CAD | none in CAD |
 | Flywheel | one 72 mm goBILDA Rhino wheel (3614-0014-0072, 85 g), no added mass | same wheel |
 | Flywheel motor | goBILDA 5000-0002-4008, 1:1 by belt (30T:30T) | same motor, ratio assumed 1:1 |

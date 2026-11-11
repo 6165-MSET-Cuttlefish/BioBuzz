@@ -104,11 +104,9 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     responding, and every command to it fails at once until it sends something back. User code never sees the
     dropped write; logcat shows `timeout: abandoning waiting 250ms for` (read from SDK 12.0.0 source:
     `LynxRespondable.awaitAndRetransmit`, `LynxCommExceptionHandler`).
-- **Expansion Hub: every command costs more, not just encoders.** The RS485 hop adds about 0.9 ms to every Lynx
-  command sent to the Expansion Hub, and 1.5 ms to a bulk read. That covers:
-  - motor and servo writes;
-  - analog, digital and encoder reads;
-  - every I2C transaction.
+- **Expansion Hub: every command costs more, not just encoders.** The RS485 hop added about 0.9 ms to each ADC read
+  sent to the Expansion Hub, and 1.5 ms to a bulk read. Every Lynx command crosses the same link, so expect the same
+  on motor and servo writes and on each command of an I2C transaction; those were not measured over RS485.
 
   | command | Control Hub | Expansion Hub |
   |---|---|---|

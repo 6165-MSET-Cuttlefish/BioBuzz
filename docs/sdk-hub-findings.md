@@ -64,7 +64,7 @@ Recheck these after an SDK bump. Our code is cited by path under
   1–255 ms, and the firmware default is 50 ms (OctoQuad FTC Edition specification Rev 3.0C, sections 6.5.12 and
   8.5.4, in [DigitalChickenLabs/OctoQuad](https://github.com/DigitalChickenLabs/OctoQuad)). At 8192 counts/rev a 50 ms
   interval overflows above about 4800 rpm; 6000 rpm needs 39 ms or less. The interval is lost at power-off unless
-  `saveParametersToFlash()` is called. Its read cost: [`loop-time-findings.md`](loop-time-findings.md), Layout.
+  `saveParametersToFlash()` is called. Its read cost: [`wiring-findings.md`](wiring-findings.md).
 
 ## Encoder ports
 

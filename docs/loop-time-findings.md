@@ -6,8 +6,8 @@ Ivy Path Test's log (`scripts/looptimes/analyze_ivy.py`) after any hardware or l
 
 ## What to do
 
-- **Wire the planned hardware as in [Layout](#layout)**: no inputs on the Expansion Hub, so each loop pays one bulk
-  read.
+- **Wire the BIOBUZZ robot as in [`wiring-findings.md`](wiring-findings.md)**: nothing that is read goes on the
+  Expansion Hub, so each loop pays one bulk read, and outputs that change every loop go on the Control Hub.
 - **OctoQuad for odometry**: 3.2 ms against the Pinpoint's 5.8 ms every loop, with far less heading drift. Needs the
   guarded localizer [`hub-bench-findings.md`](hub-bench-findings.md) describes (a missing OctoQuad hangs INIT).
 - **Write tolerances** (other teams' are [below](#other-teams-decode-code-2026-10-25)): `Shooter`'s flywheels already
@@ -15,7 +15,8 @@ Ivy Path Test's log (`scripts/looptimes/analyze_ivy.py`) after any hardware or l
   intake and transfer switch between fixed powers, so they already write only on a change; give them 0.02 if they
   ever get a computed power.
 - **Fewer per-loop allocations**, to cut collector pauses.
-- **A rangefinder poller thread** costs about 3 ms while driving: use one only to read faster than the loop.
+- **A rangefinder poller thread** cost about 3 ms per loop on a 14 ms driving loop, and will cost more on a longer
+  one: use one only to read faster than the loop.
 - **Count about 1.4 ms of SDK time in every `EnhancedOpMode` loop** ([below](#what-the-sdk-costs-every-loop)).
 - **Don't lower `WriteCache`'s re-send period**: the SDK lets only every second re-send through, so a lost write is
   repaired in about 0.5 s either way ([below](#how-often-a-write-re-send-reaches-the-hub)).
@@ -73,43 +74,23 @@ about 1.2 ms; not tried.
   `LoopProfiler` reports the SDK's share as `unprofiled`: loop time minus the top-level sections
   (`architecture/telemetry/LoopProfiler.java:51`).
 
-## Estimated per-loop costs of the planned hardware
+## Per-command costs
 
-Per-command bench costs added together; expect a loaded robot to cost more. A write costs only in loops where its
-value changes, a skipped (cached) write about 0.
+Bench p50s from [`hub-bench-findings.md`](hub-bench-findings.md). A write costs only in loops where its value
+changes; a skipped (cached) write costs about 0.
 
 | | Control Hub | Expansion Hub (RS485) |
 |---|---|---|
-| bulk read (all encoder, analog and digital ports of that hub) | 2.4 ms | 4.7 ms |
-| motor or servo write, changed value | 1.55–1.64 ms | ≈2.5 ms |
+| bulk read (all encoder, analog and digital ports of that hub) | 2.1–2.5 ms | 4.0 ms |
+| motor or servo write, changed value | 1.55–1.64 ms | ≈2.5 ms, estimated |
 
-- **Inputs** (2 Brushland rangefinders on analog, 2 flywheel Through Bores): all on the Control Hub they share one bulk
-  read; any input on the Expansion Hub adds its bulk read every loop (both hubs together ≈6.3 ms).
-- **Outputs that change every loop**: 4 turret servos while auto-aiming (≈6.2 ms), 2 shooter motors on a velocity PID
-  (3.2–5 ms), 4 drive motors while driving (≈6.6 ms, already in today's 19 ms), 2 hood servos if set from distance
-  (≈3.1 ms). Hardstop, intake servo, intake and transfer motors change rarely (≈0).
-- **Worst case while driving and auto-aiming**: ≈36 ms (28 Hz) with the layout below, ≈44 ms with inputs split across
-  hubs and the turret on the Expansion Hub; about 22 ms with turret and hood still and fixed-power shooters.
-- These estimates and the layout below assume 4 turret servos; `biobuzz/modules/Turret.java` now drives 3, one write
-  fewer while auto-aiming.
-
-### Layout
-
-| | Control Hub | Expansion Hub |
-|---|---|---|
-| motors | both flywheels on ports 0 and 3, two drive motors on 1 and 2 | two drive motors, intake, transfer |
-| encoders | the flywheels' Through Bores on encoder ports 0 and 3 | none |
-| servos | 4 turret, 2 hood | hardstop, intake servo |
-| analog | both rangefinders | none |
-| I2C | odometry | none |
-
-- Flywheels go on ports 0 and 3 of one hub with their encoders on the same ports: ports 1 and 2 count in software and
-  drop counts at flywheel speed ([`CLAUDE.md`](../CLAUDE.md), Flywheel RPM). One hub keeps a single bulk read.
-- Leave the Expansion Hub with no inputs, so its bulk read never runs, and give it outputs that rarely change.
-- Two drive motors stay on the Expansion Hub, as today (+≈1.8 ms while driving).
-- Through Bores on the OctoQuad instead: its full read is 6.6 ms against 3.2 ms for odometry alone (+3.4 ms every
-  loop), while on the Control Hub they ride the bulk read the rangefinders already need. Use the OctoQuad only for its
-  on-board velocity or if the hub's encoder ports run out.
+- The Expansion Hub write is not measured. It is the Control Hub write plus the 0.9 ms RS485 hop measured on ADC and
+  bulk reads. On USB, an Expansion Hub write measured about 2.6 ms ([Photon](#photon), Photon off).
+- With manual bulk caching a hub's bulk read runs only in loops where one of its inputs is read: any input on the
+  Expansion Hub adds its bulk read to every loop (both hubs together 5.7 ms against 2.1 ms for the Control Hub alone).
+- Where each device of the BIOBUZZ robot should plug in, and the loop period that gives, is in
+  [`wiring-findings.md`](wiring-findings.md): about 19 ms parked and 28 to 37 ms driving and aiming (estimated).
+  `scripts/looptimes/wiring_budget.py` adds the costs up.
 
 ## How often a write re-send reaches the hub
 
@@ -126,9 +107,9 @@ NACKed write is repaired about 0.5 s later, and lowering `RESEND_NANOS` doesn't 
   every call, and the SDK re-reads it from the hub once its copy is over 500 ms old; each write that gets through
   re-sends the enable once that copy is over 500 ms old. So a motor held at one power costs about three hub commands
   every 0.5 s (mode read, power, enable) and a servo two (position, enable), and the calls in between ≈0.03 ms each.
-  A write costs ≈1.6 ms on the Control Hub and ≈2.5 ms on the Expansion Hub (bench p50s,
-  [`hub-bench-findings.md`](hub-bench-findings.md)). The same expiry, on a motor written every loop, is the ~500 ms
-  loop spike in [`CLAUDE.md`](../CLAUDE.md) (Dependencies). Read from source, SDK 12.0.0: `DcMotorImpl.setPower`,
+  A write costs ≈1.6 ms on the Control Hub (bench p50, [`hub-bench-findings.md`](hub-bench-findings.md)) and an
+  estimated ≈2.5 ms on the Expansion Hub ([above](#per-command-costs)). The same expiry, on a motor written every
+  loop, is the ~500 ms loop spike in [`CLAUDE.md`](../CLAUDE.md) (Dependencies). Read from source, SDK 12.0.0: `DcMotorImpl.setPower`,
   `LynxDcMotorController.internalSetMotorEnable`, `LynxServoController.internalSetPulseWidth`.
 - `setVelocity` is the exception: the SDK doesn't cache it (`LynxDcMotorController.setMotorVelocity` sends on every
   call), so `EnhancedMotor.setVelocity`'s 250 ms re-send (`architecture/hardware/EnhancedMotor.java:63`) reaches the

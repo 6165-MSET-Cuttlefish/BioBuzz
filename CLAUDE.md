@@ -137,6 +137,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
   - Read with its own `LynxGetBulkInputDataCommand`, never through `AnalogInput` or `clearBulkCache()`: the MANUAL bulk cache is shared across threads.
   - No writes or telemetry from the thread.
 - **Flywheel RPM** from a Through Bore: the hub's 16-bit velocity overflows above about 240 RPM at 8192 counts/rev, so compute it from position over a window (Intake Transfer Shooter Test's `rpmWindowMs`). Put the flywheel motor on port 0 or 3 with its Through Bore on the same-numbered encoder port, since it's read through the motor's port (two flywheels: 0 and 3 of one hub, or one per hub): ports 1 and 2 count in software and drop counts at that rate.
+- **Wiring the BIOBUZZ robot**: nothing that is read goes on the Expansion Hub (one input there adds its bulk read to every loop), outputs that change every loop go on the Control Hub, and `biobuzz.xml` is rewritten in place: the port map and the code it needs are in `docs/wiring-findings.md`.
 - Single devices: the dashboard's Hardware View.
 
 **Control Hub bench** (`scripts/bench/`): read `docs/hub-bench-findings.md` before changing the planner, hub or I2C traffic, odometry, Limelight or stop paths.

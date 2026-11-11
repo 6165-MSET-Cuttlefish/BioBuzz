@@ -1,0 +1,288 @@
+# Wiring findings
+
+Where each device on the BIOBUZZ robot should plug in so the loop is short and steady, and what the code must do for
+that wiring to be safe. Read it before wiring the robot, writing its hardware config, or moving a device between hubs
+or ports.
+
+**Nothing is wired yet (2026-11-10), and no loop time here is measured on this robot.** The device list is the CAD's
+([`robots-findings.md`](robots-findings.md)). Command costs are measured on the bench hubs
+([`hub-bench-findings.md`](hub-bench-findings.md)). Loop periods are those costs added up by
+`scripts/looptimes/wiring_budget.py`, so they are estimates. CH is the Control Hub, EH the Expansion Hub.
+
+## What to do
+
+- **Wire to [the map](#the-map).** Three rules decide most of it:
+  1. Nothing that is read goes on the Expansion Hub: no encoder, analog, digital or I2C device. One input there adds
+     that hub's bulk read to every loop, about 3.6 ms.
+  2. Outputs that change every loop go on the Control Hub: both flywheels, the three turret servos, both hoods, and
+     the two drive motors that still fit.
+  3. Each flywheel's Through Bore goes on Control Hub encoder port 0 or 3, the same number as its motor.
+- **Expect about 19 ms parked and 28 to 37 ms while driving and aiming**, about 2 ms less with the dashboard off
+  ([Estimated loop period](#estimated-loop-period)). The wiring cannot fix the rest: 11 outputs change every loop and
+  each costs a hub command.
+- **Run the bench tests in [Open choices](#open-choices) before the wiring is final.** Two placements rest on an
+  encoder port keeping up, which no vendor documents.
+- **Make the changes in [What the code must do](#what-the-code-must-do) before the first run.** Several are about
+  safety, not speed.
+- **Rewrite `TeamCode/src/main/res/xml/biobuzz.xml` in place** with these ports. It exists with an old layout, and
+  adding a new config file shifts the stored config ([`toolchain-findings.md`](toolchain-findings.md)).
+
+## The map
+
+**Control Hub**
+
+| port | device | note |
+|---|---|---|
+| motor 0, encoder 0 | pollen flywheel motor and its Through Bore | port 0 counts in hardware |
+| motor 1 | front-left drive | its own motor encoder stays unplugged; encoder 1 is spare |
+| motor 2 | back-right drive | its own motor encoder stays unplugged |
+| encoder 2 | nectar turret Through Bore | counted in software; [open choice](#open-choices) |
+| motor 3, encoder 3 | nectar flywheel motor and its Through Bore | port 3 counts in hardware |
+| servo 0, 1 | pollen turret servos | injector A |
+| servo 2 | nectar turret servo | injector B |
+| servo 3 | pollen hood | injector A |
+| servo 4 | nectar hood | injector B |
+| servo 5 | blocker | injector A |
+| analog 0 | Floodgate current output | shares connector 0-1 with rangefinder A through a splitter cable |
+| analog 1 | transfer rangefinder A (upstream), if kept | the port the bench config `laser_rangefinder.xml` uses |
+| analog 2 | spare | |
+| analog 3 | transfer rangefinder B (downstream), if kept | the bench port |
+| I2C bus 0 | nothing | the built-in IMU's bus |
+| I2C bus 1 | spare | |
+| I2C bus 2 | OctoQuad: odometry pods on channels 0 and 1 | channel 4 stays free for the turret encoder |
+| I2C bus 3 | Prism | written only when the pattern changes; powered from its own XT30 |
+| USB 3.0 | the powered USB hub carrying the Limelight 3A and the Arducam | |
+| USB 2.0 | empty | shares a USB bus with the hub's Wi-Fi radio |
+| USB-C | laptop only | keeps deploying over a cable possible at events |
+| RS485 | both ports to the Expansion Hub | the two ports are redundant: use two cables |
+
+**Expansion Hub** (address 2, on RS485)
+
+| port | device | note |
+|---|---|---|
+| motor 0 | front-right drive | |
+| motor 1 | back-left drive | |
+| motor 2 | intake | |
+| motor 3 | transfer motor | |
+| encoders, analog, digital, I2C | nothing | so this hub's bulk read never runs |
+| servo 0 | transfer continuous-rotation servo | injector B |
+| servo 1 | flower intake servo | injector B |
+| servo 2 and servo 4 | one RGB indicator light each | hub 5 V; one light per port pair |
+| servo 3, 5 | spare | |
+
+**Servo power.** Injector A: pollen turret pair, pollen hood, blocker. Injector B: nectar turret, nectar hood,
+transfer servo, flower intake. Each injector takes an XT30 lead from the distribution board. Connect hub servo ports
+to injector inputs with the leads the injector ships with, which have the red wire removed, so no hub 5 V reaches it.
+
+## Why each placement
+
+Loop period in ms for the map and for the same map with one thing moved (estimated, p50 costs, every drive motor
+writing every loop):
+
+| | parked, aiming | driving and aiming | the same, firing |
+|---|---|---|---|
+| **the map** | **18.7** | **36.6** | **37.2** |
+| any input on the Expansion Hub | 23.1 | 40.8 | 41.4 |
+| the three Through Bores on the OctoQuad, read every loop | 22.8 | 40.5 | 41.1 |
+| turret servos on the Expansion Hub | 18.7 | 39.5 | 40.0 |
+| flywheels on the Expansion Hub, all four drive motors on the Control Hub | 20.8 | 36.6 | 37.2 |
+| intake and transfer on the Control Hub, all four drive motors on the Expansion Hub | 18.7 | 38.5 | 39.0 |
+| battery voltage read every loop | 20.3 | 38.1 | 38.6 |
+| the layout planned before the CAD existed | 18.3 | 37.4 | 37.8 |
+
+- **No inputs on the Expansion Hub.** With manual bulk caching a hub's bulk read runs only if something on it is
+  read. Both hubs' bulk reads cost 5.72 ms against 2.10 ms for the Control Hub alone (measured). Things that would
+  start it without anyone noticing: `Drivetrain.encoderTelemetry` (`biobuzz/modules/Drivetrain.java:256-262`),
+  `isOverCurrent()` on an Expansion Hub motor, or an analog input mapped there.
+- **Flywheels on Control Hub motors 0 and 3.** Their power changes every loop in closed loop, parked or driving. A
+  Control Hub motor write is 1.64 ms (measured); over RS485 it is about 2.5 ms (estimated: the 0.9 ms hop is measured
+  on reads only). Ports 0 and 3 are also the only encoder ports that count in hardware
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md), Encoder ports).
+- **Two drive motors on the Control Hub.** While driving, 6 motors change and a hub has 4 motor ports, so at least
+  two changing motor writes cross RS485 whatever the map.
+- **A diagonal pair, front-left and back-right.** The loop cost is the same for any pair. The reason is failure: if
+  the Expansion Hub drops out, a diagonal pair can still translate without turning, and a same-side pair cannot (from
+  Pedro's mecanum wheel equations; untested on a robot).
+- **All five aiming servos and the blocker on the Control Hub.** Turrets and hoods change every loop in
+  shoot-on-the-move. The blocker gates each shot: 1.55 ms on the Control Hub (measured) against about 2.45 ms.
+- **Rarely changing outputs on the Expansion Hub**: intake, transfer motor, transfer servo, flower intake, lights.
+- **Flywheel and turret encoders on hub ports, not the OctoQuad.** On the Control Hub they ride the bulk read the
+  loop already pays. Reading the OctoQuad's encoder block with its localizer block costs 6.58 ms against 3.20 ms,
+  +3.4 ms every loop (measured). The simulation in
+  [`flywheel-control-findings.md`](flywheel-control-findings.md#where-to-plug-the-flywheel-encoders) found the
+  OctoQuad's cleaner speed reading does not make the shooter fire faster. It also would put odometry, the turret and
+  both flywheels behind one I2C cable.
+- **OctoQuad on Control Hub I2C bus 2.** Every I2C read is several hub commands, and each is assumed to pay the RS485
+  hop on the Expansion Hub (not measured there). Bus 0 is the built-in IMU's. Bus 2 is where the bench measured it.
+- **Prism on its own bus.** That separates its data lines from the OctoQuad's. It does not separate power: all of a
+  hub's I2C ports share one 3.3 V supply (500 mA total, REV's specifications).
+- **Analog on the Control Hub, read in the loop.** `Drivetrain.read()` reads the Floodgate after every driving loop
+  (`Drivetrain.java:97-99`). `TransferCounter` needs both rangefinders on one hub.
+- **Cameras on USB 3.0.** The USB 2.0 port shares a bus with the hub's radio
+  ([ftc-docs hub tips](https://ftc-docs.firstinspires.org/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html),
+  fetched 2026-11-10).
+- **Lights on separate servo port pairs.** Ports 0-1, 2-3 and 4-5 each share one 2 A supply (ftc-docs hub tips).
+  The lights take hub 5 V because the injectors' 6 V may power only servos (R613(C)). Their current draw is not
+  published.
+- **Injectors split by shooter.** They carry no hub commands, so the split costs no loop time, and one injector
+  failing then stops one shooter's aim instead of both. The two pollen turret servos turn one gear: keep them on one
+  injector and one hub so they fail together.
+
+Against the layout planned before the CAD: three turret servos instead of four saves one write per aiming loop; that
+frees a Control Hub servo port for the blocker; the nectar turret encoder, the Floodgate, the transfer servo, the
+lights, the Prism and the injectors are new.
+
+## Estimated loop period
+
+`python3 -I scripts/looptimes/wiring_budget.py` prints every number in this section and the table above. The model:
+period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms refresh).
+
+| per loop, ms | parked, aiming | driving and aiming | source |
+|---|---|---|---|
+| Control Hub bulk read | 2.22 | 2.22 | measured |
+| OctoQuad localizer read | 3.20 | 3.20 | measured |
+| 2 flywheel writes | 3.28 | 3.28 | 2 × 1.64 measured |
+| 4 drive writes, 2 on each hub | 0 | 8.36 | 2 × 1.64 measured + 2 × 2.54 estimated |
+| 3 turret and 2 hood writes | 0 | 7.75 | 5 × 1.55 measured |
+| SDK between loops, telemetry, follower and other CPU | 6.93 | 6.93 | measured on the bench and the Betta bot ([`loop-time-findings.md`](loop-time-findings.md)) |
+| SDK refresh of every output, per 0.5 s | 82 | 66 | estimated from SDK source |
+| **period** | **18.7** | **36.6** | |
+| the same with every cost at its p95 | 22.4 | 45.1 | |
+
+- **36.6 ms is a ceiling.** It assumes all four drive motors write every loop. `Drivetrain` skips changes under 0.05
+  and Pedro's own motor wrapper under 0.01. With each drive motor writing in 0 / 25 / 50 / 75% of loops the period is
+  27.5 / 29.8 / 32.1 / 34.4 ms. The Betta bot's measured cost of driving on the same 2 + 2 split gives 33.5 ms.
+- **With the dashboard off**, as at events: about 2.1 ms less (measured on the bench with no Driver Station
+  connected): 16.2 parked, 34.2 driving at the ceiling, 29.6 with drive writes in half the loops.
+- **The loop that starts a shot** adds about 6.5 ms: blocker, transfer motor, transfer servo.
+- **The refresh sets the spikes, not the wiring.** Every output the code keeps writing costs one to three extra hub
+  commands every 0.5 s ([`loop-time-findings.md`](loop-time-findings.md#how-often-a-write-re-send-reaches-the-hub)):
+  66 to 82 ms of hub time per 0.5 s on this map. Outputs first written together expire together, so that time bunches
+  into a few loops. Spreading the re-sends out is a code change nobody has designed.
+- **If Photon is cleared** ([`photon-bench.md`](photon-bench.md)): 16.4 / 28.1 ms with the Expansion Hub still on
+  RS485, 16.0 / 24.2 ms with it on USB (estimated from the fork's bench on 2026-10-29). No device moves: only the
+  Expansion Hub's cable changes. Without Photon a USB Expansion Hub write is no faster than RS485, so stay on RS485.
+- **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot).
+
+## Open choices
+
+Each row has a default that the map uses and the test that would change it.
+
+| choice | default | alternative | what the alternative costs or buys | test |
+|---|---|---|---|---|
+| Flywheel Through Bores | Control Hub encoders 0 and 3 | OctoQuad channels 2 and 3, speed computed on the board at a 10 to 20 ms interval | +3.4 ms every loop; removes timestamp noise from the RPM; rated 1,000,000 counts/s where the hub has no published limit | Spin each flywheel unloaded to free speed on a full battery (5800 RPM by the vendor's test, 792,000 counts/s) with the encoder on port 0 or 3 and count for 10 s against the OctoQuad or a tachometer. Any lost counts: move to the OctoQuad. |
+| Nectar turret Through Bore | Control Hub encoder 2 | OctoQuad channel 4 | +3.4 ms every loop if read every loop (free if the flywheels are already there); its absolute output cannot drift | Sweep the turret end to end at full servo speed a few hundred times, back to a fixed mark, and log the count. Any drift: move it. |
+| Last two Control Hub motor ports | two drive motors | intake and transfer, all four drive motors on the Expansion Hub | 0 to 1.9 ms more per driving loop; puts the turret encoder under a motor that no path follower or tuner touches; makes `isOverCurrent()` jam checks free | Decide by whether the loop needs a jam check every loop. |
+| Pollen turret pair | one port each | both on one port through a Y-cable (R505 allows two servos per port) | saves 1.55 ms per aiming loop and frees a servo port; loses the per-servo offset in `Turret` | On the robot: check the two servos do not fight with no offset. |
+| Battery voltage for flywheel compensation | every 50 loops, as now | every loop while a flywheel runs, or every 2 to 3 loops | +1.3 ms, or +0.4 to 0.6 ms, per loop; the simulation had the first ball 145 to 160 RPM low under drive sag with the 50-loop read | Fire bursts during hard accelerations at each cadence and log RPM as each ball arrives. |
+| Transfer rangefinders | read in the loop | a 10 ms poller thread | measured +3.0 ms on a 14 ms loop; estimated +7 to +10 ms on this one; one failed poll crashes the OpMode | Count 100 balls, including 10-ball bursts, with in-loop counting at the real loop period. A miss means a poller, and then only with the Expansion Hub on its own USB cable. |
+
+Two cautions on the turret encoder default:
+
+- Port 2 counts in software, and the only published guidance says encoders over about 4000 counts per revolution
+  should not go on ports 1 and 2 if they spin fast
+  ([gm0](https://gm0.org/en/latest/docs/software/adv-control-system/control-system-internals.html), fetched
+  2026-11-10). The turret is slow: about 15,300 counts/s with the encoder on the turret's axis, about 36,400 on the
+  shaft between the servo and the turret (estimated from the vendor's servo speed and the CAD's gears). Which shaft
+  carries the encoder is not settled.
+- It is a relative count under a drive motor's port number. Anything that resets or changes the mode of that motor
+  moves the turret's zero, and the CAD has no hard stop to home against.
+
+In a loop at 34 to 37 ms, in-loop sampling sees about half of the rangefinders' 20 ms readings. Whether that misses
+balls is what the counting test settles.
+
+## What the code must do
+
+For this wiring to work:
+
+- **Read the turret count raw:** `br.getController().getMotorCurrentPosition(br.getPortNumber())`, not
+  `br.getCurrentPosition()`. The SDK negates `getCurrentPosition()` by the motor's direction and type; with the
+  goBILDA 5202 type every config uses, that happens when the direction is `FORWARD`, which is today's setting (read
+  from SDK 12.0.0 source, `DcMotorImpl`). The raw read still comes from the bulk cache.
+- **Never reset or change the mode of the drive motor that shares the turret's port.** What can: Pedro's two-wheel
+  and three-wheel localizers and the vendored tuners built on them (they `STOP_AND_RESET_ENCODER`), `setVelocity`
+  (switches to `RUN_USING_ENCODER`), the dashboard's Hardware OpMode run-mode control, and the Driver Station's
+  manual-control encoder reset. Check `RUN_WITHOUT_ENCODER` at INIT and fail if not.
+- **Zero the turret in software, and cross-check it.** Compare the encoder angle with the commanded angle once the
+  servo has settled; on a jump, raise a Fault and fall back to the commanded angle.
+- **One Control Hub bulk read at the top of the loop, with a timestamp.** Call `getBulkData()` on the Control Hub
+  where `EnhancedOpMode` now clears caches (`architecture/core/EnhancedOpMode.java:293`, `:403`), stamp it, and have
+  `Shooter.measure()` (`biobuzz/modules/Shooter.java:333-343`) use that stamp. Keep `clearBulkCache()` on the
+  Expansion Hub: a hub that is never cleared returns its first snapshot for the rest of the OpMode.
+- **One failed-read flag per loop.** A failed bulk read returns all zeros without an exception
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md)). Set a flag from `isFake()` and have every reader skip that loop:
+  the flywheel RPM history, the turret angle, the transfer counter (it would count a ball twice) and the Floodgate
+  limiter.
+- **Fetch the battery sensor by name** ("Control Hub"), not `hardwareMap.voltageSensor.iterator().next()`
+  (`EnhancedOpMode.java:113`), which returns the Control Hub only by the order of a hash map. Ignore readings under
+  6 V: a failed read returns 0 and is held for 50 loops.
+- **Detect a lost Expansion Hub.** With nothing read from it the code cannot see it drop. Poll
+  `LynxModule.isNotResponding()` on both hubs each loop (it sends no command) and raise a Fault.
+- **Keep current reads off the Expansion Hub in a match.** `Intran`'s two (`biobuzz/modules/Intran.java:106-107`)
+  would cost 2 × 2.61 = 5.2 ms per telemetry loop there (measured per read).
+- **Count transfers in the loop.** `TransferCounter` runs only as a thread today.
+- **OctoQuad:** a localizer that times out with a named error at INIT and checks every read
+  ([`hub-bench-findings.md`](hub-bench-findings.md)); pods on channels 0 and 1 (`OctoQuadLocalizerTest` uses 3 and
+  4). What a bad read does mid-match (crash, or Fault and carry on) is a team decision.
+
+Worth doing with it:
+
+- Send each flywheel power when it is computed. Today it is computed in `read()` (`Shooter.java:205`) and sent in
+  `write()` (`:345`), with the drive writes in between.
+- Loosen the hood write tolerance from 0.001 to 0.002-0.005 (`Shooter.java:174-175`): at one hood write per loop
+  that is about 1.8 ms off the driving loop.
+- Remove or gate `Drivetrain.encoderTelemetry`'s lines (`Drivetrain.java:256-262`): the back-right velocity would be
+  the turret's, and the Expansion Hub lines would start its bulk read.
+
+## What fails, and how this wiring behaves
+
+- **Expansion Hub or RS485 lost:** both shooters still spin and aim, and the blocker can still stop feeding. Intake,
+  transfer and two drive motors are gone. The first write to the lost hub blocks the loop for about 250 ms and later
+  ones fail at once without an error (read from SDK source). Two RS485 cables are the main protection. How long the
+  lost hub's motors keep their last power is unverified.
+- **Control Hub reset or brownout:** the turret's relative count is lost (inferred, not tested) and nothing reports
+  it; hence the cross-check above.
+- **OctoQuad unplugged or rebooted:** odometry is lost for the rest of the match (its localizer restarts at the
+  origin and its settings are volatile). With the default choices the turret and flywheels are unaffected.
+- **Camera hub's power bank flat:** the webcam fails to open, `WebcamSession.update()` throws, and every OpMode that
+  builds `BioBuzzRobot` stops in INIT. Check the power bank before each match. Whether a webcam failure should be a
+  Fault instead is a team decision, as it was for the Limelight.
+- **A camera cable crosses each turret**, which turns at least 90° each way: strain-relieve both.
+
+## Rules and limits that bound the map
+
+From the Competition Manual revision named in [`game-findings.md`](game-findings.md), and REV's and goBILDA's pages,
+fetched 2026-11-10:
+
+- R503: at most 8 motors and 8 servos. The map uses all 8 of each, so there is no spare. `Intran` builds a ninth
+  servo (`ruler`) and must be rewritten to the CAD before it is used.
+- R505: two servos per hub servo port or injector port.
+- R608: hubs and injectors are powered only by XT30 from the main battery. R613(C): injector 6 V powers servos only.
+- R701(C), R707, R708, R611(A): one extra Expansion Hub, which may connect by USB; UVC webcams, the Limelight and a
+  USB hub on USB; a USB battery pack may power that hub.
+- Per hub: 4 motor ports, 4 encoder ports, 6 servo ports, 4 analog inputs, 8 digital channels, 4 I2C buses (SDK
+  12.0.0 `LynxConstants`). Motor ports 10 A continuous; servo port pairs 2 A each, 5 A across all servo and 5 V
+  ports; encoder and I2C supplies 3.3 V, 500 mA total each (REV).
+- goBILDA servo power injector 3125-0001-0001: 6 channels, 8 to 15 V in, 6 V and 24 A out, no output on a channel
+  until it sees a PWM pulse over 500 µs
+  (<https://www.gobilda.com/6v-servo-power-injector-6-channel-8-15v-input/>).
+
+## Still unknown
+
+- **The highest count rate hub encoder ports keep up with**, hardware-counted or software-counted. No REV or FIRST
+  figure exists. The two encoder tests above settle it for our speeds.
+- **The cost of a write on an RS485 Expansion Hub.** Every 2.5 ms here is the Control Hub cost plus the hop measured
+  on reads. Test: time 1000 changed `setPower` calls on each hub in one OpMode.
+- **How often the drive motors really write** in TeleOp shoot-on-the-move. Test: a per-loop write counter in SOTM
+  Test.
+- **Whether the flywheel power changes every loop** once its RPM reading is clean; if not, parked loops are shorter.
+- **Current draw** of the RGB lights, and of three Through Bores and two pods against the 500 mA encoder and I2C
+  supplies.
+- **The splitter cable's pin mapping** and which wire the Floodgate's sense connector uses; which Floodgate version
+  is fitted (`Drivetrain` assumes the 80 A scale).
+- **Whether the injector cuts its output** when the SDK disables PWM (`Turret.disable()` does).
+- **Whether the OctoQuad's localizer reset zeroes its channel counts**, and whether its bank mode is volatile like its
+  velocity interval.
+- **Inspection questions** only an inspector or the Q&A can settle: the Axon servos' and the power bank's
+  compliance, and a resistor divider on an analog port for battery voltage (R612's note allows high-impedance
+  monitoring).

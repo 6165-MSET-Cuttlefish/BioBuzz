@@ -215,7 +215,7 @@ A USB-connected Expansion Hub is legal in BIOBUZZ (R707; the rule reading is in
 [`game-findings.md`](game-findings.md#usb-r707-r708)). Without Photon it gains nothing: a changed write cost about
 2.6 ms on a USB Expansion Hub (2026-10-28 and 2026-10-29, [`loop-time-findings.md`](loop-time-findings.md#photon))
 against about 2.5 ms over RS485
-([`loop-time-findings.md`](loop-time-findings.md#estimated-per-loop-costs-of-the-planned-hardware)). Recable it to USB
+([`loop-time-findings.md`](loop-time-findings.md#per-command-costs)). Recable it to USB
 only when Photon goes on the robot for that wiring.
 
 ## How the fork behaved on a hub (2026-10-29)
