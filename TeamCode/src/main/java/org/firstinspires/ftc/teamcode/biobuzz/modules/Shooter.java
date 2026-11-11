@@ -35,6 +35,13 @@ public class Shooter extends Module {
     public static class FeedforwardPoint {
         public double rpm = 0;
         public double power = 0;
+
+        public FeedforwardPoint() {}
+
+        public FeedforwardPoint(double rpm, double power) {
+            this.rpm = rpm;
+            this.power = power;
+        }
     }
 
     public static class HardstopTuning {
@@ -45,6 +52,55 @@ public class Shooter extends Module {
     public static FlywheelTuning pollenTuning = new FlywheelTuning();
     public static FlywheelTuning nectarTuning = new FlywheelTuning();
     public static HardstopTuning hardstopTuning = new HardstopTuning();
+
+    // TODO: tune; feedforward rows are (rpm, power), rpm 0 unused.
+    static {
+        pollenTuning.reverseMotor = false;
+        pollenTuning.reverseEncoder = false;
+        pollenTuning.ticksPerRev = 8192;
+        pollenTuning.rpmWindowMs = 50;
+        pollenTuning.targetRPM = 0;
+        pollenTuning.openLoopPower = 0;
+        pollenTuning.kP = 0;
+        pollenTuning.kI = 0;
+        pollenTuning.kD = 0;
+        pollenTuning.hoodPosition = 0.5;
+        pollenTuning.feedforward[0] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[1] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[2] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[3] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[4] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[5] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[6] = new FeedforwardPoint(0, 0);
+        pollenTuning.feedforward[7] = new FeedforwardPoint(0, 0);
+    }
+
+    // TODO: tune; feedforward rows as pollen's.
+    static {
+        nectarTuning.reverseMotor = false;
+        nectarTuning.reverseEncoder = false;
+        nectarTuning.ticksPerRev = 8192;
+        nectarTuning.rpmWindowMs = 50;
+        nectarTuning.targetRPM = 0;
+        nectarTuning.openLoopPower = 0;
+        nectarTuning.kP = 0;
+        nectarTuning.kI = 0;
+        nectarTuning.kD = 0;
+        nectarTuning.hoodPosition = 0.5;
+        nectarTuning.feedforward[0] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[1] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[2] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[3] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[4] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[5] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[6] = new FeedforwardPoint(0, 0);
+        nectarTuning.feedforward[7] = new FeedforwardPoint(0, 0);
+    }
+
+    static {
+        hardstopTuning.blockedPosition = 0.6;
+        hardstopTuning.unblockedPosition = 0.3;
+    }
 
     private enum Drive { OFF, RPM, POWER }
 

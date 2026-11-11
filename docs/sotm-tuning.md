@@ -8,7 +8,7 @@ All SOTM tunables are in the dashboard group **Shot Tuning** (`biobuzz/ShotTunin
 
 | Thing | Where | Check |
 |---|---|---|
-| Hardware config has `PollenTurret`, `NectarTurretL`, `NectarTurretR`, `PollenShooter`, `NectarShooter`, `PollenHood`, `NectarHood`, `hardstop`, plus everything `BioBuzzRobot` uses | Robot config | SOTM Test INITs with no missing-device error |
+| Hardware config has `PollenTurretL`, `PollenTurretR`, `NectarTurret`, `PollenShooter`, `NectarShooter`, `PollenHood`, `NectarHood`, `hardstop`, plus everything `BioBuzzRobot` uses | Robot config | SOTM Test INITs with no missing-device error |
 | Each flywheel motor is on port 0 or 3 with its Through Bore on the same-numbered encoder port | Wiring | `CLAUDE.md`, "Flywheel RPM" |
 | Alliance | Dashboard `Context.allianceColor`, before INIT | Telemetry and field view show the right side |
 | Unit tests pass | `./gradlew :TeamCode:testDebugUnitTest` | 0 failures |
@@ -52,7 +52,7 @@ SOTM is only as good as pose and velocity.
 For each of `Turret.Tuning.nectar` and `pollen`:
 
 1. `leftPosition`, `backPosition`, `rightPosition`: the servo positions that point the turret exactly robot-left, straight back and robot-right (dpad left / down / right).
-2. Nectar only (two servos): `offset` so the two servos don't fight. Keep each end at least `offset` inside 0 to 1.
+2. Pollen only (two servos): `offset` so the two servos don't fight. Keep each end at least `offset` inside 0 to 1.
 3. `x`, `y`: the pivot, forward and left of the robot's centre, in inches.
 4. Press A (AUTOAIM) and drive around: the turret should stay on the dashboard goal.
 

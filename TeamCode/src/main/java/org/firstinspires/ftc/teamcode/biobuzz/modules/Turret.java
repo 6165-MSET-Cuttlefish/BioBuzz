@@ -21,6 +21,26 @@ public class Turret extends Module {
         public static TurretTuning pollen = new TurretTuning();
         public static double flipBandDeg = 10;
         public static double cellSwitchBandIn = 3;
+
+        // TODO: tune.
+        static {
+            nectar.x = 0; //
+            nectar.y = 0;
+            nectar.leftPosition = 0;
+            nectar.backPosition = 0.5;
+            nectar.rightPosition = 1;
+            nectar.offset = 0.01;
+        }
+
+        // TODO: tune.
+        static {
+            pollen.x = 0;
+            pollen.y = 0;
+            pollen.leftPosition = 0;
+            pollen.backPosition = 0.5;
+            pollen.rightPosition = 1;
+            pollen.offset = 0.01;
+        }
     }
 
     public static class TurretTuning {
@@ -57,8 +77,8 @@ public class Turret extends Module {
         this.follower = follower;
         goal = this::ownCell;
 
-        nectar = new TurretServos(hardwareMap, Tuning.nectar, "NectarTurretL", "NectarTurretR");
-        pollen = new TurretServos(hardwareMap, Tuning.pollen, "PollenTurret");
+        nectar = new TurretServos(hardwareMap, Tuning.nectar, "NectarTurret");
+        pollen = new TurretServos(hardwareMap, Tuning.pollen, "PollenTurretL", "PollenTurretR");
     }
 
     private double sotmPollenDeg;

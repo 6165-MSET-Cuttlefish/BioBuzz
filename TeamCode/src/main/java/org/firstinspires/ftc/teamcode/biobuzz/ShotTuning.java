@@ -102,23 +102,82 @@ public final class ShotTuning {
     /** Grows the no-shoot box around the HIVE frame. TODO: tune. */
     public static double hiveBadZoneMarginIn = 6;
 
-    // TODO: tune every table: these placeholders only keep the solver's maths exercised.
-    public static ElementTuning pollen = new ElementTuning(placeholderTable());
-    public static ElementTuning nectar = new ElementTuning(placeholderTable());
+    public static ElementTuning pollen = new ElementTuning(emptyTable(20));
+    public static ElementTuning nectar = new ElementTuning(emptyTable(20));
+    public static ShooterTuning pollenShooter = new ShooterTuning();
+    public static ShooterTuning nectarShooter = new ShooterTuning();
 
-    private static ShotPoint[] placeholderTable() {
-        ShotPoint[] table = new ShotPoint[20];
-        table[0] = new ShotPoint(36, 2500, 0.5, 0.55);
-        table[1] = new ShotPoint(60, 2800, 0.5, 0.62);
-        table[2] = new ShotPoint(84, 3100, 0.5, 0.70);
-        table[3] = new ShotPoint(108, 3400, 0.5, 0.80);
-        table[4] = new ShotPoint(132, 3700, 0.5, 0.90);
-        for (int i = 5; i < table.length; i++) table[i] = new ShotPoint();
+    private static ShotPoint[] emptyTable(int size) {
+        ShotPoint[] table = new ShotPoint[size];
+        for (int i = 0; i < size; i++) table[i] = new ShotPoint();
         return table;
     }
 
-    public static ShooterTuning pollenShooter = new ShooterTuning();
-    public static ShooterTuning nectarShooter = new ShooterTuning();
+    // TODO: tune: placeholder rows (distanceIn, rpm, hoodPosition, tofS) that only keep the solver's maths exercised; rows 5 to 19 are free.
+    static {
+        pollen.kDragPerS = 0;
+        pollen.minDistanceIn = 0;
+        pollen.maxDistanceIn = 1000;
+        pollen.table[0] = new ShotPoint(36, 2500, 0.5, 0.55);
+        pollen.table[1] = new ShotPoint(60, 2800, 0.5, 0.62);
+        pollen.table[2] = new ShotPoint(84, 3100, 0.5, 0.70);
+        pollen.table[3] = new ShotPoint(108, 3400, 0.5, 0.80);
+        pollen.table[4] = new ShotPoint(132, 3700, 0.5, 0.90);
+    }
+
+    // TODO: tune: placeholder rows, as pollen's.
+    static {
+        nectar.kDragPerS = 0;
+        nectar.minDistanceIn = 0;
+        nectar.maxDistanceIn = 1000;
+        nectar.table[0] = new ShotPoint(36, 2500, 0.5, 0.55);
+        nectar.table[1] = new ShotPoint(60, 2800, 0.5, 0.62);
+        nectar.table[2] = new ShotPoint(84, 3100, 0.5, 0.70);
+        nectar.table[3] = new ShotPoint(108, 3400, 0.5, 0.80);
+        nectar.table[4] = new ShotPoint(132, 3700, 0.5, 0.90);
+    }
+
+    // TODO: tune.
+    static {
+        pollenShooter.pivotForwardIn = 0; // X and Y of the turret position, positive is left and up
+        pollenShooter.pivotLeftIn = 0; // ^^^
+        pollenShooter.exitLeftIn = 0;
+        pollenShooter.exitHeightIn = 14;
+        pollenShooter.minAngleDeg = -90;
+        pollenShooter.maxAngleDeg = 90;
+        pollenShooter.transferTimeS = 0;
+        pollenShooter.servoLagS = 0.05;
+        pollenShooter.maxTurretRateDegPerS = 300;
+        pollenShooter.flywheelSpinUpLeadS = 0;
+        pollenShooter.flywheelSpinDownLeadS = 0;
+        pollenShooter.hoodLeadS = 0;
+        pollenShooter.rpmTrim = 0;
+        pollenShooter.hoodTrim = 0;
+        pollenShooter.angleTrimDeg = 0;
+        pollenShooter.angleToleranceDeg = 2;
+        pollenShooter.rpmTolerance = 75;
+    }
+
+    // TODO: tune.
+    static {
+        nectarShooter.pivotForwardIn = 0;
+        nectarShooter.pivotLeftIn = 0;
+        nectarShooter.exitLeftIn = 0;
+        nectarShooter.exitHeightIn = 14;
+        nectarShooter.minAngleDeg = -90;
+        nectarShooter.maxAngleDeg = 90;
+        nectarShooter.transferTimeS = 0;
+        nectarShooter.servoLagS = 0.05;
+        nectarShooter.maxTurretRateDegPerS = 300;
+        nectarShooter.flywheelSpinUpLeadS = 0;
+        nectarShooter.flywheelSpinDownLeadS = 0;
+        nectarShooter.hoodLeadS = 0;
+        nectarShooter.rpmTrim = 0;
+        nectarShooter.hoodTrim = 0;
+        nectarShooter.angleTrimDeg = 0;
+        nectarShooter.angleToleranceDeg = 2;
+        nectarShooter.rpmTolerance = 75;
+    }
 
     /**
      * Turret angle pairs that collide: while the pollen turret is in [pollenMin, pollenMax] and the nectar turret in
