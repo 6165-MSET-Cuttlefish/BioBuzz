@@ -24,6 +24,9 @@ or ports.
   encoder port keeping up, which no vendor documents.
 - **Make the changes in [What the code must do](#what-the-code-must-do) before the first run.** Several are about
   safety, not speed.
+- **Make the hub in the bay without the battery the Control Hub**, and leave room behind both hubs' USB ports. As
+  drawn, the battery holder blocks the other hub's USB-C port
+  ([Where the hubs sit](#where-the-hubs-sit-and-the-usb-cable-between-them)).
 - **Rewrite `TeamCode/src/main/res/xml/biobuzz.xml` in place** with these ports. It exists with an old layout, and
   adding a new config file shifts the stored config ([`toolchain-findings.md`](toolchain-findings.md)).
 
@@ -249,6 +252,70 @@ Worth doing with it:
   Fault instead is a team decision, as it was for the Limelight.
 - **A camera cable crosses each turret**, which turns at least 90° each way: strain-relieve both.
 
+## Where the hubs sit, and the USB cable between them
+
+Read from the CAD model on 2026-11-11 unless marked. The model draws both hubs as Control Hubs with no ports, so it
+does not say which one is the Expansion Hub, and port positions are estimated (±0.15 in) from REV's
+[dimension drawing](https://docs.revrobotics.com/duo-control/control-system-overview/dimensions).
+
+- One hub stands in each wheel bay, between the inner and outer side plates, with its base on the inner plate and its
+  connectors facing outboard. On both, the edge with the USB ports faces the rear. A window in each outer plate lets
+  a hand reach the ports (measured on a render, ±0.1 in).
+- **The hub in the bay without the battery is clear:** nothing sits within 2.2 in behind its USB ports (render), so
+  a straight plug fits on any of them.
+- **The hub in the battery's bay is blocked as drawn.** The battery holder's front wall is 0.16 in behind the hub's
+  USB edge and covers the position of the USB-C port (the mini-USB port on an Expansion Hub). A servo power injector
+  is 0.29 in behind the USB 2.0 position (render). Only the USB 3.0 position has an opening, about 1 in tall,
+  between the two, and the battery itself is not modelled.
+
+What follows:
+
+- **The Control Hub belongs in the bay without the battery.** In the other bay its USB-C port, which deploying by
+  cable at events needs ([`game-findings.md`](game-findings.md)), is behind the battery holder, and one usable
+  USB-A port would have to serve both the camera hub and a later Expansion Hub link.
+- **An Expansion Hub in the battery's bay cannot take a mini-USB plug as drawn.** RS485 does not need one. Before
+  linking the hubs by USB (only worth it with Photon, [above](#estimated-loop-period)), move the battery holder or
+  the hub to leave room for a plug and the cable's bend.
+- **The cable for a USB link:** USB 2.0, USB-A male to Mini-B male, shielded, 3 ft (0.9 m). The route that stays
+  clear of the transfer goes rearward from each hub along its wheel bay above the rear wheel, inboard through a
+  pocket in the inner plate, and across inside the upper rear cross channel: 25 to 26 in (estimated from the plate
+  and hub positions), 28 to 29 in with bends. A 2 ft cable is too short; 3 ft leaves about 7 in to tie down.
+  Straight across behind the hubs is 15 to 16 in, but through the transfer chute's space.
+- **Cables that meet it:** Monoprice 105447: 3 ft, straight plugs, 28/24 AWG, braid plus foil shield, ferrite
+  core, by its Amazon listing (<https://www.amazon.com/dp/B003L1380E>, read 2026-11-11: $7.01, sold and shipped
+  by Amazon, 4.7 stars from 925 ratings). Tripp Lite (Eaton) U030-003: 3 ft, straight plugs, tinned copper braid
+  plus foil shield, moulded plugs with strain relief
+  ([spec sheet](https://www.markertek.com/Attachments/Specifications/TRIPPLITE/U030-003-Specifications.pdf), read
+  2026-11-11; wire gauge not stated); on that date its only Amazon listings were from a third-party seller with
+  85% positive feedback and no product ratings. StarTech's straight USB2HABM3 is listed as 30 AWG with no shield
+  stated. Its angled versions, USB2HABM3RA and USB2HABM3LA, list foil plus braid and need less room behind the
+  port (retailer listings only); which of the two points the cable the right way has to be checked on the hub.
+- **Tie it clear of** the rear wheels and drive belts under the run, the battery's slide path, the odometry pods at
+  the rear corners (they move up and down) and the end of the transfer chute near the cross channel.
+- **A USB 3.0 cable gains nothing.** The Expansion Hub's socket is a 5-pin Mini-B, which has no USB 3.0 contacts,
+  and the SDK runs the link as a serial port at 460,800 baud (read from SDK 12.0.0 source,
+  `LynxConstants.SERIAL_MODULE_BAUD_RATE`), far below what USB 2.0 carries.
+- **Which Control Hub port: through the camera hub on USB 3.0, leaving USB 2.0 empty.** The USB 2.0 port shares a
+  bus with the hub's Wi-Fi radio, and interference on a device there can drop communications
+  ([ftc-docs hub tips](https://ftc-docs.firstinspires.org/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html),
+  fetched 2026-11-10), which stops the whole robot; no bench test covers static discharge. Behind the camera hub a
+  fault costs two drive motors, the intake, the transfer and the cameras, but not the radio, and that can be tested.
+  R707 allows a USB hub and an Expansion Hub on USB, and nothing we found forbids one behind the other.
+- **Before trusting the Expansion Hub behind the camera hub** (untested on our hubs): with an OpMode running, unplug
+  the hub's power bank and then each camera, and check the Expansion Hub stays connected; then run the Photon USB
+  bench on that wiring with both cameras streaming.
+- **Mini-USB pulls out easily.** REV's USB Retention Mount (REV-41-1214, $13.50 and in stock on 2026-11-11,
+  <https://revrobotics.com/rev-41-1214>) is a base that sticks to the Expansion Hub and a cap that screws onto it
+  over the plug; the mount is 27.6 x 23.7 mm and 14.1 mm tall
+  ([drawing](https://revrobotics.com/content/docs/REV-41-1214-DR.pdf)). The kit's cable is a custom right-angle
+  Mini-B to USB-A, 457 mm, and REV only claims the mount holds "when used with the included right-angle USB
+  cable"; whether the cap fits another cable's plug is unverified, and a search on 2026-11-11 found nobody
+  reporting it either way. REV's page gives no shielding or wire gauge for its cable. So there are two ways to buy:
+  - the REV kit plus a USB 2.0 A-male to A-female extension of about 1.5 ft, which reaches the route at 36 in and
+    locks the plug at the hub, with one joint in the run to tape and tie down (Monoprice 5431 is 1.5 ft and
+    28/24 AWG by retailer listings; its shielding is not confirmed);
+  - or the straight 3 ft cable above without the mount, tied to the frame near the plug.
+
 ## Rules and limits that bound the map
 
 From the Competition Manual revision named in [`game-findings.md`](game-findings.md), and REV's and goBILDA's pages,
@@ -283,6 +350,8 @@ fetched 2026-11-10:
 - **Whether the injector cuts its output** when the SDK disables PWM (`Turret.disable()` does).
 - **Whether the OctoQuad's localizer reset zeroes its channel counts**, and whether its bank mode is volatile like its
   velocity interval.
+- **Where the USB ports really are on the mounted hubs**, and whether the battery clears them: check on the built
+  robot, since the CAD's port positions are estimates.
 - **Inspection questions** only an inspector or the Q&A can settle: the Axon servos' and the power bank's
   compliance, and a resistor divider on an analog port for battery voltage (R612's note allows high-impedance
   monitoring).

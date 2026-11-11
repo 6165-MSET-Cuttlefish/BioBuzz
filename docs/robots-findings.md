@@ -49,8 +49,11 @@ shooter has one flywheel motor and a servo hood that sets the launch angle.
   cameras share a USB hub with its own power bank.
 - One transfer channel on the centreline carries both ball sizes and exits under each turret. Its speed alone would
   pass about 10.9 balls per second (inferred, and the transfer has changed since).
-- Mass 14.6 to 17.6 kg depending on plate material, footprint about 16.2 × 16.6 in with the intake out (both
-  inferred).
+- Mass 14.6 to 17.6 kg depending on plate material (inferred). The frame is 16.25 in wide over the outer side plates
+  and 15.48 in long, 16.74 in over the widest fixed brackets (read from the CAD, 2026-11-11). With the intake arm
+  deployed the robot is about 20.9 in long (measured on a render); no retracted pose is modelled.
+- Where the two hubs sit, and what blocks their USB ports:
+  [`wiring-findings.md`](wiring-findings.md#where-the-hubs-sit-and-the-usb-cable-between-them).
 
 What code has to respect:
 
