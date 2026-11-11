@@ -106,6 +106,12 @@ writing every loop):
 - **A diagonal pair, front-left and back-right.** The loop cost is the same for any pair. The reason is failure: if
   the Expansion Hub drops out, a diagonal pair can still translate without turning, and a same-side pair cannot (from
   Pedro's mecanum wheel equations; untested on a robot).
+- **Not all four drive motors on the Control Hub.** That would move both flywheels to the Expansion Hub. Flywheel
+  power changes every loop even when parked, and drive power only while driving, so the parked loop grows by 2.1 ms
+  (20.8 against 18.7) and a driving loop with drive writes in half the loops by 1.0 ms; at the ceiling the two are
+  equal. It would also leave the hardware-counted encoder ports 0 and 3 under drive motors, so anything that resets
+  a drive motor would reset a flywheel's count. What it would buy is full driving if the Expansion Hub drops out.
+  Shooting stops in that case with either layout, because the transfer is on the Expansion Hub.
 - **All five aiming servos and the blocker on the Control Hub.** Turrets and hoods change every loop in
   shoot-on-the-move. The blocker gates each shot: 1.55 ms on the Control Hub (measured) against about 2.45 ms.
 - **Rarely changing outputs on the Expansion Hub**: intake, transfer motor, transfer servo, flower intake, lights.
@@ -165,6 +171,9 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
 - **If Photon is cleared** ([`photon-bench.md`](photon-bench.md)): 16.4 / 28.1 ms with the Expansion Hub still on
   RS485, 16.0 / 24.2 ms with it on USB (estimated from the fork's bench on 2026-10-29). No device moves: only the
   Expansion Hub's cable changes. Without Photon a USB Expansion Hub write is no faster than RS485, so stay on RS485.
+  The map stays the shortest of the layouts modelled under Photon: with all four drive motors on the Control Hub
+  the same two figures are 20.4 / 28.1 on RS485 and 16.5 / 24.2 on USB, and with the turret servos on the
+  Expansion Hub 16.4 / 33.5 and 16.0 / 25.0. With Photon on both hubs every layout is within 1 ms of the map.
 - **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot).
 
 ## Open choices
@@ -340,6 +349,10 @@ fetched 2026-11-10:
   figure exists. The two encoder tests above settle it for our speeds.
 - **The cost of a write on an RS485 Expansion Hub.** Every 2.5 ms here is the Control Hub cost plus the hop measured
   on reads. Test: time 1000 changed `setPower` calls on each hub in one OpMode.
+- **Whether Photon overlaps writes to two hubs on USB.** The model adds the two hubs' write times, as the bench's
+  blocks did (4.66 + 6.20 ms for 6 writes on each). If writes to different hubs overlap, splitting the every-loop
+  outputs evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub. Test: on the Photon USB
+  bench, time one loop's 11 writes split 9 + 2 and split 6 + 5.
 - **How often the drive motors really write** in TeleOp shoot-on-the-move. Test: a per-loop write counter in SOTM
   Test.
 - **Whether the flywheel power changes every loop** once its RPM reading is clean; if not, parked loops are shorter.

@@ -139,6 +139,11 @@ if __name__ == '__main__':
     print()
     row("Photon on the Control Hub, Expansion Hub on RS485", MAP, photon='rs485')
     row("Photon on both hubs, Expansion Hub on USB", MAP, photon='usb')
+    for mode in ('rs485', 'usb'):
+        for name, devs in (("flywheels on the EH, 4 drive on CH", FLYWHEELS_ON_EH),
+                           ("intake and transfer on CH, 4 drive on EH", ALL_DRIVE_ON_EH),
+                           ("turret servos on the EH", TURRET_SERVOS_ON_EH)):
+            row(f"  Photon, {mode}: {name}", devs, photon=mode)
     print()
     for situation in ('parked', 'driving', 'firing'):
         b = budget(MAP, situation)
