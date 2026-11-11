@@ -2,10 +2,10 @@
 
 ## Project context
 
-- Game code goes in `biobuzz/`, `modules/`, `opmodes/`; `architecture/` stays game-agnostic; new Java files go in an existing package. Field constants come from the BIOBUZZ game manual, never guesses.
+- Game code goes in `biobuzz/` (its modules in `biobuzz/modules/`) and `opmodes/`; `architecture/` stays game-agnostic; new Java files go in an existing package. Field constants come from the BIOBUZZ game manual, never guesses.
 - Nothing new at the top level beyond Gradle and repo files: tools go in `scripts/`, documents in `docs/`.
 - No BioBuzz robot yet: BioBuzz code runs on the Betta bot (`betta_decode.xml`, `pedro/BettaConstants`, `biobuzz/RobotGeometry`).
-- `decode/` runs only on the Cuttle bot (`cuttle_decode.xml`) and shares `modules/Drivetrain`. Run nothing built on `BettaConstants` there: Cuttle's config has every device a BioBuzz OpMode uses, so one starts with Betta's constants and no error.
+- `decode/` runs only on the Cuttle bot (`cuttle_decode.xml`) and shares `biobuzz/modules/Drivetrain`. Run nothing built on `BettaConstants` there: Cuttle's config has every device a BioBuzz OpMode uses, so one starts with Betta's constants and no error.
 - In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
 
@@ -64,7 +64,7 @@ Pedro Pathing 3:
 
 **Ball collection** (`RobotActions.collectBalls`) plans once and drives back to where it planned from. It ends SKIPPED on a Limelight fault before it plans, or on a START before the INIT Limelight sync is done (about 2 s; it waits only `visionWaitMs`).
 
-**Vision** (`modules/vision/`): `Camera`'s field-ball getters keep a ball out of view for `forgetAfterSeconds`, frozen where last seen with `visible()` false: check `visible()` before chasing one.
+**Vision** (`biobuzz/modules/vision/`): `Camera`'s field-ball getters keep a ball out of view for `forgetAfterSeconds`, frozen where last seen with `visible()` false: check `visible()` before chasing one.
 
 **Ball detection** (`limelight/`) ships as the generated `LimelightFiles`, so deploySloth carries edits. After a lens recalibration, update `LENS_*` in both the SnapScript and `HomographyCalculationPipeline`.
 
@@ -122,7 +122,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **OctoQuad**: use the SDK's own driver (type `OctoQuadFTC`); don't add DigitalChickenLabs' `OctoQuadFWv3`.
 - **Laser rangefinders** (Brushland): switch one to analog with Configure Laser Rangefinder on `laser_rangefinder_i2c.xml`, then set every reader's `maxRangeMm` to its `analogHighMm` (readers assume `analogLowMm` 0) or distances scale wrong. Back to I2C: INIT and stop that OpMode with the sensor unplugged, then plug it in (LED turns magenta).
 - **Transfer Count Test** / **Transfer Thread Count Test**: `analog0` (A) sits upstream of `analog1` (B), close enough that one ball covers both; balls must only travel A to B and start with the chute clear.
-- **Hub-reading threads** (reference: `modules/TransferCounter`): poll at 10 ms, the hub's ADC refresh; faster only costs loop time (`docs/hub-bench-findings.md`). Any such thread:
+- **Hub-reading threads** (reference: `biobuzz/modules/TransferCounter`): poll at 10 ms, the hub's ADC refresh; faster only costs loop time (`docs/hub-bench-findings.md`). Any such thread:
   - Call `start()` on the OpMode thread and `stop()` from the OpMode's stop, not `Module.stop()`, which also runs mid-OpMode.
   - Loop only while the OpMode thread `isAlive()`: after a crash the SDK calls no OpMode hook, so that is the only stop signal.
   - Stop with a volatile flag and `join`, never `interrupt()`: the SDK's `MessageKeyedLock.release` calls `lockInterruptibly()`, so an interrupt mid-command can leave the hub's USB lock held until it's abandoned after 500 ms, stalling every thread's hub commands.
