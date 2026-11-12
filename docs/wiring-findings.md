@@ -183,7 +183,7 @@ Each row has a default that the map uses and the test that would change it.
 | choice | default | alternative | what the alternative costs or buys | test |
 |---|---|---|---|---|
 | Flywheel Through Bores | Control Hub encoders 0 and 3 | OctoQuad channels 2 and 3, speed computed on the board at a 10 to 20 ms interval | +3.4 ms every loop; removes timestamp noise from the RPM; rated 1,000,000 counts/s where the hub has no published limit | Spin each flywheel unloaded to free speed on a full battery (5800 RPM by the vendor's test, 792,000 counts/s) with the encoder on port 0 or 3 and count for 10 s against the OctoQuad or a tachometer. Any lost counts: move to the OctoQuad. |
-| Nectar turret Through Bore | Control Hub encoder 2 | OctoQuad channel 4 | +3.4 ms every loop if read every loop (free if the flywheels are already there); its absolute output cannot drift | Sweep the turret end to end at full servo speed a few hundred times, back to a fixed mark, and log the count. Any drift: move it. |
+| Nectar turret Through Bore | Control Hub encoder 2 | OctoQuad channel 4 read every loop; or the count on the hub plus the absolute output on OctoQuad channel 4 read once at INIT ([below](#zeroing-the-nectar-turret)) | Every loop: +3.4 ms (free if the flywheels are already there). Once at INIT: nothing per loop, and a zero that survives a reset of the count | Sweep the turret end to end at full servo speed a few hundred times, back to a fixed mark, and log the count. Any drift: move it. For the INIT read: the bench test below. |
 | Last two Control Hub motor ports | two drive motors | intake and transfer, all four drive motors on the Expansion Hub | 0 to 1.9 ms more per driving loop; puts the turret encoder under a motor that no path follower or tuner touches; makes `isOverCurrent()` jam checks free | Decide by whether the loop needs a jam check every loop. |
 | Pollen turret pair | one port each | both on one port through a Y-cable (R505 allows two servos per port) | saves 1.55 ms per aiming loop and frees a servo port; loses the per-servo offset in `Turret` | On the robot: check the two servos do not fight with no offset. |
 | Battery voltage for flywheel compensation | every 50 loops, as now | every loop while a flywheel runs, or every 2 to 3 loops | +1.3 ms, or +0.4 to 0.6 ms, per loop; the simulation had the first ball 145 to 160 RPM low under drive sag with the 50-loop read | Fire bursts during hard accelerations at each cadence and log RPM as each ball arrives. |
@@ -194,11 +194,43 @@ Two cautions on the turret encoder default:
 - Port 2 counts in software, and the only published guidance says encoders over about 4000 counts per revolution
   should not go on ports 1 and 2 if they spin fast
   ([gm0](https://gm0.org/en/latest/docs/software/adv-control-system/control-system-internals.html), fetched
-  2026-11-10). The turret is slow: about 15,300 counts/s with the encoder on the turret's axis, about 36,400 on the
-  shaft between the servo and the turret (estimated from the vendor's servo speed and the CAD's gears). Which shaft
-  carries the encoder is not settled.
+  2026-11-10). The turret is slow: about 36,400 counts/s at the servo's no-load speed on 6 V (672°/s at the turret
+  × 54.18 counts per degree). The CAD puts the encoder on the pinion shaft, 50/21 turns per turret turn
+  ([`robots-findings.md`](robots-findings.md)).
 - It is a relative count under a drive motor's port number. Anything that resets or changes the mode of that motor
   moves the turret's zero, and the CAD has no hard stop to home against.
+
+### Zeroing the nectar turret
+
+Untested. The encoder's absolute output could set the zero at INIT with no cost per loop:
+
+- **Wire both outputs of the one encoder.** A, B, 3.3 V and ground go to Control Hub encoder port 2. The absolute
+  wire and ground go to the A pin of OctoQuad channel 4. Power the encoder from the hub only. No stock cable does
+  this: REV's hub cable (REV-31-1815) carries A and B only.
+- **Set the OctoQuad's second bank to pulse width at INIT.**
+  `setChannelBankConfig(BANK1_QUADRATURE_BANK2_PULSE_WIDTH)` makes channels 4 to 7 pulse-width inputs and leaves 0
+  to 3 counting, so the pods on 0 and 1 are untouched. The setting is lost at power-off unless saved to flash.
+- **Read channel 4 once at INIT**, turn the pulse width into the encoder's angle, and use the hub count from then
+  on. The loop's OctoQuad read stays the localizer read, 3.2 ms.
+- **Pick the turn from a rough angle.** The absolute output repeats every 151.2° of turret (360° × 21/50), and the
+  servo's travel covers 2.1 to 2.3 encoder turns. A rough angle within 75° of the truth picks the right turn: set
+  the turret by hand within 75° of a mark before INIT, or use the commanded servo angle once the servo has settled
+  (the turret follows the servo 1.008 to 1).
+- **Expect steps of about 0.15° of turret.** The OctoQuad reports the pulse in whole microseconds: 0.35° of encoder
+  on a V1 (1 to 1024 µs), 0.36° on a V2 (3.884 to 998.06 µs).
+
+How each part is known, all read on 2026-11-11 and none of it run:
+
+- The bank setting: SDK 12.0.0 source, `OctoQuad.ChannelBankConfig`. Pedro revhub 3.0.2's `OctoQuadLocalizer`
+  never sets it (source).
+- The pulse goes on a channel's A pin, and the inputs are 3.3 V only: OctoQuad datasheet Rev 3.0C, sections 2.1
+  and 3.1.
+- The encoder puts out the counting and absolute signals together with its switch on A: REV's
+  [application examples](https://docs.revrobotics.com/rev-crossover-products/sensors/tbe/v1/application-examples).
+
+Test: on a bench hub, with the OctoQuad and one encoder wired this way. Time the localizer read with the second
+bank in pulse-width mode against all channels counting. Turn the encoder by hand through several turns and compare
+the absolute angle with the hub count. Restart the OpMode and check the absolute angle has not moved.
 
 In a loop at 34 to 37 ms, in-loop sampling sees about half of the rangefinders' 20 ms readings. Whether that misses
 balls is what the counting test settles.
@@ -361,8 +393,11 @@ fetched 2026-11-10:
 - **The splitter cable's pin mapping** and which wire the Floodgate's sense connector uses; which Floodgate version
   is fitted (`Drivetrain` assumes the 80 A scale).
 - **Whether the injector cuts its output** when the SDK disables PWM (`Turret.disable()` does).
-- **Whether the OctoQuad's localizer reset zeroes its channel counts**, and whether its bank mode is volatile like its
-  velocity interval.
+- **Whether the OctoQuad's localizer reset zeroes its channel counts.** Its bank mode is volatile like its velocity
+  interval (the SDK's Javadoc on `setChannelBankConfig`).
+- **Whether the absolute output read once at INIT works as the nectar turret's zero.** Test: the bench test under
+  [Zeroing the nectar turret](#zeroing-the-nectar-turret); then on the robot, power-cycle with the turret at
+  several angles and compare the angle the code reports with a protractor mark.
 - **Where the USB ports really are on the mounted hubs**, and whether the battery clears them: check on the built
   robot, since the CAD's port positions are estimates.
 - **Inspection questions** only an inspector or the Q&A can settle: the Axon servos' and the power bank's

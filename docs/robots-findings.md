@@ -22,10 +22,12 @@ shooter has one flywheel motor and a servo hood that sets the launch angle.
 |---|---|---|
 | Ball | 2.8 in (71.1 mm), 24.9 g (23.5 to 27.2) | 3.6 in (91.4 mm), 41.3 g (39 to 45) |
 | Turret axis from the robot's centre (inferred, ±1 in) | about 5.3 in behind | about 3.3 in ahead |
-| Turret drive | Axon Mini, about 1:1 (48T to 20T, then 59T to 140T) | Axon Mini, about 1:1 (48T to 20T, then 63T to 150T) |
-| Turret servos | 2 | 1 |
-| Turret encoder | none | REV Through Bore; the CAD notes plan it on the OctoQuad, [`wiring-findings.md`](wiring-findings.md) on a hub encoder port |
-| Turret hard stops | none in CAD | none in CAD |
+| Turret drive | Axon Mini, about 1:1 (48T to 20T, then 59T to 140T) | Axon Mini; the turret turns 126/125 = 1.008 of the servo's angle, the same way (48T to 20T, then 63T to 150T, teeth counted) |
+| Turret servos | 2 | 1 mated; a second is drawn on the same pinion but fastened to nothing |
+| Turret encoder | none | REV Through Bore V1 on the pinion shaft, not the turret's axis: 50/21 = 2.381 turns per turret turn, the opposite way; 19,504.76 counts per turret turn, 54.18 per degree. The CAD notes plan it on the OctoQuad, [`wiring-findings.md`](wiring-findings.md) on a hub encoder port |
+| Turret speed, no load | not derived | 672°/s at 6 V, 550°/s at 4.8 V (the vendor's servo speed × 1.008): 180° in 0.27 s at 6 V |
+| Turret travel | not derived | no limit in the mechanism; 317.5° with the SDK's default 600 to 2400 µs pulse range, 352.8° with 500 to 2500 µs |
+| Turret hard stops | none in CAD | none in CAD: the ring gear has teeth all the way round and a sweep of the turret hit no fixed part |
 | Flywheel | one 72 mm goBILDA Rhino wheel (3614-0014-0072, 85 g), no added mass | same wheel |
 | Flywheel motor | goBILDA 5000-0002-4008, 1:1 by belt (30T:30T) | same motor, ratio assumed 1:1 |
 | Launch | one flywheel against a moving hood that shares the wheel's axis, fixed side guides, no second roller at the exit | same |
@@ -54,6 +56,10 @@ shooter has one flywheel motor and a servo hood that sets the launch angle.
   deployed the robot is about 20.9 in long (measured on a render); no retracted pose is modelled.
 - Where the two hubs sit, and what blocks their USB ports:
   [`wiring-findings.md`](wiring-findings.md#where-the-hubs-sit-and-the-usb-cable-between-them).
+- The nectar turret's gears, encoder position, speed and travel are from saved reads of the CAD's turret document,
+  analysed 2026-11-11: its mates as of 2026-11-04 and its placement in the full robot as of 2026-11-08. Later CAD
+  changes are not in them. The speeds use Axon's table for the Mini (0.110, 0.090, 0.080 and 0.068 s per 60° at
+  4.8, 6.0, 7.4 and 8.4 V) and are unloaded: the real turret is slower by an amount nobody has computed.
 
 What code has to respect:
 
@@ -70,6 +76,18 @@ What code has to respect:
   from the Limelight need the nectar turret's angle; `BallFieldTransform.Mount` assumes a camera fixed to the chassis
   ([`limelight-findings.md`](limelight-findings.md)). The pollen turret has no encoder, so the Arducam's heading is
   only the commanded servo angle.
+- **The nectar turret encoder cannot give the turret's angle on its own at power-on.** One encoder turn is 151.2° of
+  turret, so its absolute output repeats 2.38 times per turret turn, and there is no hard stop to home against. The
+  code needs a rough angle from elsewhere to pick the turn: see
+  [`wiring-findings.md`](wiring-findings.md#zeroing-the-nectar-turret).
+- **Nothing in the CAD couples the nectar encoder to its shaft.** The shaft is 8 mm REX; the CAD analysis lists the
+  encoder's bore as 1/2 in hex with 3/8 in hex, 5 mm hex and 1/4 in round inserts (not re-read from REV here). The
+  2.381 ratio assumes an adapter makes the rotor turn with that shaft.
+- **The nectar shooter's side plates pass 0.025 mm over the face of the 63-tooth pinion**, at about 32 to 47° and 130
+  to 156° either side of the modelled pose. A pinion that sits proud on the real robot becomes a stop there.
+- **The pollen shooter may limit the nectar turret to about 290°** (72° one way, 218° the other from the modelled
+  pose, before the two come within 2 mm). This is a coarse check with the pollen shooter held at one pose: a flag,
+  not a limit.
 - **Where the flywheel encoders plug in is undecided**: see
   [`flywheel-control-findings.md`](flywheel-control-findings.md#where-to-plug-the-flywheel-encoders).
 
@@ -149,7 +167,10 @@ and nothing below has been checked on it.
 
 - **Everything in the BIOBUZZ robot section, once the robot exists.** Test: measure each number on the robot and
   replace it here. First: flywheel inertia (spin-up at full power), the launch angle at each end of hood travel
-  (video from the side), the exit height, and which turret has two servos.
+  (video from the side), the exit height, and how many servos each turret has (the CAD draws a second, unmated
+  servo on the nectar pinion).
+- **How the nectar turret encoder is coupled to its 8 mm shaft, and its real slew speed under the shooter's
+  inertia.** Test: look at the built turret; time a 180° move from the encoder count.
 - **Do `leftPto` 0.4 and `rightPto` 0.5 still disengage?** Test: on the Cuttle bot, set each from the dashboard's
   Hardware view and look at the PTO.
 - **What does the initial lift do with `leftInitial` and `rightInitial` unpowered?** Test: run Decode Tele through
