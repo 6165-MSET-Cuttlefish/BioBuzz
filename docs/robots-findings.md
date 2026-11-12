@@ -24,9 +24,9 @@ shooter has one flywheel motor and a servo hood that sets the launch angle.
 | Turret axis from the robot's centre (inferred, ±1 in) | about 5.3 in behind | about 3.3 in ahead |
 | Turret drive | Axon Mini, about 1:1 (48T to 20T, then 59T to 140T) | Axon Mini; the turret turns 126/125 = 1.008 of the servo's angle, the same way (48T to 20T, then 63T to 150T, teeth counted) |
 | Turret servos | 2 | 1 mated; a second is drawn on the same pinion but fastened to nothing |
-| Turret encoder | none | REV Through Bore V1 on the pinion shaft, not the turret's axis: 50/21 = 2.381 turns per turret turn, the opposite way; 19,504.76 counts per turret turn, 54.18 per degree. The CAD notes plan it on the OctoQuad, [`wiring-findings.md`](wiring-findings.md) on a hub encoder port |
+| Turret encoder | none | REV Through Bore on the OctoQuad: a V2, geared 1:2.4 to the turret (team-reported 2026-11-11). The CAD draws a V1 on the pinion shaft, not the turret's axis: 50/21 = 2.381 turns per turret turn, the opposite way; 19,504.76 counts per turret turn, 54.18 per degree: [`wiring-findings.md`](wiring-findings.md#the-nectar-turret-encoder) |
 | Turret speed, no load | not derived | 672°/s at 6 V, 550°/s at 4.8 V (the vendor's servo speed × 1.008): 180° in 0.27 s at 6 V |
-| Turret travel | not derived | no limit in the mechanism; 317.5° with the SDK's default 600 to 2400 µs pulse range, 352.8° with 500 to 2500 µs |
+| Turret travel | not derived | 200° (team-reported 2026-11-11); no limit in the mechanism; 317.5° with the SDK's default 600 to 2400 µs pulse range, 352.8° with 500 to 2500 µs |
 | Turret hard stops | none in CAD | none in CAD: the ring gear has teeth all the way round and a sweep of the turret hit no fixed part |
 | Flywheel | one 72 mm goBILDA Rhino wheel (3614-0014-0072, 85 g), no added mass | same wheel |
 | Flywheel motor | goBILDA 5000-0002-4008, 1:1 by belt (30T:30T) | same motor, ratio assumed 1:1 |
@@ -79,7 +79,7 @@ What code has to respect:
 - **The nectar turret encoder cannot give the turret's angle on its own at power-on.** One encoder turn is 151.2° of
   turret, so its absolute output repeats 2.38 times per turret turn, and there is no hard stop to home against. The
   code needs a rough angle from elsewhere to pick the turn: see
-  [`wiring-findings.md`](wiring-findings.md#zeroing-the-nectar-turret).
+  [`wiring-findings.md`](wiring-findings.md#the-nectar-turret-encoder).
 - **Nothing in the CAD couples the nectar encoder to its shaft.** The shaft is 8 mm REX; the CAD analysis lists the
   encoder's bore as 1/2 in hex with 3/8 in hex, 5 mm hex and 1/4 in round inserts (not re-read from REV here). The
   2.381 ratio assumes an adapter makes the rotor turn with that shaft.

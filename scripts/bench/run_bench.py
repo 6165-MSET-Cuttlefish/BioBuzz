@@ -2022,6 +2022,10 @@ def stop_trial_verdict(sampler, require_zeroing_read=False):
         key = hub.get("key")
         if hub.get("error"):
             v["problems"].append(f"{key}: sampler thread failed: {hub.get('error')}")
+        failed = hub.get("failedSweepsMs") or []
+        if failed and dig(sampler, "info", "variant") != "crash":
+            v["problems"].append(f"{key}: {len(failed)} sampler sweep(s) had a read fail with no lost write to mark the "
+                                 f"hub not responding, first at {failed[0]:.0f} ms")
         kinds, names = hub.get("kinds") or [], hub.get("channels") or []
         sweeps = hub.get("sweeps") or []
         starts = [row[0] for row in sweeps if row]

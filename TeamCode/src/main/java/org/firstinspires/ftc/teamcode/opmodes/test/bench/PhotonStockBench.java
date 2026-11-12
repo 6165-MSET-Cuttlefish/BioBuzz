@@ -15,7 +15,7 @@ import java.util.Map;
 public class PhotonStockBench extends PhotonWorkload {
     private static final double PROBE_POWER = 0.1;
     private static final long PROBE_MS = 200;
-    private static final double PROBE_LIMIT_AMPS = 0.1;
+    private static final double PROBE_LIMIT_AMPS = 0.3;
 
     @Override
     public void runOpMode() {

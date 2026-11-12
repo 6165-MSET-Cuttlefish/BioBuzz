@@ -150,6 +150,8 @@ final class PhotonChannel {
                 e.put("got", got);
                 e.put("commanded", c.commanded());
                 e.put("hubEnabled", wantEnabled ? enabledNow : null);
+                e.put("gotOnReread", c.read());
+                e.put("hubEnabledOnReread", wantEnabled ? c.enabled() : null);
                 e.put("photonEnabled", PhotonCore.isEnabled());
                 e.put("msSinceWrite", c.msSinceWrite());
                 e.put("inFlightOnHub", PhotonProbe.inFlight(c.hub));

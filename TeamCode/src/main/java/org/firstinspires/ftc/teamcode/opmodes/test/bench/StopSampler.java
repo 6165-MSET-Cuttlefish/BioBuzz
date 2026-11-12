@@ -14,6 +14,7 @@ final class StopSampler {
     private static final long DEADLINE_NS = 60_000_000_000L;
     private static final long GATE_POLL_NS = 250_000L;
     private static final int MAX_SWEEPS = 4000;
+    private static final int MAX_FAILED_SWEEPS_IN_A_ROW = 5;
     private static final int LOOP_RING = 64;
 
     private final String fileName;
@@ -129,6 +130,7 @@ final class StopSampler {
         private final LynxModule hub;
         private final List<PhotonChannel> channels;
         private final List<double[]> sweeps = new ArrayList<>();
+        private final List<Double> failedSweepsMs = new ArrayList<>();
         private volatile boolean failSafeSeen;
         private volatile Throwable error;
 
@@ -142,19 +144,28 @@ final class StopSampler {
         @Override
         public void run() {
             try {
+                int failedInARow = 0;
                 while (!finished && System.nanoTime() - startNs < DEADLINE_NS) {
                     long t0 = System.nanoTime();
                     boolean gate = PhotonProbe.gateUp();
                     double[] row = new double[3 + 2 * channels.size()];
                     boolean allOff = true;
-                    for (int i = 0; i < channels.size(); i++) {
-                        PhotonChannel c = channels.get(i);
-                        boolean on = c.enabled();
-                        int raw = on && c.isMotor() ? HubRegisters.motorPowerRaw(hub, c.port) : 0;
-                        row[3 + 2 * i] = on ? 1 : 0;
-                        row[4 + 2 * i] = raw;
-                        allOff &= !on;
+                    try {
+                        for (int i = 0; i < channels.size(); i++) {
+                            PhotonChannel c = channels.get(i);
+                            boolean on = c.enabled();
+                            int raw = on && c.isMotor() ? HubRegisters.motorPowerRaw(hub, c.port) : 0;
+                            row[3 + 2 * i] = on ? 1 : 0;
+                            row[4 + 2 * i] = raw;
+                            allOff &= !on;
+                        }
+                    } catch (IllegalStateException e) {
+                        // A write given up marks the hub not responding until its next reply: the SDK fails reads in between.
+                        if (++failedInARow > MAX_FAILED_SWEEPS_IN_A_ROW) throw e;
+                        if (failedSweepsMs.size() < MAX_SWEEPS) failedSweepsMs.add((t0 - startNs) / 1e6);
+                        continue;
                     }
+                    failedInARow = 0;
                     long t1 = System.nanoTime();
                     row[0] = (t0 - startNs) / 1e6;
                     row[1] = (t1 - startNs) / 1e6;
@@ -182,6 +193,7 @@ final class StopSampler {
             m.put("columns", "startMs, endMs, gateUp, then enabled and raw power per channel (raw 0 when disabled or a servo)");
             m.put("gateMs", gateNs == 0 ? null : (gateNs - startNs) / 1e6);
             m.put("sweeps", new ArrayList<>(sweeps));
+            m.put("failedSweepsMs", new ArrayList<>(failedSweepsMs));
             m.put("error", error == null ? null : error.toString());
             return m;
         }

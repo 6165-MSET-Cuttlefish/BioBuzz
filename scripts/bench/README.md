@@ -128,7 +128,7 @@ hub's motor ports 0-3 or servo ports 0-1 (the block drives them at 0.15-0.3 and 
 prints exactly what before it starts). For `--usb-expansion` the Expansion Hub is on a USB cable only (no RS485 cable);
 for `--photon-rs485` on the RS485 cable only. Pass `--ports-empty` once the ports are empty: a config on the hub that
 names devices on either hub's bench ports stops the run without it, and from a terminal it asks you to confirm. The
-stock bench then drives each motor port at 0.1 for 0.2 s and refuses to go on if one draws over 0.1 A. It can't probe
+stock bench then drives each motor port at 0.1 for 0.2 s and refuses to go on if one draws over 0.3 A (an empty port reads up to 0.14 A, `docs/photon-bench.md`). It can't probe
 servo ports, and a free-spinning motor may draw less than that: check every bench port by eye.
 
 **I2C (`--photon-i2c`).** Plug the OctoQuad into Control Hub I2C port 2, where the robot has it, and the goBILDA

@@ -111,7 +111,7 @@ final class LinkTap implements InvocationHandler {
         armedThread = Thread.currentThread();
     }
 
-    // Photon reuses a message number once it gives up on the write: disarm before writing again.
+    // Photon reuses a message number once it gives up on the write: disarm before writing that channel again.
     void disarm() {
         armedThread = null;
         kinds = 0;
@@ -150,7 +150,8 @@ final class LinkTap implements InvocationHandler {
                 int packet = (bytes[8] & 0xFF) | (bytes[9] & 0xFF) << 8;
                 int channel = bytes[10] & 0xFF;
                 boolean output = packet == motorCommand || packet == servoCommand;
-                if (output && swallowing.contains(message)) {
+                int key = message | channel << 8 | (packet == servoCommand ? 1 << 16 : 0);
+                if (output && swallowing.contains(key)) {
                     note(message, packet, channel, true);
                     return null;
                 }
@@ -158,7 +159,7 @@ final class LinkTap implements InvocationHandler {
                 boolean mine = (kind & kinds) != 0 && armedThread == Thread.currentThread() && channels.contains(channel);
                 if (mine && toSwallow > 0) {
                     toSwallow--;
-                    swallowing.add(message);
+                    swallowing.add(key);
                     note(message, packet, channel, false);
                     return null;
                 }

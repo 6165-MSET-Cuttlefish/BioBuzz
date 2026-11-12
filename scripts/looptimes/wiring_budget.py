@@ -126,7 +126,7 @@ if __name__ == '__main__':
     row("the map, dashboard off, drive writes in 50%", MAP, dashboard_off=True, drive_fraction=0.5)
     print()
     row("any input on the Expansion Hub", MAP, eh_input=True)
-    row("Through Bores on the OctoQuad, read every loop", MAP, octoquad_encoders=True)
+    row("OctoQuad encoder block read every loop", MAP, octoquad_encoders=True)
     row("turret servos on the Expansion Hub", TURRET_SERVOS_ON_EH)
     row("flywheels on the Expansion Hub, 4 drive on CH", FLYWHEELS_ON_EH)
     for f in (0.0, 0.5):

@@ -48,6 +48,29 @@ SDK 12 source (`LynxRespondable.awaitAndRetransmit`); no Control Hub command tim
 |---|---|---|---|---|---|
 | 2026-10-28 | stock SolversLib Photon 0.3.6 | USB | speed only, earlier bench | none | write block 25.9 to 6.0 ms p50 at 8 parallel, loop 31.8 to 11.5 ms; showed the misrouted replies |
 | 2026-10-29 | `c825493` | USB | short, no I2C | NOT SAFE YET | 3 problems, all fixed since (below); write block 24.96 to 10.84 ms p50, loop 30.7 to 16.0 ms; other timings [below](#how-the-fork-behaved-on-a-hub-2026-10-29) |
+| 2026-11-11 | `709f1cf` | USB | short, with I2C | NOT SAFE YET | 3 failed checks: 2 bench bugs, fixed since, and 1 unexplained read-back (below); write block 22.62 to 7.75 ms p50; soak 26,070 writes per hub in 60 s |
+
+The 2026-11-11 failures (`bench-results/2026-11-11_205238` on the laptop that ran it):
+
+1. **Lost writes at depth, Control Hub (7 of 104 trials): bench bug.** The fault tap swallowed by message number alone.
+   Photon frees a number when it gives up on a write, and in those trials the hub's counter had wrapped (255 to 262
+   writes since the lost one) and handed the same number to the next servo write, which the tap swallowed too. The tap
+   now matches number, command and channel. The Expansion Hub wrote 202 to 213 times in the same window, so it never
+   wrapped.
+2. **Crash with writes in flight: bench bug.** The two swallowed writes per hub were given up 250 ms after they were
+   sent, which marks the hub not responding until its next reply (2 ms later); the sampler's read in that gap failed
+   and ended its thread 120 ms before the throw, so it never saw the fail-safe. The sampler now drops a sweep whose
+   read fails, up to 5 in a row, and the runner fails any trial but the crash one that drops a sweep. The throw came
+   366 ms after the lost writes went out, so they had already been given up: the crash had 1 write in flight that
+   could still be acknowledged, not the 4 it meant to. What takes those 366 ms isn't known.
+3. **Interleave off, 1 of 1200 read-backs: unexplained.** With Photon disabled (the SDK's own write path on Photon's
+   hub objects), the Expansion Hub's motor port 2 read disabled right after the SDK's disable and enable, 67 ms after
+   its power write, with the right power register and no logcat line in the phase. Stock (1200) and on8 (1200) had
+   none. A wrong read-back now records a second read, to tell a wrong register from one wrong reply.
+
+Passed for the first time on a hub: the I2C reads on both hubs (57,521 byte-exact reads), routing over 8 restarts in
+both swap orders, deploySloth, 160 STOP trials with every negative control caught. The soak's 26,070 writes per hub in
+60 s is under the 28,400 the go run needs ([Next runs](#next-runs-in-order)).
 
 The 2026-10-29 problems, and what changed:
 
@@ -72,7 +95,8 @@ Also changed since that run:
 - Per-step write profiling (`timing on8 profiled` in the summary).
 - The bench reads the Pinpoint and the OctoQuad over I2C on both hubs (`--photon-i2c`).
 
-**None of this has run on a hub yet.** Offline it passes the suite in
+All of it ran on a hub on 2026-11-11 (the table above) except the tap, sampler and re-read changes made after that
+run. Offline it passes the suite in
 [`scripts/bench/photon-offline/`](../scripts/bench/photon-offline/README.md).
 
 ## Before every run
@@ -98,7 +122,12 @@ committed tree: the summary records the git hash.
   and `efl`/`efr`/`ebl`/`ebr`, `eServo`/`eServo2` on the Expansion Hub). `--ports-empty` says you've emptied them:
   without it the runner refuses to start while any hardware config on the hub names a device there; with it, in a
   terminal, it asks you to confirm. Either way, Bench: Photon Stock drives each motor port at 0.1 for 0.2 s and stops
-  the run if one draws over 0.1 A. Servo ports can't be probed: check them by eye.
+  the run if one draws over 0.3 A. Servo ports can't be probed: check them by eye.
+- An empty motor port reads current while driven, so the probe's limit sits above that, and a free-spinning motor can
+  pass it. Two runs on 2026-11-11 with every bench port empty read the same at 0.1 power, to the milliamp: Control Hub
+  ports 0-3 at 0.054, 0.003, 0.000 and 0.142 A, the USB Expansion Hub's at 0.003, 0.003, 0.000 and 0.014 A. The old
+  0.1 A limit stopped both runs on Control Hub port 3. One Control Hub and one Expansion Hub, so another hub may read
+  higher.
 
 **Connect.** Join the Control Hub's Wi-Fi: the runner drives the hub through the dashboard over it, even with adb on a
 cable. Connect adb to the Control Hub with Wi-Fi ADB (the runner's default, [Run it](../scripts/bench/README.md#run-it)
