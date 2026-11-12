@@ -7,6 +7,7 @@ import com.qualcomm.ftccommon.configuration.RobotConfigFileManager;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.HardwareDevice;
 
 import org.firstinspires.ftc.robotcore.external.ClassFactory;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
@@ -26,6 +27,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 @TeleOp(name = "Bench: Probe", group = "Test")
 public class ProbeBench extends LinearOpMode {
@@ -50,6 +53,9 @@ public class ProbeBench extends LinearOpMode {
             hubs.add(h);
         }
         report.put("hubs", hubs);
+        Set<String> devices = new TreeSet<>();
+        for (HardwareDevice d : hardwareMap) devices.addAll(hardwareMap.getNamesOf(d));
+        report.put("devices", new ArrayList<>(devices));
 
         report.phase("webcams");
         List<Map<String, Object>> webcams = new ArrayList<>();

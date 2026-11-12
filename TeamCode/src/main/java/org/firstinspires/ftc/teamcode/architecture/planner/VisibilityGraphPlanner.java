@@ -19,14 +19,18 @@ public final class VisibilityGraphPlanner {
     public static int pointsPerCorner = 4;
     // Neighbouring samples are joined by chords, which cut inside the corner's arc the samples sit on.
     public static double boundaryMarginIn = 1.5;
+    /** How long a {@link RouteOptimizer.Search#step()} shapes visit orders before it returns to the OpMode loop. */
+    public static double routeSearchSliceMs = 20;
 
     private VisibilityGraphPlanner() {}
 
     /**
      * The positions from {@code start} to {@code goal}, both included, with heading 0. Null if either end is
-     * outside {@code keepIn} or no route inside it exists.
+     * outside {@code keepIn} or no route inside it exists. {@code cornerPoints} and {@code marginIn} stand in for
+     * {@link #pointsPerCorner} and {@link #boundaryMarginIn}, read once per route search.
      */
-    public static List<Pose> planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance) {
+    public static List<Pose> planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance,
+                                      int cornerPoints, double marginIn) {
         if (!keepIn.contains(start) || !keepIn.contains(goal)) return null;
         if (!Obstacle.anyBlocks(obstacles, start.x(), start.y(), goal.x(), goal.y(), clearance)) {
             List<Pose> direct = new ArrayList<>();
@@ -40,8 +44,8 @@ public final class VisibilityGraphPlanner {
         nodes.add(new double[]{start.x(), start.y()});
         nodes.add(new double[]{goal.x(), goal.y()});
 
-        double placementRadius = clearance + boundaryMarginIn;
-        int perCorner = Math.max(2, pointsPerCorner);
+        double placementRadius = clearance + marginIn;
+        int perCorner = Math.max(2, cornerPoints);
         for (Obstacle o : obstacles) {
             Region b = o.bounds;
             double[][] corners = {{b.maxX, b.maxY}, {b.minX, b.maxY}, {b.minX, b.minY}, {b.maxX, b.minY}};

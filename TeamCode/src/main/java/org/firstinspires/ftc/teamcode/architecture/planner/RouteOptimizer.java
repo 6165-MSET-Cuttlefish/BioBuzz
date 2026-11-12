@@ -4,6 +4,7 @@ import com.pedropathing.math.Pose;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -71,68 +72,152 @@ public final class RouteOptimizer {
     }
 
     /**
-     * Throws if {@code start} or {@code returnPose} fails {@link #poseProblem}, so check that first for a pose
-     * that comes from the robot rather than from configuration. {@code gapIn} is the least room between the
-     * footprint and an obstacle; {@code area} is where the footprint must stay.
+     * Throws if {@code start} or {@code returnPose} fails {@link #poseProblem}, so check that first for a pose that
+     * comes from the robot rather than from configuration. {@code gapIn} is the least room between the footprint and
+     * an obstacle; {@code area} is where the footprint must stay. The balls, the obstacle list and the
+     * {@link VisibilityGraphPlanner} settings are copied here: later edits don't reach this search.
      */
-    public static Route findOptimalRoute(Pose start, Ball[] balls, Pose returnPose, Region area,
-                                         List<Obstacle> obstacles, RobotShape robot, double gapIn,
-                                         boolean forceSplineOnly) {
-        if (!(gapIn >= 0)) throw new IllegalArgumentException(String.format("obstacle gap %.1f in must be >= 0", gapIn));
-        if (balls.length > MAX_BALLS) {
-            throw new IllegalArgumentException(balls.length + " balls: the order search is n!, so at most " + MAX_BALLS);
-        }
-        String startProblem = poseProblem(start, robot, area, obstacles, gapIn);
-        if (startProblem != null) throw new IllegalArgumentException("start " + startProblem);
-        String returnProblem = poseProblem(returnPose, robot, area, obstacles, gapIn);
-        if (returnProblem != null) throw new IllegalArgumentException("return pose " + returnProblem);
+    public static Search search(Pose start, Ball[] balls, Pose returnPose, Region area, List<Obstacle> obstacles,
+                                RobotShape robot, double gapIn, boolean forceSplineOnly) {
+        return new Search(start, balls, returnPose, area, obstacles, robot, gapIn, forceSplineOnly);
+    }
 
-        List<Dropped> dropped = new ArrayList<>();
-        List<Ball> candidates = new ArrayList<>();
-        for (Ball ball : balls) {
-            if (!(Double.isFinite(ball.x) && Double.isFinite(ball.y))) {
-                throw new IllegalArgumentException("ball position is not finite: " + ball);
+    /**
+     * Each {@link #step()} shapes visit orders until {@link VisibilityGraphPlanner#routeSearchSliceMs} has passed, so
+     * it overruns the slice by at most one shape() or the final Pedro path build. A new request is a new Search.
+     */
+    public static final class Search {
+        private final Pose start;
+        private final Pose returnPose;
+        private final Ball[] reachable;
+        private final List<Dropped> dropped = new ArrayList<>();
+        private final RoutePathBuilder.Planner planner;
+        private final List<Integer> indices = new ArrayList<>();
+        private int size;
+        private List<int[]> orders;
+        private double[] bound;
+        private Integer[] byBound;
+        private int next;
+        private Route best;
+        private Route route;
+        private RoutePathBuilder.Plan plan;
+
+        private Search(Pose start, Ball[] balls, Pose returnPose, Region area, List<Obstacle> obstacles,
+                       RobotShape robot, double gapIn, boolean forceSplineOnly) {
+            if (!(gapIn >= 0)) throw new IllegalArgumentException(String.format("obstacle gap %.1f in must be >= 0", gapIn));
+            if (balls.length > MAX_BALLS) {
+                throw new IllegalArgumentException(balls.length + " balls: the order search is n!, so at most " + MAX_BALLS);
             }
-            String problem = placementProblem(ball, start, candidates, area, obstacles, robot, gapIn);
-            if (problem == null) candidates.add(ball);
-            else dropped.add(new Dropped(ball, problem));
+            obstacles = Collections.unmodifiableList(new ArrayList<>(obstacles));
+            String startProblem = poseProblem(start, robot, area, obstacles, gapIn);
+            if (startProblem != null) throw new IllegalArgumentException("start " + startProblem);
+            String returnProblem = poseProblem(returnPose, robot, area, obstacles, gapIn);
+            if (returnProblem != null) throw new IllegalArgumentException("return pose " + returnProblem);
+            this.start = start;
+            this.returnPose = returnPose;
+
+            List<Ball> kept = new ArrayList<>();
+            List<Ball> copies = new ArrayList<>();
+            for (Ball given : balls) {
+                Ball ball = new Ball(given.x, given.y, given.radius);
+                if (!(Double.isFinite(ball.x) && Double.isFinite(ball.y))) {
+                    throw new IllegalArgumentException("ball position is not finite: " + ball);
+                }
+                String problem = placementProblem(ball, start, copies, area, obstacles, robot, gapIn);
+                if (problem == null) {
+                    kept.add(given);
+                    copies.add(ball);
+                } else {
+                    dropped.add(new Dropped(given, problem));
+                }
+            }
+
+            reachable = kept.toArray(new Ball[0]);
+            planner = new RoutePathBuilder.Planner(start, copies.toArray(new Ball[0]), returnPose, area, obstacles,
+                    robot, gapIn, forceSplineOnly);
+            for (int i = 0; i < reachable.length; i++) indices.add(i);
+            size = reachable.length;
         }
 
-        Ball[] reachable = candidates.toArray(new Ball[0]);
-        RoutePathBuilder.Planner planner = new RoutePathBuilder.Planner(start, reachable, returnPose, area, obstacles,
-                robot, gapIn, forceSplineOnly);
-        List<Integer> indices = new ArrayList<>();
-        for (int i = 0; i < reachable.length; i++) indices.add(i);
-
-        // Most balls first: only when no order through all of them is drivable is one left out.
-        for (int size = reachable.length; size >= 0; size--) {
-            List<int[]> orders = orders(indices, size);
-            final double[] bound = new double[orders.size()];
-            Integer[] byBound = new Integer[orders.size()];
-            for (int i = 0; i < bound.length; i++) {
-                bound[i] = planner.lowerBound(orders.get(i));
-                byBound[i] = i;
+        /** Runs this loop's slice; true once {@link #route()} and {@link #plan()} are ready. */
+        public boolean step() {
+            double sliceMs = VisibilityGraphPlanner.routeSearchSliceMs;
+            if (!(sliceMs >= 0)) {
+                throw new IllegalArgumentException(String.format("routeSearchSliceMs %.1f must be >= 0", sliceMs));
             }
-            Arrays.sort(byBound, (p, q) -> Double.compare(bound[p], bound[q]));
-            Route best = null;
-            for (int index : byBound) {
-                if (best != null && !(bound[index] < best.length)) break;
-                int[] order = orders.get(index);
+            long t0 = System.nanoTime();
+            while (plan == null) {
+                advance();
+                if (System.nanoTime() - t0 >= sliceMs * 1e6) break;
+            }
+            return plan != null;
+        }
+
+        public boolean done() {
+            return plan != null;
+        }
+
+        /** The balls in its order and dropped list are the caller's own, not the copies the search planned. */
+        public Route route() {
+            if (plan == null) throw new IllegalStateException("the route search hasn't finished: step() it until it returns true");
+            return route;
+        }
+
+        public RoutePathBuilder.Plan plan() {
+            route();
+            return plan;
+        }
+
+        private void advance() {
+            if (route != null) {
+                plan = RoutePathBuilder.build(route);
+                return;
+            }
+            if (orders == null) {
+                orders = orders(indices, size);
+                final double[] bounds = new double[orders.size()];
+                byBound = new Integer[orders.size()];
+                for (int i = 0; i < bounds.length; i++) {
+                    bounds[i] = planner.lowerBound(orders.get(i));
+                    byBound[i] = i;
+                }
+                Arrays.sort(byBound, (p, q) -> Double.compare(bounds[p], bounds[q]));
+                bound = bounds;
+                next = 0;
+                best = null;
+                return;
+            }
+            if (next < byBound.length && (best == null || bound[byBound[next]] < best.length)) {
+                int[] order = orders.get(byBound[next++]);
                 RoutePathBuilder.Shape shape = planner.shape(order);
-                if (shape == null || (best != null && !(shape.length() < best.length))) continue;
-                best = new Route(start, returnPose, planner.ordered(order), dropped, shape);
+                if (shape != null && (best == null || shape.length() < best.length)) {
+                    best = new Route(start, returnPose, ordered(order), dropped, shape);
+                }
+                return;
             }
             if (best != null) {
                 List<Ball> visited = Arrays.asList(best.order);
                 for (Ball ball : reachable) {
                     if (!visited.contains(ball)) dropped.add(new Dropped(ball, "no drivable order that also visits the others"));
                 }
-                return best;
+                route = best;
+                return;
             }
+            if (size == 0) {
+                throw new IllegalArgumentException(String.format(
+                        "no drivable path for the robot from the start (%.1f, %.1f) to the return pose (%.1f, %.1f)",
+                        start.x(), start.y(), returnPose.x(), returnPose.y()));
+            }
+            // Most balls first: only when no order through all of them is drivable is one left out.
+            size--;
+            orders = null;
         }
-        throw new IllegalArgumentException(String.format(
-                "no drivable path for the robot from the start (%.1f, %.1f) to the return pose (%.1f, %.1f)",
-                start.x(), start.y(), returnPose.x(), returnPose.y()));
+
+        private Ball[] ordered(int[] order) {
+            Ball[] ordered = new Ball[order.length];
+            for (int i = 0; i < order.length; i++) ordered[i] = reachable[order[i]];
+            return ordered;
+        }
     }
 
     private static String placementProblem(Ball ball, Pose start, List<Ball> kept, Region area,

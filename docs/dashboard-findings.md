@@ -6,10 +6,10 @@ dashboard's Hardware Config View or Enable/Disable switch, replacing or bumping 
 knobs.
 
 The dashboard is slothboard: Dairy Foundation's fork of acmerobotics FTC Dashboard that works with Sloth hot reload.
-TeamCode ships the team's own build of it, `com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.6`
+TeamCode ships the team's own build of it, `com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.7`
 (`TeamCode/build.gradle:91`; how it is built: [CLAUDE.md](../CLAUDE.md), Dependencies). "Stock" below means Dairy's
-`0.3.2+0.6.0` or acmerobotics' `ftc-dashboard`. Source facts are from the team build's tag unless noted. Java paths
-are under `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`.
+`0.3.2+0.6.0` or acmerobotics' `ftc-dashboard`. Source facts are from the team build's `6165.6` tag and the 6165.7
+fork commit unless noted. Java paths are under `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`.
 
 ## Do this
 
@@ -53,6 +53,10 @@ Cause, from thread dumps taken during the freeze on 2026-10-24 and the source (`
   No published tag of the team build fixes it (newest `0.3.2+0.6.0-6165.6`, checked 2026-11-10).
 - Fix for the team build: have each handler's lambda return whether a restart is needed, and call `attemptRestart()`
   after `activeOpMode.with` returns, posted to the UI thread the way the SDK's own Restart Robot menu item runs.
+  `0.3.2+0.6.0-6165.7`, which TeamCode pins, is built that way from a fork commit whose tag isn't published yet; it
+  hasn't run on a hub; Bench: Freeze Dump (`scripts/bench/run_bench.py --freeze-dump`) checks it. Configs still switch
+  on the Driver Station ([Do this](#do-this)).
+- Switching configs over adb, as the bench runner does, never froze: 14 switches on 2026-10-24.
 
 To debug any app freeze (measured 2026-10-24): run `adb logcat -G 8M` first, since the hub's `Lights Hal` lines
 (about 50 a second) push the app's own out of the default buffer. Copy `/data/anr/traces.txt` as soon as logcat
@@ -184,9 +188,9 @@ Sloth, including one that only adds Pedro's AutoTune: the POMs of `com.pedropath
 
 ## Still unknown
 
-- **Whether the handler fix ends the freeze.** Build it as a new tag of the team build, activate a config from the
-  Hardware Config View on a hub: the app should come back on the new config with no `has not reported itself as
-  alive` line in logcat.
+- **Whether the handler fix ends the freeze.** Run Bench: Freeze Dump on a hub with 6165.7 installed: each SET, WRITE
+  and DELETE from idle should restart the robot in the same process, with no `has not reported itself as alive` or
+  `deadline expired waiting for service termination: EventLoop` line in logcat.
 - **Whether the adb recovery brings the dashboard back.** Turn it off from the DS, run the command above, then check
   that the page shows telemetry and the Limelight web UI answers on port 5801.
 - **The `@Config` quirks.** Open Shot Tuning in the Config View and check whether `keepOuts` shows its four angles per

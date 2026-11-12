@@ -55,7 +55,7 @@ misbehaves.
 | `com.pedropathing.ivy:pedro` | 1.1.1 | 1.1.1 | |
 | Sloth and its Load plugin | 0.3.2 | 0.3.2 | |
 | Sinister | 2.3.0 | 2.3.0 | comes with Sloth 0.3.2, whose module metadata requires 2.3.0 |
-| slothboard | team build `0.3.2+0.6.0-6165.6` | Dairy's `0.3.2+0.6.0` | the team build sits on Dairy's newest |
+| slothboard | team build `0.3.2+0.6.0-6165.7` | Dairy's `0.3.2+0.6.0` | the team build sits on Dairy's newest |
 | `androidx.appcompat:appcompat` | 1.2.0 | 1.8.0 | the SDK v12.0 template and Pedro's Quickstart both pin 1.2.0 |
 | AGP | 8.13.2 | 9.5.1 | above |
 | Gradle | 9.1.0 | 9.9.1 | above |

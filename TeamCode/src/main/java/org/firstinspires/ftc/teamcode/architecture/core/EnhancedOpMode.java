@@ -26,6 +26,7 @@ import org.firstinspires.ftc.teamcode.architecture.auto.FieldVisualization;
 import org.firstinspires.ftc.teamcode.architecture.auto.PoseRing;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.LoopProfiler;
 import org.firstinspires.ftc.teamcode.architecture.hardware.BatteryVoltage;
+import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.architecture.input.InputClock;
 import org.firstinspires.ftc.teamcode.architecture.telemetry.FieldMapRenderer;
 
@@ -183,6 +184,9 @@ public abstract class EnhancedOpMode extends OpMode {
     }
 
     private void runStart() {
+        if (robot.follower.localizer instanceof GuardedOctoQuadLocalizer) {
+            ((GuardedOctoQuadLocalizer) robot.follower.localizer).awaitRunning();
+        }
         gameTimer.reset();
         clearBulkCaches();
         // Reset throttle counters so the first match loop samples fresh instead of inheriting the init loop's mid-cycle phase.
@@ -550,6 +554,9 @@ public abstract class EnhancedOpMode extends OpMode {
         addAllianceTelemetry();
         robot.telemetry.addData("Robot Position", "X: %.1f, Y: %.1f, Heading: %.1f°",
                 currentPose.x(), currentPose.y(), Math.toDegrees(currentPose.heading()));
+        if (robot.follower.localizer instanceof GuardedOctoQuadLocalizer) {
+            robot.telemetry.addData("OctoQuad", ((GuardedOctoQuadLocalizer) robot.follower.localizer).status());
+        }
         addVoltageCurrentTelemetry();
     }
 

@@ -31,7 +31,7 @@ Read from source on 2026-11-10: `LimelightSync`, `LimelightBallSource`, `TeamCod
 `OpMode`.
 
 - Every INIT of an OpMode that keeps ball vision on uploads `limelight/ball_pipeline.vpr` and the SnapScript to the
-  ball pipeline, with no check of what is already there (`LimelightSync.java:122-143`). It takes about 1.7 s
+  ball pipeline, with no check of what is already there (`LimelightSync.java:127-145`). It takes about 1.7 s
   ([hub-bench-findings.md](hub-bench-findings.md)).
 - The results identify the running script only by the stamp in `llpython[0]` (the script's output array): 23 bits of
   a CRC32 of both files, which the build writes into the uploaded script's `SCRIPT_ID` line
@@ -48,8 +48,13 @@ Read from source on 2026-11-10: `LimelightSync`, `LimelightBallSource`, `TeamCod
   `Limelight3A` POST can block 15 s ([`CLAUDE.md`](../CLAUDE.md), Conventions), which on the OpMode thread freezes INIT,
   and a STOP during it outlasts the SDK's 900 ms stop window ([hub-bench-findings.md](hub-bench-findings.md)). On its
   own thread, `LimelightBallSource.stop()` cancels the sync before its next POST (`LimelightBallSource.java:185-192`);
-  one already sent finishes on that daemon thread (`LimelightSync.java:43-44`, `:74-76`). A crash in the thread is
+  one already sent finishes on that daemon thread (`LimelightSync.java:47-48`, `:80-82`). A crash in the thread is
   rethrown on the OpMode thread by `Request.rethrowIfCrashed()` (`LimelightBallSource.java:209`).
+- **One POST at a time, across Sloth reloads.** Every POST goes through one semaphore kept in `OpMode.blackboard`
+  (`LimelightSync.java:63-64`, `:156-164`), which a deploySloth doesn't replace, so a reloaded `LimelightSync` with
+  its own statics waits for a POST the old class left open instead of landing on the Limelight before or after it.
+  Bench: Limelight Hung checks it (`reinit_fresh`); its 2026-10-24 run is in
+  [hub-bench-findings.md](hub-bench-findings.md).
 
 ## SDK 12 `Limelight3A` timing
 
@@ -74,7 +79,7 @@ jumps to the real date ([`CLAUDE.md`](../CLAUDE.md), Build & deploy). If that ha
 - **A false fault for one loop.** Until the next poll lands (about 10 ms), `getTimeSinceLastUpdate()` returns decades.
   `connectionProblem()` compares it with `noDataFaultMs` (250), so a loop that reads it then raises the Limelight
   fault ("no data for" about 1.8e9 s) and drops the ball tracks (`LimelightBallSource.java:136`, `:156-159`,
-  `:194-197`). A ball collection that starts in that loop ends SKIPPED (`BallCollection.java:178-182`).
+  `:194-197`). A ball collection that starts in that loop ends SKIPPED (`BallCollection.java:175-179`).
 - **Frame timing off for 128 frames.** If the jump lands between the poller's parse of a new result and our read of it
   (up to one poll interval), that frame's `getStaleness()` is decades long, and so is the hub-clock offset taken from it
   (`LimelightBallSource.java:241-245`). The offset in use is the minimum over the last 128 frames (`recordOffset`), so

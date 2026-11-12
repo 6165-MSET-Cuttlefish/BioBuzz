@@ -31,22 +31,22 @@ Station lines will be sent: at most one per `dsTransmissionIntervalMs` (250 ms b
 |---|---|---|
 | Driver Station: big red `FAULT <key>: <message>` line | only in a DS frame, so never with `dsTelemetry` off | `architecture/telemetry/DualTelemetry.java:89-91`, `:158-165` |
 | dashboard telemetry: `FAULT <key>` row | while `dashboardTelemetry` is on | `DualTelemetry.java:100-111`, `:164` |
-| dashboard field view: red `FAULT` text | always, every INIT and run loop | `architecture/core/EnhancedOpMode.java:167`, `:231`, `:519`, `:536-545` |
+| dashboard field view: red `FAULT` text | always, every INIT and run loop | `architecture/core/EnhancedOpMode.java:168`, `:235`, `:523`, `:540-549` |
 | logcat: tag `Fault` | when a key is raised while not already active | `architecture/core/Faults.java:36-40` |
 
 - In a match the Driver Station is the only screen, so with `dsTelemetry` off a Limelight fault and the fallback it
   triggers happen with nothing shown.
 - Both toggles default to on (`architecture/OptimizationToggles.java:22-23`) and are re-read every loop
-  (`EnhancedOpMode.java:284`). They are statics, so a dashboard edit carries into every later OpMode until
+  (`EnhancedOpMode.java:288`). They are statics, so a dashboard edit carries into every later OpMode until
   deploySloth or an app restart: one switched off while timing loops is still off in the next match unless someone
   switches it back.
 - Raising `dsTransmissionIntervalMs` makes DS frames rarer, and with them the `updateTelemetry` spikes over 4 ms
   ([loop-time-findings.md](loop-time-findings.md)); a fault then reaches the Driver Station within that interval.
 - A fault raised after the top of a loop reaches the telemetry lines from the next loop
-  (`EnhancedOpMode.java:287-288`) and the Driver Station from the next DS frame. The field-view text is drawn at the
+  (`EnhancedOpMode.java:291-292`) and the Driver Station from the next DS frame. The field-view text is drawn at the
   end of the loop, so it shows at once.
 - Crashes don't go through telemetry: a throwing hook is reported with `RobotLog.setGlobalErrorMsg`
-  (`EnhancedOpMode.java:264-267`), which neither toggle affects.
+  (`EnhancedOpMode.java:268-271`), which neither toggle affects.
 - Turning DS telemetry off safely would need a code change: `DualTelemetry` would have to keep sending DS frames that
   carry only the fault lines while a fault is active.
 
@@ -54,14 +54,14 @@ Station lines will be sent: at most one per `dsTransmissionIntervalMs` (250 ms b
 
 `Module.bindTunable(state, supplier)` copies the supplier's value into the State only in `refreshTunables()`, which
 `readModules()` runs just before each Module's `read()` (`architecture/core/Module.java:42-53`,
-`EnhancedOpMode.java:375-383`). Each loop runs the reads, then `follower.update()`, `gameLoop()`, commands
-(`Scheduler.execute()`) and the writes (`EnhancedOpMode.java:215-236`, `:283-311`). So a value that `gameLoop()` or a
+`EnhancedOpMode.java:379-387`). Each loop runs the reads, then `follower.update()`, `gameLoop()`, commands
+(`Scheduler.execute()`) and the writes (`EnhancedOpMode.java:219-240`, `:287-315`). So a value that `gameLoop()` or a
 command stores where a supplier reads it:
 
 - reaches the State at the next loop's refresh and the hardware in that loop's `write()`: one loop late (15.3 ms mean
   in the Ivy Path Test log, [loop-time-findings.md](loop-time-findings.md));
 - in an OpMode whose `shouldReadDuringInit()` returns false, isn't refreshed again after `initStates()` until the
-  first loop after START, since the refresh is skipped with the reads (`EnhancedOpMode.java:305`). Only `DecodeTele`
+  first loop after START, since the refresh is skipped with the reads (`EnhancedOpMode.java:309`). Only `DecodeTele`
   turns reads off today, and its modules bind no tunables.
 
 What to do:
@@ -79,15 +79,15 @@ What to do:
 ## Module order
 
 `EnhancedOpMode` builds its Module list in INIT, by reflection, in two passes, and never reorders it
-(`EnhancedOpMode.java:122-127`, `:313-373`). Which Modules it finds at all: CLAUDE.md, OpMode lifecycle.
+(`EnhancedOpMode.java:123-128`, `:317-377`). Which Modules it finds at all: CLAUDE.md, OpMode lifecycle.
 
 1. Pass 1, after `createRobot()`: the OpMode's own fields (its class first, then superclasses up to `EnhancedOpMode`),
    then `robot`'s. A non-Module object from our package found in a field has its fields searched depth-first; an
    array, `Iterable` or `Map` is searched in iteration order.
 2. Pass 2, after `initialize()`: the same walk, appending only Modules not yet listed.
 
-Reads, writes, module telemetry and `stop()` all follow that list (`EnhancedOpMode.java:375-394`, `:430-434`,
-`:257-260`).
+Reads, writes, module telemetry and `stop()` all follow that list (`EnhancedOpMode.java:379-398`, `:434-438`,
+`:261-264`).
 
 - **Guaranteed:** Modules reachable in pass 1 come before Modules created in `initialize()`. In a `BioBuzzOpMode`, the
   robot's `Drivetrain`, `CellTipCamera` and `Camera` (`biobuzz/BioBuzzRobot.java:14-16`, `:31-33`) come before SOTM
@@ -115,9 +115,9 @@ What the order decides:
 
 `BatteryVoltage.get()` is the value voltage compensation uses.
 
-- `EnhancedOpMode` reads the first voltage sensor in the hardware map (`EnhancedOpMode.java:113`) once every 50 loops,
-  INIT loops included (`:38`, `:149`, `:407-410`), and republishes that reading every loop (`:298-299`). START resets
-  the count, so the first loop after START reads fresh (`:189`).
+- `EnhancedOpMode` reads the first voltage sensor in the hardware map (`EnhancedOpMode.java:114`) once every 50 loops,
+  INIT loops included (`:39`, `:150`, `:411-414`), and republishes that reading every loop (`:302-303`). START resets
+  the count, so the first loop after START reads fresh (`:193`).
 - The value is therefore up to 49 loops old: about 0.3 s at the bench's 6.3 ms idle loop
   ([hub-bench-findings.md](hub-bench-findings.md)), 0.75 s at Ivy Path Test's 15.3 ms mean
   ([loop-time-findings.md](loop-time-findings.md)). A sag shorter than that can fall between two reads unseen.
@@ -125,10 +125,10 @@ What the order decides:
   ([hub-bench-findings.md](hub-bench-findings.md)): that is why it is throttled. A failed read returns 0.0 V instead
   of throwing ([sdk-hub-findings.md](sdk-hub-findings.md)), and that 0.0 then stands for up to 50 loops.
 - `BatteryVoltage` is a static that starts at 12.0 (`architecture/hardware/BatteryVoltage.java:4`) and only
-  `EnhancedOpMode` updates it (`EnhancedOpMode.java:299`). It keeps the previous OpMode's last reading until this
+  `EnhancedOpMode` updates it (`EnhancedOpMode.java:303`). It keeps the previous OpMode's last reading until this
   OpMode's first INIT loop, so code reading it in a constructor, `initStates()`, `init()` or `initialize()` gets that,
   and a bare `OpMode` never updates it.
-- The dashboard's `Voltage` row shows the same cached reading (`EnhancedOpMode.java:576`).
+- The dashboard's `Voltage` row shows the same cached reading (`EnhancedOpMode.java:583`).
 
 | reader | guard against a failed read | source |
 |---|---|---|

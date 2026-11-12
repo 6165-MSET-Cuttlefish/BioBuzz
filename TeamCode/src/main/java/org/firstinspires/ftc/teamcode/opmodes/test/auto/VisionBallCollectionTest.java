@@ -35,7 +35,6 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
 
     @Config("Vision Ball Collection")
     public static class Tuning {
-        public static int maxBalls = 3;
         public static boolean collectPollen = true;
         public static boolean collectRedNectar = true;
         public static boolean collectBlueNectar = true;
@@ -83,24 +82,48 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         }
     }
 
-    // Under RouteOptimizer.MAX_BALLS: this re-plans every replanIntervalMs and the visit orders grow as n!.
-    private static final int MAX_BALLS = 5;
     private static final double TRAIL_SPACING_IN = 1;
     private static final double TRAIL_TURN_DEG = 5;
 
+    private static final class Request {
+        final List<FieldBall> from;
+        final List<Double> settings;
+        final Pose start;
+        final Region keepIn;
+        final RobotShape shape;
+        final Ball[] balls;
+        final List<Obstacle> obstacles;
+        final double madeSeconds;
+
+        Request(List<FieldBall> from, List<Double> settings, Pose start, Region keepIn, RobotShape shape, Ball[] balls,
+                List<Obstacle> obstacles, double madeSeconds) {
+            this.from = from;
+            this.settings = settings;
+            this.start = start;
+            this.keepIn = keepIn;
+            this.shape = shape;
+            this.balls = balls;
+            this.obstacles = obstacles;
+            this.madeSeconds = madeSeconds;
+        }
+    }
+
     private CameraRobot visionRobot;
 
+    private Request latest;
+    private RouteOptimizer.Search search;
     private List<FieldBall> plannedFrom = Collections.emptyList();
-    private List<Double> plannedSettings;
     private double lastPlanSeconds = Double.NEGATIVE_INFINITY;
     private Pose seededStart;
     private Pose startPose;
+    private List<Double> shownSettings;
     private Region keepIn;
     private RobotShape shape;
     private Ball[] balls = new Ball[0];
     private List<Obstacle> obstacles = BioBuzzField.hiveRails();
     private RouteOptimizer.Route route;
     private RoutePathBuilder.Plan plan;
+    private RoutePathBuilder.Plan drivenPlan;
     private String noPlanReason = "waiting for the first plan";
     private double[][] intakeDrawing;
     private double[][] returnDrawing;
@@ -130,7 +153,8 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         Pose start = configuredStart();
         if (start.x() != seededStart.x() || start.y() != seededStart.y() || start.heading() != seededStart.heading()) {
             seedStart(start);
-            plannedSettings = null;
+            latest = null;
+            search = null;
             lastPlanSeconds = Double.NEGATIVE_INFINITY;
         }
         replanIfChanged();
@@ -179,11 +203,19 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
             return;
         }
         if (plan == null) {
-            refused = "no plan: " + noPlanReason;
+            refused = "no plan: " + noPlan();
+            return;
+        }
+        if (plan == drivenPlan) {
+            refused = "the plan on screen was just driven; wait for the new plan";
+            return;
+        }
+        if (!settings().equals(shownSettings)) {
+            refused = "the settings changed since the plan on screen; wait for the new plan";
             return;
         }
         Pose pose = robot.follower.pose();
-        if (movedSincePlan(pose)) {
+        if (moved(pose, startPose)) {
             refused = String.format("the robot moved %.1f in / turned %.0f deg since the plan; wait for the re-plan",
                     pose.distance(startPose), turnDeg(pose, startPose));
             return;
@@ -192,11 +224,13 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         routeRun = new RouteRun(robot.follower, plan,
                 Tuning.timeoutMinAvgSpeedIps, Tuning.timeoutMinSec, Tuning.timeoutMaxSec);
         routeRun.start();
+        drivenPlan = plan;
+        search = null;
+        latest = null;
     }
 
-    private boolean movedSincePlan(Pose pose) {
-        return pose.distance(startPose) > Tuning.replanMoveIn
-                || turnDeg(pose, startPose) > Tuning.replanTurnDeg;
+    private static boolean moved(Pose pose, Pose from) {
+        return pose.distance(from) > Tuning.replanMoveIn || turnDeg(pose, from) > Tuning.replanTurnDeg;
     }
 
     private static double turnDeg(Pose a, Pose b) {
@@ -211,31 +245,37 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         trail.add(pose);
     }
 
+    // The last finished plan stays on screen while a newer request is planned, so run drives what is shown.
     private void replanIfChanged() {
-        // Ahead of the gates below, so a bad maxBalls throws even while vision is stale.
-        maxBalls();
         double now = System.nanoTime() * 1e-9;
-        if ((now - lastPlanSeconds) * 1000 < Tuning.replanIntervalMs) return;
+        if ((now - lastPlanSeconds) * 1000 >= Tuning.replanIntervalMs) requestIfChanged(now);
+        if (search != null && search.step()) show(latest, search.route(), search.plan());
+    }
+
+    private void requestIfChanged(double now) {
         Camera camera = visionRobot.camera;
         if (camera.isFrameStale()) {
             clearPlan("vision: " + CollectionDisplay.visionState(camera));
             balls = new Ball[0];
             plannedFrom = Collections.emptyList();
-            plannedSettings = null;
+            latest = null;
+            search = null;
             lastPlanSeconds = now;
             return;
         }
         Pose pose = robot.follower.pose();
         Region region = BallCollection.keepIn(Tuning.onField, Tuning.wallGapIn);
         List<FieldBall> selected = selectBalls(pose, region);
-        if (plannedSettings != null && !ballsChanged(selected) && settings().equals(plannedSettings)
-                && !movedSincePlan(pose)) {
+        // Ball churn alone must not restart a running search, or a 4-ball plan never finishes while vision flickers.
+        if (search != null && settings().equals(latest.settings) && !moved(pose, latest.start)) return;
+        if (latest != null && !ballsChanged(selected, latest.from) && settings().equals(latest.settings)
+                && !moved(pose, latest.start)) {
             return;
         }
-        plan(selected, pose, region, now);
+        request(selected, pose, region, now);
     }
 
-    /** The nearest {@code maxBalls} usable balls, in id order so a reshuffle of distances isn't a change. */
+    /** The nearest {@link BallCollection#BALLS} usable balls, in id order so a reshuffle of distances isn't a change. */
     private List<FieldBall> selectBalls(final Pose robotPose, Region region) {
         skippedOutside = 0;
         skippedUnreachable = 0;
@@ -257,7 +297,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
                 skippedRange++;
             } else if (RouteOptimizer.ballProblem(ball.x, ball.y, RobotGeometry.shape(), region, obstacles(),
                     Tuning.railGapIn) != null) {
-                // The planner would drop it anyway, but only after it had taken one of the nearest maxBalls places.
+                // The planner would drop it anyway, but only after it had taken one of the nearest BALLS places.
                 skippedUnreachable++;
             } else {
                 wanted.add(ball);
@@ -269,7 +309,7 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
                         b.distanceTo(robotPose.x(), robotPose.y()));
             }
         });
-        List<FieldBall> selected = new ArrayList<>(wanted.subList(0, Math.min(wanted.size(), maxBalls())));
+        List<FieldBall> selected = new ArrayList<>(wanted.subList(0, Math.min(wanted.size(), BallCollection.BALLS)));
         Collections.sort(selected, new Comparator<FieldBall>() {
             @Override public int compare(FieldBall a, FieldBall b) {
                 return Integer.compare(a.id, b.id);
@@ -296,14 +336,18 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         }
     }
 
-    private boolean ballsChanged(List<FieldBall> selected) {
-        if (selected.size() != plannedFrom.size()) return true;
+    private static boolean ballsChanged(List<FieldBall> selected, List<FieldBall> from) {
+        if (selected.size() != from.size()) return true;
         for (int i = 0; i < selected.size(); i++) {
             FieldBall now = selected.get(i);
-            FieldBall then = plannedFrom.get(i);
+            FieldBall then = from.get(i);
             if (now.id != then.id || now.distanceTo(then.x, then.y) > Tuning.replanMoveIn) return true;
         }
         return false;
+    }
+
+    private String noPlan() {
+        return search != null ? "still planning" : noPlanReason;
     }
 
     private void clearPlan(String reason) {
@@ -314,29 +358,37 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         noPlanReason = reason;
     }
 
-    private void plan(List<FieldBall> selected, Pose pose, Region region, double now) {
-        plannedFrom = selected;
-        plannedSettings = settings();
+    private void request(List<FieldBall> selected, Pose pose, Region region, double now) {
         lastPlanSeconds = now;
-        startPose = pose;
-        keepIn = region;
-        shape = RobotGeometry.shape();
-
-        balls = new Ball[selected.size()];
-        for (int i = 0; i < balls.length; i++) {
+        Ball[] planned = new Ball[selected.size()];
+        for (int i = 0; i < planned.length; i++) {
             FieldBall b = selected.get(i);
-            balls[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
+            planned[i] = new Ball(b.x, b.y, b.type.diameterIn / 2);
         }
-        obstacles = obstacles();
-
-        clearPlan("");
-        String problem = RouteOptimizer.poseProblem(pose, shape, region, obstacles, Tuning.railGapIn);
+        latest = new Request(selected, settings(), pose, region, RobotGeometry.shape(), planned, obstacles(), now);
+        search = null;
+        String problem = RouteOptimizer.poseProblem(pose, latest.shape, region, latest.obstacles, Tuning.railGapIn);
         if (problem != null) {
+            show(latest, null, null);
             noPlanReason = "the robot at " + problem;
             return;
         }
-        route = RouteOptimizer.findOptimalRoute(pose, balls, pose, region, obstacles, shape, Tuning.railGapIn, false);
-        plan = RoutePathBuilder.build(route);
+        search = RouteOptimizer.search(pose, planned, pose, region, latest.obstacles, latest.shape, Tuning.railGapIn, false);
+    }
+
+    private void show(Request request, RouteOptimizer.Route route, RoutePathBuilder.Plan plan) {
+        search = null;
+        plannedFrom = request.from;
+        startPose = request.start;
+        shownSettings = request.settings;
+        keepIn = request.keepIn;
+        shape = request.shape;
+        balls = request.balls;
+        obstacles = request.obstacles;
+        clearPlan("");
+        this.route = route;
+        this.plan = plan;
+        if (plan == null) return;
         intakeDrawing = plan.intake == null ? null : FieldVisualization.pathPolyline(plan.intake);
         returnDrawing = plan.back == null ? null : FieldVisualization.pathPolyline(plan.back);
     }
@@ -353,17 +405,9 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         return out;
     }
 
-    private static int maxBalls() {
-        if (Tuning.maxBalls < 0 || Tuning.maxBalls > MAX_BALLS) {
-            throw new IllegalArgumentException(String.format(
-                    "Vision Ball Collection maxBalls %d: must be 0 to %d", Tuning.maxBalls, MAX_BALLS));
-        }
-        return Tuning.maxBalls;
-    }
-
     private static List<Double> settings() {
         List<Double> c = new ArrayList<>(Arrays.asList(
-                (double) maxBalls(), Tuning.collectPollen ? 1.0 : 0.0, Tuning.collectRedNectar ? 1.0 : 0.0,
+                Tuning.collectPollen ? 1.0 : 0.0, Tuning.collectRedNectar ? 1.0 : 0.0,
                 Tuning.collectBlueNectar ? 1.0 : 0.0, Tuning.includeLastSeen ? 1.0 : 0.0, Tuning.maxRangeIn,
                 Tuning.onField ? 1.0 : 0.0));
         c.addAll(Arrays.asList(Tuning.wallGapIn, Tuning.railGapIn));
@@ -383,11 +427,15 @@ public class VisionBallCollectionTest extends EnhancedOpMode {
         Camera camera = visionRobot.camera;
         if (camera.isFrameStale()) telemetry.addData("Vision", CollectionDisplay.visionState(camera));
         if (keepIn != null) telemetry.addData("Keep-in", "%s %s", Context.allianceColor, keepIn);
-        telemetry.addData("Balls", "%d tracked; skipped %d %s, %d out of the intake's reach, %d beyond %.0f in, %d on the driven path; planning %d",
+        if (search != null) {
+            telemetry.addData("Planning", "%d balls for %.0f ms so far", latest.balls.length,
+                    (System.nanoTime() * 1e-9 - latest.madeSeconds) * 1000);
+        }
+        telemetry.addData("Balls", "%d tracked; skipped %d %s, %d out of the intake's reach, %d beyond %.0f in, %d on the driven path; planned %d",
                 camera.getFieldBalls().size(), skippedOutside, Tuning.onField ? "off our half" : "too far from the start",
                 skippedUnreachable, skippedRange, Tuning.maxRangeIn, skippedDriven, balls.length);
         if (route == null) {
-            telemetry.addData("Plan", "none: " + noPlanReason);
+            telemetry.addData("Plan", "none: " + noPlan());
             return;
         }
 

@@ -252,10 +252,12 @@ since (above), so rerun before relying on any of these.
 
 ## Still unknown
 
-- **Whether Photon delays a motor's recovery after `failSafe()`.** Bench: Write Recovery writes the wrapped motor and
-  servo in the same loop from START, yet with Photon on the motor came back 231 ms after the servo. Test: run Bench:
-  Write Recovery and Bench: Write Recovery Photon several times each with the current fork, logging per loop whether
-  each wrapped write went to the hub or was skipped by `WriteCache`.
+- **Whether Photon delays a motor's recovery after `failSafe()`.** In the one trial above, written in the same loop, the
+  wrapped motor came back 231 ms after the wrapped servo with Photon on. Bench: Write Recovery and Bench: Write
+  Recovery Photon each fail safe seven times, 0–235 ms after a write of every device, and the Photon block judges
+  its run against `WriteCache`'s re-send period plus 2 loops, as Bench: Write Recovery does. Test: run both with the
+  current fork; if the motor still lags, log per loop whether each wrapped write went to the hub or was skipped by
+  `WriteCache`.
 - **Whether a crash takes about 540 ms to reach the hub's fail-safe without Photon too.** Test: Bench: Photon Crash
   with Photon left off, same sampler. It always enables Photon at 8 parallel today, so it needs a Photon-off option
   first.

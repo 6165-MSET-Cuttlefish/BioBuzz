@@ -121,8 +121,9 @@ commit messages, with no method: `MOEbo-Sapiens/MOEbo-Sapiens-Decode` 30 ms with
 
 ## Ball counting and detection
 
-Our transfer counter (`biobuzz/modules/TransferCounter`, so far run only by Transfer Thread Count Test) counts balls
-in: a distance edge with hysteresis across two analog rangefinders, read every 10 ms. Most of the 23 sensed balls
+Our transfer counter (`biobuzz/modules/TransferCounter`, so far run only by test OpModes: Transfer Thread Count Test
+and Bench: Thread Lifecycle) counts balls in: a distance edge with hysteresis across two analog rangefinders, read
+every 10 ms. Most of the 23 sensed balls
 going in too; almost none sensed them going out: 19 of 23 fed for a fixed time, while a button was held or by
 mechanism position, and the only per-ball exit detector in match code (2 of 23) watches for a flywheel speed dip. Add
 one per flywheel (the shooter that dips says which ball type left), time every sensor state in milliseconds, and let
@@ -266,7 +267,7 @@ Port that gate to TeleOp first, then the ideas below. No survey result reports a
   statics that carry into later OpModes; one goal nudge did nothing at an event because the new `Pose` was discarded.
 - **Aiming a loop late.** 9 compute aim or shooter targets before that loop's odometry update. So does our `Turret`
   AUTOAIM state (read from source): it aims in `read()` (`biobuzz/modules/Turret.java:110-116`), which runs before
-  `follower.update()` (`architecture/core/EnhancedOpMode.java:305-308`), so it lags one loop, 15.3 ms mean in
+  `follower.update()` (`architecture/core/EnhancedOpMode.java:309-312`), so it lags one loop, 15.3 ms mean in
   `docs/loop-time-findings.md`. Turret Aim Test aims this way; SOTM Test's default aim solves in `gameLoop()`.
 
 ### Per team

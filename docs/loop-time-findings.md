@@ -60,7 +60,7 @@ about 1.2 ms; not tried.
 
 - After each `init_loop()` or `loop()` call, SDK 12.0.0's `OpMode.internalRunOpMode` calls `telemetry.update()` and
   then `Thread.sleep(1)`, and it copies both gamepads before each call (read from source, RobotCore 12.0.0
-  `OpMode.java`). `EnhancedOpMode` extends `OpMode` (`architecture/core/EnhancedOpMode.java:35`), so every framework
+  `OpMode.java`). `EnhancedOpMode` extends `OpMode` (`architecture/core/EnhancedOpMode.java:36`), so every framework
   loop pays it.
 - Measured on the bench Control Hub (setup in [`hub-bench-findings.md`](hub-bench-findings.md)) on 2026-10-09, and
   again in a 2026-10-24 rerun of the same bench:

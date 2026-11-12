@@ -198,7 +198,7 @@ class Dry(rb.Runner):
     def logcat_stream(self, path):
         return FakeStream(path, self.main_log_extra())
 
-    def _deploy_sloth(self, run_id, gradlew, on_pushed):
+    def _deploy_sloth(self, run_id, on_pushed, timeout_s=None):
         self.sloth_loaded = True
         return {"seconds": 30.0, "endedAt": 0, "returncode": 0, "hung": False, "secondsFromPushToEnd": 1.0,
                 "listMarkAtPush": 0, "connectionAtPush": 1, "pushedAt": 0.0}
@@ -308,7 +308,7 @@ class Dry(rb.Runner):
         if name == "framework_loop":
             return {"phases": {}, "photonParallel": 8, "complete": True}
         if name == "write_recovery":
-            return {"channels": {"fl": {"wrapped": True, "kind": "motor", "settledBeforeFailSafe": True, "recoveredMs": 30.0}}}
+            return self.write_recovery()
         if name.startswith("photon_replug_"):
             on = name.endswith("_on8")
             return {"result": {"faultSeen": True, "maxWriteStallMs": 110.0, "maxSingleWriteMs": 102.0,
@@ -320,6 +320,20 @@ class Dry(rb.Runner):
 
     def main_config(self, **kw):
         return "<Robot/>"
+
+    def write_recovery(self):
+        wrapped = {"fl": "motor", "benchServo2": "servo"}
+        channels = {n: {"wrapped": n in wrapped, "kind": wrapped.get(n, "motor" if n == "fr" else "servo"),
+                        "settledBeforeFailSafe": True} for n in ("fl", "fr", "benchServo", "benchServo2")}
+        trials = []
+        for i, phase_ms in enumerate((0, 40, 80, 120, 160, 200, 235)):
+            back = {n: ({"recoveredMs": 250.0 - phase_ms + 4.0, "recoveredLoops": 26} if n in wrapped
+                        else {"recoveredMs": 2.0, "recoveredLoops": 1}) for n in channels}
+            if self.break_what == "write recovery late" and i == 0:
+                back["fl"] = {"recoveredMs": 400.0, "recoveredLoops": 40}
+            trials.append({"trial": i, "phaseMs": phase_ms, "channels": back})
+        return {"channels": channels, "trials": trials, "info": {"resendMs": 250.0, "batteryVolts": 12.6},
+                "loopPeriodMs": {"count": 900, "p50": 9.5, "p95": 10.0, "max": 14.0}, "photonParallel": 8}
 
     def i2c_stock(self, topo):
         info = i2c_info(topo, swapped=False)
@@ -424,7 +438,8 @@ for broken, needle in (("lost write in on8", "phases"), ("race", "race"), ("sile
                        ("number clash", "phases"), ("linear interrupt missed", "stop: linear"),
                        ("linear leaks", "logcat: linear STOP trials"), ("i2c wrong byte", "i2c: I2C on8"),
                        ("i2c device missing", "i2c: the stock baseline"), ("no replaced reader", "i2c: I2C off"),
-                       ("i2c warning", "logcat: Bench: Photon:")):
+                       ("i2c warning", "logcat: Bench: Photon:"),
+                       ("write recovery late", "reset: Write Recovery with Photon on: EnhancedMotor fl")):
     _, v, _ = run(full_args, broken)
     print(f"{broken}: {v['level']}, blockers {v['blockers'][:3]}")
     if v["level"] != "NOT SAFE" or not any(needle in b for b in v["blockers"]):

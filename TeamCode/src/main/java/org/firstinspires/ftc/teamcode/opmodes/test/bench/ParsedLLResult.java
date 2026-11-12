@@ -27,8 +27,12 @@ final class ParsedLLResult extends LLResult {
 
     /** Entries carry every field LLResultTypes parses, so the parse costs what a busy pipeline's would. */
     static String synthetic(int balls, int fiducials, int detectors, double tsMs) {
+        return synthetic(balls, fiducials, detectors, tsMs, 4, LimelightSync.FILE_SCRIPT_ID);
+    }
+
+    static String synthetic(int balls, int fiducials, int detectors, double tsMs, int pipeline, double scriptId) {
         StringBuilder py = new StringBuilder();
-        py.append((long) LimelightSync.FILE_SCRIPT_ID).append(',').append(balls);
+        py.append((long) scriptId).append(',').append(balls);
         for (int i = 0; i < balls; i++) py.append(",1,").append(20.5 + i * 3.25).append(',').append(-4.75 + i * 2.5);
         for (int i = 2 + 3 * balls; i < 32; i++) py.append(",0");
         String six = "[0,0,0,0,0,0]";
@@ -52,7 +56,8 @@ final class ParsedLLResult extends LLResult {
                 + "\"botpose\":" + six + ",\"botpose_avgarea\":0,\"botpose_avgdist\":0,\"botpose_span\":0,\"botpose_tagcount\":0,"
                 + "\"botpose_wpiblue\":" + six + ",\"botpose_wpired\":" + six + ",\"botpose_orb\":" + six
                 + ",\"botpose_orb_wpiblue\":" + six + ",\"botpose_orb_wpired\":" + six
-                + ",\"cl\":11.84,\"focus_metric\":0,\"pID\":4,\"pTYPE\":\"pipe_python\",\"pipelineType\":\"pipe_python\","
+                + ",\"cl\":11.84,\"focus_metric\":0,\"pID\":" + pipeline
+                + ",\"pTYPE\":\"pipe_python\",\"pipelineType\":\"pipe_python\","
                 + "\"stdev_mt1\":" + six + ",\"stdev_mt2\":" + six + ",\"t6c_rs\":" + six
                 + ",\"tl\":6.21,\"ts\":" + tsMs + ",\"ts_nt\":" + (long) (tsMs * 1000) + ",\"ts_sys\":" + (long) (tsMs * 1000)
                 + ",\"ts_us\":" + (long) (tsMs * 1000) + ",\"ta\":0,\"tx\":0,\"txnc\":0,\"ty\":0,\"tync\":0,\"v\":1}";

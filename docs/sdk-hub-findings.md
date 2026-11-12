@@ -14,8 +14,8 @@ Recheck these after an SDK bump. Our code is cited by path under
 - **Every OpMode starts from reset hardware.** Set bulk caching, run mode, zero-power behaviour, direction and any servo
   PWM range in each OpMode's INIT: nothing carries over, auto to TeleOp included. Servos are limp and motors float
   from INIT until the first write, and `EnhancedOpMode` doesn't write in INIT
-  (`architecture/core/EnhancedOpMode.java:83`). An OpMode that must hold a mechanism or preload through INIT overrides
-  `shouldWriteDuringInit()`; writes then start about 500 ms into INIT (`:159`).
+  (`architecture/core/EnhancedOpMode.java:84`). An OpMode that must hold a mechanism or preload through INIT overrides
+  `shouldWriteDuringInit()`; writes then start about 500 ms into INIT (`:160`).
 - **Hub encoder velocity can't report more than 32,767 counts/s**, 240 rpm on an 8192 counts/rev Through Bore, and
   `setVelocity()` clips its target to that without an error. Compute fast speeds from position (CLAUDE.md, Flywheel
   RPM).
@@ -87,7 +87,7 @@ Recheck these after an SDK bump. Our code is cited by path under
   `LynxModule.recordBulkCachingCommandIntent` and its callers in the `Lynx*Controller` classes).
 - With caching OFF, which the per-OpMode reset sets, every `getVelocity()` is a full bulk read (source:
   `LynxDcMotorController.internalGetMotorTicksPerSecond`). `EnhancedOpMode` sets MANUAL every INIT
-  (`architecture/core/EnhancedOpMode.java:396-401`).
+  (`architecture/core/EnhancedOpMode.java:400-405`).
 - A failed bulk read (timeout, NACK or exception) doesn't throw: the SDK caches an all-zero placeholder, so encoders,
   velocities and analog inputs read 0, digital inputs read false and `isBusy()` reads true until the next clear. Only
   `ForceStopException` is rethrown (source: `LynxModule.getBulkData`, `LynxCommExceptionHandler`).
@@ -101,7 +101,7 @@ Recheck these after an SDK bump. Our code is cited by path under
   the cache the motor and sensor reads then use, for the same single bulk read. Do it only on hubs whose inputs the
   loop reads, since it always reads: an unneeded Expansion Hub bulk read costs about 4.7 ms
   ([`loop-time-findings.md`](loop-time-findings.md)). `EnhancedOpMode` clears
-  (`architecture/core/EnhancedOpMode.java:403`) and never checks.
+  (`architecture/core/EnhancedOpMode.java:407`) and never checks.
 
 ## What writes send, skip and repeat
 
@@ -128,7 +128,7 @@ Recheck these after an SDK bump. Our code is cited by path under
   not part of the bulk read; so do motor current, hub current, I2C and GPIO bus current, auxiliary voltage and
   temperature (source: `LynxVoltageSensor`, `LynxModule`). A failed one returns 0. Costs:
   [`hub-bench-findings.md`](hub-bench-findings.md), Hub costs.
-- `EnhancedOpMode` reads the battery every 50 loops (`architecture/core/EnhancedOpMode.java:38`, `:407-410`).
+- `EnhancedOpMode` reads the battery every 50 loops (`architecture/core/EnhancedOpMode.java:39`, `:411-414`).
 
 ## Timestamps
 

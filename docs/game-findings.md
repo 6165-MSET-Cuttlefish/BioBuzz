@@ -44,7 +44,7 @@ All fetched 2026-11-10:
 
 Code paths are under `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`. slothboard (our dashboard, a fork of
 FTC Dashboard) and AutoTune (Pedro's tuning web app) are read from the versions `TeamCode/build.gradle` pins:
-`com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.6` and `com.pedropathing:tuning:1.0.1`.
+`com.acmerobotics.slothboard:dashboard:0.3.2+0.6.0-6165.7` and `com.pedropathing:tuning:1.0.1`.
 
 ## Wi-Fi and streaming (R704)
 
@@ -72,7 +72,7 @@ What our code serves on the robot's Wi-Fi today (read from source):
 
 | what | when | what stops it |
 |---|---|---|
-| dashboard packet: field overlay, pose, faults, plus telemetry lines while `dashboardTelemetry` is on (`architecture/core/EnhancedOpMode.java:488`, `updateDashboard`) | every INIT and run loop of every `EnhancedOpMode` (`:167`, `:231`) | slothboard off: `sendTelemetryPacket` returns at once |
+| dashboard packet: field overlay, pose, faults, plus telemetry lines while `dashboardTelemetry` is on (`architecture/core/EnhancedOpMode.java:492`, `updateDashboard`) | every INIT and run loop of every `EnhancedOpMode` (`:168`, `:235`) | slothboard off: `sendTelemetryPacket` returns at once |
 | dashboard camera stream from the cell-tip webcam, 30 fps (`biobuzz/modules/vision/WebcamSession.java:67`) | from INIT of every OpMode on `BioBuzzRobot`, which always builds `CellTipCamera` (`biobuzz/BioBuzzRobot.java:32`); BioBuzz Tele included | slothboard off: `startCameraStream` returns at once. `setCameraStreamEnabled(false)` exists; only `WebcamBench` calls it |
 | Limelight proxy: the Limelight's MJPEG video (port 5800), web UI (5801) and APIs (5805, 5807), forwarded from 172.29.0.1 (slothboard `LimelightProxyManager`) | while slothboard is on | slothboard off |
 | slothboard's web server (port 8000) | always; while off it answers a client only with status, plus the config, OpMode and hardware config lists when the client connects | nothing ([Still unknown](#still-unknown)) |

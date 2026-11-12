@@ -23,7 +23,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 ## Build & deploy
 
 - **TeamCode** (Run button, full install): on a fresh hub, after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`), and after any change to a `@Pinned` class (`architecture/hardware/photon/`): deploySloth never reloads those, and says nothing.
-- **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; about 5 s) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
+- **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; it can take 5 s, so without one wait 6) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
 - The hub's clock reads about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth.
 - Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK); after an AGP or Gradle bump, also `:TeamCode:assembleSloth`, which hooks AGP's dex task by name. Unit tests (no hardware): `./gradlew :TeamCode:testDebugUnitTest`.
 - Decline Android Studio's AGP upgrade: AGP 9 breaks `assembleSloth`, so deploySloth, and Gradle 9.6 or later won't load AGP 8 (`docs/toolchain-findings.md`).
@@ -34,6 +34,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
+- slothboard 6165.7's restart after a dashboard hardware-config switch, save or delete at idle hasn't run on a hub (Bench: Freeze Dump checks it); if it still deadlocks, the app freezes 10 s and is relaunched, ready about 53 s later. Its tag isn't published on the fork yet (`docs/dashboard-findings.md`).
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second.
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
 
@@ -59,6 +60,8 @@ Pedro Pathing 3:
 **Ball routing**
 
 - The planner doesn't map alliances: pass mapped coordinates, `BioBuzzField.ownHalf(margin)` as the area and, on the field, `BioBuzzField.hiveRails()` as the only obstacles.
+- Plan with `RouteOptimizer.search(...)`, then one `Search.step()` per loop until it returns true, never a whole search in one loop: a 4-ball search takes seconds on a hub, and STOP waits for the running loop (past 900 ms the SDK restarts the app). A step runs `VisibilityGraphPlanner.routeSearchSliceMs` plus at most one `shape()`. A changed request is a new Search.
+- Collections plan 4 balls (`BallCollection.BALLS`; Ball Collection plans its four slots): the order search is n!, and 5 balls take up to 15 s on a hub.
 - Drive a plan only with `RouteRun`: `Plan.intake`/`Plan.back` are for drawing. They join the drives without the plan's turns in place, and Pedro moves to a compound path's next piece as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting reversals.
 
 **Photon** (`architecture/hardware/photon/`, the team's fork of SolversLib Photon): only an OpMode annotated `@Photon` gets its hubs swapped for `PhotonLynxModule`s at INIT, and they stay swapped until the hardware map is rebuilt (config change or Restart Robot). `PhotonCore.enable()` throws unless that swap worked; it then sends RUN_WITHOUT_ENCODER `setPower` and servo pulse-width writes without waiting for each ACK, from any thread, on hubs with their own USB link. An RS485 Expansion Hub, and every command while disabled, takes the SDK's path. Every class there, nested ones included, must be `@Pinned`, with no lambdas or anonymous classes: an unpinned one is reloaded by deploySloth with its own copy of the statics. `@Photon` isn't inherited: a Photon variant of an OpMode is a subclass annotated `@Photon` (`FrameworkLoopPhotonBench`). `setMaxParallelWrites` takes 1 to 64. Don't send commands through a replaced hub object (an I2C client built on one shares its I2C lock, but a reply to a message number both objects hold is dropped and counted as `numberClashes`, and both commands time out). `PhotonCore.setWriteProfiling(true)` times every step of each parallel write, read per hub with `writeProfile(hub)`: bench use only.
@@ -120,6 +123,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 ## Testing
 
 - **Ball Collection**, **Vision Ball Collection** and **Ball Collection Auto** default to `onField` off, which plans with no walls or HIVE rails: run them off the field. With it on (`collection.onField` in the auto), enter RED coordinates; routes keep to this alliance's half.
+- While a newer plan is being made, Vision Ball Collection keeps the last one on screen and `run` drives it unless the settings changed since; ball changes wait for the running plan to finish. Ball Collection refuses `run` until the new one is shown.
 - **Close Flower Auto**: the `toHive` leg puts part of the robot over the centre line (G402).
 - **Decode Tele** starts at the placeholder pose: reset it with a gamepad1 pose button before trusting the odometry-only turret aim.
 - **Turret Aim Test**: calibrate each turret (`Turret.Tuning`'s `nectar` and `pollen`) first: `leftPosition`/`backPosition`/`rightPosition` (dpad left/down/right) facing exactly robot-left, back and right, since AUTOAIM interpolates between them, and, on the pollen turret (two servos; nectar has one, `NectarTurret`), `offset` so they don't fight, keeping each end at least `offset` inside 0 to 1; `x`/`y` is its pivot, forward and left of the robot's centre. Set the start pose before INIT.

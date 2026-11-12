@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
+import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -22,19 +23,29 @@ public class PlannerStopBench extends EnhancedOpMode {
     private final StopHook stopMark = new StopHook(() -> stopPassStarted(System.nanoTime()));
     private final PlannerWorkload workload = new PlannerWorkload();
     private final List<Double> planMs = new ArrayList<>();
+    private final List<Double> planComputeMs = new ArrayList<>();
+    private final List<Integer> planLoops = new ArrayList<>();
+    private final Samples stepMs = new Samples();
+    private final Samples overrunMs = new Samples();
+    private final Samples loopPeriodMs = new Samples();
     private final Map<String, Object> stopResult = new LinkedHashMap<>();
     private BenchReport report;
     private String runId;
     private PlannerWorkload.Layout layout;
+    private PlannerWorkload.Planning planning;
     private Field stopRequested;
     private Thread watcher;
-    private long lastPlanStartNs;
-    private long lastPlanEndNs;
+    private long lastRequestNs;
+    private long lastLoopNs;
+    private boolean steppedLastLoop;
+    private long lastStepEndNs;
     private volatile int planNumber;
     private volatile long planStartNs;
+    private volatile long stepStartNs;
     private volatile long stopSeenNs;
     private volatile int stopSeenDuringPlan;
     private volatile long stopSeenPlanStartNs;
+    private volatile long stopSeenStepStartNs;
     private volatile Throwable watcherFailure;
 
     @Override
@@ -53,17 +64,20 @@ public class PlannerStopBench extends EnhancedOpMode {
         info.put("layout", layout.describe());
         info.put("balls", balls);
         info.put("replanIntervalMs", REPLAN_INTERVAL_MS);
+        info.put("sliceMs", VisibilityGraphPlanner.routeSearchSliceMs);
         info.put("warmPlans", WARM_PLANS);
         info.put("firstPlanInProcess", !PlannerWorkload.plannedBefore());
         report.put("info", info);
         report.put("planMs", planMs);
+        report.put("planComputeMs", planComputeMs);
+        report.put("planLoops", planLoops);
         report.put("stop", stopResult);
         stopRequested = stopRequestedField();
         watcher = new Thread(this::watchForStop, "bench-stop-watch");
         watcher.setDaemon(true);
         watcher.start();
         report.phase("planning");
-        report.save();
+        save();
     }
 
     private static Field stopRequestedField() {
@@ -84,11 +98,14 @@ public class PlannerStopBench extends EnhancedOpMode {
                     long now = System.nanoTime();
                     long start = planStartNs;
                     int plan = planNumber;
+                    long step = stepStartNs;
                     stopSeenPlanStartNs = start;
                     stopSeenDuringPlan = start == 0 ? 0 : plan;
+                    stopSeenStepStartNs = step;
                     stopSeenNs = now;
                     BenchIO.log("planner_stop %s STOP seen %s", runId, start == 0 ? "between plans"
-                            : String.format("%.1f ms into plan %d", (now - start) / 1e6, plan));
+                            : String.format("%.1f ms into plan %d, %s", (now - start) / 1e6, plan, step == 0
+                            ? "between slices" : String.format("%.1f ms into a slice", (now - step) / 1e6)));
                     return;
                 }
                 Thread.sleep(1);
@@ -100,24 +117,44 @@ public class PlannerStopBench extends EnhancedOpMode {
         }
     }
 
+    // As Vision Ball Collection plans when its balls move after each plan: a new request at the first replan check after it.
     @Override
     protected void initializeLoop() {
         Throwable failure = watcherFailure;
         if (failure != null) throw new IllegalStateException("Bench: Planner Stop's stop watcher failed", failure);
         long now = System.nanoTime();
-        if (lastPlanStartNs != 0 && (now - lastPlanStartNs) / 1e6 < REPLAN_INTERVAL_MS) return;
-        lastPlanStartNs = now;
-        planNumber = planMs.size() + 1;
-        planStartNs = now;
-        PlannerWorkload.Timing timing = workload.plan(layout);
-        long end = System.nanoTime();
+        if (steppedLastLoop) loopPeriodMs.addNanos(now - lastLoopNs);
+        lastLoopNs = now;
+        steppedLastLoop = false;
+        if (planning == null && (lastRequestNs == 0 || (now - lastRequestNs) / 1e6 >= REPLAN_INTERVAL_MS)) {
+            lastRequestNs = now;
+            planNumber = planMs.size() + 1;
+            planStartNs = now;
+            planning = workload.request(layout);
+        }
+        if (planning == null) return;
+        steppedLastLoop = true;
+        stepStartNs = System.nanoTime();
+        PlannerWorkload.Timing timing = planning.step(stepMs, overrunMs);
+        lastStepEndNs = System.nanoTime();
+        stepStartNs = 0;
+        if (timing == null) return;
+        planning = null;
         planStartNs = 0;
-        lastPlanEndNs = end;
-        double ms = (end - now) / 1e6;
-        planMs.add(ms);
+        planMs.add(timing.planMs);
+        planComputeMs.add(timing.computeMs);
+        planLoops.add(timing.loops);
         if (planMs.size() == 1) report.put("ballsVisited", timing.visited);
-        BenchIO.log("planner_stop %s plan %d %.1f ms", runId, planMs.size(), ms);
-        report.status("%d plans, last %.0f ms", planMs.size(), ms);
+        BenchIO.log("planner_stop %s plan %d %.1f ms over %d loops (%.1f ms in slices)", runId, planMs.size(),
+                timing.planMs, timing.loops, timing.computeMs);
+        report.status("%d plans, last %.0f ms over %d loops", planMs.size(), timing.planMs, timing.loops);
+        save();
+    }
+
+    private void save() {
+        report.put("stepMs", stepMs.summary());
+        report.put("overrunMs", overrunMs.summary());
+        report.put("loopPeriodMs", loopPeriodMs.summary());
         report.save();
     }
 
@@ -131,14 +168,16 @@ public class PlannerStopBench extends EnhancedOpMode {
             int plan = stopSeenDuringPlan;
             stopResult.put("planRunningAtStop", plan == 0 ? null : plan);
             stopResult.put("stopToStopPassMs", (now - seen) / 1e6);
-            if (plan != 0 && plan == planMs.size()) {
-                stopResult.put("msIntoPlanAtStop", (seen - stopSeenPlanStartNs) / 1e6);
-                stopResult.put("planAtStopMs", planMs.get(plan - 1));
-                stopResult.put("planLeftAtStopMs", (lastPlanEndNs - seen) / 1e6);
+            if (plan != 0) stopResult.put("msIntoPlanAtStop", (seen - stopSeenPlanStartNs) / 1e6);
+            long step = stopSeenStepStartNs;
+            stopResult.put("inSliceAtStop", step != 0);
+            if (step != 0) {
+                stopResult.put("msIntoSliceAtStop", (seen - step) / 1e6);
+                stopResult.put("sliceLeftAtStopMs", (lastStepEndNs - seen) / 1e6);
             }
         }
         BenchIO.log("planner_stop %s stop() pass: %s", runId, stopResult);
-        report.save();
+        save();
     }
 
     @Override

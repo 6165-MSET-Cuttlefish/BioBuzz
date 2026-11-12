@@ -9,6 +9,7 @@ import org.firstinspires.ftc.teamcode.architecture.planner.Region;
 import org.firstinspires.ftc.teamcode.architecture.planner.RobotShape;
 import org.firstinspires.ftc.teamcode.architecture.planner.RouteOptimizer;
 import org.firstinspires.ftc.teamcode.architecture.planner.RoutePathBuilder;
+import org.firstinspires.ftc.teamcode.architecture.planner.VisibilityGraphPlanner;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 
 import java.util.ArrayList;
@@ -43,20 +44,67 @@ final class PlannerWorkload {
     }
 
     static final class Timing {
-        final double routeMs;
-        final double buildMs;
+        /** From the request to the loop whose slice finished it: what an OpMode waits for its plan. */
+        final double planMs;
+        /** The slices alone: the planner's own time, without the loop between them. */
+        final double computeMs;
+        final int loops;
+        final double maxStepMs;
         final int visited;
         final int dropped;
         final String intakeReroute;
         final String returnReroute;
 
-        Timing(double routeMs, double buildMs, int visited, int dropped, String intakeReroute, String returnReroute) {
-            this.routeMs = routeMs;
-            this.buildMs = buildMs;
+        Timing(double planMs, double computeMs, int loops, double maxStepMs, int visited, int dropped,
+               String intakeReroute, String returnReroute) {
+            this.planMs = planMs;
+            this.computeMs = computeMs;
+            this.loops = loops;
+            this.maxStepMs = maxStepMs;
             this.visited = visited;
             this.dropped = dropped;
             this.intakeReroute = intakeReroute;
             this.returnReroute = returnReroute;
+        }
+    }
+
+    /** One plan as the collection OpModes make it: a request, then one {@link RouteOptimizer.Search#step()} per loop. */
+    static final class Planning {
+        final Layout layout;
+        private final RouteOptimizer.Search search;
+        private final long requestNs;
+        private double computeMs;
+        private double maxStepMs;
+        private int loops;
+
+        private Planning(Layout layout, RouteOptimizer.Search search, long requestNs) {
+            this.layout = layout;
+            this.search = search;
+            this.requestNs = requestNs;
+        }
+
+        /** This loop's slice, added to {@code stepMs} and its time past the slice to {@code overrunMs}; null until done. */
+        Timing step(Samples stepMs, Samples overrunMs) {
+            double sliceMs = VisibilityGraphPlanner.routeSearchSliceMs;
+            long t0 = System.nanoTime();
+            boolean done;
+            try {
+                done = search.step();
+            } catch (RuntimeException e) {
+                throw new IllegalStateException("planner threw on " + layout.describe(), e);
+            }
+            long t1 = System.nanoTime();
+            double ms = (t1 - t0) / 1e6;
+            stepMs.add(ms);
+            overrunMs.add(Math.max(0, ms - sliceMs));
+            computeMs += ms;
+            maxStepMs = Math.max(maxStepMs, ms);
+            loops++;
+            if (!done) return null;
+            RouteOptimizer.Route route = search.route();
+            RoutePathBuilder.Plan plan = search.plan();
+            return new Timing((t1 - requestNs) / 1e6, computeMs, loops, maxStepMs, route.order.length, route.dropped.size(),
+                    String.valueOf(plan.intakeReroute), String.valueOf(plan.returnReroute));
         }
     }
 
@@ -88,7 +136,10 @@ final class PlannerWorkload {
         return new Layout("random n=" + balls, start, b);
     }
 
-    /** Hand-built worst cases: a line of balls under the HIVE behind the rail, balls on both sides of it, and a tight cluster. */
+    /**
+     * Hand-built worst cases: a line of balls under the HIVE behind the rail, balls on both sides of it, and a tight
+     * cluster, plus 4 on both sides of the rail: 4 is how many balls the collection OpModes plan.
+     */
     List<Layout> crafted() {
         List<Layout> out = new ArrayList<>();
         Pose start = new Pose(20, 72, 0);
@@ -97,6 +148,7 @@ final class PlannerWorkload {
         out.add(bothSidesOfTheRail(5));
         out.add(new Layout("5-ball cluster", start, new Ball[] {
                 ball(25, 100), ball(27, 103), ball(24, 106), ball(29, 99), ball(26, 109)}));
+        out.add(bothSidesOfTheRail(4));
         return out;
     }
 
@@ -110,32 +162,29 @@ final class PlannerWorkload {
         return plannedBefore;
     }
 
-    Timing plan(Layout layout) {
+    Planning request(Layout layout) {
         plannedBefore = true;
+        long now = System.nanoTime();
         try {
-            long t0 = System.nanoTime();
-            RouteOptimizer.Route route = RouteOptimizer.findOptimalRoute(layout.start, layout.balls, layout.start, keepIn,
-                    rails, ROBOT, RAIL_GAP_IN, false);
-            long t1 = System.nanoTime();
-            RoutePathBuilder.Plan plan = RoutePathBuilder.build(route);
-            long t2 = System.nanoTime();
-            return new Timing((t1 - t0) / 1e6, (t2 - t1) / 1e6, route.order.length, route.dropped.size(),
-                    String.valueOf(plan.intakeReroute), String.valueOf(plan.returnReroute));
+            return new Planning(layout, RouteOptimizer.search(layout.start, layout.balls, layout.start, keepIn, rails, ROBOT,
+                    RAIL_GAP_IN, false), now);
         } catch (RuntimeException e) {
             throw new IllegalStateException("planner threw on " + layout.describe(), e);
         }
     }
 
     static Map<String, Object> summarize(List<Timing> timings) {
-        Samples route = new Samples();
-        Samples build = new Samples();
-        Samples total = new Samples();
+        Samples plan = new Samples();
+        Samples compute = new Samples();
+        Samples loops = new Samples();
+        Samples maxStep = new Samples();
         int fewerVisited = 0;
         Map<String, Integer> reroutes = new LinkedHashMap<>();
         for (Timing t : timings) {
-            route.add(t.routeMs);
-            build.add(t.buildMs);
-            total.add(t.routeMs + t.buildMs);
+            plan.add(t.planMs);
+            compute.add(t.computeMs);
+            loops.add(t.loops);
+            maxStep.add(t.maxStepMs);
             if (t.dropped > 0) fewerVisited++;
             String key = t.intakeReroute + "/" + t.returnReroute;
             Integer c = reroutes.get(key);
@@ -143,9 +192,10 @@ final class PlannerWorkload {
         }
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("plans", timings.size());
-        m.put("findOptimalRouteMs", route.summary());
-        m.put("buildMs", build.summary());
-        m.put("totalMs", total.summary());
+        m.put("planMs", plan.summary());
+        m.put("computeMs", compute.summary());
+        m.put("loopsPerPlan", loops.summary());
+        m.put("longestStepMs", maxStep.summary());
         m.put("plansWithDroppedBalls", fewerVisited);
         m.put("intakeSlashReturnReroutes", reroutes);
         return m;
