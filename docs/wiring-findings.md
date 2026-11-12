@@ -17,9 +17,15 @@ or ports.
   2. Outputs that change every loop go on the Control Hub: both flywheels, the three turret servos, both hoods, and
      the two drive motors that still fit.
   3. Each flywheel's Through Bore goes on Control Hub encoder port 0 or 3, the same number as its motor.
-- **Expect about 19 ms parked and 28 to 37 ms while driving and aiming**, about 2 ms less with the dashboard off
-  ([Estimated loop period](#estimated-loop-period)). The wiring cannot fix the rest: 11 outputs change every loop and
-  each costs a hub command.
+- **Link the hubs by USB, for Photon.** The team is using Photon (decided 2026-11-11), and Photon speeds up
+  Expansion Hub writes only when that hub has its own USB link: a mini-USB to USB-A cable in place of RS485
+  ([the cable and its route](#where-the-hubs-sit-and-the-usb-cable-between-them)). Photon has not passed its bench's
+  go run on this wiring ([`photon-bench.md`](photon-bench.md)), so route one RS485 cable as well and leave it
+  unplugged at the Expansion Hub: it is the way back. Never connect both: only USB alone has been benched.
+- **Expect about 16 ms parked and 22 to 24 ms while driving and aiming** with Photon on both hubs, about 2 ms less
+  with the dashboard off (estimated from the Photon bench of 2026-10-29). On the fallback, RS485 without Photon:
+  19 ms and 28 to 37 ms ([Estimated loop period](#estimated-loop-period)). The wiring cannot fix the rest: 11
+  outputs change every loop and each costs a hub command.
 - **Run the bench tests in [Open choices](#open-choices) before the wiring is final.** Two placements rest on an
   encoder port keeping up, which no vendor documents.
 - **Make the changes in [What the code must do](#what-the-code-must-do) before the first run.** Several are about
@@ -54,12 +60,12 @@ or ports.
 | I2C bus 1 | spare | |
 | I2C bus 2 | OctoQuad: odometry pods on channels 0 and 1 | channel 4 stays free for the turret encoder |
 | I2C bus 3 | Prism | written only when the pattern changes; powered from its own XT30 |
-| USB 3.0 | the powered USB hub carrying the Limelight 3A and the Arducam | |
-| USB 2.0 | empty | shares a USB bus with the hub's Wi-Fi radio |
+| USB 3.0 | the powered USB hub carrying the Limelight 3A, the Arducam and the Expansion Hub's USB cable | the Expansion Hub behind this hub is untested: [the test](#where-the-hubs-sit-and-the-usb-cable-between-them) |
+| USB 2.0 | empty | shares a USB bus with the hub's Wi-Fi radio; the second choice for the Expansion Hub's cable |
 | USB-C | laptop only | keeps deploying over a cable possible at events |
-| RS485 | both ports to the Expansion Hub | the two ports are redundant: use two cables |
+| RS485 | one cable routed to the Expansion Hub, unplugged at that end | the fallback if Photon fails its bench run |
 
-**Expansion Hub** (address 2, on RS485)
+**Expansion Hub** (on USB, mini-USB to USB-A, with Photon; address 2 on the RS485 fallback)
 
 | port | device | note |
 |---|---|---|
@@ -79,8 +85,9 @@ to injector inputs with the leads the injector ships with, which have the red wi
 
 ## Why each placement
 
-Loop period in ms for the map and for the same map with one thing moved (estimated, p50 costs, every drive motor
-writing every loop):
+Loop period in ms for the map and for the same map with one thing moved, on the RS485 fallback without Photon
+(estimated, p50 costs, every drive motor writing every loop). The same comparison under Photon is under
+[Estimated loop period](#estimated-loop-period): the map stays the shortest or ties.
 
 | | parked, aiming | driving and aiming | the same, firing |
 |---|---|---|---|
@@ -168,9 +175,11 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
   commands every 0.5 s ([`loop-time-findings.md`](loop-time-findings.md#how-often-a-write-re-send-reaches-the-hub)):
   66 to 82 ms of hub time per 0.5 s on this map. Outputs first written together expire together, so that time bunches
   into a few loops. Spreading the re-sends out is a code change nobody has designed.
-- **If Photon is cleared** ([`photon-bench.md`](photon-bench.md)): 16.4 / 28.1 ms with the Expansion Hub still on
-  RS485, 16.0 / 24.2 ms with it on USB (estimated from the fork's bench on 2026-10-29). No device moves: only the
-  Expansion Hub's cable changes. Without Photon a USB Expansion Hub write is no faster than RS485, so stay on RS485.
+- **With Photon, which the team is using** ([`photon-bench.md`](photon-bench.md)): 16.0 / 24.2 ms with the
+  Expansion Hub on USB, and 22.2 ms driving with drive writes in half the loops; 16.4 / 28.1 ms if it stayed on
+  RS485 (estimated from the fork's bench on 2026-10-29). The table above is the fallback without Photon. No device
+  moves between the two: only the Expansion Hub's cable changes. Without Photon a USB Expansion Hub write is no
+  faster than RS485, so the fallback is RS485.
   The map stays the shortest of the layouts modelled under Photon: with all four drive motors on the Control Hub
   the same two figures are 20.4 / 28.1 on RS485 and 16.5 / 24.2 on USB, and with the turret servos on the
   Expansion Hub 16.4 / 33.5 and 16.0 / 25.0. With Photon on both hubs every layout is within 1 ms of the map.
@@ -280,10 +289,11 @@ Worth doing with it:
 
 ## What fails, and how this wiring behaves
 
-- **Expansion Hub or RS485 lost:** both shooters still spin and aim, and the blocker can still stop feeding. Intake,
-  transfer and two drive motors are gone. The first write to the lost hub blocks the loop for about 250 ms and later
-  ones fail at once without an error (read from SDK source). Two RS485 cables are the main protection. How long the
-  lost hub's motors keep their last power is unverified.
+- **Expansion Hub or its cable lost:** both shooters still spin and aim, and the blocker can still stop feeding.
+  Intake, transfer and two drive motors are gone. The first write to the lost hub blocks the loop for about 250 ms
+  and later ones fail at once without an error (read from SDK source, without Photon). On USB the one mini-USB plug
+  is the weak point: tie the cable to the frame beside it. On the RS485 fallback, two cables are the main
+  protection. How long the lost hub's motors keep their last power is unverified.
 - **Control Hub reset or brownout:** the turret's relative count is lost (inferred, not tested) and nothing reports
   it; hence the cross-check above.
 - **OctoQuad unplugged or rebooted:** odometry is lost for the rest of the match (its localizer restarts at the
@@ -314,9 +324,8 @@ What follows:
 - **The Control Hub belongs in the bay without the battery.** In the other bay its USB-C port, which deploying by
   cable at events needs ([`game-findings.md`](game-findings.md)), is behind the battery holder, and one usable
   USB-A port would have to serve both the camera hub and a later Expansion Hub link.
-- **An Expansion Hub in the battery's bay cannot take a mini-USB plug as drawn.** RS485 does not need one. Before
-  linking the hubs by USB (only worth it with Photon, [above](#estimated-loop-period)), move the battery holder or
-  the hub to leave room for a plug and the cable's bend.
+- **An Expansion Hub in the battery's bay cannot take a mini-USB plug as drawn.** The USB link needs one: move the
+  battery holder or the hub to leave room for a plug and the cable's bend.
 - **The cable for a USB link:** USB 2.0, USB-A male to Mini-B male, shielded, 3 ft (0.9 m). The route that stays
   clear of the transfer goes rearward from each hub along its wheel bay above the rear wheel, inboard through a
   pocket in the inner plate, and across inside the upper rear cross channel: 25 to 26 in (estimated from the plate
@@ -381,6 +390,8 @@ fetched 2026-11-10:
   figure exists. The two encoder tests above settle it for our speeds.
 - **The cost of a write on an RS485 Expansion Hub.** Every 2.5 ms here is the Control Hub cost plus the hop measured
   on reads. Test: time 1000 changed `setPower` calls on each hub in one OpMode.
+- **Whether the hubs tolerate USB and RS485 connected at once.** Only USB alone has been benched. Test: on bench
+  hubs, connect both and read the hub list the SDK builds at INIT.
 - **Whether Photon overlaps writes to two hubs on USB.** The model adds the two hubs' write times, as the bench's
   blocks did (4.66 + 6.20 ms for 6 writes on each). If writes to different hubs overlap, splitting the every-loop
   outputs evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub. Test: on the Photon USB
