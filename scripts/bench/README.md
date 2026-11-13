@@ -8,7 +8,8 @@ for the code: `docs/hub-bench-findings.md`.
 
 ## Bare hub, unattended
 
-For a Control Hub with nothing plugged into any port, run where there is no internet and nobody to ask:
+For a Control Hub with nothing plugged into any port, run where there is no internet and nobody to ask (over a USB
+cable instead, with the Mac on its own network: [Over a USB cable](#over-a-usb-cable)):
 
 1. While still online, from the worktree root: `scripts/bench/bare_hub.sh --build`. It refuses a dirty tree, builds the
    debug APK, checks Gradle builds offline, checks the build's `BuildConfig.PHOTON_SOURCE_SHA256` is `run_bench.py`'s
@@ -114,9 +115,36 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 | `--quick` | shorter phases, noisier numbers |
 | `--all` | every bench but the Photon block, Bench: Turret Zero and Dashboard Off; stops if no webcam, Limelight or Expansion Hub is plugged in |
 | `--keep-configs` | leaves the `bench_*` hardware configs on the hub |
+| `--usb` | reaches the hub over a USB cable instead of its Wi-Fi ([below](#over-a-usb-cable)) |
 
 `--help` lists the rest: one flag per bench (`--hub`, `--loop`, `--threads`, `--edge`, `--turret`, `--config-by-name`,
 `--freeze-dump`, `--limelight`, ...), `--serial`, `--host`, `--other-pipeline`.
+
+## Over a USB cable
+
+`--usb`, on `run_bench.py` and on `bare_hub.sh` (`--build --usb`, then `--usb`), runs everything above over a USB data
+cable from the Mac to the Control Hub's **USB-C port**, so the Mac stays on its own network. The hub's Wi-Fi stays on
+and unused. The runner takes the one USB device `adb devices` lists (pass `--serial` when there are several; it stops
+before any device command otherwise), never runs `adb connect`, and checks it is a Control Hub with the RC app. Each
+hub port it uses (8000, 8080 and 8081, 5801, 5807) goes through an `adb forward` from a free port on the Mac that adb
+picks; after a reboot or a pulled cable it waits for the same serial on USB and makes them again, and at the end it
+removes only its own, in the `finally` that restores the config. `summary.md`'s `Link:` line says which link a run used,
+with each forward. `bare_hub.sh --usb` writes a `REINSTALL.sh` that waits for that serial on USB, and its Gradle steps
+use the internet when the Mac has it and Gradle's cache when not.
+
+Different over the cable:
+
+- **Not judged by connecting:** adb accepts a connection to a forward on the Mac before it asks the hub, so whether a
+  hub port listens is read from the hub's socket table (any address or loopback: a forward reaches only those). The
+  summary's port line says "not judged" where that table can't be read, and Bench: Limelight's proxy check, with no
+  HTTP answer, says what the table showed rather than that the proxy isn't listening.
+- **Pages to open** print the Mac's address. The dashboard page's script always connects to port 8000 of the address
+  it came from, so `--interactive`'s Gamepad view also needs the Mac's own port 8000 forwarded: if something else has
+  it, those three phases are skipped and the summary says why. The RC page's script uses its own port + 1, so Bench:
+  Clock's page step needs two adjacent free ports, else it is skipped.
+- **deploySloth** runs as over Wi-Fi, with `ANDROID_SERIAL` the cable's serial; the runner first checks adb lists the
+  hub, since the Load plugin runs `adb connect 192.168.43.1` when `adb devices` lists nothing
+  ([`docs/toolchain-findings.md`](../../docs/toolchain-findings.md)).
 
 ## The Photon block
 
@@ -469,6 +497,8 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   open on the previous step's STOP-time lines: every step, the Photon block's included, is judged on its log from its
   own `begin <step>` mark on. The runner passes `-T` a dated time when the hub's logcat takes one: logcat takes a
   missing year as the current one, so a start before a clock set or local midnight would read nothing.
+- Every address the runner opens on the hub comes from `Runner.link`: `WifiLink` (`--host`) or, with `--usb`,
+  `UsbLink`, which checks `adb forward --list` before each connection and makes a forward again once it's gone.
 - The websocket is `ws://192.168.43.1:8000/`. NanoHTTPD drops a socket silent for 5 s, so the runner pings
   (`GET_ROBOT_STATUS` would put hub voltage reads in the timings). An OpMode list within 1 s of a socket opening is
   slothboard's on-connect copy, not a broadcast. A restarting app accepts a socket and drops it again within a second or
@@ -558,9 +588,9 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   `REINSTALL.sh` may run long after the run and without the worktree, so `bare_hub.sh` writes it a bash copy of the
   check (`reinstall_preflight`: the environment variables and lsof, without the TCP backstop), and every adb command
   the runner prints for later (the dashboard recovery) comes after a line saying to check the port first.
-- `--list-configs` uses only `adb connect`, `ls`, `cat` and `run-as cat` of the app's settings: no dashboard, no
-  bench folder, no log buffer change. The saved-configs listing of a full run judges the config active before the
-  run, from its copy taken at connect, since the run writes its own configs.
+- `--list-configs` uses only `adb connect` (with `--usb`, `getprop` and `pm path` instead), `ls`, `cat` and `run-as cat`
+  of the app's settings: no dashboard, no bench folder, no log buffer change. The saved-configs listing of a full run
+  judges the config active before the run, from its copy taken at connect, since the run writes its own configs.
 - Bench: Dashboard Off: while off, slothboard answers only `GET_ROBOT_STATUS` and drops every other message (INIT and
   STOP too), but its server on 8000 stays up and sends a new socket the config, OpMode and hardware config lists,
   which are recorded, not judged. So the OpMode ends itself, every restart and the recovery go over adb, and each

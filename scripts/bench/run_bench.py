@@ -38,6 +38,17 @@ from pathlib import Path
 HUB_IP = "192.168.43.1"
 ADB_PORT = 5555
 DASHBOARD_PORT = 8000
+RC_PAGE_PORT = 8080
+# The RC page's script opens its websocket on its own port + 1 (RobotServer 12.0.0 assets/js/websocket-core.js).
+RC_SOCKET_PORT = RC_PAGE_PORT + 1
+LIMELIGHT_WEB_PORT = 5801
+LOOPBACK = "127.0.0.1"
+NETWORK_SERIAL = re.compile(r"^.+:\d+$")
+CONTROL_HUB_PROP = "persist.ftcandroid.serialasusb"
+PROP_TRUE = ("1", "true", "y", "yes", "on")
+# /proc/net/tcp and tcp6 spell the hub's loopback this way; adbd connects a forward's tcp:<port> to its loopback.
+HUB_LOOPBACK = ("0100007F", "00000000000000000000000001000000", "0000000000000000FFFF00000100007F")
+RC_PAGE_TRIES = 5
 RC_PACKAGE = "com.qualcomm.ftcrobotcontroller"
 RC_LAUNCHER = f"{RC_PACKAGE}/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper"
 IDLE_OPMODE = "$Stop$Robot$"
@@ -167,6 +178,7 @@ NO_DS = "no Driver Station connected: no TelemetryMessage serialization or send"
 
 LIMELIGHT_PORT = 5807
 FAKE_LIMELIGHT_PORT = 15807
+USB_HUB_PORTS = (DASHBOARD_PORT, RC_PAGE_PORT, RC_SOCKET_PORT, LIMELIGHT_WEB_PORT, LIMELIGHT_PORT)
 TCP_LISTEN = "0A"
 FAKE_LIMELIGHT_PHASES = ("limelightPostLoopback", "limelightPollOff", "limelightPoll100Hz", "limelightPoll200Hz",
                          "limelightPoll250Hz", "limelightFailureModes")
@@ -905,8 +917,8 @@ DASH_RECONNECT_MAX_S = 4.0
 class Dashboard:
     """slothboard's websocket (port 8000): OpMode control, hardware configs, and the telemetry the benches report on."""
 
-    def __init__(self, host, port, log):
-        self.host, self.port, self.log = host, port, log
+    def __init__(self, link, port, log):
+        self.link, self.port, self.log = link, port, log
         self.cond = threading.Condition()
         self.closing = False
         self.ws = None
@@ -946,7 +958,7 @@ class Dashboard:
         wait = DASH_RECONNECT_FIRST_S
         while time.monotonic() < deadline:
             try:
-                ws = WebSocket(self.host, self.port)
+                ws = WebSocket(*self.link.address(self.port))
             except OSError as e:
                 last_error = e
                 time.sleep(max(0.0, min(wait, deadline - time.monotonic())))
@@ -961,10 +973,7 @@ class Dashboard:
                 self.cond.notify_all()
             threading.Thread(target=self._reader, args=(ws, connection), name="bench-ws-reader", daemon=True).start()
             return
-        raise BenchError(
-            f"Can't open the dashboard websocket at ws://{self.host}:{self.port}/ ({last_error}). Join the Control Hub's "
-            "Wi-Fi network, make sure the Robot Controller app is running, and that the dashboard is enabled "
-            "(RC app menu → Enable Dashboard).")
+        raise BenchError(self.link.unreachable(self.port, last_error))
 
     def _reader(self, ws, connection):
         try:
@@ -1108,7 +1117,7 @@ class Dashboard:
         moment; None if no list comes (slothboard skips it until it has read the configs after a restart)."""
         deadline = time.monotonic() + timeout
         try:
-            ws = WebSocket(self.host, self.port)
+            ws = WebSocket(*self.link.address(self.port))
         except OSError:
             return None
         try:
@@ -1486,6 +1495,284 @@ def adb_server_change(start, end):
     return None
 
 
+class ForwardFailed(ConnectionError):
+    """adb gave this Mac no port that reaches the hub's: raised where a refused connection would be."""
+
+
+def usb_devices(rows):
+    """The `adb devices` rows that are USB devices: serials that aren't host:port, an emulator's or an mDNS name."""
+    return [(serial, state) for serial, state in rows
+            if not NETWORK_SERIAL.match(serial) and not serial.startswith("emulator-") and "._tcp" not in serial]
+
+
+def pick_usb_device(rows, serial=None):
+    """--usb: the one USB device adb lists, or the one --serial names. Stops before any device command otherwise."""
+    usb = usb_devices(rows)
+    listed = ", ".join(f"{s} ({state})" for s, state in usb)
+    if serial is not None and NETWORK_SERIAL.match(serial):
+        raise BenchError(f"--usb takes the hub's USB serial from `adb devices`, not the network address {serial}. "
+                         "Nothing was sent to any hub.")
+    if serial is not None:
+        row = next((r for r in usb if r[0] == serial), None)
+        if row is None:
+            raise BenchError(f"adb doesn't list {serial} on USB ({'it lists ' + listed if usb else 'no USB device'}). "
+                             "Check the cable between the Mac and the Control Hub's USB-C port. Nothing was sent to "
+                             "any hub.")
+    elif not usb:
+        raise BenchError("adb lists no USB device. Plug the Mac into the Control Hub's USB-C port with a data cable (a "
+                         "charge-only cable lists nothing), wait for the hub to boot, and rerun. Nothing was sent to "
+                         "any hub.")
+    elif len(usb) > 1:
+        raise BenchError(f"adb lists {len(usb)} USB devices: {listed}. Unplug all but the Control Hub, or pass its "
+                         "serial with --serial. Nothing was sent to any hub.")
+    else:
+        row = usb[0]
+    if row[1] != "device":
+        raise BenchError(f"adb lists {row[0]} as {row[1]}: "
+                         + ("accept its debugging prompt" if row[1] == "unauthorized"
+                            else "wait for it to finish booting, or replug the cable")
+                         + ", then rerun. Nothing was sent to any hub.")
+    return row[0]
+
+
+def parse_listeners(text, ports):
+    found = []
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) > 7 and fields[3] == TCP_LISTEN and ":" in fields[1]:
+            address, _, port = fields[1].rpartition(":")
+            if int(port, 16) in ports:
+                found.append({"port": int(port, 16), "address": "any" if not address.strip("0") else address,
+                              "uid": fields[7]})
+    return found
+
+
+def forward_reach(port, listeners):
+    """(True, False or None, why): whether an adb forward reaches the hub's port, judged from the hub's own socket
+    table, None when that couldn't be read. A connect from the Mac can't tell: adb accepts it on the Mac before it
+    asks the hub."""
+    if listeners is None:
+        return None, "not judged over USB: the hub's socket table couldn't be read"
+    found = sorted({entry["address"] for entry in listeners if entry["port"] == port})
+    if not found:
+        return False, "nothing listens on it on the hub"
+    if any(a == "any" or a in HUB_LOOPBACK for a in found):
+        return True, f"listens on {', '.join(found)}"
+    return False, f"listens only on {', '.join(found)}, which a forward (to the hub's loopback) can't reach"
+
+
+class WifiLink:
+    """The hub's ports at its Wi-Fi address."""
+    usb = False
+    reboot_note = "the Mac rejoins its Wi-Fi by itself"
+    lost_hint = "check that the Mac rejoined the hub's Wi-Fi"
+
+    def __init__(self, host):
+        self.host = host
+
+    def address(self, port):
+        return self.host, port
+
+    def url(self, port, path=""):
+        return f"http://{self.host}:{port}{path}"
+
+    def http(self, method, port, path):
+        return http_request(method, self.url(port, path))
+
+    def unreachable(self, port, error):
+        return (f"Can't open the dashboard websocket at ws://{self.host}:{port}/ ({error}). Join the Control Hub's "
+                "Wi-Fi network, make sure the Robot Controller app is running, and that the dashboard is enabled "
+                "(RC app menu → Enable Dashboard).")
+
+    def dash_page(self):
+        return self.url(RC_PAGE_PORT, "/dash"), None
+
+    def rc_page(self):
+        return self.url(RC_PAGE_PORT), None
+
+    def restore_by_hand(self, serial, caution, name):
+        return (f"Switch the config back by hand: open {self.url(RC_PAGE_PORT, '/dash')}, add the Hardware Config view, "
+                f"and activate {name}.")
+
+    def describe(self, serial):
+        return f"Wi-Fi (adb {serial}; the hub's ports at {self.host})"
+
+    def record(self):
+        return {"link": "wifi", "host": self.host}
+
+    def close(self):
+        pass
+
+
+class UsbLink:
+    """--usb: the hub's ports through adb forwards from this Mac's loopback, each made on a port adb picks when first
+    needed and made again once adb stops listing it (a reboot or a pulled cable drops the device with its forwards).
+    close() removes only the forwards this run made."""
+    usb = True
+    reboot_note = "it comes back on the USB cable by itself: leave the cable in"
+    lost_hint = "check the USB cable between the Mac and the Control Hub's USB-C port"
+
+    def __init__(self, adb, log):
+        self.adb, self.log = adb, log
+        self.lock = threading.RLock()
+        self.ours = {}
+        self.pages = []
+        self.events = []
+
+    def _adb(self, args):
+        try:
+            return self.adb._raw(args, timeout=20)
+        except subprocess.TimeoutExpired as e:
+            raise ForwardFailed(f"adb {' '.join(args)} didn't answer within {e.timeout:.0f} s") from e
+
+    def _listed(self):
+        r = self._adb(["forward", "--list"])
+        if r.returncode != 0:
+            raise ForwardFailed(f"adb forward --list failed: {(r.stderr or r.stdout).strip()[:200]}")
+        rows = {}
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if len(parts) == 3:
+                rows[parts[1]] = (parts[0], parts[2])
+        return rows
+
+    def _forward(self, local, remote, rebind=True):
+        return self._adb(["-s", self.adb.serial, "forward"] + ([] if rebind else ["--no-rebind"])
+                         + [local, f"tcp:{remote}"])
+
+    def _forward_free(self, remote):
+        r = self._forward("tcp:0", remote)
+        # adb prints the port it picked for tcp:0 on a line of its own.
+        port = (r.stdout.strip().splitlines() or [""])[-1].strip()
+        if r.returncode != 0 or not port.isdigit():
+            raise ForwardFailed(f"adb couldn't forward a port on this Mac to the hub's port {remote}: "
+                                f"{(r.stderr or r.stdout).strip()[:200] or 'exit ' + str(r.returncode)}")
+        return int(port)
+
+    def _remove(self, local, remote):
+        try:
+            r = self._adb(["-s", self.adb.serial, "forward", "--remove", f"tcp:{local}"])
+        except ForwardFailed as e:
+            self.events.append({"notRemoved": remote, "local": local, "why": str(e)})
+            return
+        self.events.append({"removed" if r.returncode == 0 else "notRemoved": remote, "local": local,
+                            **({} if r.returncode == 0 else {"why": (r.stderr or r.stdout).strip()[:200]})})
+
+    def local_port(self, remote):
+        with self.lock:
+            local = self.ours.get(remote)
+            if local is not None:
+                if self._listed().get(f"tcp:{local}") == (self.adb.serial, f"tcp:{remote}"):
+                    return local
+                del self.ours[remote]
+                self.events.append({"gone": remote, "local": local})
+                self.log(f"the forward from {LOOPBACK}:{local} to the hub's port {remote} is gone (the hub left adb: a "
+                         "reboot or the cable); making a new one")
+            local = self.ours[remote] = self._forward_free(remote)
+            self.events.append({"made": remote, "local": local})
+            self.log(f"forwarded {LOOPBACK}:{local} to the hub's port {remote} over USB")
+            return local
+
+    def address(self, port):
+        return LOOPBACK, self.local_port(port)
+
+    def url(self, port, path=""):
+        return f"http://{LOOPBACK}:{self.local_port(port)}{path}"
+
+    def http(self, method, port, path):
+        try:
+            url = self.url(port, path)
+        except ForwardFailed as e:
+            return {"error": f"{type(e).__name__}: {e}", "ms": 0.0}
+        return http_request(method, url)
+
+    def unreachable(self, port, error):
+        return (f"Can't open the dashboard websocket on the hub's port {port} through an adb forward ({error}). Check "
+                "the USB cable between the Mac and the Control Hub's USB-C port, make sure the Robot Controller app is "
+                "running, and that the dashboard is enabled (RC app menu → Enable Dashboard).")
+
+    def dash_page(self):
+        """(slothboard's page on this Mac, None), or (None, why): the page's script always opens port 8000 of the
+        address it came from, so this Mac's port 8000 must forward to the hub's too."""
+        with self.lock:
+            try:
+                held = self._listed().get(f"tcp:{DASHBOARD_PORT}")
+                if held != (self.adb.serial, f"tcp:{DASHBOARD_PORT}"):
+                    r = self._forward(f"tcp:{DASHBOARD_PORT}", DASHBOARD_PORT, rebind=False)
+                    if r.returncode != 0:
+                        return None, ("the dashboard page can't work over the cable on this Mac: its script connects "
+                                      f"to port {DASHBOARD_PORT} of the address it was loaded from, and "
+                                      + (f"adb already forwards {LOOPBACK}:{DASHBOARD_PORT} to {held[1]} of {held[0]}"
+                                         if held else f"{LOOPBACK}:{DASHBOARD_PORT} is taken "
+                                                      f"({(r.stderr or r.stdout).strip()[:160]})"))
+                    self.pages.append((DASHBOARD_PORT, DASHBOARD_PORT))
+                    self.events.append({"made": DASHBOARD_PORT, "local": DASHBOARD_PORT, "forBrowser": True})
+                return f"http://{LOOPBACK}:{self.local_port(RC_PAGE_PORT)}/dash", None
+            except ForwardFailed as e:
+                return None, f"no forward for the dashboard page: {e}"
+
+    def rc_page(self):
+        """(the Robot Controller's page on this Mac, None), or (None, why): its script opens a websocket on its own
+        port + 1, so two adjacent ports here forward to the hub's 8080 and 8081."""
+        with self.lock:
+            tried = []
+            for _ in range(RC_PAGE_TRIES):
+                try:
+                    page = self._forward_free(RC_PAGE_PORT)
+                except ForwardFailed as e:
+                    return None, str(e)
+                self.pages.append((page, RC_PAGE_PORT))
+                r = self._forward(f"tcp:{page + 1}", RC_SOCKET_PORT, rebind=False)
+                if r.returncode == 0:
+                    self.pages.append((page + 1, RC_SOCKET_PORT))
+                    self.events.append({"made": RC_PAGE_PORT, "local": page, "forBrowser": True})
+                    self.events.append({"made": RC_SOCKET_PORT, "local": page + 1, "forBrowser": True})
+                    return f"http://{LOOPBACK}:{page}", None
+                tried.append(f"{page + 1}: {(r.stderr or r.stdout).strip()[:80]}")
+                self.pages.remove((page, RC_PAGE_PORT))
+                self._remove(page, RC_PAGE_PORT)
+            return None, (f"no two adjacent free ports on this Mac for the RC page and its websocket (tried "
+                          f"{'; '.join(tried)})")
+
+    def restore_by_hand(self, serial, caution, name):
+        return (f"Switch the config back by hand over the cable: {caution} Then run `adb -s {serial} forward "
+                f"tcp:{DASHBOARD_PORT} tcp:{DASHBOARD_PORT}` and `adb -s {serial} forward tcp:0 tcp:{RC_PAGE_PORT}`, "
+                f"which prints a port P; open http://{LOOPBACK}:P/dash, add the Hardware Config view, and activate "
+                f"{name}. Afterwards `adb -s {serial} forward --remove tcp:{DASHBOARD_PORT}` and `adb -s {serial} "
+                "forward --remove tcp:P` take the two forwards away.")
+
+    def describe(self, serial):
+        if serial is None:
+            return "USB cable (stopped before picking a device: nothing was sent to any hub, no forward made)"
+        made = [f"{e['made']} at {LOOPBACK}:{e['local']}" for e in self.events if "made" in e]
+        gone = sum(1 for e in self.events if "gone" in e)
+        removed = [str(e["local"]) for e in self.events if "removed" in e]
+        kept = [f"{e['local']} ({e.get('why')})" for e in self.events if "notRemoved" in e]
+        return (f"USB cable (adb {serial}; the hub's ports through adb forwards from this Mac: "
+                f"{', '.join(made) or 'none made'}; {gone} found gone after the hub left adb and made again; removed "
+                f"at the end: {', '.join(removed) or 'none'}" + (f"; NOT removed: {', '.join(kept)}" if kept else "")
+                + ")")
+
+    def record(self):
+        return {"link": "usb", "serial": self.adb.serial, "events": list(self.events)}
+
+    def close(self):
+        with self.lock:
+            mine = [(local, remote) for remote, local in self.ours.items()] + list(self.pages)
+            self.ours, self.pages = {}, []
+            if not mine:
+                return
+            try:
+                listed = self._listed()
+            except ForwardFailed as e:
+                self.events += [{"notRemoved": remote, "local": local, "why": str(e)} for local, remote in mine]
+                self.log(f"!! couldn't list adb's forwards to remove this run's: {e}")
+                return
+            for local, remote in mine:
+                if listed.get(f"tcp:{local}") == (self.adb.serial, f"tcp:{remote}"):
+                    self._remove(local, remote)
+
+
 def shipped_config_names(folder=None):
     """Hardware configs this checkout ships in res/xml: the files whose root element is <Robot>."""
     names = set()
@@ -1722,10 +2009,11 @@ class LogcatStream:
 
 
 class Adb:
-    def __init__(self, serial, log):
+    def __init__(self, serial, log, usb=False):
         self.path = find_adb()
         self.serial = serial
         self.log = log
+        self.usb = usb
         self.private = False
         self.dated_logcat = None
 
@@ -1742,6 +2030,18 @@ class Adb:
         return [line.split()[:2] for line in self._raw(["devices"]).stdout.splitlines()[1:] if len(line.split()) >= 2]
 
     def ensure_connected(self):
+        if self.usb:
+            state = None
+            for attempt in range(3):
+                state = {row[0]: row[1] for row in self.devices()}.get(self.serial)
+                if state == "device":
+                    return
+                if state == "unauthorized":
+                    break
+                time.sleep(1 + attempt)
+            raise BenchError(f"adb doesn't list {self.serial} on USB" + (f" (it lists it as {state})" if state else "")
+                             + ": check the cable between the Mac and the Control Hub's USB-C port; a rebooting hub is "
+                               "off adb for about a minute")
         for attempt in range(3):
             devices = self._raw(["devices"]).stdout
             for line in devices.splitlines()[1:]:
@@ -1893,16 +2193,12 @@ class Adb:
             return {"raw": " ".join(out)[:200]}
 
     def listeners(self, ports):
+        return parse_listeners(self.run("shell", "cat /proc/net/tcp /proc/net/tcp6", check=False), ports)
+
+    def listeners_or_none(self, ports):
+        """listeners(), or None when the hub's socket table couldn't be read (an empty list means nothing listens)."""
         out = self.run("shell", "cat /proc/net/tcp /proc/net/tcp6", check=False)
-        found = []
-        for line in out.splitlines():
-            fields = line.split()
-            if len(fields) > 7 and fields[3] == TCP_LISTEN and ":" in fields[1]:
-                address, _, port = fields[1].rpartition(":")
-                if int(port, 16) in ports:
-                    found.append({"port": int(port, 16), "address": "any" if not address.strip("0") else address,
-                                  "uid": fields[7]})
-        return found
+        return parse_listeners(out, ports) if "local_address" in out else None
 
     def config_names(self):
         out = self.run("shell", f"ls -1 {CONFIG_DIR}")
@@ -4305,6 +4601,17 @@ def write_recovery_checks(res, outcome):
 
 
 class Runner:
+    _link = None
+
+    @property
+    def link(self):
+        """How the runner reaches the hub's TCP ports: its Wi-Fi address, or with --usb adb forwards over the cable."""
+        if self._link is None:
+            args = getattr(self, "args", None)
+            self._link = (UsbLink(self.adb, self.log) if args is not None and args.usb
+                          else WifiLink(HUB_IP if args is None else args.host))
+        return self._link
+
     def __init__(self, args):
         self.args = args
         if args.out:
@@ -4324,7 +4631,8 @@ class Runner:
         self.summary = []
         self.checks = []
         self.results = {}
-        self.adb = Adb(args.serial or f"{args.host}:{ADB_PORT}", self.log)
+        self.adb = (Adb(None, self.log, usb=True) if args.usb
+                    else Adb(args.serial or f"{args.host}:{ADB_PORT}", self.log))
         self.dash = None
         self.probe = None
         self.original = None
@@ -4378,11 +4686,28 @@ class Runner:
         self.log(f"adb's server port {port}: "
                  + (", ".join(f"{o['command']} pid {o['pid']}" for o in server["atStart"]["owners"])
                     or "nothing listening yet, so adb starts its own server"))
+        if self.args.usb:
+            self.adb.serial = pick_usb_device(self.adb.devices(), self.args.serial)
+            self.log(f"--usb: the Control Hub on the cable is adb's {self.adb.serial}; its ports go through adb forwards "
+                     "from this Mac, made as they are needed")
         self.adb.ensure_connected()
         server["version"] = (self.adb._raw(["version"]).stdout.strip().splitlines() or [""])[0]
         server["atStart"] = adb_port_preflight()
         self.log(f"{server['version']}; adb server on port {port}: "
                  f"{', '.join(o['command'] + ' pid ' + o['pid'] for o in server['atStart']['owners']) or 'not seen'}")
+        if self.args.usb:
+            self.check_control_hub()
+
+    def check_control_hub(self):
+        """--usb: the cable reaches whatever Android device is on it, so it must be a Control Hub with the RC app."""
+        prop = self.adb.run("shell", f"getprop {CONTROL_HUB_PROP}").strip()
+        if prop not in PROP_TRUE:
+            raise BenchError(f"the USB device {self.adb.serial} isn't a REV Control Hub ({CONTROL_HUB_PROP} is {prop!r}, "
+                             "which the FTC SDK reads as false). Nothing was changed on it.")
+        if "package:" not in self.adb.run("shell", f"pm path {RC_PACKAGE}", check=False):
+            raise BenchError(f"the Control Hub on USB ({self.adb.serial}) has no Robot Controller app ({RC_PACKAGE}). "
+                             "Nothing was changed on it.")
+        self.log(f"{self.adb.serial} is a Control Hub ({CONTROL_HUB_PROP} {prop}) with the Robot Controller app")
 
     def connect(self):
         self.connect_adb()
@@ -4398,7 +4723,13 @@ class Runner:
         self.adb.run("shell", f"mkdir -p {HUB_BENCH_DIR}")
         # The hub logs ~50 Lights Hal lines a second, which pushes the app's own lines out of the default buffer.
         self.adb.run("shell", f"logcat -G {LOG_BUFFER}", check=False)
-        self.dash = Dashboard(self.args.host, DASHBOARD_PORT, self.log)
+        if self.link.usb:
+            listeners = self.adb.listeners_or_none(USB_HUB_PORTS)
+            reach = self.results["usbHubPorts"] = {p: forward_reach(p, listeners) for p in USB_HUB_PORTS}
+            self.log("hub ports a forward reaches, from the hub's socket table: "
+                     + "; ".join(f"{p} {'yes' if ok else 'no' if ok is False else '?'} ({why})"
+                                 for p, (ok, why) in reach.items()))
+        self.dash = Dashboard(self.link, DASHBOARD_PORT, self.log)
         status = self.dash.get_status()
         if status.get("enabled") is False:
             raise BenchError("slothboard reports the dashboard disabled (its saved setting survives app restarts and the "
@@ -6129,7 +6460,7 @@ class Runner:
         return out
 
     def send_on_side_socket(self, obj):
-        side = SideSocket(self.args.host, DASHBOARD_PORT)
+        side = SideSocket(*self.link.address(DASHBOARD_PORT))
         try:
             side.send(obj)
             time.sleep(0.3)
@@ -6263,8 +6594,8 @@ class Runner:
         self.log(f"!! the gamepad bench didn't show phase {phase} within 2 s; its counts may land in the previous phase")
 
     def gp_interactive(self):
-        self.log(f">>> Open http://{self.args.host}:8080/dash in a browser, pick the Custom layout and add the Gamepad "
-                 "view.")
+        page, _ = self.link.dash_page()
+        self.log(f">>> Open {page} in a browser, pick the Custom layout and add the Gamepad view.")
         for phase, _, text, _ in GP_INTERACTIVE:
             self.gp_mark(phase)
             self.ask(f">>> {text}, then come back here.")
@@ -6290,6 +6621,13 @@ class Runner:
         rec = {}
         self.gp_seq = 0
         interactive = self.args.interactive and variant == "linear"
+        if interactive and self.link.usb:
+            _, why = self.link.dash_page()
+            if why:
+                self.log(f"!! the keyboard, on-screen stick and USB pad phases are skipped: {why}")
+                s.append(f"- not run over USB, the keyboard, on-screen stick and USB pad phases: {why}")
+                rec["interactiveSkipped"] = why
+                interactive = False
         names = dict(self.GP_PHASE_NAMES)
         if interactive:
             names.update({code: label for code, label, _, _ in GP_INTERACTIVE})
@@ -6314,7 +6652,7 @@ class Runner:
             self.gp_hold(GP_WATCHDOG, GP_WATCHDOG_HOLD_S, GP_SEND_EVERY_S, left_stick_y=-1.0, left_bumper=True)
             time.sleep(GP_WATCHDOG_SILENCE_S)
             self.gp_send(GP_WATCHDOG_IDLE)
-            side = SideSocket(self.args.host, DASHBOARD_PORT)
+            side = SideSocket(*self.link.address(DASHBOARD_PORT))
             try:
                 time.sleep(0.5)
                 self.gp_second_client(side)
@@ -6545,11 +6883,10 @@ class Runner:
             if ready is None:
                 rec["skipped"] = "Bench: Limelight never reached its proxyQuery phase"
                 return
-            base = f"http://{self.args.host}:{LIMELIGHT_PORT}"
-            rec["post"] = http_request("POST", f"{base}/pipeline-switch?index={proxy_pipeline}")
+            rec["post"] = self.link.http("POST", LIMELIGHT_PORT, f"/pipeline-switch?index={proxy_pipeline}")
             t0 = time.monotonic()
             while time.monotonic() - t0 < 3:
-                reply = http_request("GET", f"{base}/status")
+                reply = self.link.http("GET", LIMELIGHT_PORT, "/status")
                 try:
                     reply["pipelineIndex"] = json.loads(reply.get("body") or "").get("pipelineIndex")
                 except ValueError:
@@ -6571,14 +6908,20 @@ class Runner:
                        "Bench: Limelight crashed or stalled before its proxyQuery phase, so the proxy wasn't tried")
         else:
             answered = "code" in post
+            unanswered = (f"the runner's POST to the hub's port {LIMELIGHT_PORT} got no HTTP answer, so slothboard's "
+                          "Limelight proxy isn't listening there")
+            if not answered and self.link.usb:
+                _, why = forward_reach(LIMELIGHT_PORT, self.adb.listeners_or_none((LIMELIGHT_PORT,)))
+                rec["hubSide"] = why
+                unanswered = (f"the runner's POST through the forward to the hub's port {LIMELIGHT_PORT} got no HTTP "
+                              f"answer, which over USB doesn't say whether the proxy listens; the hub's socket table: "
+                              f"{why}")
             self.check(f"limelight proxy: a POST with ?index={proxy_pipeline} through slothboard's proxy switches the "
                        "pipeline", proxy.get("reachedToMs") is not None,
                        f"POST {post.get('code', post.get('error'))} in {post.get('ms')} ms; /status through the proxy "
                        f"{rec.get('statusViaProxy')}; the Limelight's own status on the hub {proxy.get('indexChanges')} "
                        f"(from {proxy.get('from')}, reached {proxy_pipeline} at {proxy.get('reachedToMs')} ms)",
-                       LIMELIGHT_PROXY_PENDING if answered else
-                       f"the runner's POST to the hub's port {LIMELIGHT_PORT} got no HTTP answer, so slothboard's "
-                       "Limelight proxy isn't listening there")
+                       LIMELIGHT_PROXY_PENDING if answered else unanswered)
         s = ["## Bench: Limelight\n",
              f"- proxy query string: POST /pipeline-switch?index={proxy_pipeline} through the hub's port {LIMELIGHT_PORT} "
              f"{post}; /status through the proxy {rec.get('statusViaProxy')}; the Limelight's index on the hub "
@@ -7964,7 +8307,7 @@ class Runner:
         self.summary += s
 
     def message_counter(self):
-        return MessageCounter(self.args.host, DASHBOARD_PORT)
+        return MessageCounter(*self.link.address(DASHBOARD_PORT))
 
     def dash_off_listeners(self):
         ports = DASH_OFF_PROXY_PORTS + DASH_OFF_RECORDED_PORTS
@@ -8089,7 +8432,7 @@ class Runner:
         try:
             if name == "battery":
                 self.ask(">>> PULL the Control Hub's battery lead now, count to three, plug it back in, then press Enter. "
-                         "The runner then waits for the hub to boot (the Mac rejoins its Wi-Fi by itself).")
+                         f"The runner then waits for the hub to boot ({self.link.reboot_note}).")
                 self._dash_off_wait_boot(t0, DASH_OFF_PHASES[name])
             elif name == "restart":
                 self.activate_config(self.active_config())
@@ -8124,7 +8467,7 @@ class Runner:
         if status["activeOpMode"] not in ("", IDLE_OPMODE):
             self._stop(status["activeOpMode"], o)
         o["listeners"] = self.dash_off_listeners()
-        o["dashPage"] = http_request("GET", f"http://{self.args.host}:8080/dash").get("code")
+        o["dashPage"] = self.link.http("GET", RC_PAGE_PORT, "/dash").get("code")
         return o
 
     def _dash_off_wait_setup(self, hub_t0, what):
@@ -8158,8 +8501,8 @@ class Runner:
         while True:
             time.sleep(DASH_OFF_POLL_S)
             if time.monotonic() > deadline:
-                raise BenchError(f"the hub wasn't back from {what} within {DASH_OFF_BOOT_WAIT_S:.0f} s ({last}); check "
-                                 "that the Mac rejoined the hub's Wi-Fi")
+                raise BenchError(f"the hub wasn't back from {what} within {DASH_OFF_BOOT_WAIT_S:.0f} s ({last}); "
+                                 f"{self.link.lost_hint}")
             try:
                 self.adb.ensure_connected()
                 pid = self.adb.pid() if booted_after is None else None
@@ -8235,7 +8578,7 @@ class Runner:
             r["listeners"] = self.dash_off_listeners()
             r["autoEnable"] = self.read_dashboard_switch()
             if rec["limelight"]:
-                r["limelightHttp"] = http_request("GET", f"http://{self.args.host}:5801/")
+                r["limelightHttp"] = self.link.http("GET", LIMELIGHT_WEB_PORT, "/")
         except BenchError as e:
             r["error"] = str(e)
             raise BenchError(f"the adb recovery failed ({e}); the dashboard may still be off. "
@@ -8371,11 +8714,15 @@ class Runner:
         if self.args.interactive and not unset:
             self.log(f"the hub's clock is already set ({year}): skipping the RC web page step; to see the jump, "
                      "power-cycle the hub and open neither a Driver Station nor the RC's web pages before the run")
+        page, page_skipped = self.link.rc_page() if interactive else (None, None)
+        if page_skipped:
+            self.log(f"!! skipping the RC web page step: {page_skipped}")
+            interactive = False
         timeout_ms = CLOCK_INTERACTIVE_TIMEOUT_MS if interactive else CLOCK_TIMEOUT_MS
 
         def open_rc_page():
             self.wait_or_crash(lambda: False, 3)
-            self.ask(f">>> Open http://{self.args.host}:8080 in the Mac's browser now: the Robot Controller's own page, "
+            self.ask(f">>> Open {page} in the Mac's browser now: the Robot Controller's own page, "
                      "which sets the hub's clock while it is unset. Wait for it to load, then press Enter.")
 
         o = self.run_opmode("Bench: Clock", "clock", {"timeoutMs": timeout_ms}, timeout=timeout_ms / 1000 + 60,
@@ -8399,7 +8746,8 @@ class Runner:
                                                           "since boot, or the hub kept time)"),
                          f"- PathCommands.timeout({timeout_ms} ms) ended {ended} ms after START by System.nanoTime(); "
                          f"biggest one-loop wall-clock step {res.get('biggestLoopStepMs')} ms; jumps {res.get('jumps')}"
-                         + ("; you opened the RC's web page during it" if interactive else ""),
+                         + ("; you opened the RC's web page during it" if interactive else "")
+                         + (f"; the RC web page step was skipped: {page_skipped}" if page_skipped else ""),
                          f"- across the run so far the wall clock moved {drift} s against the hub's uptime (connect "
                          f"{connect}, after this step {after})\n"]
 
@@ -8905,6 +9253,9 @@ class Runner:
         waits for the hub's lock file with no timeout of its own, so it is killed after timeout_s
         (SLOTH_DEPLOY_TIMEOUT_S by default)."""
         self.adb.mark(f"{SLOTH_DEPLOY_MARK} {run_id}")
+        if self.link.usb:
+            # The Load plugin's adb connect 192.168.43.1 runs only when `adb devices` lists nothing (AutoConnect.MAINTAIN).
+            self.adb.ensure_connected()
         t0 = time.monotonic()
         proc = subprocess.Popen(self.gradle_command(":TeamCode:deploySloth"), cwd=REPO_ROOT,
                                 env=dict(os.environ, ANDROID_SERIAL=self.adb.serial),
@@ -9153,7 +9504,14 @@ class Runner:
         return {"name": self.original, "resourceId": ids[self.original], "location": "RESOURCE", "isDirty": False}
 
     def write_summary(self, error=None):
-        lines = [f"# Bench results {self.out.name}\n", f"Command: `{' '.join(sys.argv)}`\n"]
+        lines = [f"# Bench results {self.out.name}\n", f"Command: `{' '.join(sys.argv)}`\n",
+                 f"Link: {self.link.describe(self.adb.serial)}\n"]
+        reach = self.results.get("usbHubPorts")
+        if reach:
+            lines.append("Hub ports a forward reaches, judged from the hub's own socket table at connect (a connect from "
+                         "this Mac can't tell: adb accepts it before asking the hub): "
+                         + "; ".join(f"{p} {'yes' if ok else 'no' if ok is False else 'not judged'} ({why})"
+                                     for p, (ok, why) in reach.items()) + "\n")
         if error is not None:
             lines.append(f"**Restore failed: {error}**\n" if error.startswith("restoring the config failed")
                          else f"**Run stopped early: {error}**\n")
@@ -9209,7 +9567,8 @@ class Runner:
         lines.append("Raw JSON is in raw/, per-step logcat in logs/, the runner's log in run.log.")
         (self.out / "summary.md").write_text("\n".join(lines) + "\n")
         (self.out / "runner_results.json").write_text(
-            json.dumps(dict(self.results, configSwitches=self.switches), indent=1, default=list))
+            json.dumps(dict(self.results, configSwitches=self.switches, link=self.link.record()), indent=1,
+                       default=list))
 
     def run(self):
         error = None
@@ -9272,14 +9631,20 @@ class Runner:
                     if failure is not None:
                         error = (error + "; " if error else "") + f"restoring the config failed: {type(failure).__name__}: {failure}"
                         self.log(f"RESTORE FAILED: {failure}")
-                        self.log(f"Switch the config back by hand: open http://{self.args.host}:8080/dash, add the Hardware "
-                                 f"Config view, and activate {self.original or 'your usual config'}.")
+                        self.log(self.link.restore_by_hand(self.adb.serial, self.adb_port_caution(),
+                                                           self.original or "your usual config"))
                     try:
                         self.copy_bench_folder()
                     except Exception as e:
                         self.log(f"couldn't copy the hub's bench folder: {type(e).__name__}: {e}")
             finally:
-                self.write_summary(error)
+                try:
+                    if self.link.usb:
+                        if self.dash is not None:
+                            self.dash.close()
+                        self.link.close()
+                finally:
+                    self.write_summary(error)
             if self.dash is not None:
                 self.dash.close()
         failed = [c for c in self.checks if c[1] == "FAIL"]
@@ -9501,8 +9866,15 @@ def parse_args(argv):
                         "on the Expansion Hub: run even if a config names devices there")
     p.add_argument("--other-pipeline", type=int, default=0, help="the non-ball Limelight pipeline to switch to")
     p.add_argument("--host", default=HUB_IP)
-    p.add_argument("--serial", default=None, help=f"adb serial (default {HUB_IP}:{ADB_PORT})")
+    p.add_argument("--serial", default=None,
+                   help=f"adb serial (default {HUB_IP}:{ADB_PORT}; with --usb, the one USB device adb lists)")
+    p.add_argument("--usb", action="store_true",
+                   help="reach the Control Hub over a USB cable to its USB-C port instead of its Wi-Fi: adb over the "
+                        "cable (never adb connect) and the hub's ports through adb forwards on free ports of this Mac, "
+                        "removed at the end; the Mac stays on its own network")
     args = p.parse_args(argv)
+    if args.usb and args.host != HUB_IP:
+        p.error("--host is the hub's Wi-Fi address; with --usb the runner reaches the hub's ports through the cable")
     if not 0 <= args.other_pipeline <= 9 or args.other_pipeline == BALL_PIPELINE:
         p.error(f"--other-pipeline must be a Limelight pipeline 0-9 other than the ball pipeline {BALL_PIPELINE}")
     if not 1 <= args.expansion_address <= EXPANSION_MAX_ADDRESS:

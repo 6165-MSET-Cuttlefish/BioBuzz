@@ -1,0 +1,31 @@
+{
+ "exit": 0,
+ "adb": [
+  "connect 192.168.43.1:5555",
+  "-s 192.168.43.1:5555 get-state",
+  "-s 192.168.43.1:5555 shell getprop persist.ftcandroid.serialasusb",
+  "-s 192.168.43.1:5555 shell pm path com.qualcomm.ftcrobotcontroller",
+  "-s 192.168.43.1:5555 shell getprop",
+  "-s 192.168.43.1:5555 pull /data/app/com.qualcomm.ftcrobotcontroller-1/base.apk <root>/common/bench-backups/<time>/apk/base.apk",
+  "-s 192.168.43.1:5555 shell dumpsys package com.qualcomm.ftcrobotcontroller",
+  "-s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST/",
+  "-s 192.168.43.1:5555 pull /sdcard/FIRST/betta_decode.xml <root>/common/bench-backups/<time>/FIRST/betta_decode.xml",
+  "-s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml",
+  "-s 192.168.43.1:5555 shell test -d /storage/emulated/0/FIRST/dairy/sloth",
+  "-s 192.168.43.1:5555 install -r -t -g TeamCode/build/outputs/apk/debug/TeamCode-debug.apk",
+  "-s 192.168.43.1:5555 shell rm -rf /storage/emulated/0/FIRST/dairy/sloth/*",
+  "-s 192.168.43.1:5555 shell logcat -G 8M",
+  "-s 192.168.43.1:5555 shell date '+%m-%d %H:%M:%S'",
+  "-s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper -a android.intent.action.MAIN -c android.intent.category.LAUNCHER",
+  "-s 192.168.43.1:5555 shell logcat -d -v threadtime -T '11-12 10:00:00.000' | grep -F -e '======= INIT FINISH ======='"
+ ],
+ "python": [
+  "tcp 192.168.43.1 5555",
+  "tcp 192.168.43.1 8000",
+  "runner --gradle-offline --out bench-results/<time>"
+ ],
+ "gradle": [
+  "--offline -q :TeamCode:assembleSloth"
+ ],
+ "reinstall": "#!/bin/bash\nset -e\nport=\"${ANDROID_ADB_SERVER_PORT:-5037}\"\nif [ -n \"${ADB_SERVER_SOCKET:-}${ANDROID_ADB_SERVER_ADDRESS:-}\" ]; then\n  echo \"STOPPED: ADB_SERVER_SOCKET or ANDROID_ADB_SERVER_ADDRESS is set, which can point adb at another adb server and so another hub: unset it and rerun. Nothing was sent to any hub.\" >&2\n  exit 1\nfi\nrc=0\nowners=$(lsof -nP -iTCP:\"$port\" -sTCP:LISTEN -Fcp) || rc=$?\nif [ \"$rc\" -ne 0 ] && { [ \"$rc\" -ne 1 ] || [ -n \"$owners\" ]; }; then\n  echo \"STOPPED: lsof couldn't list what listens on adb's port $port (exit $rc). Nothing was sent to any hub.\" >&2\n  exit 1\nfi\nothers=$(printf '%s\\n' \"$owners\" | awk '\n  function flush() { if (pid != \"\" && cmd != \"adb\") printf \"%s%s (pid %s)\", (n++ ? \", \" : \"\"), (cmd == \"\" ? \"a process lsof did not name\" : cmd), pid }\n  /^p/ { flush(); pid = substr($0, 2); cmd = \"\" }\n  /^c/ { cmd = substr($0, 2) }\n  END { flush() }')\nif [ -n \"$others\" ]; then\n  echo \"STOPPED: $others listening on port $port, where adb looks for its server, so every adb command would go to whatever is behind it, possibly another hub. Stop it (an ssh port forward, for one), check that lsof -nP -iTCP:$port -sTCP:LISTEN shows nothing or adb, and rerun. Nothing was sent to any hub.\" >&2\n  exit 1\nfi\n\"<root>/stubs/adb\" connect 192.168.43.1:5555 || true\n\"<root>/stubs/adb\" -s 192.168.43.1:5555 wait-for-device\n\"<root>/stubs/adb\" -s 192.168.43.1:5555 install -r -t -d \"<root>/common/bench-backups/<time>/apk/base.apk\"\n\"<root>/stubs/adb\" -s 192.168.43.1:5555 shell \"rm -rf /storage/emulated/0/FIRST/dairy/sloth/*\"\n\"<root>/stubs/adb\" -s 192.168.43.1:5555 push \"<root>/common/bench-backups/<time>/rc_preferences.xml\" /data/local/tmp/bench_rc_prefs.xml\nout=$(\"<root>/stubs/adb\" -s 192.168.43.1:5555 shell \"am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo PREFS_OK; rm -f /data/local/tmp/bench_rc_prefs.xml\")\ncase \"$out\" in *PREFS_OK*) ;; *) echo \"the app is back, but its settings were not restored: $out\" >&2 ;; esac\n\"<root>/stubs/adb\" -s 192.168.43.1:5555 shell \"am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper\"\n"
+}

@@ -16,6 +16,8 @@ cd "$(dirname "$0")/../.."
 
 RESULTS=""
 REINSTALL_HINT=""
+USB=""
+SERIAL_ARG=""
 
 say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
@@ -25,7 +27,7 @@ die() {
     printf '\nThe bench build is installed on the hub. To put the old app and its settings back: %s\n' "$REINSTALL_HINT" >&2
   fi
   if [ -n "$RESULTS" ]; then
-    printf '\nEverything it printed is in %s/console.log.\nReconnect to the internet and tell Claude the run stopped.\n' "$PWD/$RESULTS" >&2
+    printf '\nEverything it printed is in %s/console.log.\n%s\n' "$PWD/$RESULTS" "$(back_online) the run stopped." >&2
   fi
   exit 1
 }
@@ -37,6 +39,9 @@ usage: scripts/bench/bare_hub.sh --build          while online: build the debug 
        scripts/bench/bare_hub.sh [runner flags]   on the Control Hub's Wi-Fi: back up, install, launch, and run
                                                   every bench a bare hub allows (extra flags go to run_bench.py;
                                                   a bench flag such as --photon runs only that bench)
+       scripts/bench/bare_hub.sh --usb [flags]    the same over a USB cable to the hub's USB-C port, the Mac on
+                                                  its own network (--build --usb builds online, else from
+                                                  Gradle's cache, and skips the offline check)
 See "Bare hub, unattended" in scripts/bench/README.md.
 EOF
 }
@@ -52,6 +57,25 @@ except subprocess.TimeoutExpired:
 tcp_open() {
   python3 -I -c 'import socket, sys
 socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=3).close()' "$1" "$2" 2>/dev/null
+}
+
+back_online() {
+  if [ -n "$USB" ]; then printf 'Tell Claude'; else printf 'Reconnect to the internet and tell Claude'; fi
+}
+
+# Over a forward the Mac's end accepts whether or not the hub listens, so ask the hub's own socket table.
+hub_listens() {
+  hub shell "cat /proc/net/tcp /proc/net/tcp6" 2>/dev/null | python3 -I -B -c 'import importlib.util, sys
+spec = importlib.util.spec_from_file_location("run_bench", sys.argv[1])
+rb = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rb)
+text, port = sys.stdin.read(), int(sys.argv[2])
+reached, _ = rb.forward_reach(port, rb.parse_listeners(text, (port,)) if "local_address" in text else None)
+sys.exit(0 if reached else 1)' scripts/bench/run_bench.py "$1"
+}
+
+dashboard_up() {
+  if [ -n "$USB" ]; then hub_listens 8000; else tcp_open "$HOST" 8000; fi
 }
 
 find_adb() {
@@ -107,6 +131,23 @@ print(", ".join(o["command"] + " pid " + o["pid"] for o in found["owners"]) or "
     scripts/bench/run_bench.py
 }
 
+usb_device() {
+  python3 -I -B -c 'import importlib.util, subprocess, sys
+spec = importlib.util.spec_from_file_location("run_bench", sys.argv[1])
+rb = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rb)
+out = subprocess.run([sys.argv[2], "devices"], capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+if out.returncode != 0:
+    print("adb devices failed (exit %d): %s" % (out.returncode, (out.stderr or out.stdout).strip()[:200]))
+    sys.exit(1)
+rows = [line.split()[:2] for line in out.stdout.splitlines()[1:] if len(line.split()) >= 2]
+try:
+    print(rb.pick_usb_device(rows, sys.argv[3] or None))
+except rb.BenchError as e:
+    print(e)
+    sys.exit(1)' scripts/bench/run_bench.py "$ADB" "$SERIAL_ARG"
+}
+
 # REINSTALL.sh can run long after this, without the worktree, so it gets its own copy of the port check.
 reinstall_preflight() {
   cat <<'EOF'
@@ -143,6 +184,9 @@ die_if_hub_lost() {
   [ -z "$REINSTALL_HINT" ] || changed=""
   local how="adb now reports"
   [ -z "$2" ] || how="adb exited $2 and now reports"
+  if [ -n "$USB" ]; then
+    die "adb lost the Control Hub on USB while $1 ($how the hub as '${state:-not connected}'). ${3:-$changed} To recover: check the USB cable between the Mac and the hub's USB-C port and that nothing else on the Mac restarted adb, wait a minute if the hub rebooted, run '$ADB devices' until it lists $SERIAL as device, then run scripts/bench/bare_hub.sh --usb again."
+  fi
   die "adb lost its connection to the Control Hub while $1 ($how the hub as '${state:-not connected}'). ${3:-$changed} To recover: check that the Mac is still on the hub's Wi-Fi (macOS can hop to another network) and that nothing else on the Mac restarted adb, wait a minute if the hub rebooted, run '$ADB connect $SERIAL' until it prints 'connected to $SERIAL', then run scripts/bench/bare_hub.sh again."
 }
 
@@ -153,11 +197,17 @@ need_python() {
 
 build() {
   need_python
+  [ "${1:-}" != --usb ] || USB=1
   [ -z "$(git status --porcelain)" ] || die "the worktree has uncommitted changes (see git status): commit or stash them, so the stamp names exactly what is built"
   say "building the debug APK"
-  ./gradlew :TeamCode:assembleDebug
-  say "checking that Gradle builds offline, as the run's Sloth steps will have to"
-  ./gradlew --offline :TeamCode:assembleSloth || die "Gradle can't build offline on this Mac, so the run's Sloth steps would fail: run --build again while online, and tell Claude if it keeps failing"
+  if [ -n "$USB" ]; then
+    ./gradlew :TeamCode:assembleDebug || ./gradlew --offline :TeamCode:assembleDebug \
+      || die "the debug APK didn't build, online or from Gradle's cache offline: tell Claude"
+  else
+    ./gradlew :TeamCode:assembleDebug
+    say "checking that Gradle builds offline, as the run's Sloth steps will have to"
+    ./gradlew --offline :TeamCode:assembleSloth || die "Gradle can't build offline on this Mac, so the run's Sloth steps would fail: run --build again while online, and tell Claude if it keeps failing"
+  fi
   local apk photon built_photon
   apk=$(find_apk) || die "expected exactly one APK in $APK_DIR"
   photon=$(photon_sha) || die "run_bench.py couldn't hash the photon sources"
@@ -166,10 +216,50 @@ build() {
   printf 'head=%s\napk=%s\nsha256=%s\nphoton=%s\nbuilt=%s\n' "$(git rev-parse HEAD)" "$(basename "$apk")" "$(sha256 "$apk")" \
     "$photon" "$(date '+%Y-%m-%d %H:%M:%S')" > "$STAMP"
   say "stamped $apk for $(git rev-parse --short HEAD)"
-  echo "Next: power the Control Hub with nothing plugged in, join its Wi-Fi, and run scripts/bench/bare_hub.sh"
+  if [ -n "$USB" ]; then
+    echo "Next: power the Control Hub with nothing plugged in, plug the Mac into its USB-C port, and run scripts/bench/bare_hub.sh --usb"
+  else
+    echo "Next: power the Control Hub with nothing plugged in, join its Wi-Fi, and run scripts/bench/bare_hub.sh"
+  fi
+}
+
+wifi_hub() {
+  say "looking for the Control Hub at $SERIAL"
+  local tries=0
+  until tcp_open "$HOST" 5555; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 3 ] || die "the Mac can't reach a Control Hub at $SERIAL. Power the hub, join its Wi-Fi network on the Mac (the network name and password are on the hub's label or in REV Hardware Client), wait until macOS says it is connected, and run this again. Nothing was changed on any hub."
+    sleep 2
+  done
+  local state="" attempt
+  for attempt in 1 2 3; do
+    with_timeout 20 "$ADB" connect "$SERIAL" </dev/null || true
+    state=$(with_timeout 10 "$ADB" -s "$SERIAL" get-state </dev/null 2>/dev/null || true)
+    [ "$state" = "device" ] && break
+    sleep 2
+  done
+  [ "$state" = "device" ] || die "adb can't use $SERIAL (state '${state:-none}'). Run '$ADB connect $SERIAL' to see why; 'unauthorized' means accepting the debugging prompt. Nothing was changed on the hub."
+}
+
+usb_hub() {
+  say "looking for the Control Hub on USB"
+  SERIAL=$(usb_device) || die "$SERIAL"
+  local state
+  state=$(with_timeout 10 "$ADB" -s "$SERIAL" get-state </dev/null 2>/dev/null || true)
+  [ "$state" = "device" ] || die "adb can't use $SERIAL on USB (state '${state:-none}'): replug the cable, or wait for the hub to finish booting, and run this again. Nothing was changed on the hub."
+  say "the Control Hub on USB is $SERIAL"
 }
 
 run() {
+  local arg prev=""
+  for arg in ${1+"$@"}; do
+    case "$arg" in
+      --usb) USB=1 ;;
+      --serial=*) SERIAL_ARG="${arg#--serial=}" ;;
+    esac
+    [ "$prev" != --serial ] || SERIAL_ARG="$arg"
+    prev="$arg"
+  done
   need_python
   ADB=$(find_adb) || die "adb isn't on PATH or in ~/Library/Android/sdk/platform-tools: install Android Studio's platform-tools"
   local adb_port
@@ -186,21 +276,7 @@ run() {
   [ -z "$(git status --porcelain --untracked-files=no)" ] || die "tracked files changed since the build (see git status), so the runner wouldn't match the APK: commit and --build again, or stash them"
   [ "$(stamp_get photon)" = "$(photon_sha)" ] || die "the photon sources here aren't the ones $apk was built from (stamp photon=$(stamp_get photon)), so the Photon block would fail its install check: remove what changed in them, or run scripts/bench/bare_hub.sh --build while online"
 
-  say "looking for the Control Hub at $SERIAL"
-  local tries=0
-  until tcp_open "$HOST" 5555; do
-    tries=$((tries + 1))
-    [ "$tries" -lt 3 ] || die "the Mac can't reach a Control Hub at $SERIAL. Power the hub, join its Wi-Fi network on the Mac (the network name and password are on the hub's label or in REV Hardware Client), wait until macOS says it is connected, and run this again. Nothing was changed on any hub."
-    sleep 2
-  done
-  local state="" attempt
-  for attempt in 1 2 3; do
-    with_timeout 20 "$ADB" connect "$SERIAL" </dev/null || true
-    state=$(with_timeout 10 "$ADB" -s "$SERIAL" get-state </dev/null 2>/dev/null || true)
-    [ "$state" = "device" ] && break
-    sleep 2
-  done
-  [ "$state" = "device" ] || die "adb can't use $SERIAL (state '${state:-none}'). Run '$ADB connect $SERIAL' to see why; 'unauthorized' means accepting the debugging prompt. Nothing was changed on the hub."
+  if [ -n "$USB" ]; then usb_hub; else wifi_hub; fi
   local serialasusb rc=0
   serialasusb=$(hub shell getprop persist.ftcandroid.serialasusb) || rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -234,11 +310,23 @@ run() {
   caffeinate -dims -w $$ &
   say "Control Hub found; results go to $RESULTS, the backup to $backup; the Mac stays awake until this ends"
 
-  local sloth_flag=""
-  say "checking that Gradle builds offline for the Sloth steps"
-  if ! with_timeout 600 ./gradlew --offline -q :TeamCode:assembleSloth </dev/null; then
-    sloth_flag="--no-sloth"
-    say "Gradle can't build offline here: skipping the Sloth steps (--no-sloth)"
+  local sloth_flag="" offline_flag="--gradle-offline"
+  if [ -n "$USB" ]; then
+    say "checking that Gradle builds for the Sloth steps, online if the Mac has internet, else from its cache"
+    if with_timeout 600 ./gradlew -q :TeamCode:assembleSloth </dev/null; then
+      offline_flag=""
+    elif with_timeout 600 ./gradlew --offline -q :TeamCode:assembleSloth </dev/null; then
+      say "Gradle builds only offline here: the runner's Gradle builds get --gradle-offline"
+    else
+      sloth_flag="--no-sloth"
+      say "Gradle can't build here, online or offline: skipping the Sloth steps (--no-sloth)"
+    fi
+  else
+    say "checking that Gradle builds offline for the Sloth steps"
+    if ! with_timeout 600 ./gradlew --offline -q :TeamCode:assembleSloth </dev/null; then
+      sloth_flag="--no-sloth"
+      say "Gradle can't build offline here: skipping the Sloth steps (--no-sloth)"
+    fi
   fi
 
   say "backing up the Robot Controller app and the hub's hardware configs"
@@ -309,8 +397,13 @@ for e in root.iter("string"):
     echo '#!/bin/bash'
     echo 'set -e'
     reinstall_preflight
-    printf '"%s" connect %s || true\n' "$ADB" "$SERIAL"
-    printf '"%s" -s %s wait-for-device\n' "$ADB" "$SERIAL"
+    if [ -n "$USB" ]; then
+      printf 'echo "waiting for the Control Hub %s on USB: plug the Mac into the USB-C port of that hub"\n' "$SERIAL"
+      printf '"%s" -s %s wait-for-usb-device\n' "$ADB" "$SERIAL"
+    else
+      printf '"%s" connect %s || true\n' "$ADB" "$SERIAL"
+      printf '"%s" -s %s wait-for-device\n' "$ADB" "$SERIAL"
+    fi
     if [ "$apks" -eq 1 ]; then
       printf '"%s" -s %s install -r -t -d "%s"\n' "$ADB" "$SERIAL" "$(ls "$backup"/apk/*.apk)"
     else
@@ -371,7 +464,7 @@ for e in root.iter("string"):
   launched=$(date +%s)
   deadline=$((launched + START_WAIT_S))
   until hub shell "logcat -d -v threadtime -T '$t0' | grep -F -e '$SETUP_DONE'" 2>/dev/null | grep -q -F -e "$SETUP_DONE" \
-        && tcp_open "$HOST" 8000; do
+        && dashboard_up; do
     die_if_hub_lost "waiting for the Robot Controller app to start" ""
     [ "$(date +%s)" -lt "$deadline" ] || die "the Robot Controller app didn't finish starting within $START_WAIT_S s of launching it (no '$SETUP_DONE' in logcat, or no dashboard on port 8000); besides the install, only the hot-loaded Sloth jars were removed, and REINSTALL.sh puts them back"
     sleep 5
@@ -383,18 +476,21 @@ for e in root.iter("string"):
   [ -z "$original_entry" ] || entry_flag=(--original-entry "$original_entry")
   # A non-empty trap resets to default in the runner, which restores on Ctrl-C; this shell lives on to print the backup.
   trap 'true' INT
-  python3 scripts/bench/run_bench.py --gradle-offline --out "$RESULTS" $sloth_flag \
-    ${entry_flag[@]+"${entry_flag[@]}"} ${1+"$@"} || rc=$?
+  local serial_flag=()
+  [ -z "$USB" ] || [ -n "$SERIAL_ARG" ] || serial_flag=(--serial "$SERIAL")
+  python3 scripts/bench/run_bench.py $offline_flag --out "$RESULTS" $sloth_flag \
+    ${entry_flag[@]+"${entry_flag[@]}"} ${serial_flag[@]+"${serial_flag[@]}"} ${1+"$@"} || rc=$?
   trap - INT
   echo
   echo "Backup of the hub's app and configs: $backup (to put that app and its settings back: bash $reinstall)"
   [ "$rc" -eq 0 ] || echo "The runner exited with status $rc; $RESULTS/summary.md says which checks failed or why it stopped."
-  echo "Reconnect to the internet and tell Claude the run finished."
+  echo "$(back_online) the run finished."
   return "$rc"
 }
 
 case "${1:-}" in
-  --build) build ;;
+  --build) build "${2:-}" ;;
   -h|--help) usage ;;
+  --usb) if [ "${2:-}" = --build ]; then build --usb; else run ${1+"$@"}; fi ;;
   *) run ${1+"$@"} ;;
 esac

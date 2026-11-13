@@ -1,0 +1,1043 @@
+adb devices
+adb connect 192.168.43.1:5555
+adb devices
+adb version
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell mkdir -p /sdcard/FIRST/bench
+adb -s 192.168.43.1:5555 shell logcat -G 8M
+adb -s 192.168.43.1:5555 shell cat /proc/net/tcp /proc/net/tcp6
+adb -s 192.168.43.1:5555 shell date +%s; cat /proc/uptime
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'mkdir -p files/bench'
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell cat /sdcard/FIRST/betta_decode.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell cat /sdcard/FIRST/betta_decode.xml
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'logcat year probe'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:00:18.000' | grep -F -e 'logcat year probe'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_probe'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_probe.xml /sdcard/FIRST/bench_probe.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:00:21.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:00:21.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/probe.json files/bench/probe.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin probe'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:00:35.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/probe.json
+adb -s 192.168.43.1:5555 shell ls -l /sdcard/FIRST/
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell cat /sdcard/FIRST/bench_probe.xml
+adb -s 192.168.43.1:5555 shell cat /sdcard/FIRST/betta_decode.xml
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_main'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_main.xml /sdcard/FIRST/bench_main.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:00:48.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:00:48.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/hub.json files/bench/hub.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"limelightPresent": 0, "plannerScale": 1.0}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin hub'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:01:02.000'
+adb -s 192.168.43.1:5555 shell cat /proc/net/tcp /proc/net/tcp6
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/hub.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/framework_loop.json files/bench/framework_loop.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"phaseSeconds": 8}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin framework_loop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:01:14.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/framework_loop.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/raw_loop.json files/bench/raw_loop.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"phaseSeconds": 8}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin raw_loop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:01:25.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/raw_loop.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/failure_initialize.json files/bench/failure_initialize.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"throwIn": "initialize"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin failure_initialize'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:01:38.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/failure_initialize.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/failure_initializeLoop.json files/bench/failure_initializeLoop.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"throwIn": "initializeLoop"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin failure_initializeLoop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:01:49.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/failure_initializeLoop.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/failure_moduleInit.json files/bench/failure_moduleInit.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"throwIn": "moduleInit"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin failure_moduleInit'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:02:00.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/failure_moduleInit.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/failure_onStart.json files/bench/failure_onStart.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"throwIn": "onStart"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin failure_onStart'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:02:11.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/failure_onStart.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/failure_gameLoop.json files/bench/failure_gameLoop.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"throwIn": "gameLoop"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin failure_gameLoop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:02:22.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/failure_gameLoop.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/failure_none.json files/bench/failure_none.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"throwIn": "none"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin failure_none'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:02:33.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/failure_none.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_normal'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:02:44.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_stop_before_start.json files/bench/thread_lifecycle_stop_before_start.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "stop_before_start"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_stop_before_start'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:03:05.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_stop_before_start.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_crash_in_loop.json files/bench/thread_lifecycle_crash_in_loop.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "crash_in_loop"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_crash_in_loop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:03:21.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_crash_in_loop.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_crash_in_loop.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_after_crash_in_loop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:03:38.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_crash_in_stop.json files/bench/thread_lifecycle_crash_in_stop.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "crash_in_stop"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_crash_in_stop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:03:54.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_crash_in_stop.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_crash_in_stop.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_after_crash_in_stop'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:04:11.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_thread_failure.json files/bench/thread_lifecycle_thread_failure.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "thread_failure"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_thread_failure'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:04:27.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_thread_failure.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_interrupt_probe.json files/bench/thread_lifecycle_interrupt_probe.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "interrupt_probe"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_interrupt_probe'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:04:43.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_interrupt_probe.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_01'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:04:59.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_02'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:05:15.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_03'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:05:31.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_04'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:05:47.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_05'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:06:03.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_06'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:06:19.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_07'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:06:35.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_08'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:06:51.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_09'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:07:07.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_repeat_10'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:07:23.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 600}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_sloth_reload'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy threads_sloth'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed threads_sloth'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:07:36.000' | grep -F -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:07:40.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:07:36.000' | grep -F -e 'BENCH sloth deploy threads_sloth' -e 'BENCH sloth pushed threads_sloth' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/thread_lifecycle_normal.json files/bench/thread_lifecycle_normal.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "normal", "seconds": 1}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin threads_after_sloth'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:08:06.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/thread_lifecycle_normal.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat /proc/4002/task/*/comm' 2>/dev/null
+adb -s 192.168.43.1:5555 shell cat /proc/4002/task/*/comm 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -T -p 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell ps -t 4002 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/gamepad.json files/bench/gamepad.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin gamepad'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:08:22.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/gamepad.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/gamepad_linear.json files/bench/gamepad_linear.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin gamepad_linear'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:08:33.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/gamepad_linear.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/edge_start.json files/bench/edge_start.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin edge_start'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:08:44.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/edge_start.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/write_recovery.json files/bench/write_recovery.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin write_recovery'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:08:55.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/write_recovery.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/drive_handover.json files/bench/drive_handover.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin drive_handover'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:06.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/drive_handover.json
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell date +%s
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_turret'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_turret.xml /sdcard/FIRST/bench_turret.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:18.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:18.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/turret_pwm.json files/bench/turret_pwm.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin turret_pwm'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:32.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/turret_pwm.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_main'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:43.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:43.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_llfault'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_llfault.xml /sdcard/FIRST/bench_llfault.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:55.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:09:55.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/limelight_fault_absent.json files/bench/limelight_fault_absent.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "absent", "runSeconds": 15.0}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin llfault'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:10:09.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/limelight_fault_absent.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/limelight_hung_hung_init.json files/bench/limelight_hung_hung_init.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "hung_init", "runId": "hung_init"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin llhung_hung_init'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:10:20.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/limelight_hung_hung_init.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/limelight_hung_stop_hung_1.json files/bench/limelight_hung_stop_hung_1.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "stop_hung", "runId": "stop_hung_1"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin llhung_stop_hung_1'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:10:31.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/limelight_hung_reinit.json files/bench/limelight_hung_reinit.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "reinit", "runId": "reinit"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin llhung_reinit'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:10:41.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/limelight_hung_stop_hung_2.json files/bench/limelight_hung_stop_hung_2.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "stop_hung", "runId": "stop_hung_2"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin llhung_stop_hung_2'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:10:51.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/limelight_hung_reinit_fresh.json files/bench/limelight_hung_reinit_fresh.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "reinit_fresh", "runId": "reinit_fresh"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin llhung_reinit_fresh'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:01.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/limelight_hung_stop_hung_1.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/limelight_hung_reinit.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/limelight_hung_stop_hung_2.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/limelight_hung_reinit_fresh.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_main'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:15.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:15.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/sloth_probe_atpush.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "atpush"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy atpush'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed atpush'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:28.000' | grep -F -e 'BENCH sloth deploy atpush' -e 'BENCH sloth pushed atpush' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:28.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/sloth_probe_atpush.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/sloth_probe_d0ms.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "d0ms"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy d0ms'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed d0ms'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:43.000' | grep -F -e 'BENCH sloth deploy d0ms' -e 'BENCH sloth pushed d0ms' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:43.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/sloth_probe_d0ms.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/sloth_probe_d500ms.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "d500ms"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy d500ms'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed d500ms'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:58.000' | grep -F -e 'BENCH sloth deploy d500ms' -e 'BENCH sloth pushed d500ms' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:11:58.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/sloth_probe_d500ms.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/sloth_probe_d1000ms.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "d1000ms"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy d1000ms'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed d1000ms'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:12:13.000' | grep -F -e 'BENCH sloth deploy d1000ms' -e 'BENCH sloth pushed d1000ms' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:12:13.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/sloth_probe_d1000ms.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/sloth_probe_d2000ms.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "d2000ms"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy d2000ms'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed d2000ms'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:12:28.000' | grep -F -e 'BENCH sloth deploy d2000ms' -e 'BENCH sloth pushed d2000ms' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:12:28.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/sloth_probe_d2000ms.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/sloth_probe_d5000ms.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "d5000ms"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth deploy d5000ms'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'BENCH sloth pushed d5000ms'
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:12:43.000' | grep -F -e 'BENCH sloth deploy d5000ms' -e 'BENCH sloth pushed d5000ms' -e 'Staged Sloth Load' -e 'Processed Sloth Load' -e 'Cancelled Sloth Load' -e 'failed to switch loader' -e 'Failed to sloth load'
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:12:43.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/sloth_probe_d5000ms.json
+adb -s 192.168.43.1:5555 shell for f in /sdcard/FIRST/dairy/sloth/*.jar; do echo "$f $(stat -c %Y "$f")"; done; echo "now $(date +%s)"
+adb -s 192.168.43.1:5555 shell date +%s; cat /proc/uptime
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/clock.json files/bench/clock.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"timeoutMs": 15000}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin clock'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:00.000'
+adb -s 192.168.43.1:5555 shell date +%s; cat /proc/uptime
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/clock.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_pinpoint'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_pinpoint.xml /sdcard/FIRST/bench_pinpoint.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:10.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:10.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/pinpoint_seed.json files/bench/pinpoint_seed.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "seed"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin pinpoint_seed'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:24.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/pinpoint_seed.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_octoquad'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_octoquad.xml /sdcard/FIRST/bench_octoquad.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:33.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:33.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/octoquad_seed.json files/bench/octoquad_seed.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"mode": "seed"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin octoquad_seed'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:47.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/octoquad_seed.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_octoquad_absent'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_octoquad_absent.xml /sdcard/FIRST/bench_octoquad_absent.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:56.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:13:56.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/octoquad_absent.json files/bench/octoquad_absent.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin octoquad_absent'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:14:10.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/octoquad_absent.json
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_nowebcam'
+adb -s 192.168.43.1:5555 push <out>/logs/bench_nowebcam.xml /sdcard/FIRST/bench_nowebcam.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:14:19.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:14:19.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/webcam_stop_absent.json files/bench/webcam_stop_absent.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"runId": "absent"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin webcam_absent'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:14:33.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/webcam_stop_absent.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/planner_stop_b4_d50.json files/bench/planner_stop_b4_d50.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"balls": 4, "runId": "b4_d50"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin planner_stop_b4_d50'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:14:44.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/planner_stop_b4_d50.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/planner_stop_b4_d300.json files/bench/planner_stop_b4_d300.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"balls": 4, "runId": "b4_d300"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin planner_stop_b4_d300'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:14:55.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/planner_stop_b4_d300.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/planner_stop_b4_d600.json files/bench/planner_stop_b4_d600.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"balls": 4, "runId": "b4_d600"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin planner_stop_b4_d600'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:15:06.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/planner_stop_b4_d600.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/planner_stop_b5_d50.json files/bench/planner_stop_b5_d50.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"balls": 5, "runId": "b5_d50"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin planner_stop_b5_d50'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:15:17.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/planner_stop_b5_d50.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/planner_stop_b5_d300.json files/bench/planner_stop_b5_d300.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"balls": 5, "runId": "b5_d300"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin planner_stop_b5_d300'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:15:28.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/planner_stop_b5_d300.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/planner_stop_b5_d600.json files/bench/planner_stop_b5_d600.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{"balls": 5, "runId": "b5_d600"}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin planner_stop_b5_d600'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:15:39.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/planner_stop_b5_d600.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/overlay_nan.json files/bench/overlay_nan.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin overlay_nan'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:15:50.000'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config bench_nowebcam'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:16:00.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:16:00.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/overlay_nan.json
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/freeze_dump.json files/bench/freeze_dump.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/freeze_watch.json files/bench/freeze_watch.json.tmp'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'printf '"'"'%s'"'"' '"'"'{}'"'"' > files/bench/params.json.tmp && mv files/bench/params.json.tmp files/bench/params.json'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'cat files/bench/params.json'
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'begin freeze_dump'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date +%s
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb devices
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:16:16.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config betta_decode'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:16:34.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:16:34.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_main.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_pinpoint.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_nowebcam.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_llfault.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_octoquad.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_octoquad_absent.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_turret.xml
+adb -s 192.168.43.1:5555 shell rm /sdcard/FIRST/bench_probe.xml
+adb -s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell date '+%Y-%m-%d %H:%M:%S'
+adb -s 192.168.43.1:5555 shell log -t BENCH_RUNNER 'activate config betta_decode'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 push <out>/logs/rc_prefs.xml /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller cp /data/local/tmp/bench_rc_prefs.xml shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml && echo BENCH_PREFS_COPIED; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper; rm -f /data/local/tmp/bench_rc_prefs.xml
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:17:09.000' | grep -F -e '======= INIT FINISH =======' -e 'Something went wrong when reflecting to restart the robot' -e 'Robot failed to start'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb devices
+adb -s 192.168.43.1:5555 shell logcat -d -v threadtime -T '2026-11-12 10:17:09.000'
+adb -s 192.168.43.1:5555 shell pidof com.qualcomm.ftcrobotcontroller 2>/dev/null
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'ls files/bench'
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat files/bench/params.json
+adb -s 192.168.43.1:5555 shell rmdir /sdcard/FIRST/bench
+adb -s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller sh -c 'rm -f files/bench/params.json'

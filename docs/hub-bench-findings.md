@@ -327,6 +327,9 @@ Not run on either date (they need `--interactive`):
 
 ## Still unknown
 
+- **Whether a run over the USB cable (`run_bench.py --usb`) measures what a Wi-Fi run does:** `summary.md`'s `Link:`
+  line labels every run, so cable numbers stay out of the Wi-Fi ones above until the default bench, run both ways on
+  one hub, shows the same Bench: Hub bus call costs and Bench: Framework Loop loop periods.
 - **Where the ball pipeline's slowdown starts, and which step costs it:** time each SnapScript stage (mask,
   distance-transform split, homography, drawing) with 0, 1, 2 and 3 balls in view, well after the pipeline switch,
   reporting the stage times in spare llpython slots.

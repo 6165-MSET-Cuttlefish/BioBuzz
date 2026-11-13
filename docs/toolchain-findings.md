@@ -104,7 +104,9 @@ FtcRobotController tags end at v12.0.
   `DeploySloth.kt`, `RemoveRemoteSloth.kt`). With two hubs, or one hub on both USB and Wi-Fi, deploySloth fails with
   adb's more-than-one-device error, and `removeSlothRemote` (which Gradle's `installDebug` runs first) ignores adb's
   exit code and silently deletes nothing. Set `ANDROID_SERIAL=<serial from adb devices>` in the environment Gradle
-  runs in, as the [bench](../scripts/bench/README.md) does.
+  runs in, as the [bench](../scripts/bench/README.md) does: a task's `ExecOperations` child sees the value `./gradlew`
+  was started with, on a reused daemon too (an init-script task on Gradle 9.1.0, run twice with two values, on a Mac,
+  2026-11-12).
 - **Connect adb yourself before deploySloth, or it drops the hub afterwards.** With nothing in `adb devices`, the Load
   plugin's default autoconnect (`LoadSettings.kt`: address 192.168.43.1, `AutoConnect.MAINTAIN`) runs
   `adb connect 192.168.43.1`, deploys, then a bare `adb disconnect`, which disconnects every network device
@@ -129,6 +131,14 @@ FtcRobotController tags end at v12.0.
   without `.plist`, not `com.adbtunnel.updater`. It comes back at the next login. `run_bench.py` and `bare_hub.sh`
   check the port themselves before their first adb command and stop, naming the process and its pid
   ([bench README](../scripts/bench/README.md)).
+- **Over a USB cable, a connection through `adb forward` proves nothing about the hub's port.** adb accepts it on the
+  laptop before it asks the device (`adb_listeners.cpp`, `listener_event_func`), sends a bare `tcp:<port>` to the
+  device's loopback (`socket_spec.cpp`), drops a device's forwards when the device leaves (a reboot or a pulled cable),
+  and prints the port it picked for `forward tcp:0` on a line of its own (`client/commandline.cpp`): adb's source on
+  android.googlesource.com, read 2026-11-12. Read the hub's socket table instead, as the bench does with `--usb`. A
+  page needs more than its own forward: slothboard's `/dash` script connects to port 8000 of the address it came from
+  (`assets/dash/assets/index.*.js` in the 6165.7 AAR), and the RC page's to its own port + 1 (`websocket-core.js` in
+  RobotServer 12.0.0).
 - **Fake hubs stay off ports 5554 to 5585 and never touch the real adb.** The adb server finds emulators by scanning
   the odd localhost ports 5555 to 5585 ([adb docs](https://developer.android.com/tools/adb), fetched 2026-11-10). A
   fake hub on `127.0.0.1:5555` was picked up as `emulator-5554` and churned about every 1.3 s, disturbing a real hub's
