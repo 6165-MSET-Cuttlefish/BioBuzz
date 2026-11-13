@@ -2,19 +2,34 @@
 <Robot type="FirstInspires-FTC">
     <LynxUsbDevice name="Control Hub Portal" parentModuleAddress="173" serialNumber="(embedded)">
         <LynxModule name="Control Hub" port="173">
-            <goBILDA5202SeriesMotor name="br" port="0" />
-            <goBILDA5202SeriesMotor name="fr" port="1" />
-            <goBILDA5202SeriesMotor name="vertical" port="2" />
+            <goBILDA5202SeriesMotor name="PollenShooter" port="0" />
+            <goBILDA5202SeriesMotor name="fl" port="1" />
+            <goBILDA5202SeriesMotor name="br" port="2" />
+            <goBILDA5202SeriesMotor name="NectarShooter" port="3" />
 
+            <Servo name="PollenTurretL" port="0" />
+            <Servo name="PollenTurretR" port="1" />
+            <Servo name="NectarTurret" port="2" />
+            <Servo name="PollenHood" port="3" />
+            <Servo name="NectarHood" port="4" />
+            <Servo name="hardstop" port="5" />
+
+            <AnalogInput name="floodgate" port="0" />
+            <AnalogInput name="analog0" port="1" />
+            <AnalogInput name="analog1" port="3" />
 
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
-        </LynxModule>
-
-        <LynxModule name="Expansion Hub 2" port="2">
-            <goBILDA5202SeriesMotor name="fl" port="0" />
-            <goBILDA5202SeriesMotor name="bl" port="1" />
-            <goBILDA5202SeriesMotor name="intake" port="2" /> <!-- Don't use the port 2 encoder on the current Expansion Hub, it shorts -->
-
+            <OctoQuadFTC name="octoquad" bus="2" port="0" />
         </LynxModule>
     </LynxUsbDevice>
+    <LynxUsbDevice name="Expansion Hub Portal" parentModuleAddress="2" serialNumber="DQ8P0FJB">
+        <LynxModule name="Expansion Hub 2" port="2">
+            <goBILDA5202SeriesMotor name="fr" port="0" />
+            <goBILDA5202SeriesMotor name="bl" port="1" />
+            <goBILDA5202SeriesMotor name="intake" port="2" />
+            <goBILDA5202SeriesMotor name="transfer" port="3" />
+        </LynxModule>
+    </LynxUsbDevice>
+    <Webcam name="aprilTagDetector" serialNumber="UC852" />
+    <EthernetDevice name="limelight" serialNumber="EthernetOverUsb:eth0:172.29.0.22" port="0" ipAddress="172.29.0.1" />
 </Robot>

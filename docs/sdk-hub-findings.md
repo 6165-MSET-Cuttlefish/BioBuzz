@@ -166,7 +166,7 @@ Recheck these after an SDK bump. Our code is cited by path under
   `commands/core` package). Whether the firmware does anything else with that level is unknown.
 - BRAKE and FLOAT are defined for zero power only: "a motor's behavior when a power level of zero is applied"
   (`DcMotor.ZeroPowerBehavior` javadoc). What the hub's driver does at partial power isn't published by REV or FIRST.
-- All 38 motor entries in `TeamCode/src/main/res/xml/` are `goBILDA5202SeriesMotor`, which SDK 12 defines as the 99.5:1
+- All 40 motor entries in `TeamCode/src/main/res/xml/` are `goBILDA5202SeriesMotor`, which SDK 12 defines as the 99.5:1
   gearmotor: 2786 ticks/rev, 60 rpm (`com.qualcomm.hardware.motors.GoBILDA5202Series`). A goBILDA 5203 1:1 motor runs
   6000 rpm with "28 PPR at Output Shaft", which the hub counts as 28 counts/rev
   ([goBILDA 5203 1:1](https://www.gobilda.com/5203-series-yellow-jacket-motor-1-1-ratio-24mm-length-8mm-rex-shaft-6000-rpm-3-3-5v-encoder/),

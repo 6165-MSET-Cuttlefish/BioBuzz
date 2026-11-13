@@ -38,8 +38,15 @@ once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Tur
 - **Make the hub in the bay without the battery the Control Hub**, and leave room behind both hubs' USB ports. As
   drawn, the battery holder blocks the other hub's USB-C port
   ([Where the hubs sit](#where-the-hubs-sit-and-the-usb-cable-between-them)).
-- **Rewrite `TeamCode/src/main/res/xml/biobuzz.xml` in place** with these ports. It exists with an old layout, and
-  adding a new config file shifts the stored config ([`toolchain-findings.md`](toolchain-findings.md)).
+- **`TeamCode/src/main/res/xml/biobuzz.xml` follows the map (2026-11-13)**, with the Expansion Hub named by USB serial
+  `DQ8P0FJB` at address 2, the hub in the bench's Photon USB runs of 2026-10-28 and 2026-10-29. The blocker is
+  `Shooter`'s `hardstop`, rangefinders A and B are `analog0` and `analog1`. Left out: the transfer servo, flower
+  intake, lights and Prism (no code names them yet), `Intran`'s `ruler` (no port), and the Pinpoint `BettaConstants`
+  asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to the OctoQuad.
+- **After the full install that brings it, re-activate the hub's config on the DS** (Configure Robot, pick it,
+  Activate): `intake_test.xml`, the old layout, renumbered the configs after it
+  ([`toolchain-findings.md`](toolchain-findings.md#deploying)). Another Expansion Hub needs its own serial in
+  `biobuzz.xml`; the RS485 fallback needs that hub as module 2 under the Control Hub Portal instead.
 
 ## The map
 
