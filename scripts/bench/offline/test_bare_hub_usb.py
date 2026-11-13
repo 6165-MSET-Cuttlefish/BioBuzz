@@ -132,7 +132,7 @@ os.execv(sys.executable, [sys.executable] + args)
 
 
 def bare_hub(devices, args=("--usb",), dashboard_address="00000000", gradle_online=True, start_wait=None, build=None,
-             script=None, intercept=False, serialno="FAKEHUB0001"):
+             script=None, intercept=False, serialno="FAKEHUB0001", git_works=True):
     """Runs a copy of bare_hub.sh (this checkout's unless script names another); returns (exit status, output, adb
     calls, intercepted python calls, the folder it ran in, the gradlew calls)."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -163,6 +163,8 @@ def bare_hub(devices, args=("--usb",), dashboard_address="00000000", gradle_onli
                                f'  "rev-parse --short HEAD") echo 0123456 ;;\n'
                                f'  "rev-parse --path-format=absolute --git-common-dir") echo {root}/common ;;\n'
                                '  status*) ;;\nesac\n')
+    if not git_works:
+        (stubs / "git").write_text('#!/bin/sh\necho "You have not agreed to the licence" >&2\nexit 69\n')
     (stubs / "adb").write_text(ADB.replace("PYTHON", sys.executable))
     (root / "gradlew").write_text('#!/bin/sh\necho "$@" >> "$GRADLE_LOG"\ncase "$*" in\n  *--offline*) exit 0 ;;\n'
                                   f'  *) exit {0 if gradle_online else 1} ;;\nesac\n')
@@ -322,6 +324,15 @@ def build_runs():
     expect("--build without --usb: still builds online and checks the offline Sloth build",
            code == 0 and gradle == [":TeamCode:assembleDebug", "--offline :TeamCode:assembleSloth"]
            and "join its Wi-Fi" in out)
+    code, out, calls, _, root, gradle = bare_hub([], build=["--build", "--usb"], git_works=False)
+    expect("--build with a git that won't run: stops before Gradle and writes no stamp",
+           code != 0 and "git doesn't run here (exit 69: You have not agreed" in out and gradle == []
+           and not (root / "TeamCode/build/outputs/apk/debug/.hubtest-build").exists() and calls == [])
+    for argv in (["--usb"], []):
+        code, out, calls, py, _, _ = bare_hub([(SERIAL if argv else WIFI_SERIAL, "device")], argv, intercept=True,
+                                              git_works=False)
+        expect(f"a run{' --usb' if argv else ''} with a git that won't run: stops before any adb command",
+               code != 0 and "git doesn't run here (exit 69" in out and calls == [] and py == [])
 
 
 def main():

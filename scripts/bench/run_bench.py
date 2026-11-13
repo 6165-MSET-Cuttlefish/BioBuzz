@@ -9701,8 +9701,13 @@ class Runner:
                     if failure is not None:
                         error = (error + "; " if error else "") + f"restoring the config failed: {type(failure).__name__}: {failure}"
                         self.log(f"RESTORE FAILED: {failure}")
-                        self.log(self.link.restore_by_hand(self.adb.serial, self.adb_port_caution(),
-                                                           self.original or "your usual config"))
+                        if isinstance(failure, OtherHub):
+                            self.log(f"The hub the bench ran on still has its bench config. Reach that hub again, open "
+                                     f"its dashboard, add the Hardware Config view, and activate "
+                                     f"{self.original or 'your usual config'}.")
+                        else:
+                            self.log(self.link.restore_by_hand(self.adb.serial, self.adb_port_caution(),
+                                                               self.original or "your usual config"))
                     try:
                         self.copy_bench_folder()
                     except Exception as e:

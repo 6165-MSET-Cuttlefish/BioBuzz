@@ -139,6 +139,14 @@ FtcRobotController tags end at v12.0.
   page needs more than its own forward: slothboard's `/dash` script connects to port 8000 of the address it came from
   (`assets/dash/assets/index.*.js` in the 6165.7 AAR), and the RC page's to its own port + 1 (`websocket-core.js` in
   RobotServer 12.0.0).
+- **A new clone or git worktree can't build from a terminal until it has a `local.properties`.** Gradle stops with
+  "SDK location not found" (seen 2026-11-12 in a worktree; the file is gitignored, so only the folder Android Studio
+  opened has one). Open the folder in Android Studio once, copy `local.properties` from another checkout on the same
+  laptop, or set `ANDROID_HOME` to the SDK folder. `bare_hub.sh --build` hits this too.
+- **After an Xcode update, a Mac's `git` and `/usr/bin/python3` refuse to run until its licence is accepted.** Both
+  print "You have not agreed to the Xcode license agreements" and exit 69 (seen 2026-11-12). Run
+  `sudo xcodebuild -license` in Terminal. Until then `bare_hub.sh` stops and says so; before 2026-11-12 its `--build`
+  passed the uncommitted-changes check and stamped the APK with an empty commit.
 - **Fake hubs stay off ports 5554 to 5585 and never touch the real adb.** The adb server finds emulators by scanning
   the odd localhost ports 5555 to 5585 ([adb docs](https://developer.android.com/tools/adb), fetched 2026-11-10). A
   fake hub on `127.0.0.1:5555` was picked up as `emulator-5554` and churned about every 1.3 s, disturbing a real hub's

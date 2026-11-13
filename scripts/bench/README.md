@@ -194,7 +194,11 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 
 `--usb`, on `run_bench.py` and on `bare_hub.sh` (`--build --usb`, then `--usb`), runs everything above over a USB data
 cable from the Mac to the Control Hub's **USB-C port**, so the Mac stays on its own network. The hub's Wi-Fi stays on
-and unused. The runner takes the one USB device `adb devices` lists (pass `--serial` when there are several; it stops
+and unused. REV's guide uses the USB-A to USB-C cable the hub ships with (REV-11-1232) and says a USB-C to USB-C cable
+works too if it carries data and not only power
+([Updating](https://docs.revrobotics.com/rev-professional-development-technical-path/gs/setup/updating), read
+2026-11-12); a USB-C to USB-C cable hasn't been tried with the bench yet. With a charge-only cable adb lists no device.
+The runner takes the one USB device `adb devices` lists (pass `--serial` when there are several; it stops
 before any device command otherwise), never runs `adb connect`, and checks it is a Control Hub with the RC app. Each
 hub port it uses (8000, 8080 and 8081, 5801, 5807) goes through an `adb forward` from a free port on the Mac that adb
 picks; after a reboot or a pulled cable it waits for the same serial on USB and makes them again, and at the end it

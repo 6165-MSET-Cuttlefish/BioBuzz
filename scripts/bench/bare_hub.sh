@@ -214,8 +214,15 @@ need_python() {
   python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 9))' || die "run_bench.py needs python3 3.9 or newer"
 }
 
+need_git() {
+  local out rc=0
+  out=$(git rev-parse HEAD 2>&1) || rc=$?
+  [ "$rc" -eq 0 ] || die "git doesn't run here (exit $rc: $(printf '%s' "$out" | head -n 1)), so nothing can say which commit the APK is built from. After an Xcode update, run 'sudo xcodebuild -license' in Terminal and then this again. Nothing was built or sent to a hub."
+}
+
 build() {
   need_python
+  need_git
   [ "${1:-}" != --usb ] || USB=1
   [ -z "$(git status --porcelain)" ] || die "the worktree has uncommitted changes (see git status): commit or stash them, so the stamp names exactly what is built"
   say "building the debug APK"
@@ -295,6 +302,7 @@ run() {
   local apk head
   apk=$(find_apk) || die "no single prebuilt APK in $APK_DIR: run scripts/bench/bare_hub.sh --build while online first"
   [ -f "$STAMP" ] || die "$apk has no build stamp: run scripts/bench/bare_hub.sh --build while online first"
+  need_git
   head=$(git rev-parse HEAD)
   [ "$(stamp_get head)" = "$head" ] || die "the APK was built from $(stamp_get head), not HEAD $head: run scripts/bench/bare_hub.sh --build while online"
   if [ "$(stamp_get apk)" != "$(basename "$apk")" ] || [ "$(stamp_get sha256)" != "$(sha256 "$apk")" ]; then
