@@ -39,14 +39,21 @@ once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Tur
   drawn, the battery holder blocks the other hub's USB-C port
   ([Where the hubs sit](#where-the-hubs-sit-and-the-usb-cable-between-them)).
 - **`TeamCode/src/main/res/xml/biobuzz.xml` follows the map (2026-11-13)**, with the Expansion Hub named by USB serial
-  `DQ8P0FJB` at address 2, the hub in the bench's Photon USB runs of 2026-10-28 and 2026-10-29. The blocker is
-  `Shooter`'s `hardstop`, rangefinders A and B are `analog0` and `analog1`. Left out: the transfer servo, flower
-  intake, lights and Prism (no code names them yet), `Intran`'s `ruler` (no port), and the Pinpoint `BettaConstants`
-  asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to the OctoQuad.
+  `DQ8P0FJB` at address 2, the hub in the bench's Photon USB runs of 2026-10-28 and 2026-10-29. Which Expansion Hub
+  the 2026-11-11 USB runs used is not on record here, and nothing ties `DQ8P0FJB` to this robot: read the robot's
+  Expansion Hub serial in the REV Hardware Client before activating `biobuzz`. Check the robot's Arducam serial too:
+  `UC852` is the bench Arducam's (it may be the same on every unit, unverified), and a webcam with another serial
+  fails to open, which stops everything built on `BioBuzzRobot` in INIT. Device names are under
+  [the map](#the-map). Left out: the transfer servo, flower intake, lights and Prism (no code names them yet),
+  `Intran`'s `ruler`, `sensorLeft` and `sensorRight` (no port), and the Pinpoint `BettaConstants` asks for (no port),
+  so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to the OctoQuad.
 - **After the full install that brings it, re-activate the hub's config on the DS** (Configure Robot, pick it,
   Activate): `intake_test.xml`, the old layout, renumbered the configs after it
-  ([`toolchain-findings.md`](toolchain-findings.md#deploying)). Another Expansion Hub needs its own serial in
-  `biobuzz.xml`; the RS485 fallback needs that hub as module 2 under the Control Hub Portal instead.
+  ([`toolchain-findings.md`](toolchain-findings.md#deploying)). A hub that ran Intake Test on `biobuzz`: activate
+  `intake_test`. `biobuzz` now holds the BIOBUZZ robot's layout under the same ID, so on that robot its motor names
+  would drive other mechanisms. Another Expansion Hub needs its own serial in `biobuzz.xml`, and the RS485 fallback
+  needs that hub as module 2 under the Control Hub Portal: either is a `res/` change, so a full install (Run) from a
+  laptop, not a switch on the DS.
 
 ## The map
 
@@ -90,6 +97,13 @@ once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Tur
 | servo 1 | flower intake servo | injector B |
 | servo 2 and servo 4 | one RGB indicator light each | hub 5 V; one light per port pair |
 | servo 3, 5 | spare | |
+
+**Names in `biobuzz.xml`.** `PollenTurretL` on Control Hub servo 0 and `PollenTurretR` on servo 1 (`Turret` runs R
+`offset` above L; the Betta bot has R on 0), the blocker is `hardstop`, rangefinders A and B are `analog0` and
+`analog1`, the Floodgate is `floodgate`, the OctoQuad `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0,
+read by nothing. The Expansion Hub is address 2 on USB as well as on the RS485 fallback. The rest use the code's names:
+`PollenShooter`, `NectarShooter`, `NectarTurret`, `PollenHood`, `NectarHood`, `fl`, `br`, `fr`, `bl`, `intake`,
+`transfer`, the Arducam `aprilTagDetector` and the Limelight `limelight`.
 
 **Servo power.** Injector A: pollen turret pair, pollen hood, blocker. Injector B: nectar turret, nectar hood,
 transfer servo, flower intake. Each injector takes an XT30 lead from the distribution board. Connect hub servo ports
