@@ -99,8 +99,9 @@ From REV's product pages for [V1](https://www.revrobotics.com/rev-11-1271/) and
 
 ## OctoQuad as an encoder input
 
-The robot's OctoQuad carries the odometry pods and the Nectar turret's Through Bore
-([`wiring-findings.md`](wiring-findings.md#the-nectar-turret-encoder)). It could also take
+The robot's OctoQuad carries the odometry pods and the absolute output of the Nectar turret's Through Bore, read once
+at INIT to zero that encoder's count on a Control Hub encoder port
+([`wiring-findings.md`](wiring-findings.md#zeroing-the-nectar-turret)). It could also take
 the flywheel encoders, though
 [`flywheel-control-findings.md`](flywheel-control-findings.md#where-to-plug-the-flywheel-encoders) recommends Control
 Hub ports 0 and 3. From DigitalChickenLabs' datasheet Rev 3.0C for firmware v3 ([repository][oqdocs], read
