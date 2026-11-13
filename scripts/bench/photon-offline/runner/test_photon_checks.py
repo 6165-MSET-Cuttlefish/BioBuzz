@@ -150,6 +150,28 @@ def i2c_info(topo="usb", swapped=True):
     return {"devices": devices, "periodMs": 10.0, "photonSwapFailures": []}
 
 
+OVERLAP_ADDS_UP = {"6 + 0": 4.66, "0 + 6": 6.20, "6 + 6": 10.90, "6 + 6 alternating": 10.80, "3 + 3": 5.5,
+                   "5 + 1": 5.9, "1 + 5": 7.0}
+OVERLAP_OVERLAPS = dict(OVERLAP_ADDS_UP, **{"6 + 6": 6.90, "6 + 6 alternating": 6.40, "3 + 3": 3.3, "5 + 1": 4.7,
+                                            "1 + 5": 6.2})
+
+
+def overlap_phase(parallel=8, drained=None, loops=300, **over):
+    """A Bench: Photon hub overlap phase: drained p50s per set (default adds up); return time is the drained time
+    with Photon off and 0.8 of it on."""
+    drained = drained or OVERLAP_ADDS_UP
+    sets = {}
+    for key, ms in drained.items():
+        ret = ms if parallel <= 0 else 0.8 * ms
+        sets[key] = {"channels": [], "returnMs": {"count": loops, "p50": ret, "p95": 1.3 * ret, "max": 2 * ret},
+                     "drainedMs": {"count": loops, "p50": ms, "p95": 1.3 * ms, "max": 2 * ms}}
+    issued = 54 * loops
+    ph = phase(parallel=parallel, issued=issued, counters=counters(parallelWrites=issued if parallel > 0 else 0))
+    ph.update({"rounds": loops, "seed": 6165, "drainTimeouts": 0, "sets": sets})
+    ph.update(over)
+    return ph
+
+
 def i2c_control(topo="usb", attempts=200, wrong=0, refused=None, locked_wrong=0):
     out = {}
     for d in ("pinpoint", "octoquad"):
@@ -647,6 +669,35 @@ expect("rs485: lock warning fails", any_bad(rb.photon_rs485_checks(
     rs, mutate(logs, ["phases", "rs485 shared link on8", "incorrect owner releasing"], 1))))
 expect("rs485: a missing phase marker fails", any_bad(rb.photon_rs485_checks(
     rs, mutate(logs, ["phases", "rs485 shared link off"], DELETE))))
+
+# --- two hubs at once (USB): every phase invariant holds, and the reading is record only
+adds_up = {"hubOverlap": {m: overlap_phase(p) for m, p in (("off", 0), ("on8", 8), ("on4", 4), ("on2", 2))}}
+overlaps = {"hubOverlap": dict(adds_up["hubOverlap"], on8=overlap_phase(8, OVERLAP_OVERLAPS))}
+for label, main in (("adds up", adds_up), ("overlaps", overlaps)):
+    phases = {f"hubOverlap {m}": ph for m, ph in main["hubOverlap"].items()}
+    expect(f"hub overlap: synthetic {label} passes every phase invariant",
+           all_ok(rb.photon_workload_checks("phases", "", phases)))
+expect("hub overlap: synthetic adds up reads adds up",
+       rb.photon_overlap_verdict(adds_up, "usb")["reading"] == "adds up")
+expect("hub overlap: synthetic overlaps reads overlaps",
+       rb.photon_overlap_verdict(overlaps, "usb")["reading"] == "overlaps")
+expect("hub overlap: the reading doesn't change the phase checks",
+       [(c.name, c.ok) for c in rb.photon_workload_checks("phases", "", {f"hubOverlap {m}": p for m, p in adds_up["hubOverlap"].items()})]
+       == [(c.name, c.ok) for c in rb.photon_workload_checks("phases", "", {f"hubOverlap {m}": p for m, p in overlaps["hubOverlap"].items()})])
+for broken, path, value in (("a wrong read-back", ["readback", "mismatches"], 1),
+                            ("a write left in flight", ["inFlightAfterDrain"], 1),
+                            ("in flight over the limit", ["maxInFlight", "expansionHub"], 5),
+                            ("a retransmit", ["counters", "retransmits"], 1),
+                            ("a write that skipped Photon", ["counters", "parallelWrites"], 54 * 300 - 1)):
+    bad = rb.photon_workload_checks("phases", "", {"hubOverlap on4": mutate(overlap_phase(4), path, value)})
+    expect(f"hub overlap: {broken} fails its phase", any_bad(bad))
+expect("hub overlap: a missing phase is not measured, not a reading",
+       rb.photon_overlap_verdict({}, "usb")["reading"] is None
+       and "not measured" in rb.photon_overlap_verdict({}, "usb")["line"])
+expect("hub overlap: RS485 says why it was skipped",
+       "not run: the Expansion Hub is on RS485" in rb.photon_overlap_verdict(overlaps, "rs485")["line"])
+expect("hub overlap: a Control Hub alone says why it was skipped",
+       "not run: there is no Expansion Hub" in rb.photon_overlap_verdict(overlaps, "none")["line"])
 
 # --- cable pulls
 def replug_res(**over):

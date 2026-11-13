@@ -25,15 +25,17 @@ For a Control Hub with nothing plugged into any port, run where there is no inte
    at its start.
 4. When it prints `Reconnect to the internet and tell Claude the run finished.` (or `...the run stopped.`), do that.
 
-In order, it: stops unless the APK and its stamp match HEAD, no tracked file changed and the photon sources still hash
-to the stamp's; finds adb as `run_bench.py` does and connects to `192.168.43.1:5555` (stops within about 20 s, touching
+In order, it: finds adb as `run_bench.py` does and stops, before any adb command, if anything but adb listens on
+adb's server port (5037, or `ANDROID_ADB_SERVER_PORT`), naming the process and its pid, or if `ADB_SERVER_SOCKET` or
+`ANDROID_ADB_SERVER_ADDRESS` is set; stops unless the APK and its stamp match HEAD, no tracked file changed and the
+photon sources still hash to the stamp's; connects to `192.168.43.1:5555` (stops within about 20 s, touching
 nothing, if the Mac isn't on the hub's Wi-Fi), and checks it is a Control Hub with the RC app (the SDK's
 `persist.ftcandroid.serialasusb`); keeps the Mac awake (`caffeinate`); stops, saying so and how to reconnect, if adb
 loses the hub at any step before the runner starts (told apart from a real answer by adb's exit status and `get-state`,
 never by empty output); checks Gradle builds offline, adding `--no-sloth` if not; copies the installed RC APKs (with
 sha256), its version, every `/sdcard/FIRST/*.xml`, the app's settings and the Sloth folder to
 `.git/bench-backups/<time>/` in the main checkout (outside every worktree, so removing one can't delete it), and writes
-`REINSTALL.sh` there, which puts that app, its settings and its Sloth jar back; passes the active-config setting from
+`REINSTALL.sh` there, which puts that app, its settings and its Sloth jar back, after the same adb-port check; passes the active-config setting from
 before the install to the runner (`--original-entry`), so the runner restores that one; installs the stamped APK with
 `adb install -r -t -g` (`-g` so no permission prompt waits for a tap; a signature mismatch or downgrade stops it with
 the hub unchanged; it never uninstalls); deletes `/storage/emulated/0/FIRST/dairy/sloth/*` as the Run button's
@@ -48,7 +50,10 @@ name devices on the bench ports unless you add `--ports-empty` once they are unp
    benches drive them with real power (up to 0.35). Never run it on a robot's hub. The runner refuses to start while a
    config on the hub names a motor or servo there; once they are empty, add `--ports-empty`. Keep I2C bus 3 empty, and
    analog port 0 unwired: the benches read it as an unwired Floodgate.
-2. Join the hub's Wi-Fi, then `adb connect 192.168.43.1:5555`.
+2. Join the hub's Wi-Fi, then `adb connect 192.168.43.1:5555`. Before its own first adb command the runner stops if
+   anything but adb listens on adb's server port 5037 (an ssh port forward, for one): every adb command would reach
+   whatever is behind it, possibly another hub, and the bench would drive that hub's motor ports. It names the process
+   and its pid; stop it and rerun.
 3. Full install (Android Studio, **TeamCode** run configuration, **Run**) and wait for the RC app. Do it again after
    any change to `architecture/hardware/photon/`: that code is pinned, so deploySloth never changes it on the hub, and
    the Photon block fails its first check when the installed copy doesn't match the sources.
@@ -73,9 +78,9 @@ Missing hardware skips its benches, and the summary says so.
 | plug in | where | runs |
 |---|---|---|
 | a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam, Webcam Stop, Webcam Thread Failure |
-| the Limelight 3A, booted | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found) |
+| the Limelight 3A, booted | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery |
 | a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent) |
-| an OctoQuad MK2, pods on encoder ports 3 and 4, still | Control Hub I2C bus 2 | Bench: OctoQuad |
+| an OctoQuad MK2, pods on encoder ports 3 and 4, still (on the robot they sit on 0 and 1) | Control Hub I2C bus 2 | Bench: OctoQuad, its bank phase included |
 | a REV Expansion Hub on its own 12 V | RS485, address 2 (`--expansion-address N`) | Bench: Expansion Hub (reads only) |
 | a REV Expansion Hub on 12 V, **nothing on its motor ports 0-3 or servo ports 0-1** (the Photon block drives them) | Control Hub USB to its mini-USB, no RS485 cable | the Photon block with `--usb-expansion` |
 | the same Expansion Hub, same empty ports | RS485 only, address 2 (`--expansion-address N`) | the Photon block with `--photon-rs485` |
@@ -84,7 +89,8 @@ Missing hardware skips its benches, and the summary says so.
 `--interactive` adds terminal prompts: pull and replug the Limelight, Pinpoint and OctoQuad cables (pods stay in); move
 the Pinpoint and OctoQuad to the Expansion Hub's I2C ports 1 and 2 and back; open http://192.168.43.1:8080 during
 Bench: Clock on a hub whose clock still reads about 1970; drive the dashboard's Gamepad view with the keyboard, the
-on-screen stick and a USB pad (close the tab afterwards).
+on-screen stick and a USB pad (close the tab afterwards); with `--dashboard-off`, pull the Control Hub's battery lead
+once, count to three and plug it back in, about 15 s after the dashboard is switched off.
 
 ### Flags
 
@@ -97,12 +103,16 @@ on-screen stick and a USB pad (close the tab afterwards).
 | `--out DIR` | writes the results there instead of `bench-results/<timestamp>/` |
 | `--original-entry JSON` | the app's active-config setting from before a reinstall (`bare_hub.sh` passes it): restored at the end instead of the one read after the install |
 | `--photon` | only the Photon block (below), with or without `--all`; a run without bench flags, or with `--all` alone, leaves it out |
-| `--usb-expansion` / `--photon-rs485` | the Photon block with the Expansion Hub on USB / on RS485 (implies `--photon`) |
+| `--dashboard-off` | Bench: Dashboard Off ([below](#dashboard-off)), last; a run without bench flags, `--all` and `bare_hub.sh` leave it out unless given it |
+| `--list-configs` | only lists the hub's saved hardware configs and their webcam and Ethernet device names, flagging stale ones; changes nothing on the hub, so it is fine on a robot's hub. About 10 s |
+| `--usb-expansion` / `--photon-rs485` | the Photon block with the Expansion Hub on USB / on RS485 (implies `--photon`); on USB, Bench: Photon also times writes to the two hubs apart and together (below) |
 | `--photon-soak` | the Photon block's long soak, 200 STOP trials per condition and more lost-write trials (implies `--photon`) |
 | `--photon-stop-trials N`, `--photon-seed N` | STOP trials per condition (default 40); the seed for the STOP delays (default: the time, logged) |
 | `--photon-i2c` | the Photon block also reads the Pinpoint and the OctoQuad over I2C on both hubs (about 2 min more); a wiring's verdict can only say SAFE with it |
+| `--turret-zero` | only Bench: Turret Zero (below), prompted, with or without `--all`; a run without bench flags, or with `--all` alone, leaves it out |
+| `--turret-zero-v2` | Bench: Turret Zero with its V2 phase, for when a REV-11-3174 is on hand (implies `--turret-zero`) |
 | `--quick` | shorter phases, noisier numbers |
-| `--all` | every bench but the Photon block; stops if no webcam, Limelight or Expansion Hub is plugged in |
+| `--all` | every bench but the Photon block, Bench: Turret Zero and Dashboard Off; stops if no webcam, Limelight or Expansion Hub is plugged in |
 | `--keep-configs` | leaves the `bench_*` hardware configs on the hub |
 
 `--help` lists the rest: one flag per bench (`--hub`, `--loop`, `--threads`, `--edge`, `--turret`, `--config-by-name`,
@@ -142,7 +152,7 @@ I2C checks fail; nothing passes without reads.
 
 | run | command | about |
 |---|---|---|
-| USB Expansion Hub, short (PASSED at best) | `python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty` | 50 min; from a terminal, 2 prompts at the start and 1 at the end |
+| USB Expansion Hub, short (PASSED at best) | `python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty` | 55 min; from a terminal, 2 prompts at the start and 1 at the end |
 | RS485 Expansion Hub, short (recable first) | `python3 scripts/bench/run_bench.py --photon --photon-rs485 --photon-i2c --ports-empty` | 50 min; from a terminal, 2 prompts at the start and 1 at the end |
 | **go, USB wiring** | `python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-soak --photon-i2c --interactive --ports-empty` | 6-7 h, 2 prompts at the start and 5 at the end |
 | **go, RS485 wiring** | `python3 scripts/bench/run_bench.py --photon --photon-rs485 --photon-soak --photon-i2c --ports-empty` | 6-7 h; from a terminal, 2 prompts at the start and 1 at the end |
@@ -162,7 +172,8 @@ The steps, in order (each OpMode is `Bench: Photon ...`):
    Photon's per-step write timing on (`timing on8 profiled`, summarized per hub in `summary.md`), undrained bursts at 8/2/1, three writes per channel back to back (the last must win), SDK-path enable toggles between
    parallel writes, bulk/voltage reads, servo writes from a second thread while the OpMode thread writes and reads back
    the motors and a third toggles Photon, 3000 writes at a limit of 1 under a 50 ms stall watchdog, and a
-   production-rate soak (60 s; with `--photon-soak` up to 1e7 writes per hub, about 3 h). With `--photon-i2c`: I2C
+   production-rate soak (60 s; with `--photon-soak` up to 1e7 writes per hub, about 3 h), and on USB wiring the
+   two-hubs-at-once phase (below). With `--photon-i2c`: I2C
    phases off, at 2 and at 8, where two threads per device (the driver's own client and a second one, every 10 ms, the
    robot's sensor-thread period and rules) read their device's constant registers while the OpMode thread writes every
    channel; with Photon off the second readers go through the replaced hub objects Photon keeps, so they must share the
@@ -226,6 +237,134 @@ With `--photon-rs485`, Bench: Photon adds a shared-link phase, off and on, with 
 writes (parallel when on) and the RS485 Expansion Hub's (which must never go parallel) every loop, with exact
 read-backs on both and no SDK lock warning.
 
+With `--usb-expansion`, Bench: Photon ends, after the soak, with the **two-hubs-at-once** phase: whether Photon's writes
+to the two hubs overlap in time or add up, which decides how the robot's every-loop outputs split between the hubs
+(`docs/wiring-findings.md`). Nothing to plug in beyond the USB run's wiring, no prompts, about 3 minutes. Photon off and
+at 8, 4 and 2 parallel, it times one loop of changed writes, at the block's usual levels on the same bench ports, for
+each set: 6 on the Control Hub alone (`6 + 0`), 6 on the Expansion Hub alone (`0 + 6`), all 12 hub by hub (`6 + 6`) and
+alternating hubs, and `3 + 3`, `5 + 1` and `1 + 5` (a partial hub's writes take a motor and a servo in turn). Each set
+runs 300 loops, once per round in an order shuffled every round. A loop is timed as the write blocks are (only the
+calls, each value chosen before them, the in-flight samples between calls off that clock), and from the first call
+until every write is acknowledged, with the drain the phases use; the next loop starts with nothing in flight. Its
+read-backs, drains, in-flight counts and counters are judged like every phase's, under **Every write lands**
+(`hubOverlap off` to `hubOverlap on2`). `summary.md`'s **Two hubs at once** table gives p50 / p95 per set of both
+times, and 12 together / (6 + 6 alone) for each: about 1.0 means the hubs' times add up, about max / (sum) that they
+overlap fully. Its line, read at 8 parallel on the drained time of whichever 12-write order overlapped more, says
+**adds up**, **in between** or **overlaps** (the share of the shorter hub's time hidden: under a third, a third to two
+thirds, over two thirds). That line is a record: never a check, never part of the Photon verdict. With Photon off
+every call waits for its ACK, so off should read "adds up" whatever the hubs do: it is the control. On RS485 or a
+Control Hub alone the phase doesn't run and the summary says why. Offline:
+`python3 -I scripts/bench/offline/test_hub_overlap.py`.
+
+## Dashboard Off
+
+Whether the dashboard's Enable/Disable switch really stops everything R704(D) could object to, whether off survives
+an app restart, a reboot and a reinstall, and whether the adb recovery brings it back without a Driver Station
+([`docs/dashboard-findings.md`](../../docs/dashboard-findings.md)). It hasn't run on a hub yet, and a failed recovery
+leaves the hub's dashboard off, so it runs only with its own flag, last.
+
+**Setup.** A bare Control Hub on 12 V with the Run button's debuggable build (the runner needs `run-as`: while off,
+the dashboard ignores every command but status), the Mac on its Wi-Fi with auto-join on for that network (the hub
+reboots once), no Driver Station, every dashboard tab closed. A booted Limelight adds a check of its web UI after the
+recovery.
+
+| run | command | about |
+|---|---|---|
+| unattended | `python3 scripts/bench/run_bench.py --dashboard-off --ports-empty` | about 10 min, nothing to do |
+| with a battery pull | `python3 scripts/bench/run_bench.py --dashboard-off --interactive --ports-empty` | about 12 min, one prompt: pull the hub's battery lead, count to three, plug it back in, press Enter |
+
+Through `bare_hub.sh`, which installs the stamped build first, it is a run of its own after the plain one:
+`scripts/bench/bare_hub.sh --dashboard-off --ports-empty` (a bench flag runs only the benches it names).
+
+The steps:
+
+1. Before: the status's `enabled`, the saved switch (`shared_prefs/FtcDashboard.xml`, key `autoEnable`) and what
+   listens on 5800, 5801, 5805, 5807 (the Limelight proxy) and, recorded only, 8000, 8080, 10158 and 12649.
+2. **Bench: Dashboard Off** streams telemetry every 50 ms and a two-frame camera stream for 3 s, then calls
+   slothboard's private `disable()` on the OpMode thread, as its Enable/Disable OpMode does, waits 1 s, and keeps
+   sending telemetry and starts the camera stream again for 10 s. It ends itself (the dashboard ignores STOP while
+   off), and the runner takes its BENCH DONE from logcat. A second websocket counts every message the dashboard sends,
+   by type, while on and after the switch.
+3. With `--interactive`, the battery pull, then the same reads as below once the hub is back.
+4. An app restart (the active config re-activated over adb), an `adb reboot` and an `adb install -r -t` of the APK
+   the hub has installed (pulled from it, so it is the same build), each followed by: the status, the saved switch,
+   an INIT of Bench: Probe the dashboard must ignore, 10 s on a fresh websocket, and the proxy ports.
+5. In a `finally`, whatever failed: the recovery, `dashboard_recovery`'s command over adb (`run-as` deletes the saved
+   switch, then the app restarts), then the status must say enabled, the OpMode list must come back, Bench: Probe's
+   telemetry must reach a socket and 5801 and 5807 must listen, all within 60 s. If it fails, the runner prints the
+   exact command at the end and in `summary.md`; the next run refuses a hub with the dashboard off and prints it again.
+
+Each check in `summary.md` says what a FAIL means. Setup fails unless telemetry and camera frames reached the runner
+while the dashboard was on; while off, every window must have no telemetry packet, image or logcat line on a socket
+that stayed open, the bench's camera source must have served no frame, the INIT must be ignored, and each proxy port
+that listened before the switch must be closed (one that didn't listen before isn't judged).
+
+## Bench: Turret Zero
+
+Settles whether the nectar turret's Through Bore can be zeroed once at INIT from its absolute output on OctoQuad
+channel 4 while the hub counts it on Control Hub encoder port 2 (the plan in
+[`docs/wiring-findings.md`](../../docs/wiring-findings.md#zeroing-the-nectar-turret)). It needs a person at the hub for
+about 25 minutes (5 more with the V2 phase, 3 more with a lab supply), and a terminal.
+
+**Plug in:** the Control Hub on 12 V; the OctoQuad in Control Hub I2C port 2 with nothing on its channel 4; nothing on
+any Control Hub motor power port or servo port. One REV Through Bore V1 (REV-11-1271, switch on A) on a stand, its shaft
+turned by hand against a printed 12-mark dial. Two cables:
+
+- the REV-31-1815 hub cable, for the first phase only, into OctoQuad channel 4;
+- a split cable: A, B, 3.3 V and ground to Control Hub encoder port 2; the absolute (pulse) wire and ground to the A pin
+  of OctoQuad channel 4, its 3.3 V and B pins left open, so the hub alone powers the encoder.
+
+**Command:** `python3 scripts/bench/run_bench.py --turret-zero --ports-empty` (`--ports-empty` once the ports are
+empty as above, since a config on the hub names motors there; add `--turret-zero-v2` with a REV-11-3174 on hand). It
+writes and activates `bench_turret_zero` (`br` on motor port 2, only to read encoder port 2, and the OctoQuad) and puts
+the config back afterwards. It sets no motor power and drives no servo.
+
+**What the person does,** prompted one step at a time; each Bench: Turret Zero run is one phase, picked by its params:
+
+1. Unplug the motor and servo ports and the encoder's cables. Meter both cables unplugged, pin to pin, and type `ok`
+   (the REV-31-1815 against the OctoQuad's G, 3.3 V, A and B; on the split cable the encoder plug's 3.3 V, A and B
+   each reach only the hub plug's own pin, its absolute pin only the OctoQuad branch's A pin, the branch's 3.3 V and B
+   pins nothing, and ground joins all three plugs). Anything else stops the bench before any cable is plugged in.
+2. The encoder on the REV-31-1815 into OctoQuad channel 4 (all channels counting): 5 turns forward to a mark and 5 back.
+3. Recable to the split cable with its OctoQuad branch unplugged; meter the encoder's 3.3 V pin and the absolute
+   output's highest level and type both. A level over 3.46 V (3.3 V + 5%, rounded down) or not above 0 V (reversed
+   probes), or a supply outside 2.97-3.46 V, stops the bench before the branch goes into the OctoQuad's 3.3 V-only
+   input.
+4. Branch plugged: 10 turns forward to a mark and 10 back; then branch unplugged, the same; then plug it back.
+5. Span: 3 whole turns one way, slowly, over about 20 s. The runner fits the hub count to the unwrapped absolute output:
+   the pulse range, the counts per turn and the count's direction feed every later run.
+6. Hands off: 10 INITs, each setting the bank, waiting 50 ms and reading channel 4 once as the robot would (the first
+   also times 50 reads); then a quarter turn and one more INIT.
+7. Agreement: the zero from one absolute read at INIT, then 12 or more rests at dial marks over at least 2 turns (a rest
+   is the count unchanged for 500 ms); at each, the absolute angle against the angle counted from the zero.
+8. A quarter turn, then the sign and the run-mode phases, hands off.
+9. With `--turret-zero-v2`, the branch unplugged for each change and plugged in only after its meter readings pass as
+   in step 3: swap in the V2 (switch on A), meter its supply and absolute output, one turn to a mark and back; switch
+   it to S, meter the absolute output again, one turn; put the V1 back. A reading out of range skips the V2 runs that
+   needed the branch (the run on A skips both).
+10. Last, only if the Control Hub runs from a lab supply (typed `yes`): a quarter turn, an INIT read, unplug the OctoQuad
+    branch, dip the supply to about 6 V for half a second during a running OpMode, plug the branch back, an INIT read.
+    Otherwise the brownout phase is reported as not run.
+11. At the end, and whenever the bench stops early with the branch in, unplug the split cable's OctoQuad branch from
+    OctoQuad channel 4 when asked, before the OctoQuad or the Control Hub loses power (unplugging the OctoQuad's cable
+    included): the hub keeps powering the encoder, which must not drive an unpowered OctoQuad's input.
+
+| phase | judged |
+|---|---|
+| wiring, levels | typed `ok`; supply 2.97-3.46 V and the absolute output's high level above 0 and at most 3.46 V |
+| cable 1, split | 8192 +/- 8 counts per turn and back within 8 counts per turn of travel, by hand to a dial mark; plugged and unplugged within 8 counts per turn of each other |
+| span | the V1 pulse range (1-1024 us of 1025, `docs/parts-findings.md`) within 10 us; 8192 +/- 8 hub counts per turn of the absolute output; at least 2 turns |
+| INIT read | 50 `readAllEncoderData` at rest: every CRC ok, p95 under 20 ms, spread at most 0.5 deg; the time from the bank set to the first plausible pulse is recorded |
+| re-zero | 10 untouched INITs give zeros within 0.5 deg; after a quarter turn the zero is within 1 deg (the absolute change matches the count change) |
+| agreement | coverage first: at least 10 rests with a valid absolute read, 300 deg of the absolute range, 2 turns, else FAIL "not enough motion"; negative controls on the same rests: a flipped sign and a 180 deg offset must each err over 20 deg, else FAIL setup; then every rest valid and within 1.0 deg of encoder (0.42 deg of turret) |
+| sign | with `br` FORWARD and REVERSE, from a count of at least 100: the hub's own encoder read (`getController().getMotorCurrentPosition()` with bulk caching off, so its own command, not the bulk read) equals the bulk read, and `getCurrentPosition()` is minus it exactly where the motor type's rotation and the direction say (the goBILDA 5202 is CCW: FORWARD) |
+| run mode | the count stays within 2 through RUN_WITHOUT_ENCODER, RUN_USING_ENCODER and into the next OpMode, from a count of at least 100; STOP_AND_RESET_ENCODER zeroing it is reported as the hazard; the absolute read gives the angle back within 1 deg |
+| V2 (asked for) | its levels as in step 3, on A and again on S; 8192 +/- 8 counts per turn on A and its 3.884-998.06 us range within 10 us; no counts on S |
+| brownout (lab supply) | judged only if the app's pid is unchanged: a changed count must come with a warning, an error, a failed bulk read or the hub not responding, else FAIL; a whole-hub reset is reported as not run; either way the INIT read after it gives the angle back within 1 deg |
+
+The math (pulse width to angle for both versions, count to angle, wrap error, the turret angle from the absolute angle
+and a rough one) is `TurretZeroMath`, with JUnit tests.
+
 ## What it changes on the hub
 
 It writes `bench_*` hardware configs to `/sdcard/FIRST` and switches between them by restarting the RC app; at the end
@@ -242,6 +381,13 @@ reboot. It never deletes the active config, and a run that stops before writing 
 configs untouched. With `bare_hub.sh` the hub runs the bench build from its install on; only `REINSTALL.sh` puts the
 old app back.
 With `--interactive`, opening the RC web page during Bench: Clock sets the hub's clock until it powers off.
+`--dashboard-off` switches the dashboard off, restarts the app, reboots the hub (the runner sets the 8 MB log buffer
+again after the reboot, so it stays until the hub's next one), reinstalls the installed APK (which drops a hot-loaded
+Sloth jar, now older than the install) and turns the dashboard back on over adb. `--list-configs` only reads.
+Bench: OctoQuad's bank phase and every Bench: Turret Zero run change the OctoQuad's channel bank, which is lost at
+power-off: the bank phase puts back the bank it found, and each Bench: Turret Zero run puts back ALL_QUADRATURE,
+whatever it found; nothing is saved to the OctoQuad's flash. `bench_turret_zero` names only `br` on motor port 2 (to
+read encoder port 2) and the OctoQuad.
 
 If it prints `RESTORE FAILED`: open http://192.168.43.1:8080/dash, add the Hardware Config view and activate the config
 the message names (a Control Hub has no Configure Robot screen without a Driver Station).
@@ -251,6 +397,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | OpMode | needs | measures |
 |---|---|---|
 | Bench: Probe | nothing | the IMU chip, attached webcams and Limelights, whether an Expansion Hub answers, the hardware map's device names; whether the original shipped config's saved resource id still names its XML on this install |
+| (saved configs, no OpMode; alone with `--list-configs`) | nothing | every hardware config in `/sdcard/FIRST` with its size, date, webcam and Ethernet device names; warns on a webcam not named `aprilTagDetector`, an Ethernet device not named `limelight` and a config this checkout doesn't ship in `res/xml`; checks the config active before the run names its webcam, if any, `aprilTagDetector` (CellTipCamera's) |
 | (config baseline, no OpMode) | nothing | slothboard's config baseline lists `Optimization Toggles` |
 | Bench: Hub | nothing | empty-loop overhead; bus call costs; telemetry, field map and packet costs; the floodgate pin's volts; sliced planner latency, slice lengths and loop period for 0 to 5 balls; LLResult parse; Limelight POST and poller costs against a fake Limelight |
 | Bench: Framework Loop | nothing | the EnhancedOpMode loop with Drivetrain and Pedro (capped at 0.2), one telemetry toggle per phase; the current limiter stays at 1.0 on an unwired floodgate |
@@ -261,7 +408,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Turret PWM | nothing (`bench_turret`) | BettaTurret's PWM, read from the hub's registers, through CENTER, `stop()` with writes off and on, writes back on, IDLE and RightState.FORWARD |
 | Bench: Clock | nothing | `PathCommands.timeout` (15 s) against wall-clock jumps |
 | Bench: Pinpoint, Pinpoint Absent | a Pinpoint / none | firmware, status, and whether a start pose set in INIT survives the IMU recalibration / that a missing Pinpoint raises a fault or keeps the pose `setPose` set |
-| Bench: OctoQuad | an OctoQuad | GuardedOctoQuadLocalizer's read costs, status changes, CRC failures after the first RUNNING read, start-pose survival |
+| Bench: OctoQuad | an OctoQuad | GuardedOctoQuadLocalizer's read costs, status changes, CRC failures after the first RUNNING read, start-pose survival; then its bank phase, for the turret zero: `readLocalizerData` x300 with the bank as found (ALL_QUADRATURE expected) and with channels 4-7 in pulse-width mode (within 0.2 ms at p50), against `readLocalizerDataAndAllEncoderData` x300 as the positive control (at least 2.5 ms slower, else it says the timing can't see a cost), the one-off INIT read (`readAllEncoderData` x50: every CRC ok, p95 under 20 ms), whether the bank survives GuardedOctoQuadLocalizer's setup and reset (recorded), and the bank found put back |
 | Bench: OctoQuad Absent | an empty I2C bus 3 | GuardedOctoQuadLocalizer with an `octoquad` configured and nothing answering: builds within 1 s, the `OctoQuad` fault raised in INIT within 5 s, INIT keeps looping, START throws naming the OctoQuad |
 | Bench: Expansion Hub | an Expansion Hub | the same Lynx commands and odometry reads on each hub |
 | Bench: Write Recovery | nothing | seven `failSafe()`s, 0 to 235 ms after a write: EnhancedMotor and EnhancedServo (back only on WriteCache's re-send) reach the hub again within the re-send period + 2 loops, raw devices within 2 loops; the worst seen |
@@ -281,6 +428,8 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | (config by name, Bench: Probe) | run-as | a shipped config saved with another shipped config's resource id loads its own XML; a name the build doesn't ship loads no config (both FAIL on a build without re-resolving by name at robot setup) |
 | Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; SET (3 runs), WRITE and DELETE from idle each restart the robot in the same process: no SDK `deadline expired ... EventLoop`, no Control Hub `Relaunching the RC`; thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT and ART's dump of the frozen pid (runs last) |
 | Bench: Sloth Probe | Gradle | INIT racing deploySloth, the OpMode list during a load, the load signal, the jar surviving an app restart |
+| Bench: Turret Zero (`--turret-zero`) | an OctoQuad and a Through Bore on a split cable | see Bench: Turret Zero above |
+| Bench: Dashboard Off (`--dashboard-off` only) | `run-as` | see [Dashboard Off](#dashboard-off) |
 
 The OpModes also run from the dashboard, but they expect the runner's configs and write results only to the hub.
 
@@ -288,6 +437,13 @@ The OpModes also run from the dashboard, but they expect the runner's configs an
 motor). About 80 s after START the DS and dashboard show its summary; the rest is in `analog_poll.json` in the hub's
 bench folder. It measures how often each analog value refreshes and what a poller thread (`pollMs` in that folder's
 `params.json`, default 10) costs a stand-in robot loop.
+
+## Offline checks
+
+From the repo root, before a full install. Every suite in `scripts/bench/offline/`, with the line it ends on when it
+passes, is in [`offline/README.md`](offline/README.md); the Photon block has its own
+([`photon-offline/README.md`](photon-offline/README.md)). The dry runs write their scratch results under
+`scripts/bench/offline/out/` (gitignored): `rm -rf` it to clean up.
 
 ## Notes for changing the bench
 
@@ -340,8 +496,33 @@ bench folder. It measures how often each analog value refreshes and what a polle
 - The gamepad benches take their phase from gamepad2's right trigger (phase / 100) and a message counter on its left
   trigger, so an all-zero rest state leaves the phase alone; phase 99 ends the bench.
 - Bench: OctoQuad Absent holds INIT 6 s, then STARTs, expecting the guard's OctoQuad error.
+- Bench: OctoQuad's bank phase runs after its seed phase has saved its results, in one `gameLoop()` of about 10 s
+  with the follower not updated, and puts the bank it found back in a `finally`; it never calls
+  `saveParametersToFlash`. STOP waits for that `gameLoop()`, and 900 ms in the SDK makes every Lynx call throw (SDK
+  12.0.0 `OpModeManagerImpl.OpModeStuckCodeMonitor`), the restore's too, so the phase checks STOP's gate
+  (`OpModeManagerImpl.shouldPreventDangerousHardwareAccess()`, raised as STOP begins) before each read and poll and
+  ends early, and the `finally` runs within milliseconds of the STOP. Its pods are on channels 3 and 4, and channel 4 is in the second bank, so while that bank
+  is in pulse-width mode the pod reads a pulse width: only timings and bank read-backs are judged. A crash there
+  leaves the seed checks and the cable pull as they were (`bank_phase_crashed`). `getChannelBankConfig` returns
+  ALL_QUADRATURE for any byte it doesn't know, the all-zero reply of a failed read included (SDK 12.0.0
+  `OctoQuadImpl`), so only the pulse-width read-back after the set is a positive answer. The INIT read is
+  `readAllEncoderData`: in the driver's default AUTO caching mode the first `readSinglePosition_Caching` returns the
+  zero-filled cache without reading.
 - Bench: Pinpoint Absent passes on a fault whose key or message names the Pinpoint, an error naming it, or every pose
   read after `setPose` within 0.5 in and 1° of it.
+- Bench: Turret Zero runs one phase per OpMode run, picked by `phase` and named by `run` in its params; the INIT reads
+  report BENCH DONE in INIT and are never STARTed. A tracking run ends when the runner pushes `turret_zero_finish.json`
+  to the bench folder (each run deletes it at INIT), so the OpMode puts the bank back before STOP: STOP interrupts a
+  LinearOpMode, and an I2C command after that can fail. Each run sets the bank it needs and puts ALL_QUADRATURE back
+  in a `finally` (clearing STOP's interrupt for that and setting it again), and never saves to flash. A mode change
+  makes the SDK re-send the last power and enable the port (SDK 12.0.0 `LynxDcMotorController.setMotorMode`), so
+  motor port 2's power pins stay empty. No prompt pulls the OctoQuad's I2C cable: if one is added, it must first
+  have the person unplug the split cable's OctoQuad branch and plug it back after, since an unpowered 3.3 V-only
+  input must not be driven; the dip does the same. A dip can reset the whole hub (Android reboots, the Mac rejoins
+  its Wi-Fi): when the brownout run fails, the runner waits as long as Bench: Dashboard Off allows a reboot
+  (`wait_hub_back`, 300 s) for adb and the app's process before settling and taking the INIT read after it. Every
+  branch prompt goes through `tz_branch`, which counts the branch as in from the moment it is asked for, and
+  `run_turret_zero`'s `finally` asks for it out whenever it may be in, however the bench ended.
 - Bench: Write Recovery moves every command by 0.002 before each `failSafe()`, so all four devices write at a known
   moment, and reads WriteCache's re-send period from the class by reflection.
 - Bench: Limelight Hung runs right after Bench: Limelight Fault on its config, repointing the config's `limelight` at
@@ -369,3 +550,27 @@ bench folder. It measures how often each analog value refreshes and what a polle
   A run passes only with the setup in the same pid and neither `deadline expired waiting for service termination:
   EventLoop` nor the Control Hub's `Relaunching the RC`: the watch's dumps can't decide it, since every robot setup
   waits 5 s for USB between two alive broadcasts, and the SDK's `awaiting shutdown` comes with any teardown over 2.5 s.
+- The runner and `bare_hub.sh` check adb's server port (`adb_port_preflight`) before their first adb command:
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN -Fcp` gives a `p<pid>` then a `c<command>` line per process (checked on a
+  Mac on 2026-11-11 with a listener on another port), and anything but `adb` stops the run. lsof shows only this
+  user's sockets, so when it shows nothing a TCP connect to the port is the backstop: an answer then is a listener
+  it can't name. `summary.md` warns when the process on the port at the end isn't the one from the start.
+  `REINSTALL.sh` may run long after the run and without the worktree, so `bare_hub.sh` writes it a bash copy of the
+  check (`reinstall_preflight`: the environment variables and lsof, without the TCP backstop), and every adb command
+  the runner prints for later (the dashboard recovery) comes after a line saying to check the port first.
+- `--list-configs` uses only `adb connect`, `ls`, `cat` and `run-as cat` of the app's settings: no dashboard, no
+  bench folder, no log buffer change. The saved-configs listing of a full run judges the config active before the
+  run, from its copy taken at connect, since the run writes its own configs.
+- Bench: Dashboard Off: while off, slothboard answers only `GET_ROBOT_STATUS` and drops every other message (INIT and
+  STOP too), but its server on 8000 stays up and sends a new socket the config, OpMode and hardware config lists,
+  which are recorded, not judged. So the OpMode ends itself, every restart and the recovery go over adb, and each
+  window's counts come from a second socket that pings, since NanoHTTPD drops one silent for 5 s. A telemetry
+  message with no packets is slothboard's INIT clear, not streaming. `/dash` is a static page: "FTC Dashboard is
+  Disabled" is drawn by the client from the status's `enabled`, so the runner reads the status. The off window starts
+  1 s after the status first says off, past a batch the telemetry thread may have taken before the switch. Each proxy
+  forwarder binds in its own try (`LimelightProxyManager`), so a port that didn't listen before the switch isn't
+  judged after it. The OpMode refuses to run without the runner's `confirm` parameter, and looks `disable()` up before
+  START, so a renamed member fails at INIT with the dashboard still on;
+  `scripts/bench/offline/check_dashboard_api.py` checks every member it and the runner use against the pinned AAR.
+- Desktop checks for the adb-port check, the saved-configs listing and Bench: Dashboard Off:
+  [`offline/README.md`](offline/README.md).

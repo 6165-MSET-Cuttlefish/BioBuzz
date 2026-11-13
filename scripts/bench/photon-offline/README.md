@@ -24,6 +24,7 @@ Run from the repo root.
 | mutants: each undoes one fork change, and the harness must catch it (about 3 min, after the harness) | `python3 -I scripts/bench/photon-offline/harness/mutants.py` | `mutants: 16 of 16 caught` |
 | runner checks | `python3 -I scripts/bench/photon-offline/runner/test_photon_checks.py` | `... passed, 0 failed` |
 | dry run of the whole Photon block | `python3 -I scripts/bench/photon-offline/runner/dryrun_photon_block.py` | `FAILURES: none` |
+| two hubs at once: the overlap reading, its record-only line and table | `python3 -I scripts/bench/offline/test_hub_overlap.py` | `... passed, 0 failed` |
 | network-lock leak under a LinearOpMode STOP | `sh scripts/bench/photon-offline/lockleak/run.sh` | `13 passed, 0 failed` |
 | per-write speed, desktop only | `sh scripts/bench/photon-offline/speed/run_perf.sh` | timing rows |
 

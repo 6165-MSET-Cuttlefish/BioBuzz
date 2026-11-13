@@ -145,7 +145,7 @@ step 2) or a USB cable; on a cable, add `--serial <serial>` to every command, wi
 
 Each from the repo root.
 
-### 1. USB block (about 50 min)
+### 1. USB block (about 55 min)
 
 ```bash
 python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty
@@ -153,6 +153,14 @@ python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports
 
 In a terminal it asks twice at the start (ports empty; plug in the Pinpoint and OctoQuad) and once at the end (move
 the Pinpoint to Control Hub I2C port 1). A short run says **PASSED THIS RUN, NOT YET SAFE** at best.
+
+On USB wiring Bench: Photon ends with the two-hubs-at-once phase (about 3 min, no prompts), which settles whether
+Photon's writes to the two hubs overlap ([`wiring-findings.md`](wiring-findings.md#still-unknown)): Photon off and
+at 8, 4 and 2 parallel, 6 changed writes on each hub alone, all 12 hub by hub and alternating hubs, and 3 + 3,
+5 + 1 and 1 + 5, 300 loops each, each timed until the calls return and until every write is acknowledged. The
+**Two hubs at once** line in `summary.md` reads it at 8 parallel: adds up, in between or overlaps. It is a record,
+not a check, and never changes the verdict; the phase's read-backs and in-flight counts are judged like every
+other phase's.
 
 ### 2. RS485 block (about 50 min)
 
@@ -232,7 +240,10 @@ Record every run:
 - a row in the table under [Where it stands](#where-it-stands): the date, the hash from the summary's `source: git`
   line, the wiring, the run, the verdict, and the blockers or anything odd;
 - the stock, off and on8 rows of the summary's **Write block per loop** table, dated and with the wiring, in the Photon
-  section of [`docs/loop-time-findings.md`](loop-time-findings.md#photon).
+  section of [`docs/loop-time-findings.md`](loop-time-findings.md#photon);
+- on USB wiring, the **Two hubs at once** table and line, dated, in
+  [`wiring-findings.md`](wiring-findings.md#estimated-loop-period), taking the question out of its Still unknown
+  list, and the wiring map's split rechecked if the times overlap.
 
 ## After SAFE
 

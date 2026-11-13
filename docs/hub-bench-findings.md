@@ -81,6 +81,11 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     2026-10-09, 14 of 14 on 2026-10-24. The same process went on to finish INIT every time, so it isn't a crash.
 - **The SDK's stop window is 900 ms** (`OpModeInternal.MS_BEFORE_FORCE_STOP_AFTER_STOP_REQUESTED`), plus 100 ms of
   grace, covering whatever `init_loop()`/`loop()` is running and `stop()`. Overrunning it restarts the app.
+  - In the 100 ms of grace every hub command throws `ForceStopException`, a `finally`'s too, so a loop still running
+    at 900 ms can't put hardware state back (read from source: SDK 12.0.0 `OpModeStuckCodeMonitor` calls
+    `setThrowOnNetworkLockAcquisition(true)`; `MessageKeyedLock.acquire` throws). An iterative OpMode sees STOP
+    mid-loop only through STOP's gate, `OpModeManagerImpl.shouldPreventDangerousHardwareAccess()`, raised as STOP
+    begins: Bench: OctoQuad's bank phase checks it before each read.
   - Webcam close during STOP: `CellTipCamera.stop()` took 574–581 ms when STOP came right after INIT, and 61–319 ms
     later in the run.
   - A raw `WebcamSession.close()` made 200 ms after opening took 685 ms.

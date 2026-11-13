@@ -93,6 +93,46 @@ spec.loader.exec_module(rb)
 print(rb.photon_source_sha256(rb.REPO_ROOT / rb.PHOTON_SOURCE_DIR))' scripts/bench/run_bench.py
 }
 
+adb_port_preflight() {
+  python3 -I -B -c 'import importlib.util, sys
+spec = importlib.util.spec_from_file_location("run_bench", sys.argv[1])
+rb = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rb)
+try:
+    found = rb.adb_port_preflight()
+except rb.BenchError as e:
+    print(e)
+    sys.exit(1)
+print(", ".join(o["command"] + " pid " + o["pid"] for o in found["owners"]) or "nothing listening, so adb starts its own server")' \
+    scripts/bench/run_bench.py
+}
+
+# REINSTALL.sh can run long after this, without the worktree, so it gets its own copy of the port check.
+reinstall_preflight() {
+  cat <<'EOF'
+port="${ANDROID_ADB_SERVER_PORT:-5037}"
+if [ -n "${ADB_SERVER_SOCKET:-}${ANDROID_ADB_SERVER_ADDRESS:-}" ]; then
+  echo "STOPPED: ADB_SERVER_SOCKET or ANDROID_ADB_SERVER_ADDRESS is set, which can point adb at another adb server and so another hub: unset it and rerun. Nothing was sent to any hub." >&2
+  exit 1
+fi
+rc=0
+owners=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -Fcp) || rc=$?
+if [ "$rc" -ne 0 ] && { [ "$rc" -ne 1 ] || [ -n "$owners" ]; }; then
+  echo "STOPPED: lsof couldn't list what listens on adb's port $port (exit $rc). Nothing was sent to any hub." >&2
+  exit 1
+fi
+others=$(printf '%s\n' "$owners" | awk '
+  function flush() { if (pid != "" && cmd != "adb") printf "%s%s (pid %s)", (n++ ? ", " : ""), (cmd == "" ? "a process lsof did not name" : cmd), pid }
+  /^p/ { flush(); pid = substr($0, 2); cmd = "" }
+  /^c/ { cmd = substr($0, 2) }
+  END { flush() }')
+if [ -n "$others" ]; then
+  echo "STOPPED: $others listening on port $port, where adb looks for its server, so every adb command would go to whatever is behind it, possibly another hub. Stop it (an ssh port forward, for one), check that lsof -nP -iTCP:$port -sTCP:LISTEN shows nothing or adb, and rerun. Nothing was sent to any hub." >&2
+  exit 1
+fi
+EOF
+}
+
 hub() { with_timeout "${HUB_TIMEOUT:-120}" "$ADB" -s "$SERIAL" "$@" </dev/null; }
 
 die_if_hub_lost() {
@@ -132,6 +172,9 @@ build() {
 run() {
   need_python
   ADB=$(find_adb) || die "adb isn't on PATH or in ~/Library/Android/sdk/platform-tools: install Android Studio's platform-tools"
+  local adb_port
+  adb_port=$(adb_port_preflight) || die "$adb_port"
+  say "adb's server port: $adb_port"
   local apk head
   apk=$(find_apk) || die "no single prebuilt APK in $APK_DIR: run scripts/bench/bare_hub.sh --build while online first"
   [ -f "$STAMP" ] || die "$apk has no build stamp: run scripts/bench/bare_hub.sh --build while online first"
@@ -265,6 +308,7 @@ for e in root.iter("string"):
   {
     echo '#!/bin/bash'
     echo 'set -e'
+    reinstall_preflight
     printf '"%s" connect %s || true\n' "$ADB" "$SERIAL"
     printf '"%s" -s %s wait-for-device\n' "$ADB" "$SERIAL"
     if [ "$apks" -eq 1 ]; then

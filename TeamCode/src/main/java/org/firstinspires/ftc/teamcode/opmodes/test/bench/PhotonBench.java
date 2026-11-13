@@ -136,6 +136,81 @@ public class PhotonBench extends PhotonWorkload {
         report.put("soak", soak(BenchIO.param(report.params, "soakSeconds", 60),
                 BenchIO.param(report.params, "soakWritesPerHub", 0)));
         report.save();
+        if (rig.topology == PhotonRig.USB) {
+            Map<String, Object> overlap = new LinkedHashMap<>();
+            report.put("hubOverlap", overlap);
+            int rounds = (int) BenchIO.param(report.params, "overlapLoops", HubOverlap.LOOPS);
+            for (int parallel : new int[] {0, 8, 4, 2}) {
+                if (!opModeIsActive()) return;
+                overlap.put(modeName(parallel), hubOverlap("hub overlap " + modeName(parallel), parallel, rounds));
+                report.save();
+            }
+        }
+    }
+
+    // Each loop drains before the next, so every set starts with nothing in flight and its drain is its own.
+    private Map<String, Object> hubOverlap(String name, int parallel, int rounds) {
+        Phase p = new Phase(name, parallel);
+        Map<String, List<PhotonChannel>> sets = HubOverlap.sets(kind(rig.controlHub, true), kind(rig.controlHub, false),
+                kind(rig.expansionHub, true), kind(rig.expansionHub, false));
+        List<String> names = new ArrayList<>(sets.keySet());
+        Map<String, Samples> returned = new LinkedHashMap<>();
+        Map<String, Samples> drained = new LinkedHashMap<>();
+        for (String set : names) {
+            returned.put(set, new Samples());
+            drained.put(set, new Samples());
+        }
+        Random random = new Random(HubOverlap.SEED);
+        int drainTimeouts = 0;
+        long loop = 0;
+        for (int r = 0; r < rounds && opModeIsActive(); r++) {
+            for (int k : HubOverlap.roundOrder(names.size(), random)) {
+                String set = names.get(k);
+                List<PhotonChannel> writes = sets.get(set);
+                bulkRead();
+                for (PhotonChannel c : writes) c.prepare();
+                long callNanos = 0;
+                long start = System.nanoTime();
+                for (PhotonChannel c : writes) {
+                    long t = System.nanoTime();
+                    c.send();
+                    callNanos += System.nanoTime() - t;
+                    p.sampleInFlight(c.hub);
+                }
+                double drain = rig.drain(DRAIN_TIMEOUT_MS);
+                long end = System.nanoTime();
+                returned.get(set).addNanos(callNanos);
+                if (Double.isNaN(drain)) drainTimeouts++;
+                else drained.get(set).addNanos(end - start);
+                for (PhotonChannel c : writes) p.countWrite(c);
+                p.step = loop;
+                if (loop % VERIFY_EVERY == VERIFY_EVERY - 1) p.verifyAll(false);
+                loop++;
+                report.status("%s %d/%d", name, r + 1, rounds);
+                report.sendIfDue();
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String set : names) {
+            Map<String, Object> s = new LinkedHashMap<>();
+            List<String> channels = new ArrayList<>();
+            for (PhotonChannel c : sets.get(set)) channels.add(c.name);
+            s.put("channels", channels);
+            s.put("returnMs", returned.get(set).summary());
+            s.put("drainedMs", drained.get(set).summary());
+            out.put(set, s);
+        }
+        p.result.put("rounds", rounds);
+        p.result.put("seed", HubOverlap.SEED);
+        p.result.put("drainTimeouts", drainTimeouts);
+        p.result.put("sets", out);
+        return p.end();
+    }
+
+    private List<PhotonChannel> kind(LynxModule hub, boolean motors) {
+        List<PhotonChannel> out = new ArrayList<>();
+        for (PhotonChannel c : rig.on(hub)) if (c.isMotor() == motors) out.add(c);
+        return out;
     }
 
     // The Control Hub's parallel writes skip the RS485 link's lock that the child's writes and the poller's reads take.

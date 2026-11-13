@@ -126,7 +126,9 @@ FtcRobotController tags end at v12.0.
 - **Before a hub bench run, `lsof -nP -iTCP:5037 -sTCP:LISTEN` must not show `ssh`.** While a tunnel holds 5037,
   adb reaches whatever hub the bridge is on, and the bench drives motor ports. To pause Relay's tunnel on a Mac:
   `launchctl bootout gui/$(id -u)/<name>`, where `<name>` is the `com.adbtunnel.*` file in `~/Library/LaunchAgents/`
-  without `.plist`, not `com.adbtunnel.updater`. It comes back at the next login.
+  without `.plist`, not `com.adbtunnel.updater`. It comes back at the next login. `run_bench.py` and `bare_hub.sh`
+  check the port themselves before their first adb command and stop, naming the process and its pid
+  ([bench README](../scripts/bench/README.md)).
 - **Fake hubs stay off ports 5554 to 5585 and never touch the real adb.** The adb server finds emulators by scanning
   the odd localhost ports 5555 to 5585 ([adb docs](https://developer.android.com/tools/adb), fetched 2026-11-10). A
   fake hub on `127.0.0.1:5555` was picked up as `emulator-5554` and churned about every 1.3 s, disturbing a real hub's

@@ -27,6 +27,7 @@ F = load_fixtures()
 phase, counters, clean_leftovers = F["phase"], F["counters"], F["clean_leftovers"]
 depth_trial, superseded_trial = F["depth_trial"], F["superseded_trial"]
 i2c_phase, i2c_info, i2c_control = F["i2c_phase"], F["i2c_info"], F["i2c_control"]
+overlap_phase, OVERLAP_ADDS_UP, OVERLAP_OVERLAPS = F["overlap_phase"], F["OVERLAP_ADDS_UP"], F["OVERLAP_OVERLAPS"]
 INSTALLED = rb.photon_source_sha256(rb.REPO_ROOT / rb.PHOTON_SOURCE_DIR)
 
 
@@ -256,6 +257,8 @@ class Dry(rb.Runner):
                 main.update(self.i2c_main(i2c_topo))
             if self.break_what == "number clash":
                 main["timing"]["on8"]["counters"]["numberClashes"] = 1
+            if self.args.usb_expansion and self.break_what != "overlap missing":
+                main["hubOverlap"] = self.hub_overlap()
             if topo == "rs485":
                 ch_only = {"controlHub": 6, "expansionHub": 0}
                 main["rs485SharedLink"] = {"off": phase(parallel=0),
@@ -335,6 +338,15 @@ class Dry(rb.Runner):
         return {"channels": channels, "trials": trials, "info": {"resendMs": 250.0, "batteryVolts": 12.6},
                 "loopPeriodMs": {"count": 900, "p50": 9.5, "p95": 10.0, "max": 14.0}, "photonParallel": 8}
 
+    def hub_overlap(self):
+        drained = OVERLAP_ADDS_UP if self.break_what == "overlap adds up" else OVERLAP_OVERLAPS
+        out = {"off": overlap_phase(0)}
+        for mode, parallel in (("on8", 8), ("on4", 4), ("on2", 2)):
+            out[mode] = overlap_phase(parallel, drained)
+        if self.break_what == "overlap read-back":
+            out["on8"]["readback"]["mismatches"] = 1
+        return out
+
     def i2c_stock(self, topo):
         info = i2c_info(topo, swapped=False)
         if self.break_what == "i2c device missing":
@@ -399,6 +411,22 @@ d, v, text = run(full_args)
 print("full usb verdict:", v["level"], v["blockers"][:5], v["stillNeeded"])
 if v["level"] != "SAFE" or "SAFE TO TRY ON THE ROBOT" not in text:
     fails.append("an all-good soak + cable-pull + I2C USB run should be SAFE")
+full_checks = [(c["section"], c["name"], c["ok"]) for c in d.results["photon"]["checks"]]
+if d.results["photon"]["overlap"]["reading"] != "overlaps" or not any(n == "hubOverlap on8" for _, n, _ in full_checks):
+    fails.append("a USB run must judge each hub overlap phase's invariants and read the synthetic overlap as overlapping")
+for broken, reading, needle in (("overlap adds up", "adds up", "**adds up** at 8 parallel"),
+                                ("overlap missing", None, "not measured: Bench: Photon has no hub overlap on8 result")):
+    od, ov, otext = run(full_args, broken)
+    print(f"{broken}: {ov['level']}, reading {od.results['photon']['overlap']['reading']}")
+    checks = [(c["section"], c["name"], c["ok"]) for c in od.results["photon"]["checks"]]
+    if od.results["photon"]["overlap"]["reading"] != reading or needle not in otext:
+        fails.append(f"{broken}: the record-only line must read {reading}")
+    if (ov["level"], ov["blockers"], ov["stillNeeded"]) != (v["level"], v["blockers"], v["stillNeeded"]):
+        fails.append(f"{broken}: the two-hubs-at-once reading must not change the Photon verdict")
+    if broken == "overlap adds up" and checks != full_checks:
+        fails.append("the two-hubs-at-once reading must not add, drop or change a check")
+    if any("two hubs" in n.lower() or ("overlap" in n.lower() and not n.startswith("hubOverlap ")) for _, n, _ in checks):
+        fails.append(f"{broken}: the two-hubs-at-once reading must never be a check")
 xml = d.configs.get("bench_photon", "")
 eh_block = xml.split('<LynxUsbDevice name="Expansion Hub Portal"')[-1]
 if '<OctoQuadFTC name="octoquad" port="0" bus="2" />' not in xml.split("</LynxModule>")[0] \
@@ -411,6 +439,9 @@ if "### I2C reads" not in text or "rule of three" not in text or "- I2C: the goB
     fails.append("the summary must carry the I2C table, its rule-of-three bound and the I2C header line")
 if "### Parallel write path at 8 parallel" not in text:
     fails.append("the summary must carry the write-path profile")
+if "### Two hubs at once (record only)" not in text or "**overlaps** at 8 parallel" not in text \
+        or "| 6 on the Control Hub |" not in text or "| 12 / (6 + 6), drained, alternating |" not in text:
+    fails.append("a USB run's summary must carry the two-hubs-at-once table and its record-only line")
 if sum(1 for s in d.steps if s[0] == "Bench: Photon Replug") != 4:
     fails.append("the cable pulls must run each pull with Photon off and on")
 if d.summary_writes[:1] != [(len(d.asked) - 1, True)]:
@@ -438,7 +469,7 @@ for broken, needle in (("lost write in on8", "phases"), ("race", "race"), ("sile
                        ("number clash", "phases"), ("linear interrupt missed", "stop: linear"),
                        ("linear leaks", "logcat: linear STOP trials"), ("i2c wrong byte", "i2c: I2C on8"),
                        ("i2c device missing", "i2c: the stock baseline"), ("no replaced reader", "i2c: I2C off"),
-                       ("i2c warning", "logcat: Bench: Photon:"),
+                       ("i2c warning", "logcat: Bench: Photon:"), ("overlap read-back", "phases: hubOverlap on8"),
                        ("write recovery late", "reset: Write Recovery with Photon on: EnhancedMotor fl")):
     _, v, _ = run(full_args, broken)
     print(f"{broken}: {v['level']}, blockers {v['blockers'][:3]}")
@@ -450,6 +481,9 @@ if v["level"] != "NOT SAFE" or not any("deploySloth" in b for b in v["blockers"]
     fails.append("skipping deploySloth should block the verdict")
 if "RS485 Expansion Hub" not in text:
     fails.append("rs485 section missing")
+if "Two hubs at once** (record only: not a check, not in the Photon verdict): not run: the Expansion Hub is on RS485" \
+        not in text:
+    fails.append("an RS485 run's summary must say why the two-hubs-at-once phase didn't run")
 _, v, text = run(["--photon", "--photon-rs485", "--ports-empty", "--photon-stop-trials", "4"])
 print("rs485:", v["level"], v["blockers"], v["stillNeeded"])
 if v["blockers"]:
@@ -465,6 +499,8 @@ if v["blockers"] or any("--photon-i2c" in n for n in v["stillNeeded"]) or '<goBI
 d, v, text = run(["--photon", "--ports-empty", "--photon-stop-trials", "4", "--photon-i2c"])
 print("Control Hub only --photon-i2c:", v["level"], v["blockers"][:3])
 none_xml = d.configs.get("bench_photon", "")
+if "not run: there is no Expansion Hub" not in text:
+    fails.append("a Control Hub-only run's summary must say why the two-hubs-at-once phase didn't run")
 if any(b.startswith("i2c") for b in v["blockers"]) or '<OctoQuadFTC name="octoquad" port="0" bus="2" />' not in none_xml \
         or '<goBILDAPinpoint name="pinpoint" port="0" bus="1" />' not in none_xml \
         or "Expansion Hub" in none_xml or any("back in Control Hub" in a for a in d.asked):

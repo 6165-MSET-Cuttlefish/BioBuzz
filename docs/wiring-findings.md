@@ -212,7 +212,8 @@ Two cautions on the turret encoder's alternative, the count on a hub port:
   × 54.18 counts per degree). The CAD puts the encoder on the pinion shaft, 50/21 turns per turret turn
   ([`robots-findings.md`](robots-findings.md)).
 - It is a relative count under a drive motor's port number. Anything that resets or changes the mode of that motor
-  moves the turret's zero, and the CAD has no hard stop to home against.
+  moves the turret's zero, and the CAD has no hard stop to home against. A mode change also re-sends the motor's
+  last power and enables its port (SDK 12.0.0 `LynxDcMotorController.setMotorMode`, source).
 
 ### Zeroing the nectar turret
 
@@ -238,15 +239,23 @@ output could set the zero at INIT with no cost per loop:
 How each part is known, all read on 2026-11-11 and none of it run:
 
 - The bank setting: SDK 12.0.0 source, `OctoQuad.ChannelBankConfig`. Pedro revhub 3.0.2's `OctoQuadLocalizer`
-  never sets it (source).
+  never sets it (source). `getChannelBankConfig()` returns ALL_QUADRATURE for any byte it doesn't recognise, the
+  all-zero reply of a failed I2C read included (`OctoQuadImpl`, source): only a read-back of the pulse-width setting
+  shows the set took.
+- The INIT read: `readAllEncoderData` with a `crcOk` check. In the driver's default AUTO caching mode the first
+  `readSinglePosition_Caching` call returns the zero-filled cache without reading (`OctoQuadImpl`, source).
 - The pulse goes on a channel's A pin, and the inputs are 3.3 V only: OctoQuad datasheet Rev 3.0C, sections 2.1
   and 3.1.
 - The encoder puts out the counting and absolute signals together with its switch on A: REV's
   [application examples](https://docs.revrobotics.com/rev-crossover-products/sensors/tbe/v1/application-examples).
 
-Test: on a bench hub, with the OctoQuad and one encoder wired this way. Time the localizer read with the second
-bank in pulse-width mode against all channels counting. Turn the encoder by hand through several turns and compare
-the absolute angle with the hub count. Restart the OpMode and check the absolute angle has not moved.
+Test: the localizer read's cost with the second bank in pulse-width mode against all channels counting, and whether
+the bank survives the localizer's setup and reset, are Bench: OctoQuad's last phase, which runs whenever an OctoQuad is
+on the bench (`python3 scripts/bench/run_bench.py --octoquad`, or a run without bench flags). The rest, with one
+encoder wired this way, is Bench: Turret Zero (`python3 scripts/bench/run_bench.py --turret-zero --ports-empty`,
+prompted, about 25 minutes): the hub count against the absolute angle at a dozen rests over two turns, ten re-INITs,
+run-mode changes and, with a lab supply, a brownout
+([`scripts/bench/README.md`](../scripts/bench/README.md#bench-turret-zero)).
 
 In a loop at 34 to 37 ms, in-loop sampling sees about half of the rangefinders' 20 ms readings. Whether that misses
 balls is what the counting test settles.
@@ -345,7 +354,9 @@ Worth doing with it:
   protection. How long the lost hub's motors keep their last power is unverified.
 - **Control Hub reset or brownout:** the OctoQuad is powered from the hub's I2C port, so it may reboot too and come
   back with its bank mode on the default (inferred, not tested). The turret channel then stops giving a pulse width
-  until the mode is set again; hence the cross-check above. Saving the settings to flash would avoid that.
+  until the mode is set again; hence the cross-check above. Saving the settings to flash would avoid that. Bench:
+  Turret Zero's brownout phase tests the alternative's count through a dip and the INIT read after it; it needs the
+  Control Hub on a lab supply (`python3 scripts/bench/run_bench.py --turret-zero --ports-empty`).
 - **OctoQuad unplugged or rebooted:** odometry is lost for the rest of the match (its localizer restarts at the
   origin and its settings are volatile) and the turret angle falls back to the commanded one. The flywheels are
   unaffected.
@@ -445,8 +456,11 @@ fetched 2026-11-10:
   hubs, connect both and read the hub list the SDK builds at INIT.
 - **Whether Photon overlaps writes to two hubs on USB.** The model adds the two hubs' write times, as the bench's
   blocks did (4.66 + 6.20 ms for 6 writes on each). If writes to different hubs overlap, splitting the every-loop
-  outputs evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub. Test: on the Photon USB
-  bench, time one loop's 11 writes split 9 + 2 and split 6 + 5.
+  outputs evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub. Test: the two-hubs-at-once
+  phase at the end of Bench: Photon, in the Photon block's USB run
+  (`python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty`). It times 6 writes on
+  each hub alone, all 12 in one loop (hub by hub and alternating) and the 3 + 3, 5 + 1 and 1 + 5 splits, and the
+  **Two hubs at once** line in `summary.md` says whether the hubs' times add up or overlap.
 - **How often the drive motors really write** in TeleOp shoot-on-the-move. Test: a per-loop write counter in SOTM
   Test.
 - **Whether the flywheel power changes every loop** once its RPM reading is clean; if not, parked loops are shorter.
@@ -462,9 +476,10 @@ fetched 2026-11-10:
   the 200° is 100° either side of straight back; this encoder's pulse limits; whether the OctoQuad's pulse register
   is whole microseconds; the backlash after the encoder. The first three are questions for the team, the rest
   tests in [The nectar turret encoder](#the-nectar-turret-encoder).
-- **Whether the absolute output read once at INIT would work as the nectar turret's zero.** Test: the bench test
-  under [Zeroing the nectar turret](#zeroing-the-nectar-turret); then on the robot, power-cycle with the turret at
-  several angles and compare the angle the code reports with a protractor mark.
+- **Whether the absolute output read once at INIT would work as the nectar turret's zero.** Test: Bench: Turret
+  Zero (`python3 scripts/bench/run_bench.py --turret-zero --ports-empty`) and Bench: OctoQuad's bank phase
+  (`--octoquad`), under [Zeroing the nectar turret](#zeroing-the-nectar-turret); then on the robot, power-cycle
+  with the turret at several angles and compare the angle the code reports with a protractor mark.
 - **Where the USB ports really are on the mounted hubs**, and whether the battery clears them: check on the built
   robot, since the CAD's port positions are estimates.
 - **Inspection questions** only an inspector or the Q&A can settle: the Axon servos' and the power bank's

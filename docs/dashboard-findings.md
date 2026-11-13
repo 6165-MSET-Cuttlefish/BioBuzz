@@ -71,8 +71,9 @@ Read from source (`FtcDashboard.java`, `DashboardCore.java`, the client's `Dashb
   there; stock shows it, so the dashboard can switch itself off.
 - The setting is saved in the app's SharedPreferences (`shared_prefs/FtcDashboard.xml`, key `autoEnable`, default on)
   and read only when the dashboard starts with the app. Off stays off through Restart Robot, app restarts and power
-  cycles, until the OpMode is run again from the DS; the hub bench notes it also survives the Run button's reinstall
-  (`scripts/bench/run_bench.py`). The RC app's own menu also has an Enable Dashboard item.
+  cycles, until the OpMode is run again from the DS; the hub bench's own message says it also survives the Run
+  button's reinstall (`scripts/bench/run_bench.py`), which Bench: Dashboard Off checks on a hub
+  ([Still unknown](#still-unknown)). The RC app's own menu also has an Enable Dashboard item.
 - While off: no telemetry, camera stream, dashboard gamepads, logcat capture (so no Error line) or Limelight proxy, and
   the server ignores every message except status requests. `http://192.168.43.1:8080/dash` still loads and says
   "FTC Dashboard is Disabled".
@@ -191,8 +192,15 @@ Sloth, including one that only adds Pedro's AutoTune: the POMs of `com.pedropath
 - **Whether the handler fix ends the freeze.** Run Bench: Freeze Dump on a hub with 6165.7 installed: each SET, WRITE
   and DELETE from idle should restart the robot in the same process, with no `has not reported itself as alive` or
   `deadline expired waiting for service termination: EventLoop` line in logcat.
-- **Whether the adb recovery brings the dashboard back.** Turn it off from the DS, run the command above, then check
-  that the page shows telemetry and the Limelight web UI answers on port 5801.
+- **Whether the adb recovery brings the dashboard back, and whether off really stops everything and survives an app
+  restart, a reboot and a reinstall.** Test: Bench: Dashboard Off on a bare hub, `python3 scripts/bench/run_bench.py
+  --dashboard-off --ports-empty` ([how](../scripts/bench/README.md#dashboard-off)). It switches the dashboard off
+  from an OpMode, counts what still reaches a websocket and which Limelight proxy ports listen through all three, then
+  runs the command above and checks telemetry, the OpMode list and ports 5801 and 5807 come back (with a Limelight
+  plugged in, that its web UI answers).
+- **Whether off survives a power cut soon after the switch:** slothboard saves it with `SharedPreferences.apply()`,
+  which writes in the background (`setAutoEnable`, `FtcDashboard.java`), and an `adb reboot` shuts down in order.
+  Test: add `--interactive` to the command above, which asks for a battery pull about 15 s after the switch.
 - **The `@Config` quirks.** Open Shot Tuning in the Config View and check whether `keepOuts` shows its four angles per
   entry. Then deploySloth a test class holding a `final` value field in a group and a `final` object field in a group,
   and edit each.

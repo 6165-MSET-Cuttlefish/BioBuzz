@@ -60,13 +60,20 @@ BENCH_OPMODES = [
     "Bench: Photon Stop Linear", "Bench: Photon Stop Race", "Bench: Photon Crash", "Bench: Photon Replug",
     "Bench: Framework Loop Photon", "Bench: Write Recovery Photon",
     "Bench: Limelight Hung", "Bench: Thread Lifecycle", "Bench: Turret PWM", "Bench: Edge Through Start",
-    "Bench: Freeze Dump",
+    "Bench: Freeze Dump", "Bench: Turret Zero",
 ]
 
 BENCHES = ("baseline", "hub", "loop", "failure", "threads", "gamepad", "edge", "write_recovery", "handover", "photon",
            "hardware_view", "turret", "webcam", "webcam_failure", "limelight", "llfault", "sloth", "clock", "pinpoint",
            "octoquad", "octoquad_absent", "expansion", "absent", "planner_stop", "overlay_nan", "config_by_name",
-           "freeze_dump")
+           "turret_zero", "freeze_dump", "dashboard_off")
+FLAG_ONLY_BENCHES = ("photon", "turret_zero", "dashboard_off")
+
+ADB_SERVER_PORT = 5037
+ADB_SERVER_ELSEWHERE = ("ADB_SERVER_SOCKET", "ANDROID_ADB_SERVER_ADDRESS")
+CELL_TIP_WEBCAM = "aprilTagDetector"
+LIMELIGHT_DEVICE = "limelight"
+CONFIG_LISTING = re.compile(r"^\S+\s+\d+\s+\S+\s+\S+\s+(\d+)\s+(\d{4}-\d\d-\d\d \d\d:\d\d)\s+(\S+)\.xml$")
 
 CONFIG_PROBE = "bench_probe"
 CONFIG_MAIN = "bench_main"
@@ -79,11 +86,12 @@ CONFIG_EXPANSION = "bench_expansion"
 CONFIG_EXPANSION_ODO = "bench_expansion_odo"
 CONFIG_PHOTON = "bench_photon"
 CONFIG_TURRET = "bench_turret"
+CONFIG_TURRET_ZERO = "bench_turret_zero"
 CONFIG_FREEZE_SCRATCH = "bench_freeze_scratch"
 CONFIG_UNSHIPPED = "bench_unshipped"
 BENCH_CONFIGS = (CONFIG_MAIN, CONFIG_PINPOINT, CONFIG_NO_WEBCAM, CONFIG_LLFAULT, CONFIG_OCTOQUAD, CONFIG_OCTOQUAD_ABSENT,
                  CONFIG_EXPANSION, CONFIG_EXPANSION_ODO, CONFIG_TURRET, CONFIG_FREEZE_SCRATCH, CONFIG_UNSHIPPED,
-                 CONFIG_PROBE, CONFIG_PHOTON)
+                 CONFIG_PROBE, CONFIG_PHOTON, CONFIG_TURRET_ZERO)
 # A REV hub's FTDI USB bridge; the Control Hub's own module is on a serial port, not USB.
 REV_HUB_USB_ID = ("0403", "6015")
 PHOTON_EXPANSION_DEVICES = [
@@ -238,6 +246,42 @@ BASELINE_PENDING = ("regression: slothboard's config baseline is empty again (fi
 
 SLOTH_PROBE_OPMODE = "Bench: Sloth Probe"
 DASH_TOGGLE_OPMODE = "Enable/Disable Dashboard"
+DASHBOARD_AUTO_ENABLE_KEY = "autoEnable"
+DASHBOARD_RECOVERY_SHELL = (f"am force-stop {RC_PACKAGE} && run-as {RC_PACKAGE} rm -f {DASHBOARD_PREFS}; "
+                            f"am start -n {RC_LAUNCHER}")
+
+DASH_OFF_OPMODE = "Bench: Dashboard Off"
+DASH_OFF_CONFIRM = "turn the dashboard off"
+DASH_OFF_PROXY_PORTS = (5800, 5801, 5805, 5807)
+DASH_OFF_RECORDED_PORTS = (DASHBOARD_PORT, 8080, 10158, 12649)
+DASH_OFF_RECOVERY_PORTS = (5801, 5807)
+DASH_OFF_STREAMED = ("telemetry packets", "images", "logcat")
+DASH_OFF_PHASES = {"battery": "a battery pull", "restart": "an app restart", "reboot": "an adb reboot",
+                   "reinstall": "a reinstall of the installed APK (adb install -r -t)"}
+DASH_OFF_ON_S = 3.0
+DASH_OFF_GRACE_S = 1.0
+DASH_OFF_WINDOW_S = 10.0
+DASH_OFF_PERIOD_MS = 50
+DASH_OFF_SWITCH_WAIT_S = 30.0
+DASH_OFF_DONE_WAIT_S = 60.0
+DASH_OFF_BOOT_WAIT_S = 300.0
+DASH_OFF_POLL_S = 2.0
+DASH_OFF_RECOVERY_S = 60.0
+DASH_OFF_PROBE_S = 5.0
+DASH_OFF_INSTALL_TIMEOUT_S = 600
+DASH_OFF_SETUP_MEANS = ("nothing reached the runner's socket while the dashboard was still on, so the zero counts after "
+                        "the switch prove nothing")
+DASH_OFF_DISABLE_MEANS = ("slothboard's private disable() didn't leave the dashboard off, so the later checks test nothing; "
+                          "check the pinned dashboard with scripts/bench/offline/check_dashboard_api.py")
+DASH_OFF_STREAM_MEANS = ("with the dashboard switched off, slothboard still sent telemetry, camera frames or logcat lines "
+                         "to a connected client: the switch doesn't stop the streaming R704(D) bans")
+DASH_OFF_PORTS_MEANS = ("with the dashboard switched off, the Limelight proxy still listens on the hub, so the Limelight's "
+                        "video, web UI and API stay reachable over Wi-Fi")
+DASH_OFF_INIT_MEANS = "the dashboard INITed an OpMode while switched off: the server still takes commands"
+DASH_OFF_PERSIST_MEANS = ("the off setting didn't survive this, so a hub switched off before an event can come back on "
+                          "by itself")
+DASH_OFF_RECOVERY_MEANS = ("the adb recovery didn't bring the dashboard back: a hub switched off has no way back without "
+                           "a Driver Station")
 SLOTH_LOADED = "Processed Sloth Load"
 SLOTH_CANCELLED = "Cancelled Sloth Load"
 SLOTH_STAGED = "Staged Sloth Load"
@@ -350,6 +394,31 @@ OCTOQUAD_ABSENT_SLOW = ("with the OctoQuad fault up, INIT loops were slow or mis
 OCTOQUAD_ABSENT_STARTED = ("START with the OctoQuad not running didn't stop the OpMode with an error naming it: "
                            "EnhancedOpMode's start waits for GuardedOctoQuadLocalizer to report RUNNING and throws its "
                            "message when it can't, so without that an auto would follow paths on a pose that never moves")
+OCTOQUAD_QUADRATURE = "ALL_QUADRATURE"
+OCTOQUAD_MIXED_BANKS = "BANK1_QUADRATURE_BANK2_PULSE_WIDTH"
+OCTOQUAD_BANK_READS = 300
+OCTOQUAD_INIT_READS = 50
+OCTOQUAD_BANK_SAME_MS = 0.2
+OCTOQUAD_BANK_CONTROL_MS = 2.5
+OCTOQUAD_INIT_READ_P95_MS = 20.0
+OCTOQUAD_BANK_SETUP_MEANS = ("setup: timing cannot see a cost: readLocalizerDataAndAllEncoderData (35 bytes more; 6.58 "
+                             "against 3.20 ms at p50 on 2026-10-09) wasn't clearly slower than readLocalizerData here, "
+                             "so an equal cost for the bank setting would prove nothing. Not a robot problem by itself")
+OCTOQUAD_BANK_SET_MEANS = ("the OctoQuad wasn't in ALL_QUADRATURE at the start, or didn't read back "
+                           "BANK1_QUADRATURE_BANK2_PULSE_WIDTH after the set, so the timings compare nothing. Another bank "
+                           "left by a crashed run goes back to ALL_QUADRATURE when the OctoQuad is power-cycled, unless "
+                           "someone saved it to flash")
+OCTOQUAD_BANK_COST_MEANS = ("with channels 4-7 in pulse-width mode the loop's localizer read costs more than with every "
+                            "channel counting, so the turret zero's bank setting is not free per loop (the plan in "
+                            "docs/wiring-findings.md, Zeroing the nectar turret, assumes it is)")
+OCTOQUAD_INIT_READ_MEANS = ("the one-off INIT read the turret zero would use (readAllEncoderData) failed its CRC or took "
+                            f"{OCTOQUAD_INIT_READ_P95_MS:.0f} ms or more at p95: the zero needs retries or costs INIT time")
+OCTOQUAD_BANK_RESTORE_MEANS = ("the OctoQuad doesn't read back the bank it had before the phase, so channels 4-7 may "
+                               "still be pulse-width inputs and the pod on channel 4 isn't counted until the OctoQuad is "
+                               "power-cycled: check that before the next odometry run")
+OCTOQUAD_BANK_CRASH_MEANS = ("the bank phase threw (see the error), or a STOP ended it early, after the seed phase had "
+                             "finished, so the seed checks above stand; the bank phase restores the bank it found in a "
+                             "finally")
 
 EXPANSION_MAX_ADDRESS = 10
 EXPANSION_COMMANDS = ("inputVoltage", "bulkData", "current")
@@ -491,6 +560,80 @@ TURRET_MEANS = {
         "RightState.FORWARD doesn't drive TurretR alone to its forward pulse",
 }
 TURRET_OTHER_MEANS = "a Turret PWM step didn't behave as the bench expects; its detail lists the hub readings"
+
+TZ_OPMODE = "Bench: Turret Zero"
+TZ_FINISH = "turret_zero_finish.json"
+TZ_POWERS = ("Bench: Turret Zero sets no motor power and drives no servo. Its mode-change phase changes br's (motor port "
+             "2's) run mode, and the SDK re-sends the last power and enables the port with every mode change (SDK 12.0.0 "
+             "LynxDcMotorController.setMotorMode), so keep every motor power port empty")
+TZ_COUNTS_PER_TURN = 8192
+TZ_PER_TURN_COUNTS = 8
+TZ_QUAD_TURNS = 5
+TZ_SPLIT_TURNS = 10
+TZ_V2_TURNS = 1
+TZ_VERSIONS = {"V1": (1.0, 1024.0, 1024), "V2": (3.884, 998.06, 4096)}
+TZ_PULSE_SLACK_US = 10.0
+TZ_LEVEL_MAX_V = 3.46
+TZ_REZERO_RUNS = 10
+TZ_INIT_READS = 50
+TZ_INIT_P95_MS = 20.0
+TZ_SPREAD_DEG = 0.5
+TZ_MOVED_DEG = 1.0
+TZ_AGREE_DEG = 1.0
+TZ_CONTROL_DEG = 20.0
+TZ_MIN_RESTS = 10
+TZ_MIN_SPAN_DEG = 300.0
+TZ_MIN_TURNS = 2.0
+TZ_STILL_COUNTS = 2
+TZ_NONZERO_COUNTS = 100
+TZ_RECOVER_DEG = 1.0
+TZ_SUPPLY_MIN_V = 2.97
+TZ_MOVED_MIN_DEG = 5.0
+TZ_WIRING_MEANS = ("the cables don't match what the bench needs, so it stopped before anything drove an OctoQuad input: "
+                   "the OctoQuad's inputs take 3.3 V only, and two supplies on one encoder fight")
+TZ_LEVEL_MEANS = (f"the encoder's absolute output goes above {TZ_LEVEL_MAX_V:.2f} V (3.3 V + 5%, rounded down), the "
+                  "reading wasn't a positive voltage, or its supply isn't a 3.3 V supply, so it could drive the "
+                  "OctoQuad's 3.3 V-only input too high; the bench stopped before the branch was plugged in")
+TZ_HIGH_PROMPT = (">>> METER the absolute output (the OctoQuad branch's signal pin) to ground while turning the shaft "
+                  "slowly through a whole turn. Type the highest reading in volts.")
+TZ_V2_LEVEL_MEANS = (f"the V2's absolute output goes above {TZ_LEVEL_MAX_V:.2f} V, the reading wasn't a positive "
+                     "voltage, or its supply isn't a 3.3 V supply, so it could drive the OctoQuad's 3.3 V-only input too "
+                     "high; the runner kept the branch out and skipped the V2 runs that needed it")
+TZ_TURNS_MEANS = (f"the counts over whole turns to a dial mark are off by more than {TZ_PER_TURN_COUNTS} per turn or "
+                  "didn't come back to the mark: lost or extra counts on that input (or the shaft wasn't stopped on the "
+                  "mark; the span and agreement checks don't depend on the hand)")
+TZ_LOAD_MEANS = ("the hub's counts per turn change when the OctoQuad branch is plugged in, so the split loads the "
+                 "encoder's outputs")
+TZ_SPAN_MEANS = ("the absolute output's pulse range isn't the version's (DigitalChickenLabs' note: Through Bores vary by "
+                 "up to 10 us), or the hub doesn't count 8192 per turn of the absolute output, or the shaft turned less "
+                 "than 2 turns: the later angles use this span's range and sign")
+TZ_INIT_MEANS = (f"the one-off INIT read of channel 4 failed its CRC, took {TZ_INIT_P95_MS:.0f} ms or more at p95, or "
+                 f"moved more than {TZ_SPREAD_DEG} deg at rest: the zero read at INIT is slow or noisy")
+TZ_REZERO_MEANS = (f"re-INITs with the shaft untouched gave zeros more than {TZ_SPREAD_DEG} deg apart, or a moved "
+                   f"shaft's absolute change didn't match its count change within {TZ_MOVED_DEG} deg: the INIT zero "
+                   "doesn't hold across OpModes")
+TZ_AGREE_MEANS = (f"at a rest the absolute angle and the angle counted on the hub from the INIT zero differed by more "
+                  f"than {TZ_AGREE_DEG} deg of encoder ({TZ_AGREE_DEG * 21 / 50:.2f} deg of turret): the absolute output "
+                  "read once at INIT can't set the turret's zero to that accuracy")
+TZ_COVERAGE_MEANS = ("not enough motion: too few rests, too little of the absolute range or under 2 turns, so a "
+                     "stationary or barely turned shaft could have passed")
+TZ_CONTROL_MEANS = (f"setup: a flipped sign or a 180 deg offset on the same rests didn't give an error over "
+                    f"{TZ_CONTROL_DEG:.0f} deg, so the agreement check couldn't have failed")
+TZ_SIGN_MEANS = ("the hub's own encoder read (getController().getMotorCurrentPosition with bulk caching off) and the "
+                 "bulk read disagree, so the turret code can't take the count from the bulk read it already pays for; "
+                 "or getCurrentPosition() isn't minus that count exactly where the motor type's rotation and the "
+                 "direction say (SDK 12.0.0 DcMotorImpl), so the wiring notes' rule to read the count raw rests on a "
+                 "wrong reading of the source; or the count was under 100, so the sign couldn't be told")
+TZ_SIGN_FLIPS = {"CCW": {"FORWARD": -1, "REVERSE": 1}, "CW": {"FORWARD": 1, "REVERSE": -1}}
+TZ_MODE_MEANS = ("a run-mode change or a new OpMode moved the hub's count with the shaft still: the turret zero would "
+                 "move whenever br's mode changes or an OpMode starts")
+TZ_RESET_MEANS = (f"after STOP_AND_RESET_ENCODER the absolute read didn't give the angle back within {TZ_RECOVER_DEG} "
+                  "deg: the zero can't be recovered after a count reset")
+TZ_BROWNOUT_MEANS = ("the Control Hub's count changed in the dip while the app kept running, and nothing reported it (no "
+                     "warning, no error, no failed bulk read, no hub not responding): the turret's zero moves silently")
+TZ_V2_MEANS = ("the V2 doesn't count 8192 per turn on A, counts on S, or its pulse range isn't 3.884-998.06 us: it can't "
+               "replace the V1 without changing the turret zero")
+TZ_NOT_RUN_MEANS = "the bench stopped before this phase or its OpMode run failed (see the error)"
 
 EDGE_OPMODE = "Bench: Edge Through Start"
 EDGE_INIT_IDLE, EDGE_INIT_HOLD, EDGE_RUN_HOLD, EDGE_RUN_RELEASE, EDGE_RUN_PRESS, EDGE_RUN_RELEASE_AGAIN = 10, 11, 12, 13, 14, 15
@@ -1053,6 +1196,56 @@ class SideSocket:
         self.ws.close()
 
 
+class MessageCounter:
+    """A second dashboard websocket that only listens: when slothboard sent it each message, and of what type."""
+
+    def __init__(self, host, port):
+        self.ws = WebSocket(host, port)
+        self.lock = threading.Lock()
+        self.received = []
+        self.closed_at = None
+        self.done = threading.Event()
+        threading.Thread(target=self._read, name="bench-counter", daemon=True).start()
+        threading.Thread(target=self._keepalive, name="bench-counter-ping", daemon=True).start()
+
+    def _read(self):
+        try:
+            while True:
+                opcode, payload = self.ws.recv_message()
+                now = time.monotonic()
+                try:
+                    msg = json.loads(payload.decode("utf-8")) if opcode == WebSocket.OP_TEXT else {"type": "binary"}
+                except ValueError:
+                    msg = {"type": "not JSON"}
+                kind = msg.get("type") if isinstance(msg, dict) else "not an object"
+                packets = len(msg.get("telemetry") or []) if kind == "RECEIVE_TELEMETRY" else 0
+                with self.lock:
+                    self.received.append((now, kind, packets))
+        except (ConnectionClosed, OSError, ProtocolError):
+            with self.lock:
+                self.closed_at = time.monotonic()
+
+    def _keepalive(self):
+        # NanoHTTPD drops a socket that stays silent for 5 s, and a dashboard switched off sends nothing.
+        while not self.done.wait(1.5):
+            try:
+                self.ws.send_ping()
+            except OSError:
+                return
+
+    def events(self):
+        with self.lock:
+            return list(self.received)
+
+    def open_at(self, t):
+        with self.lock:
+            return self.closed_at is None or self.closed_at >= t
+
+    def close(self):
+        self.done.set()
+        self.ws.close()
+
+
 class GamepadHold:
     """Keeps sending one gamepad state from its own thread, so a hold survives the runner's START and status waits:
     slothboard rests both pads after 500 ms without a message. A failed send is raised by stop()."""
@@ -1183,6 +1376,332 @@ def find_adb():
             return str(candidate)
     raise BenchError("adb isn't on PATH or in ~/Library/Android/sdk/platform-tools. Install Android Studio's "
                      "platform-tools or add them to PATH.")
+
+
+def adb_server_port(env):
+    """The port on this Mac where adb's client looks for its server: ANDROID_ADB_SERVER_PORT, else 5037."""
+    for name in ADB_SERVER_ELSEWHERE:
+        if env.get(name):
+            raise BenchError(f"{name} is set to {env[name]!r}, which can point adb at an adb server other than this "
+                             "Mac's own, so every adb command could reach a hub that isn't on the table and the bench "
+                             f"would drive its motor ports. Unset {name} and rerun. Nothing was sent to any hub.")
+    raw = env.get("ANDROID_ADB_SERVER_PORT")
+    if raw is None:
+        return ADB_SERVER_PORT
+    if not raw.isdigit() or not 0 < int(raw) < 65535:
+        raise BenchError(f"ANDROID_ADB_SERVER_PORT is {raw!r}, not a port number adb accepts")
+    return int(raw)
+
+
+def adb_port_owners(lsof_text):
+    """[(command, pid)] from `lsof -F cp` output: a p<pid> line starts each process, its c<command> line follows."""
+    owners, pid, command = [], None, None
+    for line in lsof_text.splitlines() + ["p"]:
+        if line.startswith("p"):
+            if pid is not None:
+                owners.append((command or "a process lsof didn't name", pid))
+            pid, command = line[1:] or None, None
+        elif line.startswith("c"):
+            command = line[1:]
+    return owners
+
+
+def preflight_problem(owners, port, unseen_listener=False):
+    """Why no adb command may run, or None: whatever listens on adb's server port gets every adb command."""
+    others = [f"{command} (pid {pid})" for command, pid in owners if command != "adb"]
+    if others:
+        return (f"{', '.join(others)} {'listens' if len(others) == 1 else 'listen'} on port {port}, where adb looks for "
+                "its server, so every adb command would go to whatever is behind it, possibly a hub that isn't this "
+                "one, and the bench would install onto and drive that hub's motor ports. Stop "
+                f"{'that process' if len(others) == 1 else 'those processes'} (an ssh port forward, for one), check "
+                f"that `lsof -nP -iTCP:{port} -sTCP:LISTEN` shows nothing or adb, and rerun. Nothing was sent to any hub.")
+    if unseen_listener:
+        return (f"something listens on port {port}, where adb looks for its server, that lsof can't name (another "
+                "user's or a system process), and every adb command would go to it. Find it with `sudo lsof -nP "
+                f"-iTCP:{port} -sTCP:LISTEN`, stop it, and rerun. Nothing was sent to any hub.")
+    return None
+
+
+def port_answers(port):
+    """Whether something accepts a TCP connection on this Mac's loopback port: lsof can't see other users' sockets."""
+    for host in ("127.0.0.1", "::1"):
+        try:
+            socket.create_connection((host, port), timeout=1).close()
+            return True
+        except OSError:
+            continue
+    return False
+
+
+def adb_port_listeners(port, run=None):
+    lsof = shutil.which("lsof") or "/usr/sbin/lsof"
+    try:
+        r = (run or subprocess.run)([lsof, "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fcp"], capture_output=True,
+                                    text=True, timeout=30)
+    except FileNotFoundError:
+        raise BenchError(f"can't check what listens on adb's port {port}: there is no lsof on this Mac")
+    if r.returncode != 0 and (r.returncode != 1 or r.stdout.strip()):
+        raise BenchError(f"lsof couldn't list what listens on adb's port {port} (exit {r.returncode}): "
+                         f"{(r.stderr or r.stdout).strip()[:200]}")
+    return adb_port_owners(r.stdout)
+
+
+def adb_port_preflight(env=None, run=None, answers=None):
+    """Raises BenchError, before any adb command, when anything but adb listens on adb's server port."""
+    port = adb_server_port(os.environ if env is None else env)
+    owners = adb_port_listeners(port, run)
+    unseen = not owners and (answers or port_answers)(port)
+    if unseen:
+        # An adb server can start between the two looks.
+        owners = adb_port_listeners(port, run)
+        unseen = not owners
+    problem = preflight_problem(owners, port, unseen)
+    if problem:
+        raise BenchError(problem)
+    return {"port": port, "owners": [{"command": c, "pid": p} for c, p in owners]}
+
+
+def adb_port_record(port, run=None):
+    """What listens on adb's server port now, for the summary: a failed look is recorded, not raised."""
+    try:
+        return {"port": port, "owners": [{"command": c, "pid": p} for c, p in adb_port_listeners(port, run)]}
+    except (BenchError, subprocess.TimeoutExpired, OSError) as e:
+        return {"port": port, "error": str(e)}
+
+
+def adb_server_change(start, end):
+    """A warning when the process on adb's port at the end of the run isn't the one from its start, else None."""
+    if end.get("error"):
+        return f"WARNING: couldn't check adb's port {end.get('port')} at the end of the run: {end['error']}"
+    before = {o["pid"] for o in start.get("owners", [])}
+    after = {o["pid"] for o in end.get("owners", [])}
+    strangers = [f"{o['command']} (pid {o['pid']})" for o in end.get("owners", []) if o["command"] != "adb"]
+    if strangers:
+        return (f"**WARNING: at the end of the run {', '.join(strangers)} held adb's port {end.get('port')}, where adb "
+                "looks for its server: adb commands after that point may have reached another hub.**")
+    if before and before != after:
+        return (f"WARNING: the adb server on port {end.get('port')} changed during the run (pid "
+                f"{', '.join(sorted(before))} -> {', '.join(sorted(after)) or 'none'}): something on this Mac stopped "
+                "or restarted it, and steps running then may have lost the hub.")
+    return None
+
+
+def shipped_config_names(folder=None):
+    """Hardware configs this checkout ships in res/xml: the files whose root element is <Robot>."""
+    names = set()
+    for path in sorted((folder or REPO_ROOT / SHIPPED_CONFIG_DIR).glob("*.xml")):
+        try:
+            if ElementTree.parse(path).getroot().tag == "Robot":
+                names.add(path.stem)
+        except ElementTree.ParseError:
+            continue
+    return names
+
+
+def parse_config_listing(text):
+    """{name: {size, modified}} from `ls -l /sdcard/FIRST/` lines for .xml files (other lines are skipped)."""
+    out = {}
+    for line in text.splitlines():
+        m = CONFIG_LISTING.match(line.strip())
+        if m:
+            out[m.group(3)] = {"size": int(m.group(1)), "modified": m.group(2)}
+    return out
+
+
+def config_device_names(xml_text):
+    """{'webcams': [...], 'ethernet': [...]} named in a hardware config, or None if its XML doesn't parse."""
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        return None
+    return {"webcams": [e.get("name") for e in root.iter("Webcam")],
+            "ethernet": [e.get("name") for e in root.iter("EthernetDevice")]}
+
+
+def active_config_source(entry, configs, shipped_folder=None, original_xml=None):
+    """(name, XML text or None, where it came from) for the app's active-config setting (None: unread)."""
+    if entry is None:
+        return "unknown", None, "run-as couldn't read the app's settings, so the active config is unknown"
+    name = entry.get("name") or NO_CONFIG
+    if name == NO_CONFIG:
+        return name, None, "no config is active"
+    shipped = (shipped_folder or REPO_ROOT / SHIPPED_CONFIG_DIR) / f"{name}.xml"
+    if (entry or {}).get("location") == "RESOURCE" or (name not in configs and shipped.exists()):
+        if shipped.exists():
+            return name, shipped.read_text(), "shipped in res/xml (this checkout's copy)"
+        return name, None, "shipped in the installed app's res/xml, which this checkout doesn't have"
+    if original_xml is not None:
+        return name, original_xml, f"saved in {CONFIG_DIR} (as it was before the run)"
+    if name in configs:
+        return name, configs[name], f"saved in {CONFIG_DIR}"
+    return name, None, f"not in {CONFIG_DIR} or this checkout's res/xml"
+
+
+def saved_config_findings(configs, shipped, active_name=None, active_xml=None):
+    """Rows, warnings and the active-config check for the hardware configs saved on a hub ({name: XML text})."""
+    rows, warnings = [], []
+    for name in sorted(configs):
+        bench = name.startswith("bench_")
+        devices = config_device_names(configs[name])
+        stale = not bench and name not in shipped
+        rows.append({"name": name, "bench": bench, "stale": stale, "parses": devices is not None,
+                     "webcams": (devices or {}).get("webcams"), "ethernet": (devices or {}).get("ethernet")})
+        if bench:
+            continue
+        if devices is None:
+            warnings.append(f"{name}: its XML doesn't parse, so the app can't load it")
+            continue
+        for webcam in devices["webcams"]:
+            if webcam != CELL_TIP_WEBCAM:
+                warnings.append(f"{name}: Webcam {webcam!r}; CellTipCamera opens {CELL_TIP_WEBCAM!r}, so its OpModes "
+                                "fail INIT on this config")
+        for device in devices["ethernet"]:
+            if device != LIMELIGHT_DEVICE:
+                warnings.append(f"{name}: EthernetDevice {device!r}; the Limelight code looks for {LIMELIGHT_DEVICE!r}")
+        if stale:
+            warnings.append(f"{name}: saved on the hub but not a config this checkout ships in res/xml (a leftover, "
+                            "for one from a renamed or deleted config)")
+    check = None
+    if active_xml is not None:
+        devices = config_device_names(active_xml)
+        webcams = None if devices is None else devices["webcams"]
+        wrong = [w for w in webcams or [] if w != CELL_TIP_WEBCAM]
+        check = (webcams is not None and not wrong,
+                 "its XML doesn't parse" if webcams is None else
+                 f"webcams {webcams}" if webcams else "it names no webcam")
+    return {"rows": rows, "warnings": warnings, "check": check, "active": active_name}
+
+
+def window_counts(events, t0, t1):
+    """What a MessageCounter got in [t0, t1): messages by type, telemetry packets, telemetry clears, images, logcat."""
+    by_type = collections.Counter()
+    out = {"telemetry packets": 0, "telemetry clears": 0, "images": 0, "logcat": 0}
+    for t, kind, packets in events:
+        if not t0 <= t < t1:
+            continue
+        by_type[kind] += 1
+        if kind == "RECEIVE_TELEMETRY":
+            if packets:
+                out["telemetry packets"] += packets
+            else:
+                out["telemetry clears"] += 1
+        elif kind == "RECEIVE_IMAGE":
+            out["images"] += 1
+        elif kind in ("RECEIVE_LOGCAT_ERRORS", "RECEIVE_LOGCAT_LINES"):
+            out["logcat"] += 1
+    out["types"] = dict(by_type)
+    out["seconds"] = round(t1 - t0, 2)
+    return out
+
+
+def first_packet_after(events, t0):
+    return next((round(t - t0, 2) for t, kind, packets in events if t >= t0 and kind == "RECEIVE_TELEMETRY" and packets),
+                None)
+
+
+def dashboard_auto_enable(prefs_text):
+    """slothboard's saved switch (key autoEnable in shared_prefs/FtcDashboard.xml): True or False, or None when the
+    file or the key is missing, which slothboard reads as on."""
+    if not prefs_text.strip() or "No such file" in prefs_text:
+        return None
+    try:
+        root = ElementTree.fromstring(prefs_text)
+    except ElementTree.ParseError as e:
+        raise BenchError(f"can't parse the app's {DASHBOARD_PREFS} ({e}): {prefs_text.strip()[:200]!r}")
+    for entry in root.iter("boolean"):
+        if entry.get("name") == DASHBOARD_AUTO_ENABLE_KEY:
+            return entry.get("value") == "true"
+    return None
+
+
+def streamed(counts):
+    return {k: counts.get(k, 0) for k in DASH_OFF_STREAMED if counts.get(k, 0)}
+
+
+def dashboard_off_checks(rec):
+    """(name, ok, detail, fail_means) for Bench: Dashboard Off; a phase that didn't run fails its checks."""
+    out = []
+    base = rec.get("baseline") or {}
+    proxy_before = [p for p in DASH_OFF_PROXY_PORTS if (base.get("listeners") or {}).get(p)]
+    switch = rec.get("switch") or {}
+    on = switch.get("onCounts") or {}
+    result = switch.get("result") or {}
+    why_not = rec.get("failed") or "an earlier phase failed"
+
+    def ports_closed(label, listeners):
+        name = f"dashboard off: the Limelight proxy ports are closed after {label}"
+        if listeners is None:
+            out.append((name, False, f"not run: {why_not}", DASH_OFF_PORTS_MEANS))
+            return
+        still = [p for p in proxy_before if listeners.get(p)]
+        unjudged = [p for p in DASH_OFF_PROXY_PORTS if p not in proxy_before]
+        out.append((name, bool(proxy_before) and not still,
+                    f"listening {still or 'none'} of {proxy_before}, the ones that listened before the switch"
+                    + (f"; not judged, since they didn't listen before it either: {unjudged}" if unjudged else ""),
+                    DASH_OFF_PORTS_MEANS if proxy_before else
+                    "none of the proxy ports listened while the dashboard was on, so this check proves nothing"))
+
+    def silent(label, counts, socket_open, served=None):
+        name = f"dashboard off: nothing streams after {label}"
+        if counts is None:
+            out.append((name, False, f"not run: {why_not}", DASH_OFF_STREAM_MEANS))
+            return
+        got = streamed(counts)
+        out.append((name, bool(socket_open) and not got and served in (None, 0),
+                    f"{got or 'no telemetry, image or logcat message'} in {counts.get('seconds')} s on a socket "
+                    f"{'open throughout' if socket_open else 'that closed during the window'}; every message "
+                    f"{counts.get('types')}"
+                    + (f"; frames the bench's camera source served after the switch {served}" if served is not None
+                       else ""), DASH_OFF_STREAM_MEANS))
+
+    out.append(("dashboard off: telemetry and the camera stream reached the runner while the dashboard was on (setup)",
+                on.get("telemetry packets", 0) > 0 and on.get("images", 0) > 0,
+                f"{on.get('telemetry packets', 0)} telemetry packets and {on.get('images', 0)} images in "
+                f"{on.get('seconds')} s; frames the bench's source served {result.get('onFramesServed')}",
+                DASH_OFF_SETUP_MEANS))
+    disabled = (result.get("enabledAtStart") is True and result.get("enabledAfterDisable") is False
+                and switch.get("offSeen") is True)
+    out.append(("dashboard off: slothboard's disable() switched it off (isEnabled, then the status)", disabled,
+                f"isEnabled {result.get('enabledAtStart')} before, {result.get('enabledAfterDisable')} after; the status "
+                f"said off {switch.get('offSeen')}" + (f"; {switch['error']}" if switch.get("error") else ""),
+                DASH_OFF_DISABLE_MEANS))
+    silent("the switch, with the OpMode still sending telemetry and starting a camera stream", switch.get("offCounts"),
+           switch.get("socketOpen"), served=result.get("offFramesServed", "not reported"))
+    ports_closed("the switch", switch.get("listeners"))
+    done = {p.get("name"): p for p in rec.get("phases") or []}
+    for name in rec.get("planned") or []:
+        p = done.get(name) or {}
+        what = DASH_OFF_PHASES[name]
+        ran = "statusEnabled" in p
+        out.append((f"dashboard off: still off after {what}",
+                    ran and p.get("statusEnabled") is False and p.get("autoEnable") is False,
+                    (f"status enabled {p.get('statusEnabled')}, saved autoEnable {p.get('autoEnable')}"
+                     + (f"; back {p.get('backSeconds')} s after it started" if p.get("backSeconds") is not None else ""))
+                    if ran else f"not run: {p.get('error') or why_not}", DASH_OFF_PERSIST_MEANS))
+        silent(what, p.get("window") if ran else None, p.get("socketOpen"))
+        if ran:
+            out.append((f"dashboard off: an INIT sent after {what} is ignored", p.get("initIgnored") is True,
+                        f"the robot stayed idle {p.get('initIgnored')}", DASH_OFF_INIT_MEANS))
+        ports_closed(what, p.get("listeners") if ran else None)
+    r = rec.get("recovery") or {}
+    listening = r.get("listeners") or {}
+    back = (not r.get("error") and r.get("statusEnabled") is True
+            and r.get("enabledSeconds") is not None and r["enabledSeconds"] <= DASH_OFF_RECOVERY_S
+            and r.get("opModeListSeconds") is not None and r["opModeListSeconds"] <= DASH_OFF_RECOVERY_S
+            and (r.get("probePackets") or 0) > 0 and all(listening.get(p) for p in DASH_OFF_RECOVERY_PORTS))
+    out.append((f"dashboard off: the adb recovery turns it back on within {DASH_OFF_RECOVERY_S:.0f} s (enabled, the "
+                f"OpMode list, Bench: Probe's telemetry, ports {' and '.join(map(str, DASH_OFF_RECOVERY_PORTS))} "
+                "listening)", back,
+                (f"failed: {r['error']}; " if r.get("error") else "")
+                + f"enabled after {r.get('enabledSeconds')} s, OpMode list after {r.get('opModeListSeconds')} s, "
+                  f"{r.get('probePackets')} Probe packets (first {r.get('firstPacketSeconds')} s after the command), "
+                  f"listening {[p for p in DASH_OFF_RECOVERY_PORTS if listening.get(p)]}, saved autoEnable "
+                  f"{r.get('autoEnable')}", DASH_OFF_RECOVERY_MEANS))
+    if rec.get("limelight"):
+        http = r.get("limelightHttp") or {}
+        out.append(("dashboard off: the Limelight web UI answers on 5801 after the recovery", http.get("code") == 200,
+                    f"{http or 'not asked'}", DASH_OFF_RECOVERY_MEANS))
+    return out
 
 
 class LogcatStream:
@@ -1481,6 +2000,11 @@ def turret_devices(imu_type):
                                  imu_tag(imu_type)]
 
 
+def turret_zero_devices(imu_type):
+    """br on motor port 2 only to read encoder port 2, as on the robot; no other motor or servo is named."""
+    return ['<goBILDA5202SeriesMotor name="br" port="2" />', octoquad_tag(OCTOQUAD_BUS), imu_tag(imu_type)]
+
+
 def extras(webcam_serial, limelight):
     out = []
     if webcam_serial is not None:
@@ -1706,6 +2230,14 @@ PHOTON_I2C_MIN_READS = 50
 PHOTON_I2C_CONTROL_ATTEMPTS = 200
 PHOTON_I2C_PHASES = ("off", "on2", "on8")
 PHOTON_I2C_DEVICES = (("pinpoint", "goBILDA Pinpoint", 0x31), ("octoquad", "OctoQuad", 0x30))
+PHOTON_OVERLAP_MODES = ("off", "on8", "on4", "on2")
+PHOTON_OVERLAP_SETS = (("6 + 0", "6 on the Control Hub"), ("0 + 6", "6 on the Expansion Hub"),
+                       ("6 + 6", "12, the Control Hub's then the Expansion Hub's"),
+                       ("6 + 6 alternating", "12, hubs alternating"), ("3 + 3", "3 + 3"), ("5 + 1", "5 + 1"),
+                       ("1 + 5", "1 + 5"))
+PHOTON_OVERLAP_ORDERS = (("6 + 6", "hub by hub"), ("6 + 6 alternating", "alternating"))
+PHOTON_OVERLAP_MIN_LOOPS = 300
+PHOTON_OVERLAP_VERDICT_MODE = "on8"
 
 PHOTON_TESTS = (
     ("install", "Installed Photon", "the hub runs the Photon built from these sources: Photon is pinned, so only a "
@@ -3105,6 +3637,132 @@ def photon_profile_summary(main):
     return lines
 
 
+def overlap_reading(together, ch, eh):
+    """12 writes in one loop against each hub's 6 alone: ratio = together / (ch + eh) is 1.0 when the two hubs' times
+    add up and max(ch, eh) / (ch + eh) ("full") when they overlap fully; hidden is the share of the shorter hub's time
+    the overlap hid, and the reading is the third of that span the ratio falls in. None without three positive times."""
+    if not all(finite(v) and v > 0 for v in (together, ch, eh)):
+        return None
+    full = max(ch, eh) / (ch + eh)
+    ratio = together / (ch + eh)
+    hidden = (1 - ratio) / (1 - full)
+    reading = "adds up" if hidden < 1 / 3 else "overlaps" if hidden > 2 / 3 else "in between"
+    return {"together": together, "ch": ch, "eh": eh, "ratio": ratio, "full": full, "hidden": hidden,
+            "reading": reading}
+
+
+def photon_overlap_skip(topology):
+    """Why Bench: Photon's two-hubs-at-once phase doesn't run on this wiring; None on USB, where it does."""
+    if topology == "rs485":
+        return ("the Expansion Hub is on RS485, sharing the Control Hub's link, and Photon never parallelizes its "
+                "writes; the phase needs each hub on its own USB link (--usb-expansion)")
+    if topology != "usb":
+        return "there is no Expansion Hub; the phase needs one on its own USB link (--usb-expansion)"
+    return None
+
+
+def overlap_p50(sets, key, field):
+    stats = dig(sets, key, field)
+    if not isinstance(stats, dict):
+        return None, f"no {key} {field}"
+    n = stats.get("count") or 0
+    if n < PHOTON_OVERLAP_MIN_LOOPS:
+        return None, f"{key} {field}: {n} loops, under {PHOTON_OVERLAP_MIN_LOOPS}"
+    if not finite(stats.get("p50")) or stats["p50"] <= 0:
+        return None, f"{key} {field} p50 {stats.get('p50')}"
+    return stats["p50"], None
+
+
+def photon_overlap_readings(phase):
+    """({"return" | "drained": {order: overlap_reading or None}}, why any reading is missing) for one mode's phase."""
+    sets = (phase or {}).get("sets") or {}
+    readings, problems = {}, []
+    for metric, field in (("return", "returnMs"), ("drained", "drainedMs")):
+        ch, ch_problem = overlap_p50(sets, "6 + 0", field)
+        eh, eh_problem = overlap_p50(sets, "0 + 6", field)
+        readings[metric] = {}
+        for key, order in PHOTON_OVERLAP_ORDERS:
+            together, problem = overlap_p50(sets, key, field)
+            problems += [p for p in (ch_problem, eh_problem, problem) if p and p not in problems]
+            readings[metric][order] = overlap_reading(together, ch, eh)
+    return readings, problems
+
+
+def overlap_mode_words(mode):
+    return "Photon off" if mode == "off" else f"{mode[2:]} parallel"
+
+
+def photon_overlap_verdict(main, topology, mode=PHOTON_OVERLAP_VERDICT_MODE):
+    """The record-only line for summary.md, decided on the drained time of whichever 12-write order hid more:
+    {"reading": "adds up" | "overlaps" | "in between" | None, "line": ...}. Never a check, never in the Photon
+    verdict."""
+    head = "- **Two hubs at once** (record only: not a check, not in the Photon verdict): "
+    out = {"mode": mode, "reading": None}
+    skip = photon_overlap_skip(topology)
+    if skip:
+        return dict(out, line=head + f"not run: {skip}.")
+    phase = dig(main, "hubOverlap", mode)
+    if not isinstance(phase, dict):
+        return dict(out, line=head + f"not measured: Bench: Photon has no hub overlap {mode} result (it stopped before "
+                                     "that phase, or the hub runs a bench build without it).")
+    readings, problems = photon_overlap_readings(phase)
+    drained = {order: r for order, r in readings["drained"].items() if r}
+    if not drained:
+        return dict(out, line=head + f"not measured at {overlap_mode_words(mode)}: {'; '.join(problems)}.")
+    order, best = min(drained.items(), key=lambda kv: kv[1]["ratio"])
+
+    def ratios(metric):
+        return ", ".join(f"{r['ratio']:.2f} {o}" if r else f"n/a {o}" for o, r in readings[metric].items())
+
+    line = (head + f"**{best['reading']}** at {overlap_mode_words(mode)}. Drained, 12 together / (6 + 6 alone) = "
+            f"{ratios('drained')}; until the calls return, {ratios('return')}. 1.00 means the hubs' times add up, "
+            f"{best['full']:.2f} that they overlap fully (drained p50: 6 on the Control Hub {best['ch']:.2f} ms, 6 on "
+            f"the Expansion Hub {best['eh']:.2f} ms, 12 {order} {best['together']:.2f} ms; {best['hidden']:.0%} of the "
+            "shorter hub's time hidden).")
+    if problems:
+        line += f" Not read: {'; '.join(problems)}."
+    return dict(out, reading=best["reading"], order=order, ratio=best["ratio"], full=best["full"],
+                readings=readings, line=line)
+
+
+def p50_p95(stats):
+    if not counted(stats):
+        return "n/a"
+    return f"{stats['p50']:.2f} / {stats['p95']:.2f}"
+
+
+def photon_overlap_summary(main, topology):
+    """summary.md's section for Bench: Photon's two-hubs-at-once phase (USB only)."""
+    lines = ["### Two hubs at once (record only)\n"]
+    verdict = photon_overlap_verdict(main, topology)
+    if photon_overlap_skip(topology):
+        return lines + [verdict["line"], ""]
+    phases = {m: dig(main, "hubOverlap", m) for m in PHOTON_OVERLAP_MODES}
+    modes = [m for m, ph in phases.items() if isinstance(ph, dict)]
+    if modes:
+        lines += ["Changed writes in one loop, p50 / p95 ms until the calls return; p50 / p95 ms until every write is "
+                  "acknowledged (drained). Each loop is drained before the next, and every set runs once per round in a "
+                  "shuffled order. With Photon off each call waits for its ACK, so off should read \"adds up\" whatever "
+                  "the hubs do: it is the control.\n",
+                  "| set | " + " | ".join(overlap_mode_words(m) for m in modes) + " |", "|---|" + "---|" * len(modes)]
+        for key, label in PHOTON_OVERLAP_SETS:
+            cells = [f"{p50_p95(dig(phases[m], 'sets', key, 'returnMs'))}; {p50_p95(dig(phases[m], 'sets', key, 'drainedMs'))}"
+                     for m in modes]
+            lines.append(f"| {label} | " + " | ".join(cells) + " |")
+        readings = {m: photon_overlap_readings(phases[m])[0] for m in modes}
+        for metric, what in (("return", "returned"), ("drained", "drained")):
+            for _, order in PHOTON_OVERLAP_ORDERS:
+                cells = []
+                for m in modes:
+                    r = readings[m][metric][order]
+                    cells.append(f"{r['ratio']:.2f} of {r['full']:.2f}-1.00: {r['reading']}" if r else "n/a")
+                lines.append(f"| 12 / (6 + 6), {what}, {order} | " + " | ".join(cells) + " |")
+        lines += ["", "- loops per set: " + ", ".join(
+            f"{overlap_mode_words(m)} {dig(phases[m], 'rounds')}" for m in modes) + "; drains past 500 ms: " + ", ".join(
+            f"{overlap_mode_words(m)} {dig(phases[m], 'drainTimeouts')}" for m in modes)]
+    return lines + [verdict["line"], ""]
+
+
 def photon_verdict(checks, negative_control_fired, orders_both, soak_ran, soak_met, stop_trials, not_run=(),
                    still_needed=()):
     """("SAFE" | "PASSED" | "NOT SAFE", blockers, still needed). PASSED: nothing in this run failed, but the go also
@@ -3192,6 +3850,410 @@ def shipped_hub_devices(name):
     if not devices or any(d.get("bus") is not None or not d.get("name") for d in devices):
         return None
     return {d.get("name") for d in devices}
+
+
+def finite(x):
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def wrap_error_deg(a, b):
+    return (a - b + 180) % 360 - 180
+
+
+def circular_span_deg(angles):
+    """The shortest arc holding every angle: 360 minus the largest gap between neighbours."""
+    a = sorted(x % 360 for x in angles)
+    if len(a) < 2:
+        return 0.0
+    gaps = [a[i + 1] - a[i] for i in range(len(a) - 1)] + [a[0] + 360 - a[-1]]
+    return 360 - max(gaps)
+
+
+def circular_mean_deg(angles):
+    s = sum(math.sin(math.radians(x)) for x in angles)
+    c = sum(math.cos(math.radians(x)) for x in angles)
+    return math.degrees(math.atan2(s, c)) % 360
+
+
+def tz_answer_ok(answer):
+    return isinstance(answer, str) and answer.strip().lower() == "ok"
+
+
+def tz_volts(answer):
+    try:
+        return float(str(answer).strip().lower().rstrip("v").strip())
+    except ValueError:
+        return None
+
+
+def tz_levels_ok(supply_answer, high_answer):
+    """Whether typed meter readings let the absolute output into the OctoQuad's 3.3 V-only input: a 3.3 V supply and a
+    positive high level at most TZ_LEVEL_MAX_V (reversed probes read a negative one)."""
+    supply, high = tz_volts(supply_answer), tz_volts(high_answer)
+    return (supply is not None and high is not None and TZ_SUPPLY_MIN_V <= supply <= TZ_LEVEL_MAX_V
+            and 0 < high <= TZ_LEVEL_MAX_V)
+
+
+def tz_turns_to_mark(rests, key, turns):
+    """(counts per turn, counts off the start at the end) for turns to a mark and back: the first rest, the one
+    farthest from it and the last; None without a rest after the farthest."""
+    values = [r.get(key) for r in rests if finite(r.get(key))]
+    if len(values) < 3:
+        return None
+    start = values[0]
+    far = max(range(len(values)), key=lambda i: abs(values[i] - start))
+    if far == len(values) - 1:
+        return None
+    return abs(values[far] - start) / turns, values[-1] - start
+
+
+def tz_span(rows, version="V1"):
+    """Fits the hub count to the unwrapped absolute output over rows [ms, count, channel 4, crcOk, bulkFake]: the pulse
+    range, counts per turn (its sign is the count's direction against the absolute angle), turns covered and the worst
+    residual in encoder degrees; None with too few good rows or no motion."""
+    positions = TZ_VERSIONS[version][2]
+    pts = [(r[1], r[2]) for r in rows if len(r) >= 5 and r[3] == 1 and r[4] == 0 and r[2] > 0]
+    if len(pts) < 20:
+        return None
+    pulses = [p for _, p in pts]
+    lo, hi = min(pulses), max(pulses)
+    if hi <= lo:
+        return None
+    turn_us = (hi - lo) * positions / (positions - 1)
+    turns, k, prev, wraps = [], 0, pulses[0], 0
+    for p in pulses:
+        if p - prev > turn_us / 2:
+            k, wraps = k - 1, wraps + 1
+        elif prev - p > turn_us / 2:
+            k, wraps = k + 1, wraps + 1
+        turns.append((p - lo) / turn_us + k)
+        prev = p
+    counts = [c for c, _ in pts]
+    n = len(pts)
+    mt, mc = sum(turns) / n, sum(counts) / n
+    var = sum((t - mt) ** 2 for t in turns)
+    if var == 0:
+        return None
+    slope = sum((t - mt) * (c - mc) for t, c in zip(turns, counts)) / var
+    residual = max(abs(c - mc - slope * (t - mt)) for t, c in zip(turns, counts))
+    return {"minUs": lo, "maxUs": hi, "countsPerTurn": slope, "sign": 1 if slope > 0 else -1,
+            "turns": max(turns) - min(turns), "wraps": wraps, "samples": n,
+            "maxResidualDeg": residual / abs(slope) * 360 if slope else None}
+
+
+def tz_failed(run):
+    """Why a Bench: Turret Zero run can't be judged, or None."""
+    if run.get("crashed"):
+        return f"crashed: {run.get('error')!r}"
+    if not run.get("result"):
+        return f"no result file (error {run.get('error')!r})"
+    return None
+
+
+def turret_zero_checks(tz):
+    """(checks, summary lines) for Bench: Turret Zero from the runner's record: the typed answers, and per run its
+    outcome and result file. A phase never reached adds a not-run line, a run that failed a FAIL."""
+    checks, lines = [], []
+    answers, runs = tz.get("answers") or {}, tz.get("runs") or {}
+
+    def add(name, ok, detail, means):
+        checks.append((f"turret zero: {name}", bool(ok), detail, means))
+
+    def result(name, label):
+        run = runs.get(name)
+        if run is None:
+            lines.append(f"- {label}: not run" + (f" (the bench stopped: {tz['stopped']})" if tz.get("stopped") else ""))
+            return None
+        failure = tz_failed(run)
+        if failure is not None:
+            add(f"{label}: the run finished", False, failure, TZ_NOT_RUN_MEANS)
+            return None
+        return run["result"]
+
+    if "cable1" in answers or "split" in answers:
+        add("the REV-31-1815 and the split cable metered right (typed ok)",
+            tz_answer_ok(answers.get("cable1")) and tz_answer_ok(answers.get("split")),
+            f"REV-31-1815 {answers.get('cable1')!r}; split cable {answers.get('split')!r}", TZ_WIRING_MEANS)
+    if "supplyV" in answers or "highV" in answers:
+        add(f"the encoder's supply {TZ_SUPPLY_MIN_V:.2f}-{TZ_LEVEL_MAX_V:.2f} V and its absolute output's high level "
+            f"above 0 and at most {TZ_LEVEL_MAX_V:.2f} V, OctoQuad branch unplugged",
+            tz_levels_ok(answers.get("supplyV"), answers.get("highV")),
+            f"supply {answers.get('supplyV')!r} V, high level {answers.get('highV')!r} V", TZ_LEVEL_MEANS)
+
+    def turns(name, label, key, n):
+        res = result(name, label)
+        if res is None:
+            return None
+        rests = dig(res, "track", "rests") or []
+        got = tz_turns_to_mark(rests, key, n)
+        add(f"{label}: {n} turns to a dial mark and back count {TZ_COUNTS_PER_TURN} +/- {TZ_PER_TURN_COUNTS} per turn and "
+            f"end within {TZ_PER_TURN_COUNTS * n} counts of the start",
+            got is not None and abs(got[0] - TZ_COUNTS_PER_TURN) <= TZ_PER_TURN_COUNTS
+            and abs(got[1]) <= TZ_PER_TURN_COUNTS * n,
+            (f"{got[0]:.1f} counts per turn, {got[1]:+.0f} counts off the start at the end" if got else
+             "fewer than three rests, or none after the farthest one: the shaft wasn't held on the marks")
+            + f"; rests {[r.get(key) for r in rests]}", TZ_TURNS_MEANS)
+        return got
+
+    turns("quad", "OctoQuad channel 4 counting (REV-31-1815)", "median", TZ_QUAD_TURNS)
+    plugged = turns("split_plugged", "hub encoder port 2, OctoQuad branch plugged", "count", TZ_SPLIT_TURNS)
+    unplugged = turns("split_unplugged", "hub encoder port 2, OctoQuad branch unplugged", "count", TZ_SPLIT_TURNS)
+    if plugged and unplugged:
+        add(f"the hub counts within {TZ_PER_TURN_COUNTS} per turn of each other with the OctoQuad branch plugged and "
+            "unplugged", abs(plugged[0] - unplugged[0]) <= TZ_PER_TURN_COUNTS,
+            f"plugged {plugged[0]:.1f}, unplugged {unplugged[0]:.1f} counts per turn", TZ_LOAD_MEANS)
+
+    res = result("span", "span")
+    if res is not None:
+        span = tz_span(dig(res, "track", "rows") or [])
+        lo, hi, _ = TZ_VERSIONS["V1"]
+        add(f"span: the V1's pulse range {lo:g}-{hi:g} us within {TZ_PULSE_SLACK_US:g} us, {TZ_COUNTS_PER_TURN} +/- "
+            f"{TZ_PER_TURN_COUNTS} hub counts per turn of the absolute output, at least {TZ_MIN_TURNS:g} turns",
+            span is not None and abs(span["minUs"] - lo) <= TZ_PULSE_SLACK_US
+            and abs(span["maxUs"] - hi) <= TZ_PULSE_SLACK_US
+            and abs(abs(span["countsPerTurn"]) - TZ_COUNTS_PER_TURN) <= TZ_PER_TURN_COUNTS
+            and span["turns"] >= TZ_MIN_TURNS,
+            f"{span}" if span else "no motion or too few good rows", TZ_SPAN_MEANS)
+
+    res = result("init_01", "INIT read")
+    if res is not None:
+        init, bank = res.get("init") or {}, res.get("bank") or {}
+        read = init.get("readMs") or {}
+        lines.append(f"- INIT read: the first plausible channel 4 pulse {bank.get('firstPlausibleMs')} ms after the bank "
+                     f"was set; first reads [ms, pulse, crc] {bank.get('firstReads')}")
+        add(f"INIT read: {TZ_INIT_READS} readAllEncoderData at rest, every CRC ok, p95 under {TZ_INIT_P95_MS:g} ms, "
+            f"spread at most {TZ_SPREAD_DEG} deg",
+            init.get("valid") is True and read.get("count") == TZ_INIT_READS and init.get("crcFailures") == 0
+            and read.get("p95", float("inf")) < TZ_INIT_P95_MS and finite(init.get("spreadDeg"))
+            and init["spreadDeg"] <= TZ_SPREAD_DEG,
+            f"{fmt(read)}, {init.get('crcFailures')} CRC failures, spread {init.get('spreadDeg')} deg over the first 20; "
+            f"pulse {init.get('pulseUs')} us", TZ_INIT_MEANS)
+
+    offsets = []
+    if "init_01" in runs:
+        for i in range(1, TZ_REZERO_RUNS + 1):
+            res = result(f"init_{i:02d}", f"re-INIT {i}") if i > 1 else dig(runs, "init_01", "result")
+            if res is not None and finite(dig(res, "init", "offsetDeg")):
+                offsets.append(res["init"]["offsetDeg"])
+        spread = circular_span_deg(offsets)
+        add(f"re-zero: {TZ_REZERO_RUNS} INITs with the shaft untouched give zeros within {TZ_SPREAD_DEG} deg",
+            len(offsets) == TZ_REZERO_RUNS and spread <= TZ_SPREAD_DEG,
+            f"{len(offsets)} valid zeros spanning {spread:.2f} deg: {[round(o, 2) for o in offsets]}", TZ_REZERO_MEANS)
+    res = result("init_moved", "INIT after the shaft moved") if "init_01" in runs else None
+    if res is not None and offsets:
+        moved = res.get("init") or {}
+        first = dig(runs, "init_01", "result", "init", "absoluteDeg")
+        turned = abs(wrap_error_deg(moved.get("absoluteDeg"), first)) if finite(moved.get("absoluteDeg")) and finite(first) else None
+        off = (abs(wrap_error_deg(moved["offsetDeg"], circular_mean_deg(offsets)))
+               if finite(moved.get("offsetDeg")) else None)
+        add(f"re-zero: after the shaft moved, the zero is within {TZ_MOVED_DEG} deg (the absolute change matches the count "
+            "change)", turned is not None and turned >= TZ_MOVED_MIN_DEG and off is not None and off <= TZ_MOVED_DEG,
+            f"absolute moved {turned} deg, zero off by {off} deg"
+            + (f"; the shaft moved under {TZ_MOVED_MIN_DEG:g} deg, so this proves nothing" if turned is not None
+               and turned < TZ_MOVED_MIN_DEG else ""), TZ_REZERO_MEANS)
+
+    res = result("agreement", "agreement")
+    if res is not None:
+        rests = dig(res, "track", "rests") or []
+        good = [r for r in rests if finite(r.get("errorDeg")) and finite(r.get("absoluteDeg"))]
+        counts = [r["count"] for r in good]
+        travel = (max(counts) - min(counts)) / TZ_COUNTS_PER_TURN if counts else 0.0
+        covered = circular_span_deg([r["absoluteDeg"] for r in good])
+        coverage = len(good) >= TZ_MIN_RESTS and covered >= TZ_MIN_SPAN_DEG and travel >= TZ_MIN_TURNS
+        flipped = max((abs(r["errorFlippedSignDeg"]) for r in good if finite(r.get("errorFlippedSignDeg"))), default=0)
+        offset = max((abs(r["error180Deg"]) for r in good if finite(r.get("error180Deg"))), default=0)
+        controls = flipped > TZ_CONTROL_DEG and offset > TZ_CONTROL_DEG
+        worst = max((abs(r["errorDeg"]) for r in good), default=None)
+        add(f"agreement: coverage: at least {TZ_MIN_RESTS} rests with a valid absolute read, {TZ_MIN_SPAN_DEG:g} deg of "
+            f"the absolute range, {TZ_MIN_TURNS:g} turns", coverage,
+            f"{len(good)} of {len(rests)} rests valid, {covered:.0f} deg covered, {travel:.2f} turns", TZ_COVERAGE_MEANS)
+        add(f"agreement: setup: a flipped sign and a 180 deg offset on the same rests err over {TZ_CONTROL_DEG:g} deg",
+            controls, f"flipped sign worst {flipped:.1f} deg, 180 deg offset worst {offset:.1f} deg", TZ_CONTROL_MEANS)
+        add(f"agreement: every rest's absolute angle valid and within {TZ_AGREE_DEG} deg of the hub count from the INIT "
+            "zero", coverage and controls and len(good) == len(rests) and worst is not None and worst <= TZ_AGREE_DEG,
+            (f"worst {worst:.2f} deg" if worst is not None else "no valid rest")
+            + (f"; {len(rests) - len(good)} rests without a valid absolute read" if len(good) != len(rests) else "")
+            + ("" if coverage and controls else "; not judged: the coverage or the negative controls failed")
+            + f"; errors {[round(r['errorDeg'], 2) for r in good]}", TZ_AGREE_MEANS)
+
+    res = result("sign", "sign")
+    if res is not None:
+        sign = res.get("sign") or {}
+        fwd, rev = sign.get("FORWARD") or {}, sign.get("REVERSE") or {}
+        flips = TZ_SIGN_FLIPS.get(sign.get("orientation"))
+        add("sign: the hub's own encoder read equals the bulk read in both directions, from a count of at least 100, "
+            "and getCurrentPosition() is minus it exactly where the motor type and direction say",
+            bool(fwd) and bool(rev) and flips is not None and all(
+                finite(d.get("raw")) and abs(d["raw"]) >= TZ_NONZERO_COUNTS and d.get("raw") == d.get("bulk")
+                and d.get("bulkFake") is False and d.get("getCurrentPosition") == flips[k] * d["raw"]
+                for k, d in (("FORWARD", fwd), ("REVERSE", rev))),
+            f"{sign.get('orientation')} motor type; FORWARD {fwd}; REVERSE {rev}", TZ_SIGN_MEANS)
+        if fwd and abs(fwd.get("raw") or 0) >= TZ_NONZERO_COUNTS:
+            lines.append(f"- sign: getCurrentPosition() {'negates' if fwd.get('getCurrentPosition') == -fwd.get('raw') else 'does not negate'} "
+                         f"the raw count on FORWARD ({sign.get('orientation')} motor type), "
+                         f"{'negates' if rev.get('getCurrentPosition') == -rev.get('raw') else 'does not negate'} it on REVERSE")
+        else:
+            lines.append("- sign: the count was under 100, so whether getCurrentPosition() negates it isn't shown")
+
+    reset, after = result("reset", "mode changes"), result("reset_after", "encoder reset")
+    if reset is not None and after is not None:
+        r, a = reset.get("reset") or {}, after.get("resetAfter") or {}
+        start = r.get("countAtInit")
+        seen = [r.get("afterRunWithoutEncoder"), r.get("afterRunUsingEncoder"), r.get("afterBackToRunWithoutEncoder")]
+        flat = [c for pair in seen if isinstance(pair, list) for c in pair]
+        last = flat[-1] if flat else None
+        add(f"mode changes: the count stays within {TZ_STILL_COUNTS} through RUN_WITHOUT_ENCODER, RUN_USING_ENCODER and "
+            "into the next OpMode, starting from a count of at least 100",
+            finite(start) and abs(start) >= TZ_NONZERO_COUNTS and len(flat) == 6
+            and all(abs(c - start) <= TZ_STILL_COUNTS for c in flat) and finite(a.get("countAtInit"))
+            and abs(a["countAtInit"] - last) <= TZ_STILL_COUNTS,
+            f"at INIT {start}, after each mode change [now, 100 ms later] {seen}, next OpMode's INIT "
+            f"{a.get('countAtInit')}", TZ_MODE_MEANS)
+        zeroed = a.get("afterStopAndReset")
+        lines.append(f"- STOP_AND_RESET_ENCODER on br: count {a.get('countAtInit')} -> {zeroed} [now, 100 ms later], then "
+                     f"{a.get('afterRunWithoutEncoder')} after RUN_WITHOUT_ENCODER"
+                     + (": it zeroes the turret count, the hazard the turret code must never trigger"
+                        if isinstance(zeroed, list) and zeroed and abs(zeroed[-1]) <= TZ_STILL_COUNTS else ""))
+        before, back = a.get("absoluteBefore") or {}, a.get("absoluteAfter") or {}
+        diff = (abs(wrap_error_deg(back["absoluteDeg"], before["absoluteDeg"]))
+                if finite(back.get("absoluteDeg")) and finite(before.get("absoluteDeg")) else None)
+        add(f"encoder reset: the absolute read gives the pre-reset angle back within {TZ_RECOVER_DEG} deg",
+            diff is not None and diff <= TZ_RECOVER_DEG, f"before {before.get('absoluteDeg')}, after "
+            f"{back.get('absoluteDeg')} deg ({diff} deg apart)", TZ_RESET_MEANS)
+
+    if "v2SupplyV" in answers or "v2HighV" in answers:
+        add(f"V2 on A: its supply {TZ_SUPPLY_MIN_V:.2f}-{TZ_LEVEL_MAX_V:.2f} V and its absolute output's high level "
+            f"above 0 and at most {TZ_LEVEL_MAX_V:.2f} V, OctoQuad branch unplugged",
+            tz_levels_ok(answers.get("v2SupplyV"), answers.get("v2HighV")),
+            f"supply {answers.get('v2SupplyV')!r} V, high level {answers.get('v2HighV')!r} V", TZ_V2_LEVEL_MEANS)
+    if "v2sHighV" in answers:
+        add(f"V2 on S: its absolute output's high level above 0 and at most {TZ_LEVEL_MAX_V:.2f} V, OctoQuad branch "
+            "unplugged", tz_levels_ok(answers.get("v2SupplyV"), answers.get("v2sHighV")),
+            f"high level {answers.get('v2sHighV')!r} V (supply {answers.get('v2SupplyV')!r} V)", TZ_V2_LEVEL_MEANS)
+    if tz.get("v2") == "asked":
+        res_a, res_s = result("v2_a", "V2 on A"), result("v2_s", "V2 on S")
+        lo, hi, _ = TZ_VERSIONS["V2"]
+        if res_a is not None:
+            got = tz_turns_to_mark(dig(res_a, "track", "rests") or [], "count", TZ_V2_TURNS)
+            span = tz_span(dig(res_a, "track", "rows") or [], "V2")
+            add(f"V2 on A: one turn to the mark counts {TZ_COUNTS_PER_TURN} +/- {TZ_PER_TURN_COUNTS}, pulse range "
+                f"{lo}-{hi} us within {TZ_PULSE_SLACK_US:g} us",
+                got is not None and abs(got[0] - TZ_COUNTS_PER_TURN) <= TZ_PER_TURN_COUNTS and span is not None
+                and abs(span["minUs"] - lo) <= TZ_PULSE_SLACK_US and abs(span["maxUs"] - hi) <= TZ_PULSE_SLACK_US,
+                f"counts per turn {got[0] if got else None}; span {span}", TZ_V2_MEANS)
+        if res_s is not None:
+            rows = [row for row in dig(res_s, "track", "rows") or [] if len(row) >= 5 and row[4] == 0]
+            moved = (max(row[1] for row in rows) - min(row[1] for row in rows)) if rows else None
+            pulses = [row[2] for row in rows if row[3] == 1 and row[2] > 0]
+            add(f"V2 on S: no counts over a turn (within {TZ_STILL_COUNTS})", moved is not None and moved <= TZ_STILL_COUNTS
+                and bool(pulses) and max(pulses) - min(pulses) > (hi - lo) / 2,
+                f"count range {moved}; absolute pulses {min(pulses) if pulses else None}-"
+                f"{max(pulses) if pulses else None} us (the turn must show on the absolute output)", TZ_V2_MEANS)
+    else:
+        lines.append(f"- V2: not run ({tz.get('v2') or 'not asked for'})")
+
+    b = tz.get("brownout")
+    if b != "ran":
+        lines.append(f"- brownout: not run ({b or 'the bench stopped before it'})")
+    else:
+        before = result("brownout_before", "brownout: INIT read before")
+        run = runs.get("brownout")
+        lost = tz.get("brownoutError")
+        whole = bool(lost) or (run is not None and (run.get("appRestarted") or run.get("pidBefore") != run.get("pidAfter")))
+        dip = None if whole else result("brownout", "brownout")
+        if whole:
+            lines.append("- brownout: not run: whole-hub reset ("
+                         + (f"the runner lost the hub: {lost}" if lost else
+                            f"app pid {run.get('pidBefore')} -> {run.get('pidAfter')}")
+                         + "), so whether a running OpMode reports a lost count can't be judged; only the INIT read "
+                         "after it is")
+        back = result("brownout_after", "brownout: INIT read after")
+        run = run or {}
+        if dip is not None:
+            track = dip.get("track") or {}
+            first, last = track.get("firstCount"), track.get("lastCount")
+            changed = finite(first) and finite(last) and abs(last - first) > TZ_STILL_COUNTS
+            warnings = (tz.get("brownoutRunner") or {}).get("warnings") or []
+            reported = bool(warnings) or bool(track.get("fakeReads")) or bool(track.get("hubEvents")) or bool(run.get("error"))
+            add("brownout: a count lost in the dip is reported (warning, error, failed bulk read or hub not responding), "
+                "starting from a count of at least 100",
+                finite(first) and abs(first) >= TZ_NONZERO_COUNTS and (not changed or reported),
+                f"count {first} -> {last}; warnings {warnings}; failed bulk reads {track.get('fakeReads')}; hub events "
+                f"{track.get('hubEvents')}; error {run.get('error')!r}", TZ_BROWNOUT_MEANS)
+        if before is not None and back is not None:
+            x, y = dig(before, "init", "absoluteDeg"), dig(back, "init", "absoluteDeg")
+            diff = abs(wrap_error_deg(y, x)) if finite(x) and finite(y) else None
+            add(f"brownout: the INIT read after it gives the angle back within {TZ_RECOVER_DEG} deg",
+                diff is not None and diff <= TZ_RECOVER_DEG, f"before {x}, after {y} deg ({diff} deg apart)", TZ_RESET_MEANS)
+    return checks, lines
+
+
+def bank_phase_crashed(outcome, res):
+    """Bench: OctoQuad crashed in its bank phase, which starts only after the seed phase saved its results."""
+    return bool(outcome.get("crashed")) and "bank" in (res.get("phaseLog") or [])
+
+
+def octoquad_bank_checks(bank, error=""):
+    """(checks, summary lines) for Bench: OctoQuad's bank phase; no checks when it never started. Channel 4 carries a
+    pod on this bench, so only the timings and the bank read-backs are judged."""
+    if not bank:
+        return [], ["- not run: the OpMode never got past the seed phase"]
+    found, after_set, restored = bank.get("asFound"), bank.get("afterSet"), bank.get("afterRestore")
+    local = bank.get("readLocalizerDataAsFound") or {}
+    combined = bank.get("readLocalizerDataAndAllEncoderDataAsFound") or {}
+    mixed = bank.get("readLocalizerDataMixed") or {}
+    init = bank.get("initRead") or {}
+    setup, reset = bank.get("afterLocalizerSetup") or {}, bank.get("afterLocalizerReset") or {}
+    finished = restored is not None and bool(reset)
+    lines = [f"- pods on OctoQuad channels {bank.get('podPorts')}: channel 4 is in the second bank, so while it is in "
+             "pulse-width mode its pod reads a pulse width, not a count; only timings and read-backs are judged (on the "
+             "robot the pods sit on channels 0 and 1)",
+             f"- bank as found {found}; after setChannelBankConfig({OCTOQUAD_MIXED_BANKS}) {after_set}; after "
+             f"GuardedOctoQuadLocalizer's setup and reset {setup.get('bank')} (RUNNING after {setup.get('runningMs')} ms); "
+             f"after its reset() alone {reset.get('bank')} (RUNNING after {reset.get('runningMs')} ms); restored to "
+             f"{restored}",
+             f"- readLocalizerData as found {fmt(local)}, {local.get('invalid')} invalid; with bank 2 in pulse-width "
+             f"mode {fmt(mixed)}, {mixed.get('invalid')} invalid (p50 {p50_diff(local, mixed)} ms)",
+             f"- positive control, readLocalizerDataAndAllEncoderData as found: {fmt(combined)} (p50 "
+             f"{p50_diff(local, combined)} ms)",
+             f"- the turret's one-off INIT read, readAllEncoderData with bank 2 in pulse-width mode: {fmt(init)}, "
+             f"{init.get('crcFailures')} CRC failures; channel 4 (a pod here) read {init.get('channel4')}"]
+    if setup or reset:
+        lines.append("- the bank " + ("survives" if setup.get("bank") == reset.get("bank") == OCTOQUAD_MIXED_BANKS
+                                      else "does NOT survive") + " the localizer's own setup and reset calls (recorded, not judged)")
+    checks = []
+    if not finished:
+        checks.append(("octoquad bank: the phase finished", False, f"stopped with {sorted(bank)}; STOP during it "
+                       f"{bank.get('stopRequested')}; error {error!r}", OCTOQUAD_BANK_CRASH_MEANS))
+    checks.append(("octoquad bank: the bank found at the start reads back after the phase", restored == found,
+                   f"found {found}, read back {restored}", OCTOQUAD_BANK_RESTORE_MEANS))
+    banks_ok = found == OCTOQUAD_QUADRATURE and after_set == OCTOQUAD_MIXED_BANKS
+    if after_set is not None:
+        checks.append((f"octoquad bank: {OCTOQUAD_QUADRATURE} as found, {OCTOQUAD_MIXED_BANKS} read back after the set",
+                       banks_ok, f"as found {found}, after the set {after_set}", OCTOQUAD_BANK_SET_MEANS))
+    control_ok = None
+    if counted(local) and counted(combined):
+        gap = combined["p50"] - local["p50"]
+        control_ok = gap >= OCTOQUAD_BANK_CONTROL_MS
+        checks.append((f"octoquad bank: setup: the timing sees a cost (readLocalizerDataAndAllEncoderData at least "
+                       f"{OCTOQUAD_BANK_CONTROL_MS} ms slower at p50 than readLocalizerData)", control_ok,
+                       f"{gap:+.2f} ms ({fmt(combined)} against {fmt(local)})", OCTOQUAD_BANK_SETUP_MEANS))
+    if counted(mixed):
+        if control_ok and banks_ok and counted(local):
+            gap = mixed["p50"] - local["p50"]
+            checks.append((f"octoquad bank: readLocalizerData p50 with bank 2 in pulse-width mode within "
+                           f"{OCTOQUAD_BANK_SAME_MS} ms of every channel counting", abs(gap) <= OCTOQUAD_BANK_SAME_MS,
+                           f"{gap:+.2f} ms ({fmt(mixed)} against {fmt(local)})", OCTOQUAD_BANK_COST_MEANS))
+        else:
+            lines.append("- the cost with bank 2 in pulse-width mode isn't judged: the positive control or the bank "
+                         "read-backs failed")
+    if init:
+        checks.append((f"octoquad bank: the one-off INIT read: {OCTOQUAD_INIT_READS} readAllEncoderData, every CRC ok, "
+                       f"p95 under {OCTOQUAD_INIT_READ_P95_MS:.0f} ms",
+                       init.get("count") == OCTOQUAD_INIT_READS and init.get("crcFailures") == 0
+                       and init.get("p95", float("inf")) < OCTOQUAD_INIT_READ_P95_MS,
+                       f"{fmt(init)}, {init.get('crcFailures')} CRC failures", OCTOQUAD_INIT_READ_MEANS))
+    return checks, lines
 
 
 def write_recovery_checks(res, outcome):
@@ -3282,6 +4344,7 @@ class Runner:
         self.gp_lock = threading.Lock()
         self.thread_method = None
         self.thread_listings = []
+        self.dashboard_left_off = None
 
     def log(self, text):
         line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}"
@@ -3307,9 +4370,22 @@ class Runner:
         self.checks.append((name, "PASS" if ok else "FAIL", detail, fail_means))
         self.log(f"{'PASS' if ok else 'FAIL'} {name}: {detail}")
 
-    def connect(self):
+    def connect_adb(self):
+        """The runner's first adb command comes after the check of adb's server port."""
         self.log(f"results folder: {self.out}")
+        server = self.results["adbServer"] = {"atStart": adb_port_preflight()}
+        port = server["atStart"]["port"]
+        self.log(f"adb's server port {port}: "
+                 + (", ".join(f"{o['command']} pid {o['pid']}" for o in server["atStart"]["owners"])
+                    or "nothing listening yet, so adb starts its own server"))
         self.adb.ensure_connected()
+        server["version"] = (self.adb._raw(["version"]).stdout.strip().splitlines() or [""])[0]
+        server["atStart"] = adb_port_preflight()
+        self.log(f"{server['version']}; adb server on port {port}: "
+                 f"{', '.join(o['command'] + ' pid ' + o['pid'] for o in server['atStart']['owners']) or 'not seen'}")
+
+    def connect(self):
+        self.connect_adb()
         pid = self.note_pid()
         if pid is None:
             raise BenchError("The Robot Controller app isn't running on the hub. Do the full install with the IDE's "
@@ -3326,8 +4402,8 @@ class Runner:
         status = self.dash.get_status()
         if status.get("enabled") is False:
             raise BenchError("slothboard reports the dashboard disabled (its saved setting survives app restarts and the "
-                             "Run button's reinstall), so it ignores INIT and sends no telemetry. Turn it back on "
-                             f"with: {self.dashboard_recovery()}")
+                             "Run button's reinstall), so it ignores INIT and sends no telemetry. "
+                             f"{self.adb_port_caution()} Then turn it back on with: {self.dashboard_recovery()}")
         self.dash.wait_until(lambda: self.dash.opmodes is not None, 10, "the OpMode list")
         self.log(f"dashboard ok: {status}")
         self.results["tcpListeners"] = {"atConnect": self.adb.listeners((LIMELIGHT_PORT, FAKE_LIMELIGHT_PORT))}
@@ -3678,13 +4754,19 @@ class Runner:
         return result
 
     def dashboard_recovery(self):
-        return (f"adb -s {self.adb.serial} shell 'am force-stop {RC_PACKAGE} && run-as {RC_PACKAGE} rm -f "
-                f"{DASHBOARD_PREFS}; am start -n {RC_LAUNCHER}'")
+        return f"adb -s {self.adb.serial} shell '{DASHBOARD_RECOVERY_SHELL}'"
+
+    def adb_port_caution(self):
+        """Said before every adb command printed for a person to run later, when this run's port check is stale."""
+        port = dig(self.results, "adbServer", "atStart", "port") or ADB_SERVER_PORT
+        return (f"First check that `lsof -nP -iTCP:{port} -sTCP:LISTEN` shows nothing or adb: anything else on adb's "
+                "port takes the command to another hub.")
 
     def silent_cause(self, hub_t0):
         status = self.dash.status or {}
         if status.get("enabled") is False:
-            return f"slothboard reports the dashboard disabled; turn it back on with: {self.dashboard_recovery()}"
+            return (f"slothboard reports the dashboard disabled. {self.adb_port_caution()} Then turn it back on with: "
+                    f"{self.dashboard_recovery()}")
         if not self.adb.logcat_matches(hub_t0, REPORT_STARTED).strip():
             return "the OpMode never logged its BenchReport start, so it is stuck before its first packet"
         if not self.dash.recording["messages"]:
@@ -3944,6 +5026,49 @@ class Runner:
             if current != stored:
                 self.log(f"!! the hub's active config {name} loads {target} on this install: {advice} on every hub that "
                          "uses it")
+
+    def run_saved_configs(self):
+        """Read-only: the hardware configs saved on the hub, the webcam and Ethernet device names in each, and the ones
+        this checkout doesn't ship."""
+        listing = parse_config_listing(self.adb.run("shell", f"ls -l {CONFIG_DIR}/", check=False))
+        configs = {name: self.adb.read_config(name) for name in sorted(self.adb.config_names())}
+        name, xml_text, source = active_config_source(self.original_entry, configs, original_xml=self.original_xml)
+        found = saved_config_findings(configs, shipped_config_names(), name, xml_text)
+        for row in found["rows"]:
+            row.update(listing.get(row["name"]) or {})
+        self.results["savedConfigs"] = dict(found, activeSource=source)
+        s = [f"## Saved hardware configs ({CONFIG_DIR}, read only)\n",
+             "| config | size | modified | webcams | Ethernet devices | note |", "|---|---|---|---|---|---|"]
+        for row in found["rows"]:
+            note = ("written by the bench runner" if row["bench"] else "doesn't parse" if not row["parses"]
+                    else "not shipped in this checkout's res/xml" if row["stale"] else "")
+            s.append(f"| {row['name']}{' (active)' if row['name'] == name else ''} | {row.get('size', '?')} | "
+                     f"{row.get('modified', '?')} | {row['webcams'] or ''} | {row['ethernet'] or ''} | {note} |")
+        s.append("")
+        s += [f"- WARN {w}" for w in found["warnings"]] or ["- no warnings"]
+        s.append(f"- active config: {name}, {source}\n")
+        self.summary += s
+        for w in found["warnings"]:
+            self.log(f"WARN saved config {w}")
+        if found["check"] is None:
+            self.log(f"the active config {name} wasn't judged: {source}")
+        else:
+            ok, detail = found["check"]
+            self.check(f"saved configs: the active config {name}, if it names a webcam, names it {CELL_TIP_WEBCAM}", ok,
+                       f"{detail} ({source})",
+                       f"every CellTipCamera OpMode fails INIT on this hub: CellTipCamera opens the webcam named "
+                       f"{CELL_TIP_WEBCAM}; rename the Webcam in {name} on the Driver Station")
+        return s
+
+    def list_configs(self):
+        """--list-configs: reads the hub's configs and settings over adb and changes nothing, so any hub will do."""
+        self.log("--list-configs: listing the hub's hardware configs; nothing on the hub is changed")
+        try:
+            self.original_entry = self.adb.active_config_entry()
+        except BenchError as e:
+            self.log(f"{e}; the active config is unknown, so it isn't judged")
+        for line in self.run_saved_configs():
+            print(line)
 
     def main_config(self, webcam="detected", pinpoint=False, octoquad_bus=None, expansion=None):
         serial = self.webcam if webcam == "detected" else webcam
@@ -4480,7 +5605,7 @@ class Runner:
                                        stream_log=a.photon_soak)
             self.photon["main"] = main
             phases = {}
-            for group in ("timing", "burst", "lastWriterWins", "interleave", "reads", "i2c"):
+            for group in ("timing", "burst", "lastWriterWins", "interleave", "reads", "i2c", "hubOverlap"):
                 for name, ph in (dig(main, group, default={}) or {}).items():
                     phases[f"{group} {name}"] = ph
             if dig(main, "i2cAfterControl") is not None:
@@ -4502,6 +5627,8 @@ class Runner:
                 self.photon_add(*photon_i2c_checks(stock, main, topology))
             self.photon_add(*photon_log_checks("Bench: Photon", self.photon_log_entries("photon_main"),
                                                exempt=("i2c control",) if a.photon_i2c else ()))
+            self.photon["overlap"] = photon_overlap_verdict(main, topology)
+            self.log(f"photon: {self.photon['overlap']['line']}")
 
             depth_reps = PHOTON_SOAK_DEPTH_REPS if a.photon_soak else PHOTON_DEPTH_REPS
             _, faults = self.photon_step("Bench: Photon Faults", "photon_faults",
@@ -4744,6 +5871,7 @@ class Runner:
         if self.args.photon_i2c:
             s += photon_i2c_summary(p.get("stock"), p.get("main"))
         s += photon_profile_summary(p.get("main"))
+        s += photon_overlap_summary(p.get("main"), p["topology"])
         for section, title, proves in PHOTON_TESTS:
             mine = [c for c in checks if c.section == section]
             if not mine:
@@ -6276,6 +7404,220 @@ class Runner:
                  "(the SDK returns its cached flag once set, so the bench reads the hub)\n")
         self.summary += s
 
+    def answer(self, text):
+        """ask() for a typed reply: what the person read off a meter or decided."""
+        self.log(text)
+        reply = input(">>> type it, then press Enter: ").strip()
+        self.log(f"typed: {reply!r}")
+        return reply
+
+    def run_turret_zero(self):
+        previous = self.active_config()
+        tz = {"answers": {}, "runs": {},
+              "v2": "asked" if self.args.turret_zero_v2 else "not asked for: --turret-zero-v2 with a REV-11-3174 on hand"}
+        self.activate_config(CONFIG_TURRET_ZERO, hub_config(turret_zero_devices(self.imu_type)))
+        try:
+            self.contained("turret_zero", lambda: self._turret_zero(tz))
+        finally:
+            try:
+                if tz.get("branchPlugged"):
+                    self.ask(">>> UNPLUG the split cable's OctoQuad branch from OctoQuad channel 4 now, before the "
+                             "OctoQuad or the Control Hub loses power: an unpowered OctoQuad's 3.3 V-only input must "
+                             "not be driven.")
+            finally:
+                self._turret_zero_report(tz)
+                if self.dash.fatal is None and self.active_config() != previous:
+                    self.activate_config(previous)
+
+    def tz_branch(self, tz, plugged, prompt):
+        """Asks for the split cable's OctoQuad branch in or out, counting it as in from the moment it is asked for."""
+        if plugged:
+            tz["branchPlugged"] = True
+        self.ask(prompt)
+        if not plugged:
+            tz["branchPlugged"] = False
+
+    def _turret_zero(self, tz):
+        a = tz["answers"]
+        self.log(TZ_POWERS)
+        self.ask(">>> UNPLUG everything from the Control Hub's motor power and servo ports, any pod from OctoQuad channel "
+                 "4, and the turret encoder's cables from both hubs and the OctoQuad. The OctoQuad stays in Control Hub "
+                 "I2C port 2.")
+        a["cable1"] = self.answer(">>> METER the REV-31-1815 cable, unplugged, pin to pin against the OctoQuad channel 4 "
+                                  "header's G, 3.3 V, A and B. Type ok if each pin reaches its own, else what's wrong.")
+        a["split"] = self.answer(">>> METER the split cable, unplugged, pin to pin: the encoder plug's 3.3 V, A and B each "
+                                 "reach the hub plug's own pin and nothing else; its absolute (pulse) pin reaches the "
+                                 "OctoQuad branch's A pin and nothing else; the branch's 3.3 V and B pins reach nothing; "
+                                 "ground joins all three plugs. Type ok if so, else what's wrong.")
+        if not (tz_answer_ok(a["cable1"]) and tz_answer_ok(a["split"])):
+            tz["stopped"] = "the cables didn't meter right"
+            return
+        self.ask(">>> PLUG the encoder (switch on A) into OctoQuad channel 4 with the REV-31-1815 cable, nothing in "
+                 "Control Hub encoder port 2, and set its shaft on a dial mark.")
+        self.tz_track(tz, "quad", "quad", None,
+                      f">>> TURN the shaft {TZ_QUAD_TURNS} turns forward to the same mark and hold it a second, then "
+                      f"{TZ_QUAD_TURNS} turns back to the mark and hold it a second.")
+        self.ask(">>> UNPLUG the REV-31-1815 from the encoder and the OctoQuad. PLUG the encoder into the split cable and "
+                 "its hub plug into Control Hub encoder port 2; leave its OctoQuad branch unplugged.")
+        a["supplyV"] = self.answer(">>> METER the encoder's 3.3 V pin to ground. Type the volts.")
+        a["highV"] = self.answer(TZ_HIGH_PROMPT)
+        if not tz_levels_ok(a["supplyV"], a["highV"]):
+            tz["stopped"] = "the encoder's levels don't suit the OctoQuad's 3.3 V input"
+            return
+        self.tz_branch(tz, True, ">>> PLUG the split cable's OctoQuad branch into OctoQuad channel 4 (signal on its A "
+                                 "pin) and set the shaft on a dial mark.")
+        turns = (f">>> TURN the shaft {TZ_SPLIT_TURNS} turns forward to the same mark and hold it a second, then "
+                 f"{TZ_SPLIT_TURNS} turns back to the mark and hold it a second.")
+        self.tz_track(tz, "split", "split_plugged", None, turns)
+        self.tz_branch(tz, False, ">>> UNPLUG the split cable's OctoQuad branch and set the shaft on a dial mark.")
+        self.tz_track(tz, "split", "split_unplugged", None, turns)
+        self.tz_branch(tz, True, ">>> PLUG the OctoQuad branch back into OctoQuad channel 4.")
+        self.tz_track(tz, "span", "span", None,
+                      ">>> TURN the shaft slowly one way through 3 whole turns, taking about 20 s, and let go.")
+        span = tz_span(dig(tz, "runs", "span", "result", "track", "rows") or [])
+        if span is None or span["turns"] < TZ_MIN_TURNS:
+            tz["stopped"] = "the span run didn't give the absolute output's range and the count's direction"
+            return
+        common = {"sign": span["sign"], "minUs": span["minUs"], "maxUs": span["maxUs"], "version": "V1"}
+        self.ask(f">>> LET GO of the shaft and don't touch it until the next prompt ({TZ_REZERO_RUNS} INITs, about a "
+                 "minute).")
+        for i in range(1, TZ_REZERO_RUNS + 1):
+            self.tz_init(tz, "init", f"init_{i:02d}", dict(common, reads=TZ_INIT_READS if i == 1 else 1))
+        self.ask(">>> TURN the shaft about a quarter turn (not a whole turn) and let go.")
+        self.tz_init(tz, "init", "init_moved", common)
+        self.tz_track(tz, "agreement", "agreement", common,
+                      f">>> TURN the shaft through at least {TZ_MIN_TURNS:g} turns, stopping on 12 or more dial marks "
+                      "spread round the dial, about a second on each.")
+        self.ask(">>> TURN the shaft about a quarter turn and let go.")
+        self.tz_init(tz, "sign", "sign", common)
+        self.ask(">>> Don't touch the shaft until the next prompt.")
+        self.tz_init(tz, "reset", "reset", common)
+        self.tz_init(tz, "reset_after", "reset_after", common)
+        if self.args.turret_zero_v2:
+            self.tz_v2(tz)
+        a["labSupply"] = self.answer(">>> Is the Control Hub on a lab supply you can dip to about 6 V for half a second? "
+                                     "Type yes or no.")
+        if a["labSupply"].strip().lower() != "yes":
+            tz["brownout"] = "no lab supply"
+            return
+        tz["brownout"] = "ran"
+        self.ask(">>> TURN the shaft about a quarter turn and let go; don't touch it again until the bench ends.")
+        self.tz_init(tz, "init", "brownout_before", common)
+        self.tz_branch(tz, False, ">>> UNPLUG the split cable's OctoQuad branch: the dip can leave the OctoQuad "
+                                  "unpowered while the encoder still drives its input.")
+        try:
+            self.tz_brownout(tz, common)
+        except ProtocolError:
+            raise
+        except (BenchError, subprocess.TimeoutExpired) as e:
+            tz["brownoutError"] = str(e)
+            self.log(f"!! {TZ_OPMODE} brownout: {e}")
+            self.wait_hub_back("the dip")
+            self.settle()
+        self.tz_branch(tz, True, ">>> PLUG the OctoQuad branch back into OctoQuad channel 4.")
+        self.tz_init(tz, "init", "brownout_after", common)
+
+    def tz_v2(self, tz):
+        """The V2 on A, then on S, each metered with the branch out before it goes in, then the V1 back."""
+        a, v2 = tz["answers"], {"version": "V2"}
+        unplug = ">>> UNPLUG the split cable's OctoQuad branch from OctoQuad channel 4."
+        plug = (">>> PLUG the split cable's OctoQuad branch into OctoQuad channel 4 (signal on its A pin) and set the "
+                "V2's shaft on a dial mark.")
+        self.tz_branch(tz, False, unplug)
+        self.ask(">>> UNPLUG the V1 from the split cable and PLUG a REV-11-3174 (V2) in its place, switch on A; leave "
+                 "the OctoQuad branch unplugged.")
+        a["v2SupplyV"] = self.answer(">>> METER the V2's 3.3 V pin to ground. Type the volts.")
+        a["v2HighV"] = self.answer(TZ_HIGH_PROMPT)
+        if not tz_levels_ok(a["v2SupplyV"], a["v2HighV"]):
+            tz["v2"] = "stopped: the V2's levels on A don't suit the OctoQuad's 3.3 V input"
+        else:
+            self.tz_branch(tz, True, plug)
+            self.tz_track(tz, "v2", "v2_a", v2, ">>> TURN the shaft one turn forward to the same mark and hold it a "
+                                                "second, then one turn back to the mark and hold it a second.")
+            self.tz_branch(tz, False, unplug)
+            self.ask(">>> SWITCH the V2 to S; leave the OctoQuad branch unplugged.")
+            a["v2sHighV"] = self.answer(TZ_HIGH_PROMPT)
+            if tz_levels_ok(a["v2SupplyV"], a["v2sHighV"]):
+                self.tz_branch(tz, True, plug)
+                self.tz_track(tz, "v2", "v2_s", v2,
+                              ">>> TURN the shaft one turn forward to the mark and hold it a second.")
+                self.tz_branch(tz, False, unplug)
+        self.ask(">>> PUT the V1 back on the split cable, switch on A.")
+        self.tz_branch(tz, True, ">>> PLUG the OctoQuad branch back into OctoQuad channel 4.")
+
+    def tz_finish(self):
+        self.adb.push_json({"finish": True}, TZ_FINISH, self.out / "logs" / TZ_FINISH)
+
+    def tz_track(self, tz, phase, run, params, prompt, script=None):
+        step = f"turret_zero_{run}"
+
+        def ask_then_finish():
+            if self.wait_or_crash(lambda: self.dash.data.get(KEY_PHASE) == phase, 15) is not None:
+                self.ask(prompt)
+                self.log(f"{TZ_OPMODE} {run}: {self.dash.data.get(KEY_STATUS)}")
+            self.tz_finish()
+
+        o = self.run_opmode(TZ_OPMODE, step, dict(params or {}, phase=phase, run=run), timeout=30,
+                            during=script or ask_then_finish, result_files=[step])
+        self.tz_record(tz, run, o, step)
+
+    def tz_init(self, tz, phase, run, params):
+        step = f"turret_zero_{run}"
+        o = self.run_opmode(TZ_OPMODE, step, dict(params, phase=phase, run=run), start=False, timeout=30,
+                            result_files=[step])
+        self.tz_record(tz, run, o, step)
+
+    def tz_record(self, tz, run, o, step):
+        tz["runs"][run] = {"crashed": o["crashed"], "error": o.get("errorMessage") or "", "timedOut": o.get("timedOut"),
+                           "appRestarted": o.get("appRestarted"), "pidBefore": o.get("pidBefore"),
+                           "pidAfter": o.get("pidAfter"), "result": self.pull(step, required=False) or {}}
+
+    def tz_brownout(self, tz, common):
+        rec = {"warnings": [], "before": []}
+        tz["brownoutRunner"] = rec
+
+        def note():
+            s = self.dash.status or {}
+            for text in (s.get("warningMessage") or "", s.get("errorMessage") or ""):
+                if text and text not in rec["before"] and text not in rec["warnings"]:
+                    rec["warnings"].append(text)
+            return False
+
+        def dip():
+            ready = self.wait_or_crash(lambda: self.dash.data.get(KEY_PHASE) == "brownout", 15)
+            s = self.dash.get_status() or {}
+            rec["before"] = [s.get("warningMessage") or "", s.get("errorMessage") or ""]
+            if ready is not None:
+                self.ask(">>> DIP the Control Hub's supply to about 6 V for half a second now, without touching the "
+                         "shaft.")
+                self.wait_or_crash(note, 5)
+            self.tz_finish()
+
+        self.tz_track(tz, "brownout", "brownout", common, None, script=dip)
+
+    def _turret_zero_report(self, tz):
+        checks, lines = turret_zero_checks(tz)
+        runs = tz["runs"]
+        info = dig(runs, "quad", "result", "info") or dig(runs, "split_plugged", "result", "info") or {}
+        span = tz_span(dig(runs, "span", "result", "track", "rows") or [])
+        rests = dig(runs, "agreement", "result", "track", "rests") or []
+        first_pulse = {r: dig(v, "result", "bank", "firstPlausibleMs") for r, v in runs.items() if r != "quad"}
+        self.summary += ["## Bench: Turret Zero (a Through Bore's count on Control Hub encoder port 2 against its absolute "
+                         "output on OctoQuad channel 4)\n",
+                         f"- {TZ_POWERS}",
+                         f"- OctoQuad: chip id {fmt_chip(info.get('chipId'))}, firmware {info.get('firmware')}, bank as "
+                         f"found {info.get('bankAsFound')}, channel 4 pulse-width params {info.get('pulseWidthParams')}, "
+                         f"wrap tracking {info.get('tracksWrapAsFound')}; every run puts the bank back to "
+                         f"{OCTOQUAD_QUADRATURE}",
+                         f"- typed: {tz['answers']}" + (f"; stopped: {tz['stopped']}" if tz.get("stopped") else ""),
+                         f"- span (the count against the unwrapped absolute output): {span}",
+                         f"- ms from setting the bank to the first plausible channel 4 pulse, per run: {first_pulse}",
+                         f"- agreement rests [count, absolute deg, error deg]: "
+                         f"{[[r.get('count'), r.get('absoluteDeg'), r.get('errorDeg')] for r in rests]}"] + lines + [""]
+        for check in checks:
+            self.check(*check)
+        self.results["turret_zero"] = {k: v for k, v in tz.items() if k != "runs"}
+
     def run_edge(self):
         rec = {}
         self.gp_seq = 0
@@ -6621,6 +7963,335 @@ class Runner:
         s.append("")
         self.summary += s
 
+    def message_counter(self):
+        return MessageCounter(self.args.host, DASHBOARD_PORT)
+
+    def dash_off_listeners(self):
+        ports = DASH_OFF_PROXY_PORTS + DASH_OFF_RECORDED_PORTS
+        found = {entry["port"] for entry in self.adb.listeners(ports)}
+        return {p: p in found for p in ports}
+
+    def read_dashboard_switch(self):
+        r = self.adb._raw(["-s", self.adb.serial, "shell", f"run-as {RC_PACKAGE} cat {DASHBOARD_PREFS}"])
+        text = r.stdout if r.returncode == 0 else r.stdout + r.stderr
+        if r.returncode != 0 and "No such file" not in text:
+            raise BenchError(f"run-as can't read the app's {DASHBOARD_PREFS}: {text.strip()[:200]}")
+        return dashboard_auto_enable(text)
+
+    def run_dashboard_off(self):
+        rec = {"planned": (["battery"] if self.args.interactive else []) + ["restart", "reboot", "reinstall"],
+               "phases": [], "limelight": self.limelight is not None}
+        self.results["dashboard_off"] = rec
+        if not self.switch_with_adb:
+            raise BenchError(f"{DASH_OFF_OPMODE} needs run-as (the Run button's debuggable APK): while the dashboard is "
+                             "off it ignores every command but status, so its app restarts and its recovery go over "
+                             "adb. Nothing was switched off.")
+        if DASH_OFF_OPMODE not in {n for n, _ in self.dash.opmodes or []}:
+            raise BenchError(f"The hub doesn't have {DASH_OFF_OPMODE}. Do a full install with the IDE's Run button "
+                             "(TeamCode configuration), or bare_hub.sh, so it is on the hub. Nothing was switched off.")
+        try:
+            self._dash_off_baseline(rec)
+            self._dash_off_switch(rec)
+            for name in rec["planned"]:
+                self._dash_off_phase(rec, name)
+        except BenchError as e:
+            rec["failed"] = str(e)
+            raise
+        finally:
+            try:
+                self._dash_off_recover(rec)
+            finally:
+                self._dash_off_report(rec)
+
+    def _dash_off_baseline(self, rec):
+        b = rec["baseline"] = {"statusEnabled": self.dash.get_status().get("enabled"),
+                               "autoEnable": self.read_dashboard_switch(), "listeners": self.dash_off_listeners()}
+        self.log(f"dashboard off, before the switch: {b}")
+        if b["statusEnabled"] is not True:
+            raise BenchError("the dashboard wasn't on before the switch, so the bench can't tell what switching it off "
+                             "changes")
+
+    def _dash_off_until(self, predicate, t0, limit):
+        """Seconds from t0 until predicate() held, or None once limit s have passed."""
+        while True:
+            if predicate():
+                return round(time.monotonic() - t0, 2)
+            if time.monotonic() - t0 > limit:
+                return None
+            time.sleep(0.25)
+
+    def _dash_off_switch(self, rec):
+        s = rec["switch"] = {}
+        step = "dashboard_off"
+        self.wait_idle()
+        self.adb.bench_shell(f"rm -f {self.adb.bench_dir()}/{step}.json {self.adb.bench_dir()}/{step}.json.tmp")
+        self.adb.push_json({"confirm": DASH_OFF_CONFIRM, "onSeconds": DASH_OFF_ON_S, "graceSeconds": DASH_OFF_GRACE_S,
+                            "offSeconds": DASH_OFF_WINDOW_S, "periodMs": DASH_OFF_PERIOD_MS},
+                           "params.json", self.out / "logs" / "params.json")
+        hub_t0 = self.adb.hub_time()
+        self.adb.mark(f"begin {step}")
+        self.step_pid()
+        done = None
+        finished = False
+        counter = self.message_counter()
+        try:
+            self.begin_watch(DASH_OFF_OPMODE, hub_t0)
+            self.dash.send({"type": "INIT_OP_MODE", "opModeName": DASH_OFF_OPMODE})
+            self.dash.wait_until(lambda: self._status_is(DASH_OFF_OPMODE) or self.crashed(), 30,
+                                 f"{DASH_OFF_OPMODE} to INIT", poll_status_every=0.5, tick=self.adb_crash_tick)
+            if self.crashed():
+                raise BenchError(f"{DASH_OFF_OPMODE} crashed in INIT, before switching anything off: "
+                                 f"{self.user_crash() or self.dash.status.get('errorMessage') or self.watch['crashSignal']}")
+            t_start = time.monotonic()
+            self.dash.send({"type": "START_OP_MODE"})
+            off_s = self._dash_off_until(lambda: self.dash.get_status().get("enabled") is False
+                                         or self.dash.status["activeOpMode"] == IDLE_OPMODE, t_start,
+                                         DASH_OFF_ON_S + DASH_OFF_SWITCH_WAIT_S)
+            s["offSeen"] = off_s is not None and self.dash.status.get("enabled") is False
+            if not s["offSeen"]:
+                raise BenchError(f"the dashboard didn't report itself off within {DASH_OFF_ON_S + DASH_OFF_SWITCH_WAIT_S:.0f} "
+                                 f"s of START (last status {self.dash.status})")
+            off_at = t_start + off_s
+            s["offSecondsAfterStart"] = off_s
+            s["onCounts"] = window_counts(counter.events(), t_start, off_at)
+            deadline = off_at + DASH_OFF_GRACE_S + DASH_OFF_WINDOW_S + DASH_OFF_DONE_WAIT_S
+            while done is None and time.monotonic() < deadline:
+                time.sleep(1.0)
+                done = self.logcat_done(hub_t0, [step])
+                if done is None and self.dash.get_status()["activeOpMode"] == IDLE_OPMODE:
+                    done = self.logcat_done(hub_t0, [step])
+                    break
+            t_end = time.monotonic()
+            s["offCounts"] = window_counts(counter.events(), off_at + DASH_OFF_GRACE_S, t_end)
+            s["socketOpen"] = counter.open_at(t_end)
+            s["doneLine"] = done
+            finished = True
+        finally:
+            counter.close()
+            if not finished:
+                self._save_log(f"logs/{step}.log", hub_t0)
+        # The dashboard ignores STOP while off, so the OpMode ends itself after its off stretch.
+        self.dash.wait_until(lambda: self.dash.status and self.dash.status["activeOpMode"] != DASH_OFF_OPMODE,
+                             DASH_OFF_DONE_WAIT_S, f"{DASH_OFF_OPMODE} to end by itself", poll_status_every=0.5)
+        log_text = self._save_log(f"logs/{step}.log", hub_t0)
+        s["result"] = self.pull(step, required=False)
+        s["listeners"] = self.dash_off_listeners()
+        self.log(f"dashboard off, the switch: {s}")
+        if done is None:
+            raise BenchError(f"{DASH_OFF_OPMODE} ended without BENCH DONE: "
+                             f"{crash_text(logcat_messages(step_log(log_text, step), OPMODE_MANAGER_TAG)) or 'no error logged'}"
+                             f" (logs/{step}.log)")
+
+    def _dash_off_phase(self, rec, name):
+        p = {"name": name}
+        rec["phases"].append(p)
+        t0 = time.monotonic()
+        try:
+            if name == "battery":
+                self.ask(">>> PULL the Control Hub's battery lead now, count to three, plug it back in, then press Enter. "
+                         "The runner then waits for the hub to boot (the Mac rejoins its Wi-Fi by itself).")
+                self._dash_off_wait_boot(t0, DASH_OFF_PHASES[name])
+            elif name == "restart":
+                self.activate_config(self.active_config())
+            elif name == "reboot":
+                self.adb.run("reboot", check=False, timeout=60)
+                self._dash_off_wait_boot(t0, DASH_OFF_PHASES[name])
+            else:
+                self._dash_off_reinstall()
+        except BenchError as e:
+            p["error"] = str(e)
+            raise
+        p["backSeconds"] = round(time.monotonic() - t0, 1)
+        self.restarts.append({"during": f"{DASH_OFF_OPMODE}: {DASH_OFF_PHASES[name]}", "pid": self.note_pid(),
+                              "waitedSeconds": p["backSeconds"]})
+        p.update(self._dash_off_observe())
+        self.log(f"dashboard off, after {DASH_OFF_PHASES[name]}: {p}")
+
+    def _dash_off_observe(self):
+        o = {"statusEnabled": self.dash.get_status().get("enabled"), "autoEnable": self.read_dashboard_switch()}
+        counter = self.message_counter()
+        try:
+            t0 = time.monotonic()
+            self.dash.send({"type": "INIT_OP_MODE", "opModeName": "Bench: Probe"})
+            time.sleep(DASH_OFF_WINDOW_S)
+            t1 = time.monotonic()
+            o["window"] = window_counts(counter.events(), t0, t1)
+            o["socketOpen"] = counter.open_at(t1)
+        finally:
+            counter.close()
+        status = self.dash.get_status()
+        o["initIgnored"] = status["activeOpMode"] == IDLE_OPMODE
+        if status["activeOpMode"] not in ("", IDLE_OPMODE):
+            self._stop(status["activeOpMode"], o)
+        o["listeners"] = self.dash_off_listeners()
+        o["dashPage"] = http_request("GET", f"http://{self.args.host}:8080/dash").get("code")
+        return o
+
+    def _dash_off_wait_setup(self, hub_t0, what):
+        t0 = time.monotonic()
+        while ROBOT_SETUP_DONE not in self.adb.logcat_matches(hub_t0, ROBOT_SETUP_DONE):
+            if time.monotonic() - t0 > CONFIG_SWITCH_TIMEOUT_S:
+                raise BenchError(f"no robot setup ('{ROBOT_SETUP_DONE}') within {CONFIG_SWITCH_TIMEOUT_S} s of {what}")
+            time.sleep(DASH_OFF_POLL_S)
+
+    def _dash_off_wait_app(self, deadline, what):
+        while True:
+            try:
+                self.dash.ensure_connected(timeout=max(5.0, deadline - time.monotonic()))
+                self.wait_ready()
+                return
+            except ProtocolError:
+                raise
+            except BenchError as e:
+                if time.monotonic() > deadline:
+                    raise BenchError(f"the Robot Controller app wasn't ready after {what}: {e}")
+
+    def _dash_off_wait_boot(self, t0, what):
+        """Waits until adb answers from a hub whose uptime says it booted after t0, then for the app."""
+        self._dash_off_wait_app(self.wait_hub_back(what, booted_after=t0), what)
+
+    def wait_hub_back(self, what, booted_after=None):
+        """Waits until adb answers, from a hub whose uptime says it booted after booted_after when that's given, else
+        with the app's process up, and sets the log buffer again (a reboot resets it); returns the deadline it used."""
+        deadline = time.monotonic() + DASH_OFF_BOOT_WAIT_S
+        last = "no answer yet"
+        while True:
+            time.sleep(DASH_OFF_POLL_S)
+            if time.monotonic() > deadline:
+                raise BenchError(f"the hub wasn't back from {what} within {DASH_OFF_BOOT_WAIT_S:.0f} s ({last}); check "
+                                 "that the Mac rejoined the hub's Wi-Fi")
+            try:
+                self.adb.ensure_connected()
+                pid = self.adb.pid() if booted_after is None else None
+            except (BenchError, subprocess.TimeoutExpired) as e:
+                last = str(e)
+                continue
+            if booted_after is None:
+                if pid is not None:
+                    break
+                last = "the Robot Controller app isn't running"
+                continue
+            uptime = self.adb.clock().get("uptimeS")
+            if uptime is not None and uptime < time.monotonic() - booted_after + 1:
+                break
+            last = f"its uptime is {uptime} s, so it hasn't restarted yet"
+        self.adb.run("shell", f"logcat -G {LOG_BUFFER}", check=False)
+        return deadline
+
+    def _dash_off_reinstall(self):
+        out = self.adb.run("shell", f"pm path {RC_PACKAGE}")
+        paths = [line.strip()[len("package:"):] for line in out.splitlines() if line.strip().startswith("package:")]
+        if not paths:
+            raise BenchError(f"pm path found no installed Robot Controller APK to reinstall: {out.strip()[:200]}")
+        folder = self.out / "logs" / "installed_apk"
+        folder.mkdir(parents=True, exist_ok=True)
+        local = [str(folder / Path(p).name) for p in paths]
+        try:
+            for remote, dest in zip(paths, local):
+                self.adb.run("pull", remote, dest, timeout=900)
+            hub_t0 = self.adb.hub_time()
+            t0 = time.monotonic()
+            command = ["install", "-r", "-t", local[0]] if len(local) == 1 else ["install-multiple", "-r", "-t"] + local
+            r = self.adb._raw(["-s", self.adb.serial] + command, timeout=DASH_OFF_INSTALL_TIMEOUT_S)
+        finally:
+            for dest in local:
+                Path(dest).unlink(missing_ok=True)
+        if "Success" not in r.stdout:
+            raise BenchError(f"adb install -r of the hub's own APK didn't succeed: {(r.stdout + r.stderr).strip()[-300:]}")
+        self.adb.run("shell", f"am start -n {RC_LAUNCHER}", check=False)
+        self._dash_off_wait_setup(hub_t0, "the reinstall")
+        self._dash_off_wait_app(t0 + DASH_OFF_BOOT_WAIT_S, "the reinstall")
+
+    def _dash_off_recover(self, rec):
+        r = rec["recovery"] = {"command": self.dashboard_recovery()}
+        self.dashboard_left_off = r["command"]
+        self.log(f"turning the dashboard back on over adb: {r['command']}")
+        try:
+            self.adb.ensure_connected()
+            hub_t0 = self.adb.hub_time()
+            seq = self.dash.opmode_seq
+            t0 = time.monotonic()
+            r["output"] = self.adb.run("shell", DASHBOARD_RECOVERY_SHELL, check=False).strip()[-300:]
+            self._dash_off_wait_setup(hub_t0, "the recovery's app restart")
+            self.dash.ensure_connected(timeout=DASH_OFF_RECOVERY_S)
+            r["enabledSeconds"] = self._dash_off_until(lambda: self.dash.get_status().get("enabled") is True, t0,
+                                                       DASH_OFF_RECOVERY_S)
+            r["statusEnabled"] = self.dash.status.get("enabled")
+            r["opModeListSeconds"] = self._dash_off_until(
+                lambda: self.dash.opmode_seq > seq and DASH_OFF_OPMODE in {n for n, _ in self.dash.opmodes or []}, t0,
+                DASH_OFF_RECOVERY_S)
+            self.wait_ready()
+            self.restarts.append({"during": f"{DASH_OFF_OPMODE}: the recovery", "pid": self.note_pid(),
+                                  "waitedSeconds": round(time.monotonic() - t0, 1)})
+            counter = self.message_counter()
+            try:
+                t_probe = time.monotonic()
+                self.run_opmode("Bench: Probe", "dashboard_off_recovery_probe", timeout=60, result_files=["probe"],
+                                during=lambda: time.sleep(DASH_OFF_PROBE_S))
+                r["probePackets"] = window_counts(counter.events(), t_probe, time.monotonic())["telemetry packets"]
+                r["firstPacketSeconds"] = first_packet_after(counter.events(), t0)
+            finally:
+                counter.close()
+            r["listeners"] = self.dash_off_listeners()
+            r["autoEnable"] = self.read_dashboard_switch()
+            if rec["limelight"]:
+                r["limelightHttp"] = http_request("GET", f"http://{self.args.host}:5801/")
+        except BenchError as e:
+            r["error"] = str(e)
+            raise BenchError(f"the adb recovery failed ({e}); the dashboard may still be off. "
+                             f"{self.adb_port_caution()} Then turn it back on with {r['command']}") from e
+        finally:
+            if r.get("statusEnabled") is True:
+                self.dashboard_left_off = None
+            else:
+                self.log(f"!! THE DASHBOARD MAY STILL BE OFF. {self.adb_port_caution()} Then turn it back on with: "
+                         f"{r['command']}")
+
+    def _dash_off_report(self, rec):
+        for name, ok, detail, means in dashboard_off_checks(rec):
+            self.check(name, ok, detail, means)
+
+        def listening(d):
+            return [p for p, up in (d.get("listeners") or {}).items() if up] if d.get("listeners") is not None else "?"
+
+        def row(label, enabled, auto, counts, init, d):
+            counts = counts or {}
+            others = {k: v for k, v in (counts.get("types") or {}).items()
+                      if k not in ("RECEIVE_TELEMETRY", "RECEIVE_IMAGE", "RECEIVE_LOGCAT_ERRORS", "RECEIVE_LOGCAT_LINES")}
+            return (f"| {label} | {enabled} | {auto} | {counts.get('telemetry packets', '')} | {counts.get('images', '')} | "
+                    f"{counts.get('logcat', '')} | {others or ''} | {init} | {listening(d)} |")
+
+        base, switch, r = rec.get("baseline") or {}, rec.get("switch") or {}, rec.get("recovery") or {}
+        result = switch.get("result") or {}
+        s = [f"## {DASH_OFF_OPMODE} (switched off, then {', '.join(DASH_OFF_PHASES[n] for n in rec['planned'])}, then "
+             "the adb recovery)\n",
+             f"- Every window is {DASH_OFF_WINDOW_S:.0f} s on a second websocket; while off, the runner also sends an INIT "
+             "for Bench: Probe at the start of each window, which the dashboard must ignore. The proxy ports are judged "
+             f"only where they listened before the switch.",
+             f"- The OpMode: isEnabled {result.get('enabledAtStart')} -> {result.get('enabledAfterDisable')} "
+             f"(disable() took {result.get('disableMs')} ms); it sent {result.get('onPackets')} packets and its camera "
+             f"source served {result.get('onFramesServed')} frames while on, {result.get('offPackets')} packets and "
+             f"{result.get('offFramesServed')} frames after the switch",
+             "", "| when | status enabled | saved autoEnable | telemetry packets | images | logcat | other messages | "
+                 "INIT ignored | listening |", "|---|---|---|---|---|---|---|---|---|",
+             row("before (the OpMode, on)", base.get("statusEnabled"), base.get("autoEnable"), switch.get("onCounts"), "",
+                 base),
+             row("the switch (the OpMode, off)", False if switch.get("offSeen") else "?", "", switch.get("offCounts"), "",
+                 switch)]
+        for p in rec.get("phases") or []:
+            s.append(row(f"after {DASH_OFF_PHASES[p['name']]}" + (f" (FAILED: {p['error']})" if p.get("error") else ""),
+                         p.get("statusEnabled"), p.get("autoEnable"), p.get("window"), p.get("initIgnored"), p))
+        s.append("")
+        s.append(f"- Recovery (`{r.get('command')}`): " + (f"FAILED: {r['error']}; " if r.get("error") else "")
+                 + f"enabled after {r.get('enabledSeconds')} s, OpMode list after {r.get('opModeListSeconds')} s, "
+                   f"first Probe packet {r.get('firstPacketSeconds')} s after the command, listening {listening(r)}"
+                 + (f", Limelight web UI {r.get('limelightHttp')}" if rec.get("limelight") else ""))
+        if self.dashboard_left_off:
+            s.append(f"- **The dashboard may still be off. {self.adb_port_caution()} Then turn it back on with "
+                     f"`{self.dashboard_left_off}`**")
+        s.append("")
+        self.summary += s
+
     def run_config_by_name(self):
         s = ["## Config by name (shipped configs saved with a resource id this install gives another XML)\n"]
         shipped = (self.probe or {}).get("shippedConfigs") or {}
@@ -6877,7 +8548,7 @@ class Runner:
         self._octoquad_seed(o, res)
         if not self.args.interactive:
             return
-        if o["crashed"] or not res.get("info"):
+        if (o["crashed"] and not bank_phase_crashed(o, res)) or not res.get("info"):
             self.log("Bench: OctoQuad didn't get through INIT: skipping the OctoQuad unplug step")
             self.summary.append("_OctoQuad unplug and replug skipped: Bench: OctoQuad didn't get through INIT._\n")
             return
@@ -6901,25 +8572,32 @@ class Runner:
              f"{seed.get('firstTurnDeg')} deg off, at START {seed.get('offsetAtStartIn')} in / "
              f"{seed.get('turnAtStartDeg')} deg, worst through START + 3 s {seed.get('maxOffsetIn')} in / "
              f"{seed.get('maxTurnDeg')} deg; final pose {res.get('finalPose')}, status {res.get('finalStatus')}"]
+        bank_crash = bank_phase_crashed(o, res)
         if o["crashed"]:
-            s.append(f"- CRASHED: {o['errorMessage']}")
+            s.append(f"- CRASHED{' in the bank phase, after the seed phase finished' if bank_crash else ''}: "
+                     f"{o['errorMessage']}")
         elif not info:
             s.append(f"- INIT never finished (timed out {o.get('timedOut')}); error {o.get('errorMessage')!r}")
         s.append("")
         self.summary += s
-        stuck = OCTOQUAD_CRASHED if o["crashed"] else OCTOQUAD_HUNG if not info else None
+        stuck = None if bank_crash else OCTOQUAD_CRASHED if o["crashed"] else OCTOQUAD_HUNG if not info else None
         offset, turn = seed.get("maxOffsetIn"), seed.get("maxTurnDeg")
         held = (stuck is None and seed.get("ran") is True and offset is not None and turn is not None
                 and offset <= PINPOINT_SEED_OFFSET_IN and turn <= PINPOINT_SEED_TURN_DEG)
         self.check(f"octoquad: a start pose set in INIT survives through START + 3 s (within {PINPOINT_SEED_OFFSET_IN} in "
                    f"and {PINPOINT_SEED_TURN_DEG} deg)", held,
                    f"worst {offset} in / {turn} deg over {seed.get('loops')} loops; final status {res.get('finalStatus')}"
-                   + (f"; error {o['errorMessage']!r}" if o["crashed"] else ""), stuck or OCTOQUAD_SEED_PENDING)
+                   + (f"; error {o['errorMessage']!r}" if o["crashed"] and not bank_crash else ""),
+                   stuck or OCTOQUAD_SEED_PENDING)
         crc, invalid = res.get("crcFailures"), res.get("invalidLoops")
         self.check("octoquad: every loop's localizer read was valid (CRC ok and RUNNING) after the first RUNNING read",
                    stuck is None and bool(seed.get("loops")) and crc == 0 and invalid == 0,
                    f"{crc} CRC failures and {invalid} invalid loops over {seed.get('loops')} loops; loops per status "
                    f"{res.get('statusLoops')}", stuck or OCTOQUAD_VALID_PENDING)
+        checks, lines = octoquad_bank_checks(res.get("bank"), o.get("errorMessage") or "" if o["crashed"] else "")
+        self.summary += ["### Bench: OctoQuad's bank phase (OctoQuad channels 4-7 in pulse-width mode, last)\n"] + lines + [""]
+        for check in checks:
+            self.check(*check)
 
     def _octoquad_dropout(self):
         rec = {"warnings": []}
@@ -7479,6 +9157,15 @@ class Runner:
         if error is not None:
             lines.append(f"**Restore failed: {error}**\n" if error.startswith("restoring the config failed")
                          else f"**Run stopped early: {error}**\n")
+        if self.dashboard_left_off:
+            lines.append(f"**The dashboard may still be off on the hub. {self.adb_port_caution()} Then turn it back on "
+                         f"with `{self.dashboard_left_off}`**\n")
+        server = self.results.get("adbServer")
+        if server is not None:
+            server["atEnd"] = adb_port_record(server["atStart"]["port"])
+            change = adb_server_change(server["atStart"], server["atEnd"])
+            if change:
+                lines.append(change + "\n")
         lines.append(f"Original hardware config setting: {json.dumps(self.original_entry)}"
                      + (" (from before the install)" if self.args.original_entry else "") + "\n")
         if self.restore_notes:
@@ -7532,14 +9219,22 @@ class Runner:
                 raise BenchError("--interactive asks you to drive the dashboard's Gamepad view, to unplug and replug "
                                  "the Limelight, the Pinpoint and the OctoQuad, to move the odometry cables to the "
                                  "Expansion Hub and back, and to open the RC's web page, so it needs a terminal")
-            self.connect()
-            self.run_probe()
-            wanted = self.selection()
-            self.activate_config(CONFIG_MAIN, self.main_config())
-            for name in BENCHES:
-                if name in wanted:
-                    self.log(f"=== {name} ===")
-                    self.guarded(name, getattr(self, f"run_{name}"))
+            if self.args.turret_zero and not sys.stdin.isatty():
+                raise BenchError("--turret-zero asks you to meter its cables, recable the encoder and turn its shaft, "
+                                 "so it needs a terminal")
+            if self.args.list_configs:
+                self.connect_adb()
+                self.list_configs()
+            else:
+                self.connect()
+                self.run_probe()
+                self.contained("saved_configs", self.run_saved_configs)
+                wanted = self.selection()
+                self.activate_config(CONFIG_MAIN, self.main_config())
+                for name in BENCHES:
+                    if name in wanted:
+                        self.log(f"=== {name} ===")
+                        self.guarded(name, getattr(self, f"run_{name}"))
         except BenchError as e:
             error = str(e)
             self.log(f"STOPPED: {e}")
@@ -7592,6 +9287,9 @@ class Runner:
         print(f"Results: {self.out}")
         print(f"Summary: {self.out / 'summary.md'}")
         print("Nothing to send back: Claude reads that folder directly. Just say the run finished.")
+        if self.dashboard_left_off:
+            print(f"\nTHE DASHBOARD MAY STILL BE OFF ON THE HUB. {self.adb_port_caution()}\n"
+                  f"Turn it back on with:\n{self.dashboard_left_off}")
         if unexpected is not None:
             raise unexpected
         if error or failed:
@@ -7651,7 +9349,7 @@ class Runner:
         chosen = {n for n in every if getattr(a, n)}
         explicit = bool(chosen) or a.all
         if not chosen:
-            chosen = set(every) - {"photon"}
+            chosen = set(every) - set(FLAG_ONLY_BENCHES)
         if "octoquad" in chosen:
             chosen.add("octoquad_absent")
         if a.no_sloth:
@@ -7700,6 +9398,13 @@ def parse_args(argv):
     p.add_argument("--freeze-dump", action="store_true",
                    help="Bench: Freeze Dump (slothboard's SET (3x), WRITE and DELETE_HARDWARE_CONFIG from idle, a "
                         "thread-dump watch armed; on slothboard 6165.6 each gets the app killed, so it runs last)")
+    p.add_argument("--dashboard-off", action="store_true",
+                   help="Bench: Dashboard Off (switches the dashboard off, checks nothing streams and that off survives "
+                        "an app restart, a reboot and a reinstall, then turns it back on over adb; with --interactive, "
+                        "a battery pull too; runs last, only with this flag)")
+    p.add_argument("--list-configs", action="store_true",
+                   help="only list the hub's saved hardware configs, their webcam and Ethernet device names and stale "
+                        "ones; changes nothing on the hub, so it works on a robot's hub")
     p.add_argument("--gamepad", action="store_true",
                    help="Bench: Gamepad and Bench: Gamepad Linear (dashboard gamepads sent over the websocket)")
     p.add_argument("--write-recovery", action="store_true",
@@ -7753,17 +9458,25 @@ def parse_args(argv):
                         "Pinpoint Absent when none answers")
     p.add_argument("--octoquad", action="store_true",
                    help="Bench: OctoQuad (GuardedOctoQuadLocalizer on Control Hub I2C bus 2: read cost, valid reads, INIT "
-                        "start pose; dropout with --interactive) and Bench: OctoQuad Absent (nothing on I2C bus 3)")
+                        "start pose, then channels 4-7 in pulse-width mode for the turret zero; dropout with "
+                        "--interactive) and Bench: OctoQuad Absent (nothing on I2C bus 3)")
     p.add_argument("--expansion", action="store_true",
                    help="Bench: Expansion Hub (the same Lynx commands and odometry reads on each hub; needs an Expansion "
                         "Hub; with --interactive, again with the odometry moved to it)")
     p.add_argument("--expansion-address", type=int, default=2, help="the Expansion Hub's module address (default 2)")
+    p.add_argument("--turret-zero", action="store_true",
+                   help="Bench: Turret Zero, prompted (about 25 min, needs a terminal): a Through Bore on a split cable, "
+                        "A/B on Control Hub encoder port 2 and its absolute output on OctoQuad channel 4; not part of a "
+                        "run without bench flags, nor of --all")
+    p.add_argument("--turret-zero-v2", action="store_true",
+                   help="Bench: Turret Zero's V2 phase too, with a REV-11-3174 on hand (implies --turret-zero)")
     p.add_argument("--absent", action="store_true", help="the webcam-unplugged INIT check")
     p.add_argument("--sloth", action="store_true", help="the deploySloth/INIT race (runs gradle six times)")
     p.add_argument("--clock", action="store_true",
                    help="Bench: Clock (PathCommands.timeout against wall-clock jumps on the hub)")
     p.add_argument("--all", action="store_true",
-                   help="every bench but the Photon block, and fail if the webcam, Limelight or Expansion Hub is missing")
+                   help="every bench but the Photon block, Bench: Turret Zero and Dashboard Off, and fail if the "
+                        "webcam, Limelight or Expansion Hub is missing")
     p.add_argument("--no-sloth", action="store_true",
                    help="skip the Sloth race, Thread Lifecycle's hot reload and the Photon block's deploySloth step (no "
                         "Gradle builds)")
@@ -7779,7 +9492,8 @@ def parse_args(argv):
                         "after Bench: Pinpoint and Bench: OctoQuad, to unplug and replug each; after Bench: Expansion "
                         "Hub, to move the Pinpoint and OctoQuad to the Expansion Hub and back; in Bench: Clock, to "
                         "open the RC's web page; in the Photon block (USB wiring), to pull the Expansion Hub's USB and "
-                        "power cables, each once with Photon off and once on")
+                        "power cables, each once with Photon off and once on; in Bench: Dashboard Off, to pull the "
+                        "Control Hub's battery lead once")
     p.add_argument("--quick", action="store_true", help="shorter phases (numbers are noisier)")
     p.add_argument("--keep-configs", action="store_true", help="leave the bench_* hardware configs on the hub")
     p.add_argument("--ports-empty", action="store_true",
@@ -7795,6 +9509,8 @@ def parse_args(argv):
         p.error(f"--expansion-address must be 1-{EXPANSION_MAX_ADDRESS}: the SDK reserves higher module addresses")
     if args.usb_expansion or args.photon_rs485 or args.photon_soak:
         args.photon = True
+    if args.turret_zero_v2:
+        args.turret_zero = True
     if args.photon_stop_trials is not None and args.photon_stop_trials < 1:
         p.error("--photon-stop-trials must be at least 1")
     return args
