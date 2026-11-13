@@ -1,0 +1,64 @@
+--------- beginning of main
+12-31 17:04:19.767  8233  8233 I BENCH_RUNNER: begin photon_stop_linear_on_003 
+12-31 17:04:19.997  3050  8208 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:04:19.999  3050  3286 I RobotCore: Attempting to switch to OpMode Bench: Photon Stop Linear
+12-31 17:04:20.000  3050  8208 V ThreadPool: container(0x06f00ea9: OpModeExecutor) removed id=1133 TID=8208 count=1
+12-31 17:04:20.005  3050  3286 I RobotCore: ******************** START - OPMODE Bench: Photon Stop Linear ********************
+12-31 17:04:20.177  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:04:20.185  3050  3286 V ThreadPool: container(0x01621487: OpModeExecutor) added id=1135 TID=0 count=1
+12-31 17:04:20.186  3050  8240 V RobotCore: thread: 'OpModeThread' starting...
+12-31 17:04:20.191  3050  8240 I BENCH   : Photon Stop Linear starting, results in /data/user/0/com.qualcomm.ftcrobotcontroller/files/bench/photon_stop_main_linear_on_003.json
+12-31 17:04:20.704  3050  8240 I BENCH   : phase writing
+12-31 17:04:23.201  3050  3286 I FtcEventLoop: auto-stopping OpMode 'Bench: Photon Stop Linear'
+12-31 17:04:23.203  3050  8240 V RobotCore: nack rec'd mod=2 msg#=74 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:04:23.418  3050  8240 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:04:23.419  3050  8240 V ThreadPool: container(0x01621487: OpModeExecutor) removed id=1135 TID=8240 count=1
+12-31 17:04:23.422  3050  3286 I RobotCore: ******************** STOP - OPMODE /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop_Linear.txt ********************
+12-31 17:04:23.427  3050  3286 I RobotCore: Pruning old match logs: deleting Match-0-Bench:_Photon_Stop_Linear.txt
+12-31 17:04:23.440  3050  8247 I RobotCore: saving match logcat to /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop_Linear.txt
+12-31 17:04:23.440  3050  8247 I RobotCore: logging command line: exec logcat -d -T '12-31 17:4:20.000' -f '/storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop_Linear.txt' -n4 -v threadtime UsbRequestJNI:S UsbRequest:S art:W ThreadPool:W System:W ExtendedExtractor:W OMXClient:W MediaPlayer:W dalvikvm:W  *:V
+12-31 17:04:23.447  3050  3286 E OpModeManager: User code threw an uncaught exception
+12-31 17:04:23.448  3050  3286 E OpModeManager: java.lang.IllegalStateException: LynxGetMotorChannelEnableCommand failed
+12-31 17:04:23.450  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.opmodes.test.bench.HubRegisters.send(HubRegisters.java:78)
+12-31 17:04:23.451  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.opmodes.test.bench.HubRegisters.motorEnabled(HubRegisters.java:46)
+12-31 17:04:23.453  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.opmodes.test.bench.PhotonChannel.enabled(PhotonChannel.java:99)
+12-31 17:04:23.455  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.opmodes.test.bench.PhotonRig.outputs(PhotonRig.java:135)
+12-31 17:04:23.456  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.opmodes.test.bench.PhotonStopLinearBench.runOpMode(PhotonStopLinearBench.java:56)
+12-31 17:04:23.457  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.eventloop.opmode.LinearOpMode.internalRunOpMode(LinearOpMode.java:199)
+12-31 17:04:23.460  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.eventloop.opmode.OpModeInternal.lambda$internalInit$1$com-qualcomm-robotcore-eventloop-opmode-OpModeInternal(OpModeInternal.java:186)
+12-31 17:04:23.461  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.eventloop.opmode.OpModeInternal$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+12-31 17:04:23.462  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.util.ThreadPool.logThreadLifeCycle(ThreadPool.java:737)
+12-31 17:04:23.467  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.eventloop.opmode.OpModeInternal.lambda$internalInit$2$com-qualcomm-robotcore-eventloop-opmode-OpModeInternal(OpModeInternal.java:184)
+12-31 17:04:23.468  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.eventloop.opmode.OpModeInternal$$ExternalSyntheticLambda1.run(D8$$SyntheticClass:0)
+12-31 17:04:23.474  3050  3286 E OpModeManager: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1133)
+12-31 17:04:23.474  3050  3286 E OpModeManager: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:607)
+12-31 17:04:23.475  3050  3286 E OpModeManager: 	at com.qualcomm.robotcore.util.ThreadPool$ThreadFactoryImpl$1.run(ThreadPool.java:793)
+12-31 17:04:23.476  3050  3286 E OpModeManager: 	at java.lang.Thread.run(Thread.java:761)
+12-31 17:04:23.477  3050  3286 E OpModeManager: Caused by: java.lang.InterruptedException
+12-31 17:04:23.477  3050  3286 E OpModeManager: 	at java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireInterruptibly(AbstractQueuedSynchronizer.java:1218)
+12-31 17:04:23.478  3050  3286 E OpModeManager: 	at java.util.concurrent.locks.ReentrantLock.lockInterruptibly(ReentrantLock.java:312)
+12-31 17:04:23.479  3050  3286 E OpModeManager: 	at com.qualcomm.hardware.lynx.MessageKeyedLock.acquire(MessageKeyedLock.java:167)
+12-31 17:04:23.481  3050  3286 E OpModeManager: 	at com.qualcomm.hardware.lynx.LynxUsbDeviceImpl.acquireNetworkTransmissionLock(LynxUsbDeviceImpl.java:1172)
+12-31 17:04:23.483  3050  3286 E OpModeManager: 	at com.qualcomm.hardware.lynx.LynxModule.acquireNetworkTransmissionLock(LynxModule.java:1996)
+12-31 17:04:23.485  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.architecture.hardware.photon.PhotonLynxModule.acquireNetworkTransmissionLock(PhotonLynxModule.java:171)
+12-31 17:04:23.488  3050  3286 E OpModeManager: 	at com.qualcomm.hardware.lynx.commands.LynxMessage.acquireNetworkLock(LynxMessage.java:125)
+12-31 17:04:23.489  3050  3286 E OpModeManager: 	at com.qualcomm.hardware.lynx.commands.LynxRespondable.sendReceive(LynxRespondable.java:257)
+12-31 17:04:23.499  3050  3286 E OpModeManager: 	at org.firstinspires.ftc.teamcode.opmodes.test.bench.HubRegisters.send(HubRegisters.java:76)
+12-31 17:04:23.500  3050  3286 E OpModeManager: 	... 14 more
+12-31 17:04:23.501  3050  3286 I RobotCore: Attempting to switch to OpMode $Stop$Robot$
+12-31 17:04:23.503  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:04:23.505  3050  3286 V ThreadPool: container(0x0c692ebc: OpModeExecutor) added id=1142 TID=0 count=1
+12-31 17:04:23.513  3050  8251 V RobotCore: thread: 'OpModeThread' starting...
+12-31 17:04:23.524  3050  8247 I RobotCore: Done running exec logcat -d -T '12-31 17:4:20.000' -f '/storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop_Linear.txt' -n4 -v threadtime UsbRequestJNI:S UsbRequest:S art:W ThreadPool:W System:W ExtendedExtractor:W OMXClient:W MediaPlayer:W dalvikvm:W  *:V
+12-31 17:04:23.524  3050  8247 I RobotCore: exiting match logcat for /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop_Linear.txt
+12-31 17:04:23.529  3050  3055 I art     : Do partial code cache collection, code=502KB, data=421KB
+12-31 17:04:23.531  3050  3055 I art     : After code cache collection, code=498KB, data=419KB
+12-31 17:04:23.531  3050  3055 I art     : Increasing code cache capacity to 2MB
+--------- beginning of system
+12-31 17:04:23.913   808   808 D redacted:  Failed while trying resolve alarm filter file, not exists
+12-31 17:04:24.022  3050  8251 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:04:24.027  3050  8251 V ThreadPool: container(0x0c692ebc: OpModeExecutor) removed id=1142 TID=8251 count=1
+12-31 17:04:24.032  3050  3286 I RobotCore: Attempting to switch to OpMode $Stop$Robot$
+12-31 17:04:24.034  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:04:24.047  3050  3286 V ThreadPool: container(0x0bd2dfc5: OpModeExecutor) added id=1144 TID=0 count=1
+12-31 17:04:24.048  3050  8260 V RobotCore: thread: 'OpModeThread' starting...

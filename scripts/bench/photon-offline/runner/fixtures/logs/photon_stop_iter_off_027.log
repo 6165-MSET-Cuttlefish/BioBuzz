@@ -1,0 +1,30 @@
+--------- beginning of system
+12-31 17:02:23.797   808   808 D redacted:  Failed while trying resolve alarm filter file, not exists
+--------- beginning of main
+12-31 17:02:24.023  7428  7428 I BENCH_RUNNER: begin photon_stop_iter_off_027 
+12-31 17:02:24.596  3050  7393 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:02:24.599  3050  3286 I RobotCore: Attempting to switch to OpMode Bench: Photon Stop
+12-31 17:02:24.600  3050  7393 V ThreadPool: container(0x0961c5c4: OpModeExecutor) removed id=983 TID=7393 count=1
+12-31 17:02:24.604  3050  3286 I RobotCore: ******************** START - OPMODE Bench: Photon Stop ********************
+12-31 17:02:24.769  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:02:24.776  3050  3286 V ThreadPool: container(0x07636c2e: OpModeExecutor) added id=985 TID=0 count=1
+12-31 17:02:24.777  3050  7435 V RobotCore: thread: 'OpModeThread' starting...
+12-31 17:02:24.780  3050  7435 I BENCH   : Photon Stop starting, results in /data/user/0/com.qualcomm.ftcrobotcontroller/files/bench/photon_stop_main_iter_off_027.json
+12-31 17:02:25.287  3050  7435 I BENCH   : phase writing
+12-31 17:02:25.857  3050  3061 I art     : Background partial concurrent mark sweep GC freed 307451(10MB) AllocSpace objects, 62(5MB) LOS objects, 32% free, 32MB/48MB, paused 2.329ms total 151.887ms
+12-31 17:02:27.791  3050  3286 I FtcEventLoop: auto-stopping OpMode 'Bench: Photon Stop'
+12-31 17:02:27.794  3050  7435 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:02:27.800  3050  7435 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:02:27.805  3050  7435 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:02:27.992  3050  7435 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:02:27.995  3050  7435 V ThreadPool: container(0x07636c2e: OpModeExecutor) removed id=985 TID=7435 count=1
+12-31 17:02:27.995  3050  3286 I RobotCore: ******************** STOP - OPMODE /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt ********************
+12-31 17:02:28.002  3050  3286 I RobotCore: Pruning old match logs: deleting Match-0-Bench:_Photon_Stop.txt
+12-31 17:02:28.006  3050  7440 I RobotCore: saving match logcat to /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt
+12-31 17:02:28.007  3050  7440 I RobotCore: logging command line: exec logcat -d -T '12-31 17:2:24.000' -f '/storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt' -n4 -v threadtime UsbRequestJNI:S UsbRequest:S art:W ThreadPool:W System:W ExtendedExtractor:W OMXClient:W MediaPlayer:W dalvikvm:W  *:V
+12-31 17:02:28.017  3050  3286 I RobotCore: Attempting to switch to OpMode $Stop$Robot$
+12-31 17:02:28.023  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:02:28.032  3050  3286 V ThreadPool: container(0x0f216fdd: OpModeExecutor) added id=992 TID=0 count=1
+12-31 17:02:28.035  3050  7443 V RobotCore: thread: 'OpModeThread' starting...
+12-31 17:02:28.105  3050  7440 I RobotCore: Done running exec logcat -d -T '12-31 17:2:24.000' -f '/storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt' -n4 -v threadtime UsbRequestJNI:S UsbRequest:S art:W ThreadPool:W System:W ExtendedExtractor:W OMXClient:W MediaPlayer:W dalvikvm:W  *:V
+12-31 17:02:28.105  3050  7440 I RobotCore: exiting match logcat for /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt

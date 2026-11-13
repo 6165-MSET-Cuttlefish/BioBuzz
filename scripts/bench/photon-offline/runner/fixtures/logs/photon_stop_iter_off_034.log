@@ -1,0 +1,35 @@
+--------- beginning of main
+12-31 17:03:15.377  7777  7777 I BENCH_RUNNER: begin photon_stop_iter_off_034 
+12-31 17:03:16.018  3050  7742 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:03:16.023  3050  7742 V ThreadPool: container(0x0d82e2c4: OpModeExecutor) removed id=1046 TID=7742 count=1
+12-31 17:03:16.025  3050  3286 I RobotCore: Attempting to switch to OpMode Bench: Photon Stop
+12-31 17:03:16.030  3050  3286 I RobotCore: ******************** START - OPMODE Bench: Photon Stop ********************
+12-31 17:03:16.195  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:03:16.202  3050  3286 V ThreadPool: container(0x01da32ef: OpModeExecutor) added id=1048 TID=0 count=1
+12-31 17:03:16.203  3050  7784 V RobotCore: thread: 'OpModeThread' starting...
+12-31 17:03:16.207  3050  7784 I BENCH   : Photon Stop starting, results in /data/user/0/com.qualcomm.ftcrobotcontroller/files/bench/photon_stop_main_iter_off_034.json
+12-31 17:03:16.710  3050  7784 I BENCH   : phase writing
+12-31 17:03:20.226  3050  3286 I FtcEventLoop: auto-stopping OpMode 'Bench: Photon Stop'
+12-31 17:03:20.231  3050  7784 V RobotCore: nack rec'd mod=173 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.235  3050  7784 V RobotCore: nack rec'd mod=173 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.243  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.250  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.258  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.264  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.268  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.271  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.275  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.278  3050  7784 V RobotCore: nack rec'd mod=2 msg#=0 ref#=0 reason=CANCELLED_FOR_SAFETY:259
+12-31 17:03:20.446  3050  7784 V RobotCore: thread: ...terminating 'OpModeThread'
+12-31 17:03:20.451  3050  7784 V ThreadPool: container(0x01da32ef: OpModeExecutor) removed id=1048 TID=7784 count=1
+12-31 17:03:20.451  3050  3286 I RobotCore: ******************** STOP - OPMODE /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt ********************
+12-31 17:03:20.455  3050  3286 I RobotCore: Pruning old match logs: deleting Match-0-Bench:_Photon_Stop.txt
+12-31 17:03:20.458  3050  7789 I RobotCore: saving match logcat to /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt
+12-31 17:03:20.458  3050  7789 I RobotCore: logging command line: exec logcat -d -T '12-31 17:3:16.000' -f '/storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt' -n4 -v threadtime UsbRequestJNI:S UsbRequest:S art:W ThreadPool:W System:W ExtendedExtractor:W OMXClient:W MediaPlayer:W dalvikvm:W  *:V
+12-31 17:03:20.470  3050  3286 I RobotCore: Attempting to switch to OpMode $Stop$Robot$
+12-31 17:03:20.474  3050  3286 D HardwareMap: Clearing which device instances have been retrieved
+12-31 17:03:20.477  3050  3286 V ThreadPool: container(0x0cb92bad: OpModeExecutor) added id=1055 TID=0 count=1
+12-31 17:03:20.479  3050  7792 V RobotCore: thread: 'OpModeThread' starting...
+12-31 17:03:20.533  3050  7789 I RobotCore: Done running exec logcat -d -T '12-31 17:3:16.000' -f '/storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt' -n4 -v threadtime UsbRequestJNI:S UsbRequest:S art:W ThreadPool:W System:W ExtendedExtractor:W OMXClient:W MediaPlayer:W dalvikvm:W  *:V
+12-31 17:03:20.534  3050  7789 I RobotCore: exiting match logcat for /storage/emulated/0/FIRST/matchlogs/Match-0-Bench:_Photon_Stop.txt
+12-31 17:03:20.674  3050  3061 I art     : Background sticky concurrent mark sweep GC freed 362443(11MB) AllocSpace objects, 32(2MB) LOS objects, 26% free, 36MB/48MB, paused 2.696ms total 111.422ms

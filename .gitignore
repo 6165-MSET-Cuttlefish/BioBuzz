@@ -19,6 +19,7 @@ build/
 local.properties
 
 *.log
+!scripts/bench/photon-offline/runner/fixtures/logs/*.log
 
 .navigation/
 captures/
