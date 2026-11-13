@@ -188,6 +188,14 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
   The map stays the shortest of the layouts modelled under Photon: with all four drive motors on the Control Hub
   the same two figures are 20.4 / 28.1 on RS485 and 16.5 / 24.2 on USB, and with the turret servos on the
   Expansion Hub 16.4 / 33.5 and 16.0 / 25.0. With Photon on both hubs every layout is within 1 ms of the map.
+- **Two swaps could still shorten it under Photon on USB** (estimated 2026-11-11, same model, parked / driving):
+  - The pollen turret pair on one port through a Y-cable: 15.9 / 23.2 ms, 1.0 ms less while aiming. It costs the
+    per-servo offset ([Open choices](#open-choices)).
+  - The nectar turret and nectar hood servos on Expansion Hub servo ports 3 and 5, a 7 + 4 split of the every-loop
+    writes: 16.1 / 24.8 ms if the two hubs' write times add up, as modelled, and 16.1 / 20.2 ms if they overlap
+    fully, against 16.0 / 21.8 ms for the map in that case. Which it is has not been measured
+    ([Still unknown](#still-unknown)). Until it is, wire the map and leave those two signal leads long enough to
+    reach either hub; both servos stay on injector B either way.
 - **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot).
 
 ## Open choices
@@ -456,7 +464,8 @@ fetched 2026-11-10:
   hubs, connect both and read the hub list the SDK builds at INIT.
 - **Whether Photon overlaps writes to two hubs on USB.** The model adds the two hubs' write times, as the bench's
   blocks did (4.66 + 6.20 ms for 6 writes on each). If writes to different hubs overlap, splitting the every-loop
-  outputs evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub. Test: the two-hubs-at-once
+  outputs more evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub by up to 1.6 ms per
+  driving loop ([Estimated loop period](#estimated-loop-period)). Test: the two-hubs-at-once
   phase at the end of Bench: Photon, in the Photon block's USB run
   (`python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty`). It times 6 writes on
   each hub alone, all 12 in one loop (hub by hub and alternating) and the 3 + 3, 5 + 1 and 1 + 5 splits, and the

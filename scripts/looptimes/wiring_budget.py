@@ -50,6 +50,12 @@ FLYWHEELS_ON_EH = devices(flywheel=['EH', 'EH'], drive=['CH'] * 4, turret=['CH']
 TURRET_SERVOS_ON_EH = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['EH'] * 3,
                               hood=['CH'] * 2, blocker=['CH'], intake=['EH'], transfer=['EH'],
                               transfer_servo=['CH'], flower=['CH'], light=['CH', 'EH'])
+POLLEN_PAIR_ON_Y_CABLE = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH'] * 2,
+                                 hood=['CH'] * 2, blocker=['CH'], intake=['EH'], transfer=['EH'],
+                                 transfer_servo=['EH'], flower=['EH'], light=['EH', 'EH'])
+NECTAR_SERVOS_ON_EH = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH', 'CH', 'EH'],
+                              hood=['CH', 'EH'], blocker=['CH'], intake=['EH'], transfer=['EH'],
+                              transfer_servo=['EH'], flower=['EH'], light=['EH', 'EH'])
 PLAN_BEFORE_CAD = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH'] * 4,
                           hood=['CH'] * 2, blocker=['EH'], intake=['EH'], transfer=['EH'], flower=['EH'])
 
@@ -94,6 +100,16 @@ def budget(devs, situation, q=0, drive_fraction=1.0, octoquad_encoders=False, eh
     base = io + cpu
     return dict(io=io, cpu=cpu, base=base, refresh=refresh, edges=edges, edge_loop=edge_loop,
                 period=base / (1 - (refresh + edges) / 500.0))
+
+
+def overlapping(devs, situation, drive_fraction=1.0):  # E: full overlap is the unmeasured best case
+    b = budget(devs, situation, photon='usb', drive_fraction=drive_fraction)
+    per_hub = {'CH': 0.0, 'EH': 0.0}
+    for group, hub in devs:
+        if group in EVERY_LOOP[situation]:
+            per_hub[hub] += (drive_fraction if group == 'drive' else 1.0) * write(group, hub, 0, 'usb')
+    io = b['io'] - sum(per_hub.values()) + max(per_hub.values())
+    return (io + b['cpu']) / (1 - (b['refresh'] + b['edges']) / 500.0)
 
 
 def row(name, devs, **kw):
@@ -144,6 +160,13 @@ if __name__ == '__main__':
                            ("intake and transfer on CH, 4 drive on EH", ALL_DRIVE_ON_EH),
                            ("turret servos on the EH", TURRET_SERVOS_ON_EH)):
             row(f"  Photon, {mode}: {name}", devs, photon=mode)
+    print()
+    print("Photon on USB, parked / driving: the two hubs' write times add up, then overlap fully")
+    for name, devs in (("the map", MAP), ("pollen turret pair on a Y-cable", POLLEN_PAIR_ON_Y_CABLE),
+                       ("nectar turret and hood servos on the EH", NECTAR_SERVOS_ON_EH)):
+        adds = [budget(devs, s, photon='usb')['period'] for s in ('parked', 'driving')]
+        over = [overlapping(devs, s) for s in ('parked', 'driving')]
+        print(f"  {name:42s} {adds[0]:5.1f} / {adds[1]:5.1f}    {over[0]:5.1f} / {over[1]:5.1f}")
     print()
     for situation in ('parked', 'driving', 'firing'):
         b = budget(MAP, situation)
