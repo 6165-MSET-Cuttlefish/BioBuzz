@@ -111,6 +111,11 @@ elif cmd == "shell":
             print(f"   0: {address}:1F40 00000000:0000 0A 00000000:00000000 00:00000000 00000000 10070 0 1")
     elif shell.startswith("pidof"):
         print("4000")
+    elif shell == "getprop ro.serialno":
+        values = os.environ.get("HUB_SERIALNO", "FAKEHUB0001").split(",")
+        with open(os.environ["ADB_LOG"]) as log:
+            n = sum(1 for line in log if line.endswith("shell getprop ro.serialno\n"))
+        print(values[min(n, len(values)) - 1])
 '''
 
 # Stands in for python3: logs the runner's flags and the Wi-Fi TCP check instead of running them, runs the rest.
@@ -127,7 +132,7 @@ os.execv(sys.executable, [sys.executable] + args)
 
 
 def bare_hub(devices, args=("--usb",), dashboard_address="00000000", gradle_online=True, start_wait=None, build=None,
-             script=None, intercept=False):
+             script=None, intercept=False, serialno="FAKEHUB0001"):
     """Runs a copy of bare_hub.sh (this checkout's unless script names another); returns (exit status, output, adb
     calls, intercepted python calls, the folder it ran in, the gradlew calls)."""
     OUT.mkdir(parents=True, exist_ok=True)
@@ -172,7 +177,7 @@ def bare_hub(devices, args=("--usb",), dashboard_address="00000000", gradle_onli
     env = {"PATH": f"{stubs}:/usr/bin:/bin", "HOME": str(root), "ADB_LOG": str(adb_log),
            "GRADLE_LOG": str(gradle_log), "PY_LOG": str(py_log),
            "ADB_DEVICES": ",".join(f"{s}={st}" for s, st in devices),
-           "FORWARD_PORT": str(closed_port()), "DASHBOARD_ADDRESS": dashboard_address or ""}
+           "FORWARD_PORT": str(closed_port()), "DASHBOARD_ADDRESS": dashboard_address or "", "HUB_SERIALNO": serialno}
     argv = ["/bin/bash", str(root / "scripts/bench/bare_hub.sh")] + list(build if build is not None else args)
     r = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=300, cwd=root)
     lines = (lambda p: p.read_text().splitlines() if p.exists() else [])
@@ -183,11 +188,12 @@ def reinstall_script(root):
     return next((root / "common/bench-backups").glob("*/REINSTALL.sh"))
 
 
-def run_reinstall(root, devices):
+def run_reinstall(root, devices, serialno="FAKEHUB0001"):
     """Runs the REINSTALL.sh a run wrote, against the same stub adb; returns (exit status, output, adb calls)."""
     log = root / "reinstall_adb.log"
+    log.unlink(missing_ok=True)
     env = {"PATH": f"{root / 'stubs'}:/usr/bin:/bin", "HOME": str(root), "ADB_LOG": str(log),
-           "ADB_DEVICES": ",".join(f"{s}={st}" for s, st in devices)}
+           "ADB_DEVICES": ",".join(f"{s}={st}" for s, st in devices), "HUB_SERIALNO": serialno}
     r = subprocess.run(["/bin/bash", str(reinstall_script(root))], env=env, capture_output=True, text=True, timeout=60)
     return r.returncode, r.stdout + r.stderr, log.read_text().splitlines() if log.exists() else []
 
@@ -266,6 +272,42 @@ def usb_runs():
            code != 0 and "accept its debugging prompt" in out and calls == ["devices"])
 
 
+def serialno_runs():
+    """--install-only --expect-serialno, as session.py runs it over Wi-Fi."""
+    args = ["--install-only", "bench-results/sess/install", "--expect-serialno", "FAKEHUB0001"]
+    wifi = [(WIFI_SERIAL, "device")]
+    code, out, calls, _, root, _ = bare_hub(wifi, args, intercept=True)
+    reads = [i for i, c in enumerate(calls) if c.endswith("shell getprop ro.serialno")]
+    install = next((i for i, c in enumerate(calls) if " install -r -t -g " in f" {c} "), None)
+    serialasusb = next(i for i, c in enumerate(calls) if c.endswith("getprop persist.ftcandroid.serialasusb"))
+    first_pull = next(i for i, c in enumerate(calls) if " pull " in f" {c} ")
+    expect("--expect-serialno, the right hub: installs, reading ro.serialno right after the Control Hub check and "
+           "again right before the install", code == 0 and install is not None and len(reads) == 2
+           and reads[0] == serialasusb + 1 and reads[0] < first_pull and reads[1] == install - 1)
+    reinstall = reinstall_script(root).read_text()
+    expect("--expect-serialno: REINSTALL.sh reads ro.serialno after waiting for the hub and before installing",
+           0 <= reinstall.find("wait-for-device") < reinstall.find("getprop ro.serialno")
+           < reinstall.find("install -r -t -d") and "FAKEHUB0001" in reinstall)
+    rcode, rout, rcalls = run_reinstall(root, wifi, serialno="OTHERHUB0002")
+    expect("REINSTALL.sh on another hub at the same address: stops before installing, saying which hub answered",
+           rcode != 0 and "ro.serialno OTHERHUB0002, not FAKEHUB0001" in rout
+           and not [c for c in rcalls if " install" in f" {c}"])
+    rcode, rout, rcalls = run_reinstall(root, wifi)
+    expect("REINSTALL.sh on the right hub runs to its end", rcode == 0 and any(" install -r -t -d" in f" {c}"
+                                                                              for c in rcalls))
+    code, out, calls, _, root, _ = bare_hub(wifi, args, intercept=True, serialno="OTHERHUB0002")
+    expect("--expect-serialno, another hub at the address: stops before the backup, nothing installed",
+           code != 0 and "a different hub answers at 192.168.43.1:5555 (ro.serialno OTHERHUB0002, not FAKEHUB0001): "
+           "nothing was installed" in out and not [c for c in calls if " pull " in f" {c} " or " install" in f" {c}"])
+    code, out, calls, _, root, _ = bare_hub(wifi, args, intercept=True, serialno="FAKEHUB0001,OTHERHUB0002")
+    expect("--expect-serialno, the hub changing after the backup: stops before the install",
+           code != 0 and "ro.serialno OTHERHUB0002" in out and any(" pull " in f" {c} " for c in calls)
+           and not [c for c in calls if " install -r -t -g " in f" {c} "])
+    code, out, calls, _, root, _ = bare_hub(wifi, ["--expect-serialno", "FAKEHUB0001"], intercept=True)
+    expect("--expect-serialno without --install-only: refused before any adb command",
+           code != 0 and "goes with --install-only" in out and calls == [])
+
+
 def build_runs():
     for argv, online, label in ((["--build", "--usb"], True, "online"), (["--usb", "--build"], False, "offline only")):
         code, out, calls, _, root, gradle = bare_hub([], build=argv, gradle_online=online)
@@ -292,6 +334,7 @@ def main():
         print(f"recorded the Wi-Fi run of {a.script or 'this checkout'} in {a.record}")
         return 0
     usb_runs()
+    serialno_runs()
     build_runs()
     now, recorded = wifi_record(), json.loads(FIXTURE.read_text())
     for key in recorded:

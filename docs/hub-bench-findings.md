@@ -327,6 +327,19 @@ Not run on either date (they need `--interactive`):
 
 ## Still unknown
 
+- **Whether `adb shell getprop ro.serialno` names a Control Hub:** `scripts/bench/session.py` tells the hub from
+  another by it, and over Wi-Fi refuses to start where it reads empty. The SDK reads the same property when
+  `Build.getSerial()` gives nothing (`Device.getSerialNumber`), and a Control Hub names its Wi-Fi from that serial
+  (`ControlHubDeviceNameManager.handleFactoryReset`; SDK 12.0.0 decompiled, read 2026-11-12), so it is very likely
+  set. Test: start the session on a hub and read the `ro.serialno` in its console's `Control Hub ...` line.
+- **Whether adb's server reconnects a dropped `adb connect` device by itself:** its help text (platform-tools 37.0.1)
+  doesn't say. If it does, over Wi-Fi an adb command a runner sends between two `ensure_connected` calls could reach
+  another hub the Mac joined, before the next call reads `ro.serialno` (`--hub-serialno`, which `session.py` passes) and
+  stops the run. Test: `adb connect 192.168.43.1:5555`, power-cycle the hub, and run `adb devices` every few seconds
+  without `adb connect`: the hub coming back as `device` means adb reconnects by itself.
+- **Whether a hub back from a reboot is ready for the next runner once the session's wait ends:** it waits for adb,
+  the RC app's pid and port 8000 in the hub's socket table, not for the robot's setup. Test: pull the hub's battery
+  lead for a few seconds late in a session's default suite, and check the next stage's runner connects.
 - **Whether a run over the USB cable (`run_bench.py --usb`) measures what a Wi-Fi run does:** `summary.md`'s `Link:`
   line labels every run, so cable numbers stay out of the Wi-Fi ones above until the default bench, run both ways on
   one hub, shows the same Bench: Hub bus call costs and Bench: Framework Loop loop periods.

@@ -153,7 +153,15 @@ expect("list-configs: prints the table to the terminal", "| cuttledecode (active
 rb.DASH_OFF_ON_S, rb.DASH_OFF_GRACE_S, rb.DASH_OFF_WINDOW_S = 0.3, 0.1, 0.3
 rb.DASH_OFF_DONE_WAIT_S, rb.DASH_OFF_SWITCH_WAIT_S, rb.DASH_OFF_BOOT_WAIT_S = 3.0, 2.0, 3.0
 rb.DASH_OFF_POLL_S, rb.DASH_OFF_RECOVERY_S, rb.DASH_OFF_PROBE_S, rb.CONFIG_SWITCH_TIMEOUT_S = 0.02, 2.0, 0.05, 3
-rb.http_request = lambda method, url, timeout=3.0: {"code": 200, "ms": 1.0}
+URLS = []
+
+
+def http_request(method, url, timeout=3.0):
+    URLS.append(f"{method} {url}")
+    return {"code": 200, "ms": 1.0}
+
+
+rb.http_request = http_request
 PREFS = ("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n"
          '    <boolean name="autoEnable" value="{}" />\n</map>\n')
 
@@ -303,6 +311,7 @@ class FakeCounter:
 class FakeAdb:
     serial = "192.168.43.1:5555"
     private = True
+    expect_serialno = other_hub = None
 
     def __init__(self, hub):
         self.hub = hub
@@ -510,8 +519,17 @@ def only_failing(results, fragment):
     return bool(bad) and all(fragment in name for name in bad)
 
 
+URLS.clear()
 d, error, results = bench()
 expect("dashboard off: a clean hub passes every check", error is None and results and all(results.values()))
+expect("dashboard off over Wi-Fi: its only HTTP requests are slothboard's page at 192.168.43.1:8080/dash, one after "
+       "each phase", URLS == ["GET http://192.168.43.1:8080/dash"] * 3)
+URLS.clear()
+d = Dry(FakeHub())
+d.limelight = {"ipAddress": "172.29.0.1"}
+d.run_dashboard_off()
+expect("dashboard off over Wi-Fi with a Limelight: the recovery also opens its web UI at 192.168.43.1:5801",
+       URLS == ["GET http://192.168.43.1:8080/dash"] * 3 + ["GET http://192.168.43.1:5801/"])
 expect("dashboard off: every planned check ran", len(results) == 4 + 4 * 3 + 1)
 expect("dashboard off: the recovery ran its own command", ("shell", rb.DASHBOARD_RECOVERY_SHELL) in d.adb.calls)
 expect("dashboard off: it reinstalled the hub's own APK",

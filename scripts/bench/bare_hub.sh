@@ -18,6 +18,8 @@ RESULTS=""
 REINSTALL_HINT=""
 USB=""
 SERIAL_ARG=""
+INSTALL_ONLY=""
+EXPECT_SERIALNO=""
 
 say() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
@@ -26,7 +28,7 @@ die() {
   if [ -n "$REINSTALL_HINT" ]; then
     printf '\nThe bench build is installed on the hub. To put the old app and its settings back: %s\n' "$REINSTALL_HINT" >&2
   fi
-  if [ -n "$RESULTS" ]; then
+  if [ -n "$RESULTS" ] && [ -z "$INSTALL_ONLY" ]; then
     printf '\nEverything it printed is in %s/console.log.\n%s\n' "$PWD/$RESULTS" "$(back_online) the run stopped." >&2
   fi
   exit 1
@@ -42,6 +44,11 @@ usage: scripts/bench/bare_hub.sh --build          while online: build the debug 
        scripts/bench/bare_hub.sh --usb [flags]    the same over a USB cable to the hub's USB-C port, the Mac on
                                                   its own network (--build --usb builds online, else from
                                                   Gradle's cache, and skips the offline check)
+       scripts/bench/bare_hub.sh --install-only DIR [--usb [--serial S]] [--expect-serialno S]
+                                                  session.py's install: everything up to the runner, then
+                                                  DIR/installed.json instead of a run; with --expect-serialno, a
+                                                  hub whose ro.serialno isn't S gets nothing installed, and
+                                                  REINSTALL.sh checks it too
 See "Bare hub, unattended" in scripts/bench/README.md.
 EOF
 }
@@ -190,6 +197,18 @@ die_if_hub_lost() {
   die "adb lost its connection to the Control Hub while $1 ($how the hub as '${state:-not connected}'). ${3:-$changed} To recover: check that the Mac is still on the hub's Wi-Fi (macOS can hop to another network) and that nothing else on the Mac restarted adb, wait a minute if the hub rebooted, run '$ADB connect $SERIAL' until it prints 'connected to $SERIAL', then run scripts/bench/bare_hub.sh again."
 }
 
+check_serialno() {
+  [ -n "$EXPECT_SERIALNO" ] || return 0
+  local found rc=0
+  found=$(hub shell getprop ro.serialno) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    die_if_hub_lost "reading its ro.serialno $1" "$rc"
+    die "adb couldn't read the hub's ro.serialno $1 (exit $rc): nothing was installed"
+  fi
+  found=$(printf '%s' "$found" | tr -d '\r')
+  [ "$found" = "$EXPECT_SERIALNO" ] || die "a different hub answers at $SERIAL (ro.serialno ${found:-empty}, not $EXPECT_SERIALNO): nothing was installed"
+}
+
 need_python() {
   command -v python3 >/dev/null 2>&1 || die "python3 isn't on PATH (macOS offers to install the Command Line Tools the first time you type python3)"
   python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 9))' || die "run_bench.py needs python3 3.9 or newer"
@@ -258,8 +277,16 @@ run() {
       --serial=*) SERIAL_ARG="${arg#--serial=}" ;;
     esac
     [ "$prev" != --serial ] || SERIAL_ARG="$arg"
+    [ "$prev" != --install-only ] || INSTALL_ONLY="$arg"
+    [ "$prev" != --expect-serialno ] || EXPECT_SERIALNO="$arg"
     prev="$arg"
   done
+  [ "$prev" != --install-only ] || die "--install-only takes the folder to write installed.json in"
+  [ "$prev" != --expect-serialno ] || die "--expect-serialno takes the hub's ro.serialno"
+  [ -z "$EXPECT_SERIALNO" ] || [ -n "$INSTALL_ONLY" ] || die "--expect-serialno goes with --install-only"
+  case "$EXPECT_SERIALNO" in
+    *[!A-Za-z0-9._-]*) die "--expect-serialno takes a ro.serialno: letters, digits, dots, dashes and underscores" ;;
+  esac
   need_python
   ADB=$(find_adb) || die "adb isn't on PATH or in ~/Library/Android/sdk/platform-tools: install Android Studio's platform-tools"
   local adb_port
@@ -288,6 +315,7 @@ run() {
     1|true|y|yes|on) ;;
     *) die "the device at $SERIAL isn't a REV Control Hub (persist.ftcandroid.serialasusb is '$serialasusb', which the FTC SDK reads as no). Nothing was changed on it." ;;
   esac
+  check_serialno "before the backup"
   local pm_out paths
   rc=0
   pm_out=$(hub shell pm path "$PACKAGE" 2>&1) || rc=$?
@@ -302,7 +330,7 @@ run() {
 
   local stamp backup
   stamp=$(date +%Y-%m-%d_%H%M%S)
-  RESULTS="bench-results/$stamp"
+  RESULTS="${INSTALL_ONLY:-bench-results/$stamp}"
   # Outside the worktree: removing a worktree deletes its ignored bench-results/ with it.
   backup="$(git rev-parse --path-format=absolute --git-common-dir)/bench-backups/$stamp"
   mkdir -p "$RESULTS" "$backup/apk" "$backup/FIRST"
@@ -404,6 +432,15 @@ for e in root.iter("string"):
       printf '"%s" connect %s || true\n' "$ADB" "$SERIAL"
       printf '"%s" -s %s wait-for-device\n' "$ADB" "$SERIAL"
     fi
+    if [ -n "$EXPECT_SERIALNO" ]; then
+      cat <<EOF
+found=\$("$ADB" -s $SERIAL shell getprop ro.serialno | tr -d '\r')
+if [ "\$found" != "$EXPECT_SERIALNO" ]; then
+  echo "STOPPED: a different hub answers at $SERIAL (ro.serialno \${found:-empty}, not $EXPECT_SERIALNO): nothing was installed. Reach the hub with ro.serialno $EXPECT_SERIALNO and run this again." >&2
+  exit 1
+fi
+EOF
+    fi
     if [ "$apks" -eq 1 ]; then
       printf '"%s" -s %s install -r -t -d "%s"\n' "$ADB" "$SERIAL" "$(ls "$backup"/apk/*.apk)"
     else
@@ -427,8 +464,10 @@ for e in root.iter("string"):
     printf '"%s" -s %s shell "am start -n %s"\n' "$ADB" "$SERIAL" "$LAUNCHER"
   } > "$reinstall"
   chmod +x "$reinstall"
+  [ -z "$INSTALL_ONLY" ] || printf '%s\n' "$reinstall" > "$RESULTS/reinstall_path.txt"
   say "backed up $apks APK(s) and $(wc -l < "$backup/FIRST/configs.txt" | tr -d ' ') hardware config(s); to put that app and its settings back later: bash $reinstall"
 
+  check_serialno "before the install"
   say "installing $apk"
   local out
   rc=0
@@ -470,6 +509,15 @@ for e in root.iter("string"):
     sleep 5
   done
   say "the Robot Controller is up after about $(( $(date +%s) - launched )) s"
+  if [ -n "$INSTALL_ONLY" ]; then
+    python3 -I -c 'import json, sys
+with open(sys.argv[1], "w") as f:
+    json.dump({"serial": sys.argv[2], "backup": sys.argv[3], "reinstall": sys.argv[4], "originalEntry": sys.argv[5],
+               "runnerFlags": sys.argv[6:]}, f, indent=1)' \
+      "$RESULTS/installed.json" "$SERIAL" "$backup" "$reinstall" "$original_entry" $offline_flag $sloth_flag
+    say "installed: the session runs the benches next"
+    return 0
+  fi
 
   say "running the benches: about 45 minutes, at most 90, no keypresses (--photon runs only the Photon block, which with --ports-empty waits for one Enter at its start); the runner puts the hardware config back at the end even if a step fails"
   local rc=0 entry_flag=()

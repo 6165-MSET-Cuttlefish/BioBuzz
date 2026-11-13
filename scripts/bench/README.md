@@ -6,6 +6,74 @@ and the Sloth hot load. One command runs every bench the plugged-in hardware all
 `bench-results/<timestamp>/` at the repo root (gitignored); its `summary.md` says what each FAIL means. What the results mean
 for the code: `docs/hub-bench-findings.md`.
 
+## Start it once
+
+`scripts/bench/session.py` runs every stage the table allows back to back from one start: it asks everything first,
+then needs nobody until it ends, and puts the hub back however it ends. Each stage is a `run_bench.py` run with its own
+folder.
+
+1. Plug in what the session should bench (below), power the Control Hub from a 12 V battery, empty the bench ports,
+   close every dashboard tab, no Driver Station; the Mac on power with its lid open.
+2. From the worktree root, on the hub's Wi-Fi: `python3 scripts/bench/session.py`; over a USB data cable to its USB-C
+   port, the Mac on its own network: `python3 scripts/bench/session.py --usb` (`--serial S` when adb lists several USB
+   devices). Without more, the hub must already run this checkout's build (the Run button's full install). Add
+   `--install` to back up the hub's app and install the stamped bench build first, as `bare_hub.sh` does (run
+   `scripts/bench/bare_hub.sh --build`, or `--build --usb`, while online first).
+3. Answer the questions, then leave it: it keeps the Mac awake and logs its whole console. It refuses to start
+   without a terminal and reads nothing from it after the last answer.
+
+| plug in | the session adds |
+|---|---|
+| nothing (a bare hub) | the default suite and Bench: Dashboard Off: about 1-2 h |
+| a webcam, the Limelight, a Pinpoint (Control Hub I2C port 1), an OctoQuad (port 2), an Expansion Hub on RS485 | their benches in the default suite ([Optional hardware](#optional-hardware)) |
+| an Expansion Hub on 12 V from the Control Hub's second XT30 port, on USB only or on RS485 only (address 2, or `--expansion-address N`), nothing on its motor ports 0-3 or servo ports 0-1 | the Photon block for that wiring, about 50-55 min |
+| that, plus the Pinpoint in **Expansion Hub** I2C port 1 and the OctoQuad in Control Hub I2C port 2 | the Photon block's I2C reads (`--photon-i2c`); the default suite then runs Bench: Pinpoint Absent in place of Bench: Pinpoint |
+| that, on RS485 wiring, and the go run asked for (asked only there: the USB go run needs its cable pulls, so it stays in Needs a person; answer yes once a USB short block has passed too, as [`docs/photon-bench.md`](../../docs/photon-bench.md) orders the runs) | the RS485 go run, its soak's cap + 2-3 h, only if the short block says PASSED THIS RUN and its 60 s soak rate can reach the loss bound within the cap |
+
+Over Wi-Fi, leave auto-join on for the hub's network and turn it off for every other network the Mac knows, another
+hub's above all: Bench: Dashboard Off reboots the hub.
+
+What it asks, all at once (each answer also takes a flag): whether an Expansion Hub is on RS485, only when no REV hub is
+on the Control Hub's USB (`--rs485 yes|no`); with an Expansion Hub, where the Pinpoint is (`--pinpoint
+control-hub|expansion-hub|none`), whether the OctoQuad is in Control Hub I2C port 2 (`--octoquad yes|no`), and, on RS485
+with the Pinpoint and OctoQuad there, whether to add the go run and its soak's cap in hours, at most the runner's 4
+(`--soak-hours H`, 0 for none); with `--install`, whether to put the hub's own app back at the end (`--restore-app
+yes|no`); last, typed `empty`, the statement that nothing is plugged into the ports its stages drive, which it names
+(Control Hub motor ports 0-3 and servo ports 0-1, and the Expansion Hub's when there is one). The statement stands in
+for `--ports-empty` and the Photon block's confirmation.
+
+Before the questions it checks, changing nothing: adb's server port, that the device is a Control Hub with the RC app,
+its `ro.serialno` (how it tells the hub from another later), the REV hubs on the Control Hub's USB, and the dashboard's
+saved switch (a hub with the dashboard off is refused, with the command that turns it back on). After them: the install
+with `--install` (`bare_hub.sh --install-only`, once the hub still reads the same `ro.serialno`; over Wi-Fi
+`bare_hub.sh` reads it again before its backup and before installing); Gradle checked as `bare_hub.sh` does;
+`run_bench.py --probe-only` (about 3 min) for what is plugged in; then the plan, with each stage's time, what it drives
+and why anything is left out; then the default suite, the Photon block, the soak, Bench: Dashboard Off last.
+
+It goes on after a stage that fails, exits non-zero or can't start, and after a hub restart or reboot (it waits up to
+300 s for adb, the RC app and the dashboard's port). A stage past its time limit gets Ctrl-C, so its runner puts the hub
+back, and the session goes on. Every runner gets the hub's `ro.serialno` (`--hub-serialno`) and reads it at each adb
+connection check, so another hub answering mid-stage gets nothing more from it, its config not put back. It stops,
+saying why, when the hub isn't the one it started on, when adb's port check fails (then it sends no adb command at all,
+putting back included), when a stage would drive ports the statement didn't name (an Expansion Hub the answers didn't
+expect, or another one on USB), when the probe doesn't finish, or when the hub isn't back within 300 s. Ctrl-C reaches
+the running stage's runner too, which puts its config back; the session waits for it, runs nothing more, and puts the
+hub back; further Ctrl-C is ignored until that's done.
+
+At the end, whatever happened, once adb reaches the hub it started on (the RC app needn't be up): the dashboard is
+turned back on over adb if Bench: Dashboard Off left it off; if the hub isn't on its original config, or a `bench_*`
+config is left, a `--probe-only` runner puts it back, once the app is up; over USB the adb forwards a runner left behind
+are removed; the hub's own app goes back (its `REINSTALL.sh`) only with `--install` and a yes. Results are in
+`bench-results/session-<time>/`: `summary.md` lists every stage with its verdict line, its failed checks and the path to
+its own `summary.md`, what didn't run and why, what was put back, **Needs a person** (every prompted bench, each with
+the exact command and what to have on the table) and what is left by hand; `console.log`; one folder per stage
+(`00-probe`, `01-default`, ...); `install/` with `--install`.
+
+By hand afterwards: the Needs a person runs (the `--interactive` prompts, the Photon cable pulls inside the USB go
+run, Bench: Dashboard Off's battery pull, Bench: Turret Zero); the Pinpoint back to Control Hub I2C port 1 if it was
+on the Expansion Hub; `bash .../REINSTALL.sh` (`summary.md` names it) if it installed and you kept the bench build;
+whatever the Put back section says failed; and the bench ports plugged back before the hub goes on a robot.
+
 ## Bare hub, unattended
 
 For a Control Hub with nothing plugged into any port, run where there is no internet and nobody to ask (over a USB
@@ -116,6 +184,8 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 | `--all` | every bench but the Photon block, Bench: Turret Zero and Dashboard Off; stops if no webcam, Limelight or Expansion Hub is plugged in |
 | `--keep-configs` | leaves the `bench_*` hardware configs on the hub |
 | `--usb` | reaches the hub over a USB cable instead of its Wi-Fi ([below](#over-a-usb-cable)) |
+| `--probe-only` | only Bench: Probe and the REV hubs on the Control Hub's USB, recorded as `hardware` in `runner_results.json`, then the config put back; drives nothing (`session.py`'s probe and its restore) |
+| `--photon-soak-hours H` | with `--photon-soak`, ends the soak after H hours instead of 4 if it hasn't reached its write count (`session.py`'s cap) |
 
 `--help` lists the rest: one flag per bench (`--hub`, `--loop`, `--threads`, `--edge`, `--turret`, `--config-by-name`,
 `--freeze-dump`, `--limelight`, ...), `--serial`, `--host`, `--other-pipeline`.
@@ -604,3 +674,25 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   `scripts/bench/offline/check_dashboard_api.py` checks every member it and the runner use against the pinned AAR.
 - Desktop checks for the adb-port check, the saved-configs listing and Bench: Dashboard Off:
   [`offline/README.md`](offline/README.md).
+- `session.py` runs each stage as its own `run_bench.py` with stdin `/dev/null`, so the runner's terminal-only prompts
+  (`photon_guard_ports`, `tell()`) don't wait, in the session's process group, so a Ctrl-C reaches the runner and it
+  restores, and with SIGHUP ignored, so a closed terminal kills neither. A Ctrl-C while a runner starts is held until
+  `Popen` returns, so the session still waits for that runner. The put-back runs with SIGINT ignored, which exec keeps,
+  so its own `lsof` and `adb` survive a second Ctrl-C; its put-back runner and `REINSTALL.sh` run in their own session,
+  started while a Python handler catches SIGINT, which exec resets to the default, so the time limit's Ctrl-C still
+  reaches them. A runner after a stage that left another config active gets the session's original as
+  `--original-entry`, and so does every runner after `--install` (the setting from before it). Its `PROMPTED` list is
+  every bench that waits for a person: `offline/test_session.py` maps each `self.ask(`, `self.answer(` and `input(` in
+  the runner to an entry, so a new prompt fails that test until it is listed there.
+- `session.py` tells the hub from another by `getprop ro.serialno`, the property the SDK falls back to for the device
+  serial (`Device.getSerialNumber`) and from which a Control Hub names its Wi-Fi
+  (`ControlHubDeviceNameManager.handleFactoryReset`; SDK 12.0.0, decompiled). Over Wi-Fi, where every hub is
+  `192.168.43.1:5555`, it refuses a hub on which that reads empty; over USB it falls back to adb's serial. It reads it
+  before every stage, before the install and before putting the hub back (which needs adb and the same hub, not the
+  app), and passes it on: as `--hub-serialno` to every runner, whose `Adb.ensure_connected` reads it at every call
+  (adb's help doesn't say whether its server reconnects a dropped `adb connect` device by itself; a command between two
+  calls would go wherever adb reconnected), after which a mismatch refuses every adb command (`OtherHub`) and skips the
+  restore; and over Wi-Fi as `bare_hub.sh --install-only --expect-serialno`, which reads it before its backup and before
+  installing and writes the same check into `REINSTALL.sh`. The soak gate reads `photon.verdict.level` and
+  `photon.main.soak` (`seconds`, `issuedWrites`) from the short block's `runner_results.json`, and needs every hub's
+  rate to reach `ceil(3 / PHOTON_SOAK_LOSS_TARGET)` writes within the cap.

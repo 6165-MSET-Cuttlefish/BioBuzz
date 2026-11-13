@@ -275,12 +275,17 @@ class FakePopen:
     def __init__(self, argv, lines, returncode=0):
         self.args, self.returncode = argv, returncode
         self.stdout = FakeLines(lines)
+        self.waited = self.killed = False
 
     def wait(self, timeout=None):
+        self.waited = True
         return self.returncode
 
+    def poll(self):
+        return self.returncode if self.waited or self.killed else None
+
     def kill(self):
-        pass
+        self.killed = True
 
     def terminate(self):
         pass
@@ -347,6 +352,16 @@ class Hub:
                                          "serial": "EthernetOverUsb:eth0:172.29.0.22"}]
         self.start_telemetry = {"Bench: Limelight": {"Bench phase": "proxyQuery", "Bench status": "ready"}}
         self.on_present = None
+        self.hub_serial = "FAKEHUB0001"
+        self.usb_rev_hubs = []
+        self.lsof = "p4242\ncadb\n"
+        self.dashboard_off = False
+        self.dashboard_unreadable = False
+        self.app_broken = False
+        self.forward_list_fails = False
+        self.socket_table_failures = 0
+        self.hang_no_rebind = False
+        self.gradle_procs = []
         self.dash = Slothboard(self)
         self.http_ports = {p: HttpPorts(self, p) for p in HUB_PORTS if p != 8000}
         self.log_line(SETUP_DONE, tag="FtcEventLoop")
@@ -412,7 +427,7 @@ class Hub:
         self.dash.drop_all()
         if not same_pid:
             self.pid += 1
-        self.app_up = True
+        self.app_up = not self.app_broken
         self.status.update(activeOpMode=IDLE, activeOpModeStatus="STOPPED")
         self.log_line(SETUP_DONE, tag="FtcEventLoop")
 
@@ -448,6 +463,8 @@ class Hub:
             serial = None
             if args[:1] == ["-s"]:
                 serial, args = args[1], args[2:]
+            if self.hang_no_rebind and "--no-rebind" in args:
+                raise subprocess.TimeoutExpired(argv, 20)
             out, err, code = self._command(serial, args)
             return subprocess.CompletedProcess(argv, code, out, err)
 
@@ -465,11 +482,13 @@ class Hub:
         if cmd == "version":
             return "Android Debug Bridge version 1.0.41\nVersion 37.0.1-fake\n", "", 0
         if cmd == "connect":
-            if self.usb or args[1] != WIFI_SERIAL:
+            if self.usb or args[1] != WIFI_SERIAL or self.down_polls > 0:
                 return f"failed to connect to '{args[1]}'\n", "", 1
             self.present = True
             return f"connected to {WIFI_SERIAL}\n", "", 0
         if cmd == "forward" and args[1:] == ["--list"]:
+            if self.forward_list_fails:
+                return "", "adb: error: cannot connect to daemon\n", 1
             return "".join(f"{f.serial} tcp:{f.local} tcp:{f.remote}\n" for f in self.forwards), "", 0
         if serial is None and cmd not in ("forward",):
             return "", "adb: no serial given in the dry run\n", 1
@@ -590,6 +609,9 @@ class Hub:
         if command.startswith(f"pidof {PACKAGE}"):
             return (f"{self.pid}\n" if self.app_up else ""), "", 0 if self.app_up else 1
         if command == "cat /proc/net/tcp /proc/net/tcp6":
+            if self.socket_table_failures > 0:
+                self.socket_table_failures -= 1
+                return "", "error: closed\n", 1
             if not self.socket_table:
                 return "", "cat: /proc/net/tcp: Permission denied\n", 1
             rows = ["  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode"]
@@ -600,6 +622,11 @@ class Hub:
         if command == f"run-as {PACKAGE} cat {PREFS}":
             return self.prefs_xml(), "", 0
         if command.startswith(f"run-as {PACKAGE} cat shared_prefs/FtcDashboard.xml"):
+            if self.dashboard_unreadable:
+                return "", f"run-as: package not debuggable: {PACKAGE}\n", 1
+            if self.dashboard_off:
+                return ("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n"
+                        '    <boolean name="autoEnable" value="false" />\n</map>\n'), "", 0
             return "", "cat: shared_prefs/FtcDashboard.xml: No such file or directory\n", 1
         if command.startswith(f"run-as {PACKAGE} cat "):
             text = self._bench_read(command.split()[-1])
@@ -624,6 +651,10 @@ class Hub:
         if command.startswith(f"am force-stop {PACKAGE} && run-as {PACKAGE} cp {PREFS_TMP} {PREFS}"):
             self._restart_from_prefs()
             return "BENCH_PREFS_COPIED\nStarting: Intent\n", "", 0
+        if command.startswith(f"am force-stop {PACKAGE} && run-as {PACKAGE} rm -f shared_prefs/FtcDashboard.xml"):
+            self.dashboard_off = False
+            self.restart_app()
+            return "Starting: Intent\n", "", 0
         if command.startswith(f"am force-stop {PACKAGE}"):
             self.restart_app()
             return "Starting: Intent\n", "", 0
@@ -633,6 +664,10 @@ class Hub:
             return "Starting: Intent\n", "", 0
         if command == "getprop persist.ftcandroid.serialasusb":
             return ("1\n" if self.control_hub else "\n"), "", 0
+        if command == "getprop ro.serialno":
+            return f"{self.hub_serial}\n", "", 0
+        if command.startswith("for d in /sys/bus/usb/devices/*;"):
+            return "".join(f"{s}\n" for s in self.usb_rev_hubs), "", 0
         if command == f"pm path {PACKAGE}":
             return f"package:/data/app/{PACKAGE}-1/base.apk\n", "", 0
         if command.startswith("for f in /sdcard/FIRST/dairy/sloth/*.jar"):
@@ -664,14 +699,16 @@ class Hub:
                 self.deploys.append({"argv": list(argv[1:]), "ANDROID_SERIAL": (env or {}).get("ANDROID_SERIAL"),
                                      "listedDevices": listed})
                 self.log_line("Processed Sloth Load", tag="Sloth")
-                return FakePopen(argv, ["checked for lock file\n", "pushed jar\n", "waiting for lock file to be removed\n",
+                proc = FakePopen(argv, ["checked for lock file\n", "pushed jar\n", "waiting for lock file to be removed\n",
                                         "lock file removed\n", "BUILD SUCCESSFUL\n"])
+                self.gradle_procs.append(proc)
+                return proc
             self.calls.append(" ".join(["adb"] + list(argv[1:])))
             return FakePopen(argv, [])
 
     def run(self, argv, **kw):
         if pathlib.Path(argv[0]).name == "lsof":
-            return subprocess.CompletedProcess(argv, 0, "p4242\ncadb\n", "")
+            return subprocess.CompletedProcess(argv, 0, self.lsof, "")
         return self.adb(argv, kw.get("env"))
 
     def create_connection(self, address, timeout=None, source_address=None, **kw):

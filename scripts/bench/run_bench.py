@@ -759,6 +759,10 @@ class ProtocolError(BenchError):
     pass
 
 
+class OtherHub(BenchError):
+    """--hub-serialno: adb reached a hub whose ro.serialno isn't that one. Final: nothing more is sent to it."""
+
+
 class ConnectionClosed(Exception):
     pass
 
@@ -1649,13 +1653,13 @@ class UsbLink:
                                 f"{(r.stderr or r.stdout).strip()[:200] or 'exit ' + str(r.returncode)}")
         return int(port)
 
-    def _remove(self, local, remote):
+    def _remove(self, local, remote, label="removed"):
         try:
             r = self._adb(["-s", self.adb.serial, "forward", "--remove", f"tcp:{local}"])
         except ForwardFailed as e:
             self.events.append({"notRemoved": remote, "local": local, "why": str(e)})
             return
-        self.events.append({"removed" if r.returncode == 0 else "notRemoved": remote, "local": local,
+        self.events.append({label if r.returncode == 0 else "notRemoved": remote, "local": local,
                             **({} if r.returncode == 0 else {"why": (r.stderr or r.stdout).strip()[:200]})})
 
     def local_port(self, remote):
@@ -1722,7 +1726,12 @@ class UsbLink:
                 except ForwardFailed as e:
                     return None, str(e)
                 self.pages.append((page, RC_PAGE_PORT))
-                r = self._forward(f"tcp:{page + 1}", RC_SOCKET_PORT, rebind=False)
+                try:
+                    r = self._forward(f"tcp:{page + 1}", RC_SOCKET_PORT, rebind=False)
+                except ForwardFailed as e:
+                    self.pages.remove((page, RC_PAGE_PORT))
+                    self._remove(page, RC_PAGE_PORT, label="discarded")
+                    return None, str(e)
                 if r.returncode == 0:
                     self.pages.append((page + 1, RC_SOCKET_PORT))
                     self.events.append({"made": RC_PAGE_PORT, "local": page, "forBrowser": True})
@@ -1730,7 +1739,7 @@ class UsbLink:
                     return f"http://{LOOPBACK}:{page}", None
                 tried.append(f"{page + 1}: {(r.stderr or r.stdout).strip()[:80]}")
                 self.pages.remove((page, RC_PAGE_PORT))
-                self._remove(page, RC_PAGE_PORT)
+                self._remove(page, RC_PAGE_PORT, label="discarded")
             return None, (f"no two adjacent free ports on this Mac for the RC page and its websocket (tried "
                           f"{'; '.join(tried)})")
 
@@ -1747,11 +1756,13 @@ class UsbLink:
         made = [f"{e['made']} at {LOOPBACK}:{e['local']}" for e in self.events if "made" in e]
         gone = sum(1 for e in self.events if "gone" in e)
         removed = [str(e["local"]) for e in self.events if "removed" in e]
+        discarded = [str(e["local"]) for e in self.events if "discarded" in e]
         kept = [f"{e['local']} ({e.get('why')})" for e in self.events if "notRemoved" in e]
         return (f"USB cable (adb {serial}; the hub's ports through adb forwards from this Mac: "
                 f"{', '.join(made) or 'none made'}; {gone} found gone after the hub left adb and made again; removed "
-                f"at the end: {', '.join(removed) or 'none'}" + (f"; NOT removed: {', '.join(kept)}" if kept else "")
-                + ")")
+                f"at the end: {', '.join(removed) or 'none'}"
+                + (f"; discarded unused page ports: {', '.join(discarded)}" if discarded else "")
+                + (f"; NOT removed: {', '.join(kept)}" if kept else "") + ")")
 
     def record(self):
         return {"link": "usb", "serial": self.adb.serial, "events": list(self.events)}
@@ -1764,7 +1775,7 @@ class UsbLink:
                 return
             try:
                 listed = self._listed()
-            except ForwardFailed as e:
+            except (ForwardFailed, OtherHub) as e:
                 self.events += [{"notRemoved": remote, "local": local, "why": str(e)} for local, remote in mine]
                 self.log(f"!! couldn't list adb's forwards to remove this run's: {e}")
                 return
@@ -2016,8 +2027,12 @@ class Adb:
         self.usb = usb
         self.private = False
         self.dated_logcat = None
+        self.expect_serialno = None
+        self.other_hub = None
 
     def _raw(self, args, timeout=60):
+        if self.other_hub is not None:
+            raise OtherHub(self.other_hub)
         return subprocess.run([self.path] + args, capture_output=True, text=True, timeout=timeout)
 
     def run(self, *args, check=True, timeout=60):
@@ -2030,6 +2045,22 @@ class Adb:
         return [line.split()[:2] for line in self._raw(["devices"]).stdout.splitlines()[1:] if len(line.split()) >= 2]
 
     def ensure_connected(self):
+        self._listed_as_device()
+        self.check_serialno()
+
+    def check_serialno(self):
+        """With expect_serialno, every check reads the hub's ro.serialno: adb's help doesn't say whether its server
+        reconnects a dropped `adb connect` device by itself, maybe to another hub at the same address."""
+        if self.expect_serialno is None:
+            return
+        now = self.run("shell", "getprop ro.serialno").strip()
+        if now != self.expect_serialno:
+            self.other_hub = (f"a different hub answered at {self.serial} (ro.serialno {now or 'empty'}, not "
+                              f"{self.expect_serialno}); nothing more was sent to it")
+            self.log(f"!! {self.other_hub}")
+            raise OtherHub(self.other_hub)
+
+    def _listed_as_device(self):
         if self.usb:
             state = None
             for attempt in range(3):
@@ -2209,6 +2240,15 @@ class Adb:
 
     def remove_config(self, name):
         self.run("shell", f"rm {shlex.quote(f'{CONFIG_DIR}/{name}.xml')}")
+
+
+def usb_rev_hub_serials(adb):
+    """The serials of the REV hubs on the Control Hub's USB ports (an Expansion Hub on USB), read from sysfs."""
+    vendor, product = REV_HUB_USB_ID
+    out = adb.run("shell", "for d in /sys/bus/usb/devices/*; do "
+                  f"[ \"$(cat $d/idVendor 2>/dev/null)\" = {vendor} ] && "
+                  f"[ \"$(cat $d/idProduct 2>/dev/null)\" = {product} ] && cat $d/serial; done; true")
+    return [line.strip() for line in out.splitlines() if line.strip()]
 
 
 def attr(value):
@@ -4059,6 +4099,12 @@ def photon_overlap_summary(main, topology):
     return lines + [verdict["line"], ""]
 
 
+def photon_soak_seconds(args):
+    if args.photon_soak:
+        return round(args.photon_soak_hours * 3600) if args.photon_soak_hours else PHOTON_SOAK_MAX_S
+    return 20 if args.quick else 60
+
+
 def photon_verdict(checks, negative_control_fired, orders_both, soak_ran, soak_met, stop_trials, not_run=(),
                    still_needed=()):
     """("SAFE" | "PASSED" | "NOT SAFE", blockers, still needed). PASSED: nothing in this run failed, but the go also
@@ -4633,6 +4679,7 @@ class Runner:
         self.results = {}
         self.adb = (Adb(None, self.log, usb=True) if args.usb
                     else Adb(args.serial or f"{args.host}:{ADB_PORT}", self.log))
+        self.adb.expect_serialno = args.hub_serialno
         self.dash = None
         self.probe = None
         self.original = None
@@ -5401,6 +5448,12 @@ class Runner:
         for line in self.run_saved_configs():
             print(line)
 
+    def record_hardware(self):
+        """--probe-only: what the probe found and the REV hubs on the Control Hub's USB ports, for session.py's plan."""
+        self.results["hardware"] = {"imuType": self.imu_type, "webcam": self.webcam, "limelight": self.limelight,
+                                    "expansion": self.expansion, "usbRevHubs": usb_rev_hub_serials(self.adb)}
+        self.log(f"hardware: {self.results['hardware']}")
+
     def main_config(self, webcam="detected", pinpoint=False, octoquad_bus=None, expansion=None):
         serial = self.webcam if webcam == "detected" else webcam
         return hub_config(main_devices(self.imu_type, pinpoint, octoquad_bus), extras(serial, self.limelight), expansion)
@@ -5760,11 +5813,7 @@ class Runner:
     def usb_expansion_serial(self):
         if self.args.usb_expansion_serial:
             return self.args.usb_expansion_serial
-        vendor, product = REV_HUB_USB_ID
-        out = self.adb.run("shell", "for d in /sys/bus/usb/devices/*; do "
-                           f"[ \"$(cat $d/idVendor 2>/dev/null)\" = {vendor} ] && "
-                           f"[ \"$(cat $d/idProduct 2>/dev/null)\" = {product} ] && cat $d/serial; done; true")
-        serials = [line.strip() for line in out.splitlines() if line.strip()]
+        serials = usb_rev_hub_serials(self.adb)
         if len(serials) != 1:
             raise BenchError(f"--usb-expansion found {len(serials)} REV hubs on the Control Hub's USB ports ({serials}): "
                              "connect exactly one Expansion Hub by USB (no RS485 cable) on its own 12 V, or pass its "
@@ -5926,7 +5975,7 @@ class Runner:
             self.photon_add(*photon_log_checks("Bench: Photon Stock", self.photon_log_entries("photon_stock")))
             self.photon_routing("first Photon INIT after the restart", base, "r01")
 
-            soak_seconds = PHOTON_SOAK_MAX_S if a.photon_soak else (20 if a.quick else 60)
+            soak_seconds = photon_soak_seconds(a)
             soak_writes = PHOTON_SOAK_WRITES_PER_HUB if a.photon_soak else 0
             _, main = self.photon_step("Bench: Photon", "photon_main",
                                        dict(base, runId="1", loops=loops, soakSeconds=soak_seconds,
@@ -8506,6 +8555,8 @@ class Runner:
             try:
                 self.adb.ensure_connected()
                 pid = self.adb.pid() if booted_after is None else None
+            except OtherHub:
+                raise
             except (BenchError, subprocess.TimeoutExpired) as e:
                 last = str(e)
                 continue
@@ -8579,6 +8630,9 @@ class Runner:
             r["autoEnable"] = self.read_dashboard_switch()
             if rec["limelight"]:
                 r["limelightHttp"] = self.link.http("GET", LIMELIGHT_WEB_PORT, "/")
+        except OtherHub as e:
+            r["error"] = str(e)
+            raise
         except BenchError as e:
             r["error"] = str(e)
             raise BenchError(f"the adb recovery failed ({e}); the dashboard may still be off. "
@@ -9281,6 +9335,10 @@ class Runner:
             proc.wait()
         finally:
             watchdog.cancel()
+            # A session's time limit sends Ctrl-C to the runner alone, and deploySloth would wait on the lock unbounded.
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
         ended = time.monotonic()
         (self.out / "logs" / f"sloth_deploy_{run_id}.log").write_text("".join(lines))
         if proc.returncode != 0 and not hung.is_set():
@@ -9584,6 +9642,10 @@ class Runner:
             if self.args.list_configs:
                 self.connect_adb()
                 self.list_configs()
+            elif self.args.probe_only:
+                self.connect()
+                self.run_probe()
+                self.record_hardware()
             else:
                 self.connect()
                 self.run_probe()
@@ -9607,7 +9669,10 @@ class Runner:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
             signal.signal(signal.SIGHUP, signal.SIG_IGN)
             try:
-                if self.dash is not None:
+                if self.dash is not None and self.adb.other_hub is not None:
+                    self.log(f"not putting the hardware config back: {self.adb.other_hub}")
+                    self.note_restore(f"not put back: {self.adb.other_hub}")
+                elif self.dash is not None:
                     self.log("putting the hardware config back; Ctrl-C is ignored until that's done")
                     failure = None
                     deadline = time.monotonic() + RESTORE_WINDOW_S
@@ -9615,12 +9680,17 @@ class Runner:
                     while True:
                         attempt += 1
                         try:
-                            if attempt > 1:
+                            # restore_config opens the dashboard at the hub's address before its first adb command.
+                            if attempt > 1 or self.adb.expect_serialno is not None:
                                 self.adb.ensure_connected()
                             self.restore_config()
                             failure = None
                             if attempt > 1:
                                 self.restore_notes.append(f"restored on attempt {attempt}")
+                            break
+                        except OtherHub as e:
+                            failure = e
+                            self.log(f"restore attempt {attempt}: {e}")
                             break
                         except Exception as e:
                             failure = e
@@ -9677,7 +9747,7 @@ class Runner:
         of a step whose next part runs on the same config."""
         try:
             step()
-        except ProtocolError:
+        except (ProtocolError, OtherHub):
             raise
         except BenchError as e:
             self.check(f"{name} bench completed", False, str(e))
@@ -9770,6 +9840,9 @@ def parse_args(argv):
     p.add_argument("--list-configs", action="store_true",
                    help="only list the hub's saved hardware configs, their webcam and Ethernet device names and stale "
                         "ones; changes nothing on the hub, so it works on a robot's hub")
+    p.add_argument("--probe-only", action="store_true",
+                   help="only Bench: Probe and the REV hubs on the Control Hub's USB ports, recorded as hardware in "
+                        "runner_results.json for session.py's plan, then the config put back; drives nothing")
     p.add_argument("--gamepad", action="store_true",
                    help="Bench: Gamepad and Bench: Gamepad Linear (dashboard gamepads sent over the websocket)")
     p.add_argument("--write-recovery", action="store_true",
@@ -9791,6 +9864,9 @@ def parse_args(argv):
                    help="the Photon block with its long write soak (up to 1e7 writes per hub, about 3 h), 200 STOP "
                         "trials per condition and more lost-write trials; with --photon-i2c (and on USB wiring "
                         "--usb-expansion --interactive too) it is the run whose verdict can say SAFE")
+    p.add_argument("--photon-soak-hours", type=float, default=None,
+                   help=f"end --photon-soak's soak after this many hours instead of {PHOTON_SOAK_MAX_S // 3600} (at most "
+                        "that), if it hasn't reached its write count by then")
     p.add_argument("--photon-stop-trials", type=int, default=None,
                    help=f"STOP trials per condition (default {PHOTON_STOP_TRIALS}, {PHOTON_SOAK_STOP_TRIALS} with "
                         "--photon-soak)")
@@ -9872,9 +9948,14 @@ def parse_args(argv):
                    help="reach the Control Hub over a USB cable to its USB-C port instead of its Wi-Fi: adb over the "
                         "cable (never adb connect) and the hub's ports through adb forwards on free ports of this Mac, "
                         "removed at the end; the Mac stays on its own network")
+    p.add_argument("--hub-serialno", default=None,
+                   help="the hub's ro.serialno (session.py passes it): every adb connection check reads it, and a hub "
+                        "that reads otherwise stops the run with nothing more sent to it, its config not put back")
     args = p.parse_args(argv)
     if args.usb and args.host != HUB_IP:
         p.error("--host is the hub's Wi-Fi address; with --usb the runner reaches the hub's ports through the cable")
+    if args.hub_serialno is not None and not args.hub_serialno.strip():
+        p.error("--hub-serialno takes the hub's ro.serialno, which can't be empty")
     if not 0 <= args.other_pipeline <= 9 or args.other_pipeline == BALL_PIPELINE:
         p.error(f"--other-pipeline must be a Limelight pipeline 0-9 other than the ball pipeline {BALL_PIPELINE}")
     if not 1 <= args.expansion_address <= EXPANSION_MAX_ADDRESS:
@@ -9885,6 +9966,11 @@ def parse_args(argv):
         args.turret_zero = True
     if args.photon_stop_trials is not None and args.photon_stop_trials < 1:
         p.error("--photon-stop-trials must be at least 1")
+    cap = PHOTON_SOAK_MAX_S / 3600
+    if args.photon_soak_hours is not None and not (args.photon_soak and 0 < args.photon_soak_hours <= cap):
+        p.error(f"--photon-soak-hours takes --photon-soak and a number of hours above 0, at most {cap:g}")
+    if args.probe_only and (args.list_configs or args.all or any(getattr(args, n, False) for n in BENCHES)):
+        p.error("--probe-only runs no bench: leave out the bench flags, --all and --list-configs")
     return args
 
 

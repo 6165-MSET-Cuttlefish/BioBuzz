@@ -28,6 +28,8 @@ CALLS = "wifi_default_adb_calls.txt"
 SELECTIONS = "step_selections.json"
 EVERYTHING = "wifi_everything.json"
 NONCE = re.compile(r'"nonce": "[0-9-]+"')
+POLL = re.compile(r"^adb devices$| shell pidof | shell logcat -d ")
+HUB_TIME = re.compile(r"'(?:\d{4}-)?\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}'")
 SELECTION_ARGV = ([], ["--all"], ["--hub", "--loop"], ["--photon"], ["--turret-zero"], ["--dashboard-off"], ["--no-sloth"],
                   ["--all", "--no-sloth"], ["--webcam"], ["--photon", "--hub"])
 
@@ -91,6 +93,21 @@ def normalized(hub, runner):
     return [call.replace(out, "<out>") for call in hub.calls]
 
 
+def same_calls(label, now, recorded):
+    """In order and byte for byte, polls aside: how many `adb devices`, pidof and logcat reads a wait makes follows how
+    fast the fake hub answers on a loaded Mac. A kind of poll the recorded run never made still fails."""
+    a, b = [c for c in now if not POLL.search(c)], [c for c in recorded if not POLL.search(c)]
+    expect(label, a == b)
+    if a != b:
+        at = next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+        print(f"  first difference at call {at + 1} of those: now {a[at:at + 1]}, recorded {b[at:at + 1]}")
+    shapes = (lambda calls: {HUB_TIME.sub("'<time>'", c) for c in calls if POLL.search(c)})
+    new = shapes(now) - shapes(recorded)
+    expect(f"{label}: no kind of poll the recorded run didn't make", not new)
+    if new:
+        print(f"  new polls: {sorted(new)[:3]}")
+
+
 def benches_entered(runner):
     text = (runner.out / "run.log").read_text()
     return [line.split("=== ", 1)[1].split(" ===")[0] for line in text.splitlines() if "] === " in line]
@@ -137,6 +154,73 @@ def wifi_checks(rb):
     return hub, runner
 
 
+def other_hub(rb):
+    """--hub-serialno (session.py's): another hub answering at 192.168.43.1 after a reboot gets nothing more, not even
+    the config put back; one answering at connect gets nothing at all; this hub's run is the run without the flag."""
+    class RebootOnly(rb.Runner):
+        def run_dashboard_off(self):
+            rec = self.results["dashboard_off"] = {"planned": ["reboot"], "phases": [], "limelight": False}
+            try:
+                self._dash_off_phase(rec, "reboot")
+            finally:
+                self._dash_off_recover(rec)
+
+    hub, seen = fake_hub.Hub(), {}
+
+    def another():
+        hub.hub_serial = "OTHERHUB0002"
+        seen.update(calls=len(hub.calls), tcp=len(hub.tcp))
+
+    hub.on_present = another
+    OUT.mkdir(parents=True, exist_ok=True)
+    with hub.installed(rb), quiet():
+        r = RebootOnly(rb.parse_args(["--out", str(pathlib.Path(tempfile.mkdtemp(prefix="other-", dir=OUT)) / "run"),
+                                      "--ports-empty", "--dashboard-off", "--hub-serialno", "FAKEHUB0001"]))
+        code = r.run()
+    summary = (r.out / "summary.md").read_text()
+    said = "a different hub answered at 192.168.43.1:5555 (ro.serialno OTHERHUB0002, not FAKEHUB0001); nothing more " \
+           "was sent to it"
+    expect("another hub after Bench: Dashboard Off's reboot: after its ro.serialno, not one adb command or socket",
+           code == 1 and hub.calls[seen["calls"]:] == [f"adb -s {fake_hub.WIFI_SERIAL} shell getprop ro.serialno"]
+           and len(hub.tcp) == seen["tcp"])
+    expect("another hub after the reboot: no recovery and no config put back there, and summary.md says why",
+           hub.active["name"] == rb.CONFIG_MAIN and said in summary and f"Restore: not put back: {said}" in summary
+           and said in r.results["dashboard_off"]["recovery"].get("error", ""))
+
+    hub = fake_hub.Hub()
+    hub, runner, code, _ = default_run(rb, ["--hub-serialno", "SOMEOTHER9"], hub=hub)
+    expect("--hub-serialno naming another hub: stops at connect after reading its ro.serialno, changing nothing",
+           code == 1 and hub.calls[-1].endswith("shell getprop ro.serialno")
+           and not [c for c in hub.calls if " push " in c or "run-as" in c or " am " in c]
+           and "ro.serialno FAKEHUB0001, not SOMEOTHER9" in (runner.out / "summary.md").read_text())
+
+    class Restore(rb.Runner):
+        def restore_config(self):
+            seen["restore"] = len(hub.calls)
+            return super().restore_config()
+
+    hub = fake_hub.Hub()
+    with hub.installed(rb), quiet():
+        r = Restore(rb.parse_args(["--out", str(pathlib.Path(tempfile.mkdtemp(prefix="other-", dir=OUT)) / "run"),
+                                   "--ports-empty", "--hub", "--hub-serialno", "FAKEHUB0001"]))
+        r.run()
+    checks = [i for i, c in enumerate(hub.calls) if c.endswith("shell getprop ro.serialno")]
+    expect("--hub-serialno naming this hub: the run ends with the config put back, reading ro.serialno after every "
+           "adb connection check, the restore's first included",
+           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")]
+           and checks and all(hub.calls[i - 1] == "adb devices" for i in checks)
+           and seen["restore"] - 1 in checks and "different hub" not in (r.out / "summary.md").read_text())
+
+
+def wifi_link(rb):
+    link = rb.WifiLink(rb.HUB_IP)
+    expect("Wi-Fi link: the dashboard page, the RC page and the restore by hand are all at 192.168.43.1:8080",
+           link.dash_page() == ("http://192.168.43.1:8080/dash", None)
+           and link.rc_page() == ("http://192.168.43.1:8080", None)
+           and "open http://192.168.43.1:8080/dash, add the Hardware Config view, and activate betta_decode"
+           in link.restore_by_hand(fake_hub.WIFI_SERIAL, "", "betta_decode"))
+
+
 def connects(hub):
     return [c for c in hub.calls if " connect " in f" {c} " or " disconnect" in c]
 
@@ -175,6 +259,8 @@ def usb_default(rb):
     expect("usb: deploySloth ran with ANDROID_SERIAL at the cable's serial, the device listed, so the Load plugin "
            "doesn't adb connect", hub.deploys and all(d["ANDROID_SERIAL"] == fake_hub.USB_SERIAL
                                                       and d["listedDevices"] for d in hub.deploys))
+    expect("usb: every deploySloth that ended by itself was left alone", hub.gradle_procs
+           and not [p for p in hub.gradle_procs if p.killed])
     expect("usb: summary.md says the run used the cable and which forwards it made",
            "Link: USB cable (adb " + fake_hub.USB_SERIAL in summary and "removed at the end:" in summary)
     expect("usb: summary.md judges each hub port from the hub's own socket table", "8000 yes (listens on any)" in summary)
@@ -320,8 +406,80 @@ def usb_unjudged(rb):
            and "isn't listening there" not in check[3])
 
 
-def usb_checks(rb):
-    for section in (usb_default, usb_reboot, usb_cable_pull, usb_stops, usb_unjudged):
+def usb_interrupted(rb):
+    """Ctrl-C in the first bench: the runner's finally puts the config back and removes its own forwards."""
+    class FirstBenchInterrupted(rb.Runner):
+        def guarded(self, name, step):
+            raise KeyboardInterrupt
+
+    foreign = [("R58M90ABCDE", 9999, 9999), (fake_hub.USB_SERIAL, 9998, 8000)]
+    hub = fake_hub.Hub(usb=True, foreign_forwards=foreign)
+    raised = False
+    with hub.installed(rb), quiet():
+        r = FirstBenchInterrupted(rb.parse_args(["--out", str(pathlib.Path(tempfile.mkdtemp(prefix="usb-", dir=OUT))
+                                                             / "run"), "--ports-empty", "--usb"]))
+        try:
+            r.run()
+        except KeyboardInterrupt:
+            raised = True
+    link = next(line for line in (r.out / "summary.md").read_text().splitlines() if line.startswith("Link: "))
+    expect("usb, Ctrl-C in the first bench: the runner put the original config back, left no bench config and "
+           "re-raised", raised and hub.active["name"] == "betta_decode"
+           and not [n for n in hub.configs if n.startswith("bench_")])
+    expect("usb, Ctrl-C in the first bench: only the forwards it made are gone, and summary.md's Link line says which",
+           [(f.serial, f.local, f.remote) for f in hub.forwards] == foreign
+           and re.search(r"removed at the end: \d+", link) and "9998" not in link.split("removed at the end:")[1])
+
+
+def usb_rc_page(rb):
+    """The RC page's second forward: a hung adb skips only that step, and page ports given up are discarded, not
+    reported as removed at the end."""
+    hub = fake_hub.Hub(usb=True)
+    with hub.installed(rb), quiet():
+        r = usb_runner(rb, hub, ["--clock", "--interactive"])
+        r.connect()
+        hub.clock, hub.hang_no_rebind = 3600, True
+        r.run_clock()
+        events = list(r.link.events)
+        r.dash.close()
+        r.link.close()
+        describe = r.link.describe(hub.serial)
+    summary = "\n".join(r.summary)
+    discarded = [e["local"] for e in events if "discarded" in e]
+    expect("rc page, adb hanging on the websocket's forward: Bench: Clock still runs, saying the page step was skipped",
+           "the RC web page step was skipped: adb -s" in summary and "didn't answer within 20 s" in summary
+           and any(c[0].startswith("clock: PathCommands.timeout") for c in r.checks)
+           and not [c for c in r.checks if "raised" in c[2]])
+    expect("rc page, adb hanging: the page's own forward is discarded at once, and the Link line says so, apart from "
+           "the forwards removed at the end",
+           len(discarded) == 1 and not [f for f in hub.forwards if f.local == discarded[0]]
+           and f"discarded unused page ports: {discarded[0]}" in describe
+           and str(discarded[0]) not in describe.split("removed at the end:")[1].split(";")[0])
+
+
+def deploy_interrupted(rb):
+    hub = fake_hub.Hub(usb=True)
+    raised = False
+    with hub.installed(rb), quiet():
+        r = usb_runner(rb, hub)
+        r.connect()
+
+        def ctrl_c():
+            raise KeyboardInterrupt
+
+        try:
+            r._deploy_sloth("t1", ctrl_c)
+        except KeyboardInterrupt:
+            raised = True
+        r.dash.close()
+        r.link.close()
+    expect("deploySloth when the runner alone gets Ctrl-C after the push: the runner kills it rather than leave it "
+           "waiting on the hub's lock", raised and hub.gradle_procs and hub.gradle_procs[-1].killed)
+
+
+def link_checks(rb):
+    for section in (usb_default, usb_reboot, usb_cable_pull, usb_stops, usb_unjudged, usb_interrupted, usb_rc_page,
+                    deploy_interrupted, other_hub, wifi_link):
         try:
             section(rb)
         except Exception as e:
@@ -346,13 +504,9 @@ def main():
         return 0
 
     hub, runner = wifi_checks(rb)
-    usb_checks(rb)
-    calls = normalized(hub, runner)
-    golden = (FIXTURES / CALLS).read_text().splitlines()
-    first = next((i for i, (a_, b) in enumerate(zip(calls, golden)) if a_ != b), min(len(calls), len(golden)))
-    expect("wifi: the adb calls are the recorded ones, byte for byte (fixtures/" + CALLS + ")", calls == golden)
-    if calls != golden:
-        print(f"  first difference at call {first + 1}: now {calls[first:first + 1]}, recorded {golden[first:first + 1]}")
+    link_checks(rb)
+    same_calls("wifi: the adb calls are the recorded ones, in order and byte for byte, polls aside (fixtures/" + CALLS
+               + ")", normalized(hub, runner), (FIXTURES / CALLS).read_text().splitlines())
     expect("the step selection matches the recorded one for every flag set (fixtures/" + SELECTIONS + ")",
            selections(rb) == json.loads((FIXTURES / SELECTIONS).read_text()))
     expect("--usb leaves the step selection as it is for every flag set",
@@ -362,6 +516,10 @@ def main():
            {"webcam", "limelight", "expansion"} <= set(recorded["benches"])
            and any(remote == 5807 for remote, _ in recorded["http"]))
     for key in recorded:
+        if key == "adb":
+            same_calls(f"wifi with a webcam, the Limelight and an Expansion Hub: its adb calls are the recorded ones, "
+                       f"polls aside (fixtures/{EVERYTHING})", now[key], recorded[key])
+            continue
         expect(f"wifi with a webcam, the Limelight and an Expansion Hub: its {key} are the recorded ones, in order "
                f"(fixtures/{EVERYTHING})", now[key] == recorded[key])
         if now[key] != recorded[key]:
