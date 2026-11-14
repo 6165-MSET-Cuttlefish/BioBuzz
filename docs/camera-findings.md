@@ -121,6 +121,28 @@ pixels, HFOV = 2·atan(width / 2 / fx), and VFOV is the vertical equivalent.
 - These numbers come from goBILDA's unit. Whether the bare B0385 reports the same vid/pid and crops the same way is
   unverified.
 
+### Swapping in an Arducam OV9281 (monochrome)
+
+Asked 2026-11-14; not tried on a hub. It should work for the cell-tip check, with one config change:
+
+- **The check needs nothing the OV9281 lacks.** `CellTipPipeline` detects tags on the grayscale frame and uses only
+  their corners (above), and `WebcamSession` streams 640×480 MJPEG. The FTC docs' [webcam table][ftcwebcams] lists
+  the Arducam 120 fps global-shutter OV9281 as a 70° monochrome camera with 640×480 among its MJPEG sizes (searched
+  2026-11-14). The same 70° class of lens keeps tags about the size they are now.
+- **Change the serial in the hardware config.** `aprilTagDetector` is declared with the OV9782's serial; a webcam
+  with another serial fails to open, which stops every OpMode built on `BioBuzzRobot` in INIT. Read the new camera's
+  serial on the Driver Station (Configure Robot, Scan) and put it in `biobuzz.xml` and `camera.xml`: a `res/` change,
+  so a full install.
+- **White balance will probably be refused.** A monochrome sensor has none. `WebcamControls` records a refused mode
+  and shows `REJECTED` instead of stopping (`biobuzz/modules/vision/WebcamControls.java`, `setModes`); whether the
+  SDK's white balance control returns limits or throws on this camera is unknown. Exposure and gain should still
+  apply, and with no colour filter the sensor needs less exposure for the same picture.
+- **One per robot.** The same FTC docs page says the SDK has been seen to misbehave with more than one Arducam OV9281
+  attached.
+- **Check before trusting it:** Cell Tip Test on `camera.xml` (INIT must pass and tags must be found at match
+  distance), then Bench: Webcam, whose white balance phases should read refused, not crash.
+- **Avoid Arducam's 130° OV9281 board**: wide-angle shrinks every tag, so the check reads TIPPED from closer in.
+
 ## Lens distortion, calibration and pose
 
 This matters only if VisionPortal AprilTag pose is ever used. The cell tip doesn't use pose.
