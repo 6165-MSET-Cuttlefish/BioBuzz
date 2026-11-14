@@ -150,7 +150,9 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   - The OctoQuad had 0 bad reads in 383 loops. `readLocalizerDataAndAllEncoderData` costs 6.58 / 8.51 / 17.67.
   - Pinpoint drift: the 0.7 in position error that came with it is the heading error times the 6.5 in pod offset.
   - Rerun the Pinpoint step with the board untouched before blaming the Pinpoint. If the drift holds, a start pose set
-    in INIT won't survive it, and neither would a re-seed at START.
+    in INIT won't survive it, and neither would a re-seed at START. Test: Bench: Pinpoint's soak
+    (`python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`, an hour untouched) judges the heading over the
+    first 5 s and 5-120 s against the OctoQuad's beside it, and times a recalibration.
 - **Pedro's `OctoQuadLocalizer` hangs INIT when the OctoQuad is missing: give a follower that uses the OctoQuad
   `GuardedOctoQuadLocalizer` (`architecture/hardware/`) instead.** No robot's follower uses either yet; only the
   OctoQuad benches build the guarded one. Pedro's constructor (measured on 3.0.1 on 2026-10-09, unchanged in 3.0.2)
@@ -351,7 +353,12 @@ Not run on either date (they need `--interactive`):
   ([`CLAUDE.md`](../CLAUDE.md), Tuning).
 - **Whether a Pinpoint unplugged mid-run reads (0, 0, 0) as the source says, and whether single bad reads happen while
   driving:** run the Pinpoint unplug and replug in `run_bench.py --interactive`. It decides whether a guard stops on
-  one non-READY read or on a streak.
+  one non-READY read or on a streak. `python3 scripts/bench/run_bench.py --pinpoint --interactive --ports-empty` pulls
+  the cable twice, first under the SDK's driver alone (no follower), then under the follower.
+- **Whether a healthy Pinpoint at rest ever reads a status other than READY after its first READY, and whether the
+  41.8 ms `follower.update()` peak logged on the DECODE robot (2026-07-30) recurs as an I2C stall:** test: Bench:
+  Pinpoint's soak (`python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`). An hour with none bounds the
+  rate at about 1e-5 per read; the driving half still needs a count in Pinpoint Localizer Test on the Betta bot.
 - **Whether a rangefinder in SHORT mode keeps its accuracy at a 10 ms timing budget:** log a fixed target's distance
   at 20 and 10 ms budgets and compare the spread and the mean.
 - **The sliced route search on a hub:** its longest step, plan time from request to done, the loop period while it
@@ -363,7 +370,9 @@ Not run on either date (they need `--interactive`):
   write, and judges each against `WriteCache`'s re-send period plus 2 loops; run it, and Bench: Write Recovery Photon
   with `--photon`.
 - **`GuardedOctoQuadLocalizer` with an OctoQuad plugged in:** read cost, valid reads after the first RUNNING, the
-  start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`.
+  start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`. START before the first
+  RUNNING, the cable plugged in during INIT, and the same pull under Pedro's `OctoQuadLocalizer` as the control:
+  `python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`.
 - **Whether Ball Collection Auto's STOP fits the stop window with the webcam open:** the about 830 ms (up to about 855)
   above is an estimate. Test: `scripts/bench/run_bench.py --planner-stop --ports-empty` with a UVC webcam on the
   Control Hub's USB (Bench: Planner Stop's webcam trials: a planner slice, the loop's tail and `CellTipCamera.stop()`

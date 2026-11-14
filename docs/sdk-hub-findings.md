@@ -257,6 +257,8 @@ every other device (source: `OpModeManagerImpl.resetHardwareForOpMode`):
 - **BRAKE at partial power:** coast down from the same speed at power 0.05 under BRAKE and under FLOAT.
 - **Whether the firmware acts on the current-alert level:** stall a motor with the alert set low and log its current.
 - **What a Pinpoint reads when unplugged mid-run:** the Pinpoint cable pull in
-  `scripts/bench/run_bench.py --interactive`, which records the first non-READY status and pose.
+  `scripts/bench/run_bench.py --interactive`, which records the first non-READY status and pose. The first of its two
+  pulls (`python3 scripts/bench/run_bench.py --pinpoint --interactive --ports-empty`) reads the SDK's driver alone, with
+  no follower.
 - **What the hub's fail-safe leaves motors and servos in** (brake or float, servo PWM off or held): press STOP with a
   servo under load and a motor spinning, and watch both.

@@ -70,7 +70,8 @@ the exact command and what to have on the table) and what is left by hand; `cons
 (`00-probe`, `01-default`, ...); `install/` with `--install`.
 
 By hand afterwards: the Needs a person runs (the `--interactive` prompts, the Photon cable pulls inside the USB go
-run, Bench: Dashboard Off's battery pull, Bench: Turret Zero, Bench: Config Check's typed ports statement); the
+run, Bench: Dashboard Off's battery pull, Bench: Turret Zero, Bench: Config Check's typed ports statement); Bench:
+Pinpoint's hour-long soak, which needs nobody but isn't in the session ([below](#bench-pinpoint-soak)); the
 Pinpoint back to Control Hub I2C port 1 if it was on the Expansion Hub; `bash .../REINSTALL.sh` (`summary.md` names
 it) if it installed and you kept the bench build; whatever the Put back section says failed; and the bench ports
 plugged back before the hub goes on a robot.
@@ -147,8 +148,8 @@ Missing hardware skips its benches, and the summary says so.
 
 | plug in | where | runs |
 |---|---|---|
-| a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam, Webcam Stop, Webcam Thread Failure; with `--planner-stop`, Bench: Planner Stop's webcam trials |
-| the Limelight 3A, booted | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery |
+| a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam ([its clamped and refused settings](#bench-webcams-clamped-and-refused-settings) included), Webcam Stop, Webcam Thread Failure; with `--planner-stop`, Bench: Planner Stop's webcam trials |
+| the Limelight 3A, booted, with 4 Pollen balls in its view ([below](#bench-limelights-ball-phases)) | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery |
 | a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent) |
 | an OctoQuad MK2, pods on encoder ports 3 and 4, still (on the robot they sit on 0 and 1) | Control Hub I2C bus 2 | Bench: OctoQuad, its bank phase included |
 | a REV Expansion Hub on its own 12 V | RS485, address 2 (`--expansion-address N`) | Bench: Expansion Hub (reads only) |
@@ -156,7 +157,8 @@ Missing hardware skips its benches, and the summary says so.
 | the same Expansion Hub, same empty ports | RS485 only, address 2 (`--expansion-address N`) | the Photon block with `--photon-rs485` |
 | the Pinpoint and the OctoQuad, for the Photon block's I2C reads | OctoQuad: Control Hub I2C port 2; Pinpoint: **Expansion Hub I2C port 1** (Control Hub port 1 with no Expansion Hub) | the Photon block with `--photon-i2c` |
 
-`--interactive` adds terminal prompts: pull and replug the Limelight, Pinpoint and OctoQuad cables (pods stay in); move
+`--interactive` adds terminal prompts: pull and replug the Limelight, Pinpoint and OctoQuad cables (pods stay in; the
+Pinpoint's twice, under its raw driver and then under the follower); move
 the Pinpoint and OctoQuad to the Expansion Hub's I2C ports 1 and 2 and back; open http://192.168.43.1:8080 during
 Bench: Clock on a hub whose clock still reads about 1970; drive the dashboard's Gamepad view with the keyboard, the
 on-screen stick and a USB pad (close the tab afterwards); with `--dashboard-off`, pull the Control Hub's battery lead
@@ -185,6 +187,8 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 | `--config-check` | only Bench: Config Check (below); needs `--s3-ports` and a terminal; a run without bench flags, or with `--all` alone, leaves it out |
 | `--s3-ports` | you type `empty` at the start, saying nothing is plugged into either hub's motor ports 0-3 or servo ports 0-5; a bench that drives them (Bench: Config Check) runs only with it; it also stands for `--ports-empty`; needs a terminal |
 | `--turret-zero-v2` | Bench: Turret Zero with its V2 phase, for when a REV-11-3174 is on hand (implies `--turret-zero`) |
+| `--pinpoint-soak [SECONDS]` | Bench: Pinpoint's soak and recalibration run ([below](#bench-pinpoint-soak)): SECONDS untouched, 3600 by default, 300 with `--quick`, at least 150 (implies `--pinpoint`); a run without bench flags leaves it out |
+| `--octoquad-chain` | Bench: OctoQuad's chain ([below](#bench-octoquad-chain)), prompted, with the pods on OctoQuad channels 0 and 1; needs `--interactive` (implies `--octoquad`) |
 | `--quick` | shorter phases, noisier numbers |
 | `--all` | every bench but the Photon block, Bench: Turret Zero and Dashboard Off; stops if no webcam, Limelight or Expansion Hub is plugged in |
 | `--keep-configs` | leaves the `bench_*` hardware configs on the hub |
@@ -508,6 +512,191 @@ Only a hub shows: the real error text each OpMode throws, whether the allowed er
 what each OpMode writes during INIT, and how long each INIT and STOP takes. Offline:
 `python3 -I scripts/bench/offline/benches/config_check.py`.
 
+## Bench: Pinpoint soak
+
+Whether a healthy Pinpoint at rest ever reads a status other than READY after its first READY (a guard that stops on
+one such read would stop a match), whether the 41.8 ms `follower.update()` peak seen on the DECODE robot recurs as an
+I2C stall, and how far its heading drifts at rest next to the OctoQuad. It extends Bench: Pinpoint: two more runs of
+the same OpMode, after the seed run.
+
+**Plug in:** the Control Hub on 12 V; the Pinpoint in Control Hub I2C port 1 and the OctoQuad in port 2, both pods in
+each, both boards taped down. Nothing on the motor ports 0-3 or servo ports 0-1 (the idle follower writes 0 to `fl`,
+`fr`, `bl`, `br`, as Bench: Pinpoint's seed run does).
+
+**Command:** `python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`, about 70 minutes (`--pinpoint-soak 300`,
+or `--quick`, for a five-minute look). Nobody touches the bench for the hour: start it before a break. It switches to
+`bench_octoquad` and puts the config back at the end.
+
+The runs, on `bench_octoquad`:
+
+1. **Soak**: INIT held 2 s, then RUN for the time asked, Pedro's `PinpointLocalizer` built as `BettaConstants` builds it,
+   so the follower reads the Pinpoint every loop with no guard. Each loop times the Pinpoint read alone (its `update()`),
+   and `follower.update()`, and reads the status; every read over 20 ms is kept with its loop and ART's blocking-GC
+   and GC counts across it; every status other than READY after the first READY is kept as a streak (status, reads,
+   ms to READY, pose). Every 10th loop it reads the OctoQuad's heading next to the Pinpoint's.
+2. **Recalibration**: no follower. Both drivers read raw; once READY and RUNNING, `recalibrateIMU()` and
+   `resetLocalizerAndCalibrateIMU()` together, the time each takes to come back, then 60 s still.
+
+| judged | FAIL when |
+|---|---|
+| ran its time | the soak crashed or stopped short |
+| no status but READY after the first READY | any one; the check lists each streak and when a guard that stops on the first would have stopped |
+| no read over 40 ms without a blocking GC | any; reads over 20 ms are counted, with their rate and GC overlap, not judged |
+| setup: the OctoQuad's heading moved at most 0.1 deg over 5-120 s | it moved more, or no OctoQuad answered: the Pinpoint's drift is then not judged |
+| the Pinpoint's heading moved at most 0.2 deg in the first 5 s and 0.5 deg over 5-120 s | it moved more |
+| the recalibration came back and 60 s were recorded | either board wasn't back within 15 s, or the run stopped early |
+
+`summary.md` also gives the read, `follower.update()` and loop-period percentiles, the status counts, both headings'
+slopes in deg/min, the yaw scalar and the rule-of-three bound: with no non-READY read in n reads, 3/n per read, and
+what that allows in a 150 s match at 33 Hz. At an estimated 87 loops a second an hour is about 313,000 reads, which
+bounds it to 9.6e-6 per read, at most about 5% per match; five minutes bounds only 1.1e-4, so the guard decision waits
+on the hour.
+
+With `--pinpoint --interactive`, before the follower's own pull, Bench: Pinpoint also runs its raw driver alone
+(`GoBildaPinpointDriver` from the hardware map, `update()` each loop): pull the Pinpoint's cable from Control Hub I2C
+port 1, then plug it back in. It records the first status off READY and whether the pose zeroed, froze or moved, and
+when READY came back; it fails only if the unplug never showed.
+
+Only a hub shows: the read times, whether any non-READY read or stall happens, the drift, and what the SDK driver
+reads with its cable out. The math (`PinpointMath`: the histogram, the streaks, the drift, the bound) has JUnit tests.
+Offline: `python3 -I scripts/bench/offline/benches/pinpoint.py`.
+
+## Bench: OctoQuad chain
+
+GuardedOctoQuadLocalizer with an OctoQuad plugged in, through every path the robot could meet: START before the first
+RUNNING, a cable pulled under Pedro's own localizer (the control) and under the guard, the cable plugged in during
+INIT; and what the OctoQuad keeps through its own reset, its full reset and a power cycle. It extends Bench: OctoQuad:
+after the seed run, five more runs of the same OpMode.
+
+**Plug in:** the Control Hub on 12 V; the OctoQuad MK2 in Control Hub I2C port 2 with its pods on **channels 0 and 1**
+(as on the robot), still. Nothing on the motor ports 0-3 or servo ports 0-1.
+
+**Command:** `python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`, from a
+terminal, about 12 minutes. Without `--octoquad-chain`, `--octoquad --interactive` runs the seed run and one pull and
+replug, as before (pods on channels 3 and 4).
+
+**What the person does,** each when asked:
+
+1. Roll the pod on OctoQuad channel 0 about 10 cm by hand.
+2. Pull the OctoQuad's cable out of Control Hub I2C port 2. The runner waits 10 s.
+3. Plug it back in.
+4. Pull it out again, and leave it out.
+5. Plug it back in (the OpMode is in INIT, waiting).
+
+The runs, each a Bench: OctoQuad mode, params `portX` 0 and `portY` 1:
+
+1. **earlystart**: START 0.3 s after INIT, before the first RUNNING; then 5 s of RUN.
+2. **markers**: no follower. Reads the bank, every channel's velocity interval and direction and the uptime, then sets
+   two markers, channel 7's velocity interval to 17 ms and the bank to BANK1_QUADRATURE_BANK2_PULSE_WIDTH (the pods on
+   channels 0 and 1 keep counting), never saved to flash. After the roll: the counts and the pose;
+   `resetLocalizerAndCalibrateIMU()`, then the counts; `resetEverything()`, then the uptime, the markers, the counts and
+   the localizer's status. Then it puts the bank and channel 7's interval back as it found them.
+3. **unguarded**, the control: Pedro's `OctoQuadLocalizer` (param `guard` 0), the markers set again at INIT. The cable
+   pull, 10 s out, the replug; once the OctoQuad answers again, the uptime, bank, intervals and directions (the
+   power-cycle answer), then how long until RUNNING, and the pose then; then the markers put back.
+4. **dropout** with the guard: the pull, and the cable stays out.
+5. **latejoin**: INIT with the cable out; once the `OctoQuad` fault shows, the plug-in; START once RUNNING, then 3 s.
+
+| judged | FAIL when |
+|---|---|
+| early START | START waited over 3 s for RUNNING (from the last INIT loop), or the OpMode threw or didn't run 5 s |
+| markers | a read didn't answer within 5 s of its step (a reset, the full reset, a count read); what the resets kept is reported, not judged |
+| the control | under Pedro's localizer the pull didn't simply freeze the pose: the OpMode stopped, an OctoQuad fault came, the pose zeroed or moved, or the pull never showed |
+| the power cycle | after the replug the OctoQuad didn't answer within 30 s; the markers and directions it lost are reported, not judged (the code sets them at every INIT) |
+| the guard | the OpMode didn't stop by itself 200-1000 ms after the first invalid read with an error naming the OctoQuad; judged only when the control kept running, otherwise reported as void |
+| the late plug-in | no fault within 5 s of INIT; the fault not cleared or RUNNING not reached within 5 s of the OctoQuad answering; the pod directions not as OctoQuadSetup sets them; the start pose set in INIT off by over 0.1 in or 0.2 deg at START + 3 s |
+
+Only a hub shows: whether the firmware's resets and a power cycle keep the markers, the counts and the localizer
+settings, how long the guard takes to stop, and whether a late plug-in reaches RUNNING. The comparisons
+(`OctoQuadMath`) have JUnit tests. Offline: `python3 -I scripts/bench/offline/benches/octoquad.py`.
+
+## Bench: Limelight's ball phases
+
+Bench: Limelight (`--limelight`, and the default run whenever a Limelight answers) ends with four steps that check the
+ball frames: whether they go stale, how still balls look through the tracker, and what a pipeline change does mid-run.
+
+**Set up at S2, once:** the Limelight 3A on the Control Hub's USB, on a stand at the height and tilt the SnapScript's
+homography (`H_ARRAY`) assumes: lens about 15.5 in above the floor, tilted about 15.9° down (the Betta bot's mount, not
+the CAD's 16.34 in and 30°). Put 4 Pollen balls on taped marks 24, 48, 72 and 96 in from the lens, on the camera's
+centreline, and leave them. Nothing else: the bench asks nothing.
+
+**Command:** `python3 scripts/bench/run_bench.py --limelight --ports-empty`, about 2 minutes longer than before.
+
+What it does, in order:
+
+1. **sync:** after the two upload syncs, it switches the Limelight to the other pipeline (`--other-pipeline`, default
+   0) and runs the switch-only sync (`Limelight Balls → syncOnInit` off). Then a `LimelightBallSource` with
+   `syncOnInit` off goes from the other pipeline to its first frame.
+2. **staleness:** a `LimelightBallSource` with the upload at INIT runs 60 s on pipeline 4. It records when each new
+   frame arrives, the gaps between them in 10 ms bins, the loops that publish balls and the stale episodes at the live
+   `staleFrameSeconds`. Then it replays the arrivals at 0.4, 0.5, 0.6 and 0.7 s.
+3. **stillBalls:** the same source and its tracker for 30 s. A ball is a place 6 in wide. Per ball: the spread of its
+   tracked position around its mean, the speed the tracker reports, its track ids and the frames it was missing from.
+4. **pipelineChange:** it changes `Limelight Balls → pipeline` under the running source, as a dashboard edit does: to
+   the other pipeline until that sync is done, back to 4, then, with that sync still running, to the other pipeline
+   100 ms later and back to 4 100 ms after that. It counts `LimelightSync` threads every 100 ms. The changes away from
+   4 only switch, so the bench never uploads the ball pipeline into your other pipeline.
+
+At the end the Limelight goes back to the pipeline it was on, and `pipeline` and `syncOnInit` to their dashboard values.
+
+| judged | FAIL when |
+|---|---|
+| the two upload syncs | either took over 2.5 s or ended with a problem |
+| the switch-only sync | it took over 1 s or ended with a problem |
+| `syncOnInit` off | the source got no frame, or had a problem |
+| INIT to the first frame, with the upload | over 2.5 s, no frame, or a problem |
+| staleness | under 99% of the loops after the first ball published balls, at the live `staleFrameSeconds` |
+| still balls: how many | not exactly 4 balls seen in at least half the frames |
+| still balls: each ball | it moved 2 in or more from its mean, the tracker gave it a p95 speed of 3 in/s or more, or its track id changed |
+| pipeline change | two `LimelightSync` threads at once; no new frame on pipeline 4 within 3 s of the last change, or ending on another pipeline; `on pipeline N, want 4` after the last change; a loop of 50 ms or more |
+
+`summary.md` names the smallest of 0.4, 0.5, 0.6 and 0.7 s with no stale episode, which settles whether
+`staleFrameSeconds` stays 0.5 or goes to 0.6, and lists each still ball with its spread, speed and ids. With no balls in
+view, the staleness and still-ball checks FAIL and say where the balls go.
+
+Only a hub shows: the real gaps between ball frames and whether any passes 0.5 s; the real jitter and speed noise of a
+still ball at each distance; how long the switch-only sync and a change during a sync take on a real Limelight; and
+whether a cancelled sync's request lands after the new one. Offline:
+`python3 -I scripts/bench/offline/benches/limelight.py`; `StalenessReplay` and `TrackStats`, the latter with the real
+`BallTracker` on a made-up two-ball stream, are JUnit tests in `./gradlew :TeamCode:testDebugUnitTest`.
+
+## Bench: Webcam's clamped and refused settings
+
+Bench: Webcam (`--webcam`, and the default run whenever a webcam is attached) ends with three steps on the real
+`CellTipCamera` module, with its own `WebcamControls` and its own `Webcam` fault, read every loop.
+
+**Plug in:** the OV9782 on the Control Hub's USB. A person does nothing.
+
+**Command:** `python3 scripts/bench/run_bench.py --webcam --ports-empty`, about 1 minute longer than before.
+
+1. **clamp:** it asks for gain 50 above the camera's max, exposure 0 ms and white balance 20000 K, 3 s each, then the
+   value it found again. `WebcamControls` clamps a value into the camera's range before sending it, so this checks the
+   `(asked X)` text and that each value goes out once.
+2. **rejectFind:** it sends each control's values straight to the camera, from its minimum up, in the units
+   `WebcamControls` uses (exposure in whole ms): up to 150 values per control, the maximum last. The SDK gives no step
+   size, so a larger range is only covered from its bottom. It records each value the camera refused.
+3. **reject:** it turns `manual` off and on, which makes `WebcamControls` send all three again. Then, for each control
+   with a refused value, it holds the first one 3 s through `WebcamControls`, then a valid one. Every loop it records
+   `rejected()`, the `Webcam` fault, the line Camera Tune shows and how long `read()` took.
+
+| judged | FAIL when |
+|---|---|
+| `(asked X)` | a value outside the camera's range isn't shown with `(asked X)`, or no held value was outside a range the camera gave |
+| one write per held value | a held value was written again (a `read()` over 20 ms after its first loop), or never, unless it was refused |
+| each refused value: the fault | the `Webcam` fault wasn't raised in the first 2 loops naming the setting, or was already up |
+| each refused value: REJECTED | the control's line doesn't say REJECTED |
+| each refused value: no retry | more than one blocking write, or one after the first loop |
+| each refused value: cleared | the fault stays up after the valid value |
+
+The SDK refuses exposure of 0 ms or less, gain below 0 and white balance outside the camera's range itself, before any
+USB transfer (`CachingExposureControl`, `CachingGainControl` and `CachingWhiteBalanceControl` in SDK 12.0.0,
+decompiled). If the camera's whole-ms exposure minimum is 0, rejectFind finds exposure 0 refused that way.
+`summary.md` says which refusals were the camera's own. If the camera refused nothing, it says the fault path is
+unexercised on hardware and the rejected-settings question stays partly answered.
+
+Only a hub shows: the OV9782's real ranges, whether it refuses any value in them, how long a refused write blocks and
+the text Camera Tune shows. Offline: `python3 -I scripts/bench/offline/benches/webcam.py`.
+
 ## Bench: Turret Zero
 
 Settles whether the nectar turret's Through Bore can be zeroed once at INIT from its absolute output on OctoQuad
@@ -598,7 +787,8 @@ again after the reboot, so it stays until the hub's next one), reinstalls the in
 Sloth jar, now older than the install) and turns the dashboard back on over adb. `--list-configs` only reads.
 Bench: OctoQuad's bank phase and every Bench: Turret Zero run change the OctoQuad's channel bank, which is lost at
 power-off: the bank phase puts back the bank it found, and each Bench: Turret Zero run puts back ALL_QUADRATURE,
-whatever it found; nothing is saved to the OctoQuad's flash. `bench_turret_zero` names only `br` on motor port 2 (to
+whatever it found; nothing is saved to the OctoQuad's flash. `--octoquad-chain` also sets channel 7's velocity interval,
+sends the OctoQuad's `resetEverything()` and puts the bank and that interval back as it found them. `bench_turret_zero` names only `br` on motor port 2 (to
 read encoder port 2) and the OctoQuad.
 
 If it prints `RESTORE FAILED`: open http://192.168.43.1:8080/dash, add the Hardware Config view and activate the config
@@ -619,8 +809,8 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Edge Through Start | nothing | BioBuzz Tele's `EdgeBooleanSupplier` pattern with gamepad1 LB held from INIT through START: no edge at START, one per later press |
 | Bench: Turret PWM | nothing (`bench_turret`) | BettaTurret's PWM, read from the hub's registers, through CENTER, `stop()` with writes off and on, writes back on, IDLE and RightState.FORWARD |
 | Bench: Clock | nothing | `PathCommands.timeout` (15 s) against wall-clock jumps |
-| Bench: Pinpoint, Pinpoint Absent | a Pinpoint / none | firmware, status, and whether a start pose set in INIT survives the IMU recalibration / that a missing Pinpoint raises a fault or keeps the pose `setPose` set |
-| Bench: OctoQuad | an OctoQuad | GuardedOctoQuadLocalizer's read costs, status changes, CRC failures after the first RUNNING read, start-pose survival; then its bank phase, for the turret zero: `readLocalizerData` x300 with the bank as found (ALL_QUADRATURE expected) and with channels 4-7 in pulse-width mode (within 0.2 ms at p50), against `readLocalizerDataAndAllEncoderData` x300 as the positive control (at least 2.5 ms slower, else it says the timing can't see a cost), the one-off INIT read (`readAllEncoderData` x50: every CRC ok, p95 under 20 ms), whether the bank survives GuardedOctoQuadLocalizer's setup and reset (recorded), and the bank found put back |
+| Bench: Pinpoint, Pinpoint Absent | a Pinpoint / none | firmware, status, and whether a start pose set in INIT survives the IMU recalibration / that a missing Pinpoint raises a fault or keeps the pose `setPose` set; with `--pinpoint-soak`, the soak and recalibration run ([below](#bench-pinpoint-soak)) |
+| Bench: OctoQuad | an OctoQuad | GuardedOctoQuadLocalizer's read costs, status changes, CRC failures after the first RUNNING read, start-pose survival; then its bank phase, for the turret zero: `readLocalizerData` x300 with the bank as found (ALL_QUADRATURE expected) and with channels 4-7 in pulse-width mode (within 0.2 ms at p50), against `readLocalizerDataAndAllEncoderData` x300 as the positive control (at least 2.5 ms slower, else it says the timing can't see a cost), the one-off INIT read (`readAllEncoderData` x50: every CRC ok, p95 under 20 ms), whether the bank survives GuardedOctoQuadLocalizer's setup and reset (recorded), and the bank found put back; with `--octoquad-chain`, the chain after it ([below](#bench-octoquad-chain)) |
 | Bench: OctoQuad Absent | an empty I2C bus 3 | GuardedOctoQuadLocalizer with an `octoquad` configured and nothing answering: builds within 1 s, the `OctoQuad` fault raised in INIT within 5 s, INIT keeps looping, START throws naming the OctoQuad |
 | Bench: Expansion Hub | an Expansion Hub | the same Lynx commands and odometry reads on each hub |
 | Bench: Write Recovery | nothing | seven `failSafe()`s, 0 to 235 ms after a write: EnhancedMotor and EnhancedServo (back only on WriteCache's re-send) reach the hub again within the re-send period + 2 loops, raw devices within 2 loops; the worst seen |
@@ -631,10 +821,10 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Limelight Fault | nothing | the `Limelight` fault with nothing answering: raised in INIT within 5 s, loop keeps running, collection ends SKIPPED |
 | Bench: Limelight Hung | nothing | the real Camera against a fake Limelight that serves results and never answers a POST: the `Limelight` fault raised in INIT within the 15 s POST timeout + 2 s, INIT and the loop keep running, one POST and no retry; STOP during a hung POST isn't held up; the next INIT doesn't wait for it, its POSTs never overlap the old one (`reinit` reuses the stopped run's worker; only `reinit_fresh`, with a second worker on the shared blackboard semaphore as a reloaded LimelightSync would use, tests the shared sender), and its sync completes once the fake answers |
 | Bench: Webcam Stop (absent) | nothing | INIT fails with CellTipCamera's "failed to open" |
-| Bench: Webcam | a webcam | open/close times, per-frame and stream costs, frame age against `CellTipCamera.maxStalenessMs` |
+| Bench: Webcam | a webcam | open/close times, per-frame and stream costs, frame age against `CellTipCamera.maxStalenessMs`; out-of-range and refused exposure, gain and white balance through the real CellTipCamera (see Bench: Webcam's clamped and refused settings above) |
 | Bench: Webcam Stop | a webcam | STOP at several points with the webcam open |
 | Bench: Webcam Thread Failure | a webcam | a camera-thread exception reaches the Error line within 2 s |
-| Bench: Limelight | the Limelight | slothboard's proxy, `LimelightSync` time, INIT to first frame, POST costs, frame rate and latency |
+| Bench: Limelight | the Limelight, 4 balls in view | slothboard's proxy, `LimelightSync` time (upload and switch only), INIT to first frame, POST costs, frame rate and latency; ball-frame staleness, still-ball jitter and a pipeline change mid-run (see Bench: Limelight's ball phases above) |
 | Bench: Planner Stop | nothing | STOP during 4- and 5-ball sliced plans: no app restart, hub-side STOP to idle within 900 ms, every 4-ball slice under 300 ms; with `--planner-stop`, an unsliced control that must overrun the stop window at least once in three STOPs and, with a webcam, the same STOP limits with CellTipCamera open (20 trials, the worst case reproduced) |
 | Bench: Overlay NaN | nothing | a NaN in a field overlay doesn't kill dashboard telemetry |
 | (config by name, Bench: Probe) | run-as | a shipped config saved with another shipped config's resource id loads its own XML; a name the build doesn't ship loads no config (both FAIL on a build without re-resolving by name at robot setup) |
@@ -726,6 +916,17 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   `OctoQuadImpl`), so only the pulse-width read-back after the set is a positive answer. The INIT read is
   `readAllEncoderData`: in the driver's default AUTO caching mode the first `readSinglePosition_Caching` returns the
   zero-filled cache without reading.
+- Bench: Pinpoint's soak times the Pinpoint read by wrapping Pedro's `PinpointLocalizer` (`PinpointBench.TimedLocalizer`)
+  and `follower.update()` from a module read just before it to `gameLoop()` (`UpdateClock`). It keeps every time in a
+  0.05 ms histogram (`PinpointMath.Tail`), so an hour allocates nothing per read, and reads ART's
+  `art.gc.blocking-gc-count` and `art.gc.gc-count` (`Debug.getRuntimeStat`) around each read. It saves its summary
+  every 5 minutes and its heading rows only at the end.
+- Bench: OctoQuad's chain: `OctoQuadSetup` reads `portX`, `portY` and `guard` from the runner's params
+  (OctoQuadLocalizerTest's ports and the guard when they're absent). With `guard` 0 it reads the `LocalizerDataBlock`
+  Pedro's `OctoQuadLocalizer` keeps private by reflection (field `localizer`, revhub 3.0.2), and that constructor waits
+  for RUNNING with no timeout, so the control runs only after the seed run found the OctoQuad. The markers run waits
+  for the runner's `octoquad_rolled.json` in the bench folder (deleted at INIT), polled every 200 ms. The control counts
+  the OctoQuad back once a read passes its CRC after at least 500 ms without one.
 - Bench: Pinpoint Absent passes on a fault whose key or message names the Pinpoint, an error naming it, or every pose
   read after `setPose` within 0.5 in and 1° of it.
 - Bench: Turret Zero runs one phase per OpMode run, picked by `phase` and named by `run` in its params; the INIT reads

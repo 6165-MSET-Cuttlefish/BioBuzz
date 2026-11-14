@@ -2,8 +2,10 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.pedropathing.algorithm.Foresight;
 import com.pedropathing.follower.Follower;
+import com.pedropathing.localization.Localizer;
 import com.pedropathing.revhub.drivetrains.Mecanum;
 import com.pedropathing.revhub.localizers.OctoQuadConfig;
+import com.pedropathing.revhub.localizers.OctoQuadLocalizer;
 import com.qualcomm.hardware.digitalchickenlabs.OctoQuad;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
@@ -14,6 +16,7 @@ import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocal
 import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
+import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -37,10 +40,16 @@ final class OctoQuadSetup {
     }
 
     static OctoQuadConfig localizerConfig() {
+        return localizerConfig(BenchIO.params());
+    }
+
+    static OctoQuadConfig localizerConfig(Map<String, Object> params) {
+        int portX = (int) BenchIO.param(params, "portX", OctoQuadLocalizerTest.portX);
+        int portY = (int) BenchIO.param(params, "portY", OctoQuadLocalizerTest.portY);
         return new OctoQuadConfig(c -> {
             c.name.set(OctoQuadLocalizerTest.name);
-            c.xPodPort.set(OctoQuadLocalizerTest.portX);
-            c.yPodPort.set(OctoQuadLocalizerTest.portY);
+            c.xPodPort.set(portX);
+            c.yPodPort.set(portY);
             c.xPodDirection.set(OctoQuadLocalizerTest.directionX);
             c.yPodDirection.set(OctoQuadLocalizerTest.directionY);
             c.encoderResolutionUnit.set(DistanceUnit.MM);
@@ -55,16 +64,27 @@ final class OctoQuadSetup {
         });
     }
 
+    static boolean guarded(Map<String, Object> params) {
+        double guard = BenchIO.param(params, "guard", 1);
+        if (guard != 0 && guard != 1) throw new IllegalArgumentException("bench param guard must be 0 or 1, was " + guard);
+        return guard == 1;
+    }
+
     static Follower create(HardwareMap hardwareMap) {
-        return new Follower(
-                new GuardedOctoQuadLocalizer(hardwareMap, localizerConfig()),
+        Map<String, Object> params = BenchIO.params();
+        OctoQuadConfig config = localizerConfig(params);
+        Localizer localizer = guarded(params) ? new GuardedOctoQuadLocalizer(hardwareMap, config)
+                : new OctoQuadLocalizer(hardwareMap, config);
+        return new Follower(localizer,
                 new Mecanum(hardwareMap, BettaConstants.drivetrainConfig()),
                 new Foresight(BettaConstants.foresightConfig()));
     }
 
     static Map<String, Object> params() {
-        OctoQuadConfig c = localizerConfig();
+        Map<String, Object> runner = BenchIO.params();
+        OctoQuadConfig c = localizerConfig(runner);
         Map<String, Object> m = new LinkedHashMap<>();
+        m.put("localizer", guarded(runner) ? "GuardedOctoQuadLocalizer" : "Pedro's OctoQuadLocalizer");
         m.put("portX", c.xPodPort.get());
         m.put("portY", c.yPodPort.get());
         m.put("directionX", c.xPodDirection.get().name());
@@ -87,5 +107,22 @@ final class OctoQuadSetup {
                     + ", not GuardedOctoQuadLocalizer");
         }
         return (GuardedOctoQuadLocalizer) follower.localizer;
+    }
+
+    // Pedro's OctoQuadLocalizer keeps the block it reads into private.
+    static OctoQuad.LocalizerDataBlock lastRead(Follower follower) {
+        if (follower.localizer instanceof GuardedOctoQuadLocalizer) return guard(follower).lastRead();
+        if (!(follower.localizer instanceof OctoQuadLocalizer)) {
+            throw new IllegalStateException("the follower's localizer is a " + follower.localizer.getClass().getName()
+                    + ", not an OctoQuad localizer");
+        }
+        try {
+            Field block = OctoQuadLocalizer.class.getDeclaredField("localizer");
+            block.setAccessible(true);
+            return (OctoQuad.LocalizerDataBlock) block.get(follower.localizer);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new IllegalStateException("Pedro's OctoQuadLocalizer no longer keeps its LocalizerDataBlock in a field "
+                    + "named localizer", e);
+        }
     }
 }

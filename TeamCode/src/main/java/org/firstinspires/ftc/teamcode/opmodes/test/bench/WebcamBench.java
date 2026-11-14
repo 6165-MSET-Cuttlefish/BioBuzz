@@ -2,10 +2,13 @@ package org.firstinspires.ftc.teamcode.opmodes.test.bench;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.stream.CameraStreamServer;
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
+import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.CellTipPipeline;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.WebcamControls;
@@ -18,10 +21,15 @@ import org.openftc.easyopencv.OpenCvCameraRotation;
 import org.openftc.easyopencv.OpenCvPipeline;
 import org.openftc.easyopencv.OpenCvWebcam;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @TeleOp(name = "Bench: Webcam", group = "Test")
 public class WebcamBench extends LinearOpMode {
@@ -31,9 +39,23 @@ public class WebcamBench extends LinearOpMode {
     private static final int WIDTH = 640;
     private static final int HEIGHT = 480;
     private static final long FIRST_FRAME_TIMEOUT_MS = 8000;
+    private static final double HOLD_S = 3;
+    private static final double SETTLE_S = 0.5;
+    private static final double BLOCKING_MS = 20;
+    private static final int GAIN_ABOVE_MAX = 50;
+    private static final int WHITE_BALANCE_TOO_HIGH_K = 20000;
+    private static final int FIND_PER_CONTROL = 150;
 
     private BenchReport report;
     private WebcamName name;
+    private final Map<String, String> shownLines = new HashMap<>();
+    private final Telemetry shownCapture = (Telemetry) Proxy.newProxyInstance(Telemetry.class.getClassLoader(),
+            new Class<?>[] {Telemetry.class}, (proxy, method, args) -> {
+                if (method.getName().equals("addData") && args != null && args.length == 2) {
+                    shownLines.put(String.valueOf(args[0]), String.valueOf(args[1]));
+                }
+                return null;
+            });
 
     @Override
     public void runOpMode() {
@@ -62,6 +84,7 @@ public class WebcamBench extends LinearOpMode {
                     + "and when onClose fires", async));
 
             cellTipProcessing(sub);
+            if (opModeIsActive()) rejectedSettings(new int[] {exposure, gain, wb});
             closeAtDelays();
             report.done("webcam phases complete");
         } finally {
@@ -339,5 +362,322 @@ public class WebcamBench extends LinearOpMode {
             }
         }
         return m;
+    }
+
+    /** The real CellTipCamera with its own WebcamControls and its own Webcam fault, read() by hand each loop. */
+    static final class ProbeCamera extends CellTipCamera {
+        ProbeCamera(HardwareMap hardwareMap) {
+            super(hardwareMap);
+        }
+
+        void open() {
+            initStates();
+            init();
+        }
+
+        void readNow() {
+            read();
+        }
+
+        WebcamSession session() {
+            try {
+                return (WebcamSession) sessionField().get(this);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("CellTipCamera.session can't be read", e);
+            }
+        }
+    }
+
+    static Field sessionField() {
+        try {
+            Field f = CellTipCamera.class.getDeclaredField("session");
+            if (f.getType() != WebcamSession.class) {
+                throw new IllegalStateException("CellTipCamera.session is a " + f.getType() + ", not a WebcamSession");
+            }
+            f.setAccessible(true);
+            return f;
+        } catch (NoSuchFieldException e) {
+            throw new IllegalStateException("CellTipCamera has no field session for Bench: Webcam to read", e);
+        }
+    }
+
+    /** As WebcamControls sends each: exposure in whole ms, gain in device units, white balance in K. */
+    private enum Knob {
+        EXPOSURE("exposure", "Exposure"),
+        GAIN("gain", "Gain"),
+        WHITE_BALANCE("white balance", "White balance");
+
+        final String label;
+        final String caption;
+
+        Knob(String label, String caption) {
+            this.label = label;
+            this.caption = caption;
+        }
+
+        void ask(int value) {
+            switch (this) {
+                case EXPOSURE: WebcamControls.exposureMs = value; break;
+                case GAIN: WebcamControls.gain = value; break;
+                default: WebcamControls.whiteBalanceK = value;
+            }
+        }
+
+        int min(OpenCvWebcam w) {
+            switch (this) {
+                case EXPOSURE: return (int) w.getExposureControl().getMinExposure(TimeUnit.MILLISECONDS);
+                case GAIN: return w.getGainControl().getMinGain();
+                default: return w.getWhiteBalanceControl().getMinWhiteBalanceTemperature();
+            }
+        }
+
+        int max(OpenCvWebcam w) {
+            switch (this) {
+                case EXPOSURE: return (int) w.getExposureControl().getMaxExposure(TimeUnit.MILLISECONDS);
+                case GAIN: return w.getGainControl().getMaxGain();
+                default: return w.getWhiteBalanceControl().getMaxWhiteBalanceTemperature();
+            }
+        }
+
+        boolean send(OpenCvWebcam w, int value) {
+            switch (this) {
+                case EXPOSURE: return w.getExposureControl().setExposure(value, TimeUnit.MILLISECONDS);
+                case GAIN: return w.getGainControl().setGain(value);
+                default: return w.getWhiteBalanceControl().setWhiteBalanceTemperature(value);
+            }
+        }
+    }
+
+    private void rejectedSettings(int[] baseline) {
+        report.phase("cellTip:clamp");
+        WebcamControls.manual = true;
+        for (Knob k : Knob.values()) k.ask(baseline[k.ordinal()]);
+        ProbeCamera camera = new ProbeCamera(hardwareMap);
+        camera.open();
+        try {
+            WebcamControls controls = openControls(camera);
+            OpenCvWebcam webcam = camera.session().webcam();
+            Map<String, Object> opened = hold(camera, controls, null, () -> {}, SETTLE_S);
+            clamp(camera, controls, webcam, baseline, opened);
+            Map<String, Object> found = rejectFind(webcam);
+            reject(camera, controls, webcam, found, baseline);
+        } finally {
+            try {
+                camera.stop();
+            } finally {
+                Faults.clear(CellTipCamera.FAULT_KEY);
+            }
+        }
+    }
+
+    private WebcamControls openControls(ProbeCamera camera) {
+        long t0 = System.nanoTime();
+        while (true) {
+            camera.readNow();
+            WebcamControls c = camera.session().controls();
+            if (c != null) return c;
+            if ((System.nanoTime() - t0) / 1e6 > FIRST_FRAME_TIMEOUT_MS) {
+                throw new IllegalStateException(CellTipCamera.WEBCAM_NAME + " didn't open within " + FIRST_FRAME_TIMEOUT_MS
+                        + " ms for the rejected-settings phases");
+            }
+            report.sendIfDue();
+            sleep(5);
+        }
+    }
+
+    private void clamp(ProbeCamera camera, WebcamControls controls, OpenCvWebcam webcam, int[] baseline,
+                       Map<String, Object> opened) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("what", "CellTipCamera's read() every loop while WebcamControls asks for gain above the camera's max, "
+                + "exposure 0 ms and white balance " + WHITE_BALANCE_TOO_HIGH_K + " K, " + HOLD_S + " s each, then the "
+                + "found value again; WebcamControls clamps into [min, max] before sending when max > min. Per hold: "
+                + "blocking writes are [loop, ms] for each read() over " + BLOCKING_MS + " ms; shown, rejected and "
+                + "fault are [loop, ms since the change, text] on each change");
+        m.put("opened", opened);
+        List<Object> holds = new ArrayList<>();
+        m.put("holds", holds);
+        int gainMax = Knob.GAIN.max(webcam);
+        Object[][] asks = {{Knob.GAIN, (int) Math.min(Integer.MAX_VALUE, (long) gainMax + GAIN_ABOVE_MAX)},
+                {Knob.EXPOSURE, 0}, {Knob.WHITE_BALANCE, WHITE_BALANCE_TOO_HIGH_K}};
+        try {
+            for (Object[] ask : asks) {
+                if (!opModeIsActive()) break;
+                Knob k = (Knob) ask[0];
+                int asked = (int) ask[1];
+                int lo = k.min(webcam);
+                int hi = k.max(webcam);
+                Map<String, Object> h = hold(camera, controls, k, () -> k.ask(asked), HOLD_S);
+                h.put("asked", asked);
+                h.put("min", lo);
+                h.put("max", hi);
+                h.put("clampExpected", hi > lo && (asked < lo || asked > hi));
+                h.put("restore", hold(camera, controls, k, () -> k.ask(baseline[k.ordinal()]), SETTLE_S));
+                holds.add(h);
+                report.endPhase("clamp", m);
+            }
+        } finally {
+            report.endPhase("clamp", m);
+        }
+    }
+
+    private Map<String, Object> rejectFind(OpenCvWebcam webcam) {
+        report.phase("cellTip:rejectFind");
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("what", "each control's own set() straight to the camera, in the units WebcamControls sends, every value "
+                + "from its min up, at most " + FIND_PER_CONTROL + " per control with the max last; refused are "
+                + "[value, ms set() took]");
+        try {
+            for (Knob k : Knob.values()) {
+                if (!opModeIsActive()) break;
+                int lo = k.min(webcam);
+                int hi = k.max(webcam);
+                List<Integer> values = sweep(lo, hi, FIND_PER_CONTROL);
+                List<double[]> refused = new ArrayList<>();
+                List<Integer> accepted = new ArrayList<>();
+                Samples setMs = new Samples();
+                for (int v : values) {
+                    if (!opModeIsActive()) break;
+                    long t0 = System.nanoTime();
+                    boolean ok = k.send(webcam, v);
+                    double took = (System.nanoTime() - t0) / 1e6;
+                    setMs.add(took);
+                    if (ok) accepted.add(v);
+                    else refused.add(new double[] {v, took});
+                    report.status("%s %d", k.label, v);
+                    report.sendIfDue();
+                }
+                Map<String, Object> one = new LinkedHashMap<>();
+                one.put("min", lo);
+                one.put("max", hi);
+                one.put("tried", setMs.count());
+                one.put("inRange", Math.max(0, (long) hi - lo + 1));
+                one.put("refused", refused);
+                one.put("firstAccepted", accepted.isEmpty() ? null : accepted.get(0));
+                one.put("setMs", setMs.summary());
+                m.put(k.label, one);
+                report.endPhase("rejectFind", m);
+            }
+        } finally {
+            report.endPhase("rejectFind", m);
+        }
+        return m;
+    }
+
+    static List<Integer> sweep(int lo, int hi, int cap) {
+        List<Integer> values = new ArrayList<>();
+        if (hi < lo) return values;
+        long count = (long) hi - lo + 1;
+        if (count <= cap) {
+            for (long v = lo; v <= hi; v++) values.add((int) v);
+            return values;
+        }
+        for (int i = 0; i < cap - 1; i++) values.add(lo + i);
+        values.add(hi);
+        return values;
+    }
+
+    /** The manual toggle hands the camera back to WebcamControls: it resends all three after rejectFind's writes. */
+    @SuppressWarnings("unchecked")
+    private void reject(ProbeCamera camera, WebcamControls controls, OpenCvWebcam webcam, Map<String, Object> found,
+                        int[] baseline) {
+        report.phase("cellTip:reject");
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("what", "manual off then on, then for each control the first value rejectFind saw refused, through "
+                + "WebcamControls: the found value (or the first accepted) " + SETTLE_S + " s, the refused one "
+                + HOLD_S + " s, the valid one again up to " + HOLD_S + " s; records as in clamp");
+        List<Object> holds = new ArrayList<>();
+        m.put("holds", holds);
+        try {
+            m.put("manualOff", hold(camera, controls, null, () -> WebcamControls.manual = false, SETTLE_S));
+            m.put("manualOn", hold(camera, controls, null, () -> WebcamControls.manual = true, SETTLE_S));
+            report.endPhase("reject", m);
+            for (Knob k : Knob.values()) {
+                Map<String, Object> one = (Map<String, Object>) found.get(k.label);
+                List<double[]> refused = one == null ? null : (List<double[]>) one.get("refused");
+                if (refused == null || refused.isEmpty() || !opModeIsActive()) continue;
+                int value = (int) refused.get(0)[0];
+                int valid = baseline[k.ordinal()];
+                for (double[] r : refused) {
+                    if ((int) r[0] == valid && one.get("firstAccepted") != null) valid = (Integer) one.get("firstAccepted");
+                }
+                int restore = valid;
+                Map<String, Object> h = new LinkedHashMap<>();
+                h.put("control", k.label);
+                h.put("value", value);
+                h.put("valid", restore);
+                h.put("min", k.min(webcam));
+                h.put("max", k.max(webcam));
+                h.put("before", hold(camera, controls, k, () -> k.ask(restore), SETTLE_S));
+                h.put("held", hold(camera, controls, k, () -> k.ask(value), HOLD_S));
+                h.put("restored", hold(camera, controls, k, () -> k.ask(restore), HOLD_S));
+                holds.add(h);
+                report.endPhase("reject", m);
+            }
+        } finally {
+            report.endPhase("reject", m);
+        }
+    }
+
+    private Map<String, Object> hold(ProbeCamera camera, WebcamControls controls, Knob knob, Runnable change,
+                                     double seconds) {
+        String caption = knob == null ? null : knob.caption;
+        String shown = shown(controls, caption);
+        String rejected = controls.rejected();
+        String fault = webcamFault();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("control", knob == null ? null : knob.label);
+        m.put("shownBefore", shown);
+        m.put("rejectedBefore", rejected);
+        m.put("faultBefore", fault);
+        List<double[]> blocking = new ArrayList<>();
+        List<Object[]> shownChanges = new ArrayList<>();
+        List<Object[]> rejectedChanges = new ArrayList<>();
+        List<Object[]> faultChanges = new ArrayList<>();
+        Samples readMs = new Samples();
+        change.run();
+        long c0 = System.nanoTime();
+        int loops = 0;
+        while (opModeIsActive() && (System.nanoTime() - c0) / 1e9 < seconds) {
+            long r0 = System.nanoTime();
+            camera.readNow();
+            double ms = (System.nanoTime() - r0) / 1e6;
+            readMs.add(ms);
+            if (ms > BLOCKING_MS) blocking.add(new double[] {loops, ms});
+            double since = (System.nanoTime() - c0) / 1e6;
+            String s = shown(controls, caption);
+            if (!Objects.equals(s, shown)) shownChanges.add(new Object[] {loops, since, s});
+            shown = s;
+            String r = controls.rejected();
+            if (!Objects.equals(r, rejected)) rejectedChanges.add(new Object[] {loops, since, r});
+            rejected = r;
+            String f = webcamFault();
+            if (!Objects.equals(f, fault)) faultChanges.add(new Object[] {loops, since, f});
+            fault = f;
+            loops++;
+            report.sendIfDue();
+            sleep(5);
+        }
+        m.put("loops", loops);
+        m.put("readMs", readMs.summary());
+        m.put("blockingWrites", blocking);
+        m.put("shown", shownChanges);
+        m.put("shownAtEnd", shown);
+        m.put("rejected", rejectedChanges);
+        m.put("rejectedAtEnd", rejected);
+        m.put("fault", faultChanges);
+        m.put("faultAtEnd", fault);
+        return m;
+    }
+
+    private String shown(WebcamControls controls, String caption) {
+        if (caption == null) return null;
+        shownLines.clear();
+        controls.addTelemetry(shownCapture);
+        return shownLines.get(caption);
+    }
+
+    private static String webcamFault() {
+        for (Faults.Fault f : Faults.active()) if (f.key.equals(CellTipCamera.FAULT_KEY)) return f.message;
+        return null;
     }
 }

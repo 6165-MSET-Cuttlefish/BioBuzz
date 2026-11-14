@@ -768,7 +768,9 @@ def put_back_cases():
 
 
 PROMPT_SITES = {"gp_interactive": "gamepad", "run_clock": "clock", "run_limelight_replug": "limelight",
-                "_pinpoint_dropout": "pinpoint", "_octoquad_dropout": "octoquad", "run_expansion": "expansion",
+                "_pinpoint_dropout": "pinpoint", "_pinpoint_raw_dropout": "pinpoint", "_octoquad_dropout": "octoquad",
+                "_octoquad_markers": "octoquad_chain", "_octoquad_unguarded": "octoquad_chain",
+                "_octoquad_latejoin": "octoquad_chain", "run_expansion": "expansion",
                 "photon_replug": "photon_replug", "_dash_off_phase": "dashboard_battery",
                 "run_turret_zero": "turret_zero", "tz_branch": "turret_zero", "_turret_zero": "turret_zero",
                 "tz_v2": "turret_zero", "tz_track": "turret_zero", "tz_brownout": "turret_zero"}

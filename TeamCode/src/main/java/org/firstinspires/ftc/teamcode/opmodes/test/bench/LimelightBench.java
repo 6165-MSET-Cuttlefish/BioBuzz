@@ -8,13 +8,19 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightBallSource;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.LimelightSync;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.TrackedBall;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 @TeleOp(name = "Bench: Limelight", group = "Test")
 public class LimelightBench extends LinearOpMode {
@@ -23,6 +29,15 @@ public class LimelightBench extends LinearOpMode {
 
     private static final int SDK_DEFAULT_POLL_HZ = 100;
     private static final double PROXY_WAIT_S = 6;
+    private static final double STALENESS_S = 60;
+    private static final double[] REPLAY_THRESHOLDS_S = {0.4, 0.5, 0.6, 0.7};
+    private static final int GAP_BUCKET_MS = 10;
+    private static final int GAP_BUCKETS = 100;
+    private static final double STILL_S = 30;
+    private static final double STILL_RADIUS_IN = 6;
+    private static final double IN_FLIGHT_S = 0.1;
+    private static final double LAST_CHANGE_S = 5;
+    private static final String SENDER_THREAD = "LimelightSync";
 
     private BenchReport report;
     private Limelight3A ll;
@@ -44,6 +59,7 @@ public class LimelightBench extends LinearOpMode {
         report.put("initialStatus", status(initial));
         int originalPipeline = initial.getPipelineIndex();
         int savedTuningPipeline = LimelightBallSource.Tuning.pipeline;
+        boolean savedSyncOnInit = LimelightBallSource.Tuning.syncOnInit;
 
         if (!report.holdUntilStart(this)) return;
 
@@ -68,11 +84,13 @@ public class LimelightBench extends LinearOpMode {
             realJsonParse();
             pollRates();
             behindItsBack(ballPipeline, otherPipeline);
+            ballPhases(ballPipeline, otherPipeline);
             report.done("Limelight phases complete");
         } finally {
             ll.stop();
             ll.setPollRateHz(SDK_DEFAULT_POLL_HZ);
             LimelightBallSource.Tuning.pipeline = savedTuningPipeline;
+            LimelightBallSource.Tuning.syncOnInit = savedSyncOnInit;
             report.put("restoredPipeline", originalPipeline);
             report.put("restoreAccepted", ll.pipelineSwitch(originalPipeline));
             report.save();
@@ -402,30 +420,22 @@ public class LimelightBench extends LinearOpMode {
         BenchLimelight.startPolling(ll, SDK_DEFAULT_POLL_HZ);
     }
 
-    /** The INIT sync (park, upload, confirm) twice, each from otherPipeline; ends settled on otherPipeline. */
+    /** The INIT sync (park, upload, confirm) twice, then switch only, each from otherPipeline; ends on otherPipeline. */
     private void sync(int ballPipeline, int otherPipeline) {
         report.phase("sync");
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("what", "LimelightSync.request(ballPipeline, upload=true) as LimelightBallSource sends it, twice, each "
-                + "after a direct switch to otherPipeline: ms until done and its problem (null is success)");
+        m.put("what", "LimelightSync.request(ballPipeline, upload=true) as LimelightBallSource sends it, twice, then "
+                + "with upload=false (syncOnInit off: switch only), each after a direct switch to otherPipeline: ms until "
+                + "done and its problem (null is success); then a LimelightBallSource with syncOnInit off, from "
+                + "otherPipeline to its first frame");
         m.put("stamp", LimelightSync.STAMP);
-        for (String run : new String[] {"first", "again"}) {
+        for (String run : new String[] {"first", "again", "switchOnly"}) {
             if (!opModeIsActive()) break;
-            Map<String, Object> one = new LinkedHashMap<>();
-            one.put("switchToOtherAccepted", ll.pipelineSwitch(otherPipeline));
-            sleep(1000);
-            long t0 = System.nanoTime();
-            LimelightSync.Request request = LimelightSync.request(ll, ballPipeline, true);
-            while (!request.isDone() && opModeIsActive()) {
-                report.sendIfDue();
-                sleep(10);
-            }
-            if (!request.isDone()) request.cancel();
-            request.rethrowIfCrashed();
-            one.put("done", request.isDone());
-            one.put("ms", (System.nanoTime() - t0) / 1e6);
-            one.put("problem", request.problem());
-            m.put(run, one);
+            m.put(run, timedSync(ballPipeline, otherPipeline, !run.equals("switchOnly")));
+            report.endPhase("sync", m);
+        }
+        if (opModeIsActive()) {
+            m.put("syncOnInitOff", syncOnInitOffFirstFrame(ballPipeline, otherPipeline));
             report.endPhase("sync", m);
         }
         if (opModeIsActive()) {
@@ -434,6 +444,46 @@ public class LimelightBench extends LinearOpMode {
             sleep(1000);
         }
         report.endPhase("sync", m);
+    }
+
+    private Map<String, Object> timedSync(int ballPipeline, int otherPipeline, boolean upload) {
+        Map<String, Object> one = new LinkedHashMap<>();
+        one.put("upload", upload);
+        one.put("switchToOtherAccepted", ll.pipelineSwitch(otherPipeline));
+        sleep(1000);
+        long t0 = System.nanoTime();
+        LimelightSync.Request request = LimelightSync.request(ll, ballPipeline, upload);
+        while (!request.isDone() && opModeIsActive()) {
+            report.sendIfDue();
+            sleep(10);
+        }
+        if (!request.isDone()) request.cancel();
+        request.rethrowIfCrashed();
+        one.put("done", request.isDone());
+        one.put("ms", (System.nanoTime() - t0) / 1e6);
+        one.put("problem", request.problem());
+        return one;
+    }
+
+    /** Leaves the poller running at the SDK rate, which the switch phase reads. */
+    private Map<String, Object> syncOnInitOffFirstFrame(int ballPipeline, int otherPipeline) {
+        boolean before = LimelightBallSource.Tuning.syncOnInit;
+        boolean accepted = ll.pipelineSwitch(otherPipeline);
+        sleep(1000);
+        ll.stop();
+        LimelightBallSource.Tuning.pipeline = ballPipeline;
+        LimelightBallSource.Tuning.syncOnInit = false;
+        LimelightBallSource source = new LimelightBallSource(hardwareMap);
+        Map<String, Object> m;
+        try {
+            m = firstFrame(source, System.nanoTime());
+        } finally {
+            source.stop();
+            LimelightBallSource.Tuning.syncOnInit = before;
+        }
+        m.put("switchToOtherAccepted", accepted);
+        BenchLimelight.startPolling(ll, SDK_DEFAULT_POLL_HZ);
+        return m;
     }
 
     /** Camera's source on the ball pipeline, then another pipeline selected without telling it, then back. */
@@ -518,5 +568,289 @@ public class LimelightBench extends LinearOpMode {
             seg.put("timeline", timeline);
         }
         return seg;
+    }
+
+    private void ballPhases(int ballPipeline, int otherPipeline) {
+        report.phase("staleness");
+        ll.stop();
+        LimelightBallSource.Tuning.pipeline = ballPipeline;
+        LimelightBallSource.Tuning.syncOnInit = true;
+        LimelightBallSource source = new LimelightBallSource(hardwareMap);
+        try {
+            Map<String, Object> first = firstFrame(source, System.nanoTime());
+            first.put("syncOnInit", true);
+            staleness(source, first);
+            if (opModeIsActive()) stillBalls(source);
+            if (opModeIsActive()) pipelineChange(source, ballPipeline, otherPipeline);
+        } finally {
+            source.stop();
+        }
+    }
+
+    private void staleness(LimelightBallSource source, Map<String, Object> first) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("what", "LimelightBallSource.update() every loop for " + STALENESS_S + " s on the ball pipeline: each new "
+                + "frame's arrival on the hub (the source's own: capture time plus latency), the gaps between arrivals, "
+                + "loops publishing balls from the first loop that did, and stale episodes, live and replayed at "
+                + Arrays.toString(REPLAY_THRESHOLDS_S) + " s");
+        m.put("firstFrame", first);
+        m.put("liveThresholdS", LimelightBallSource.Tuning.staleFrameSeconds);
+        List<Long> arrivals = new ArrayList<>();
+        Samples updateMs = new Samples();
+        Set<String> problems = new LinkedHashSet<>();
+        boolean wasStale = source.latest().stale;
+        int liveEpisodes = 0;
+        long loops = 0;
+        long fromFirstBall = 0;
+        long withBalls = 0;
+        long firstBallNs = 0;
+        long start = System.nanoTime();
+        try {
+            while (opModeIsActive() && (System.nanoTime() - start) / 1e9 < STALENESS_S) {
+                long u0 = System.nanoTime();
+                boolean fresh = source.update();
+                long u1 = System.nanoTime();
+                updateMs.addNanos(u1 - u0);
+                LimelightBallSource.Frame f = source.latest();
+                if (fresh) arrivals.add(Math.round((f.timestampSeconds + f.latencyMs / 1000) * 1e9));
+                if (f.stale && !wasStale) liveEpisodes++;
+                wasStale = f.stale;
+                if (source.problem() != null) problems.add(source.problem());
+                boolean balls = !f.balls.isEmpty();
+                if (balls && firstBallNs == 0) firstBallNs = u1;
+                if (firstBallNs != 0) {
+                    fromFirstBall++;
+                    if (balls) withBalls++;
+                }
+                loops++;
+                report.status("%d frames, %d loops with balls", arrivals.size(), withBalls);
+                report.sendIfDue();
+                sleep(2);
+            }
+        } finally {
+            long[] ns = new long[arrivals.size()];
+            for (int i = 0; i < ns.length; i++) ns[i] = arrivals.get(i);
+            Samples gaps = new Samples();
+            for (int i = 1; i < ns.length; i++) gaps.addNanos(ns[i] - ns[i - 1]);
+            Map<String, Object> replay = new LinkedHashMap<>();
+            for (double t : REPLAY_THRESHOLDS_S) replay.put(String.valueOf(t), StalenessReplay.episodes(ns, t));
+            double[] arrivalMs = new double[ns.length];
+            for (int i = 0; i < ns.length; i++) arrivalMs[i] = (ns[i] - start) / 1e6;
+            m.put("seconds", (System.nanoTime() - start) / 1e9);
+            m.put("loops", loops);
+            m.put("frames", ns.length);
+            m.put("firstBallLoopMs", firstBallNs == 0 ? null : (firstBallNs - start) / 1e6);
+            m.put("loopsFromFirstBall", fromFirstBall);
+            m.put("loopsWithBalls", withBalls);
+            m.put("liveEpisodes", liveEpisodes);
+            m.put("replayEpisodes", replay);
+            m.put("smallestCleanThresholdS", StalenessReplay.smallestClean(ns, REPLAY_THRESHOLDS_S));
+            m.put("longestGapMs", StalenessReplay.longestGapMs(ns));
+            m.put("gapMs", gaps.summary());
+            m.put("gapHistogram", gaps.histogram(GAP_BUCKET_MS, GAP_BUCKETS));
+            m.put("arrivalsMs", arrivalMs);
+            m.put("updateMs", updateMs.summary());
+            m.put("problems", new ArrayList<>(problems));
+            report.endPhase("staleness", m);
+        }
+    }
+
+    private void stillBalls(LimelightBallSource source) {
+        report.phase("stillBalls");
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("what", "the source and its BallTracker for " + STILL_S + " s with the balls standing still; per ball (a "
+                + "place, radiusIn wide): the visible tracks' position spread around their mean, the speed the tracker "
+                + "reports, the track ids it had and the new frames it was missing from");
+        m.put("radiusIn", STILL_RADIUS_IN);
+        TrackStats stats = new TrackStats(STILL_RADIUS_IN);
+        Set<String> problems = new LinkedHashSet<>();
+        long start = System.nanoTime();
+        try {
+            while (opModeIsActive() && (System.nanoTime() - start) / 1e9 < STILL_S) {
+                if (source.update()) {
+                    stats.beginFrame();
+                    for (TrackedBall b : source.latest().balls) stats.add(b.id, b.x, b.y, b.vx, b.vy, b.visible());
+                    stats.endFrame();
+                }
+                if (source.problem() != null) problems.add(source.problem());
+                report.status("%d frames", stats.frames());
+                report.sendIfDue();
+                sleep(2);
+            }
+        } finally {
+            m.put("seconds", (System.nanoTime() - start) / 1e9);
+            m.put("frames", stats.frames());
+            m.put("balls", stats.balls());
+            m.put("problems", new ArrayList<>(problems));
+            report.endPhase("stillBalls", m);
+        }
+    }
+
+    /**
+     * Tuning.pipeline changed under the running source, as a dashboard edit does. Changes away from the ball pipeline
+     * only switch (syncOnInit off), so the ball files are never uploaded into the other pipeline.
+     */
+    private void pipelineChange(LimelightBallSource source, int ballPipeline, int otherPipeline) {
+        report.phase("pipelineChange");
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("what", "Tuning.pipeline changed under the running source: to otherPipeline (switch only) until its sync "
+                + "is done, back to the ball pipeline (upload), then, with that sync in flight, otherPipeline "
+                + Math.round(IN_FLIGHT_S * 1000) + " ms later and the ball pipeline again " + Math.round(IN_FLIGHT_S * 1000)
+                + " ms after that; per change: ms to its sync done and to the first new frame, problem changes [ms, "
+                + "text], loop period, LimelightSync threads; senders are [ms, LimelightSync threads] on every change "
+                + "of the count, sampled every 100 ms; the cancelled requests' ends are read from the source");
+        SourceLoop loop = new SourceLoop(source);
+        LimelightSync.Request back = null;
+        LimelightSync.Request inFlight = null;
+        try {
+            Map<String, Object> start = change(loop, ballPipeline, true, 0, 0, 10);
+            start.put("what", "no change: the running source to its next new frame");
+            m.put("start", start);
+            report.endPhase("pipelineChange", m);
+            m.put("toOther", change(loop, otherPipeline, false, 0, 1, 10));
+            report.endPhase("pipelineChange", m);
+            m.put("back", change(loop, ballPipeline, true, IN_FLIGHT_S, -1, IN_FLIGHT_S));
+            back = syncOf(source);
+            m.put("otherInFlight", change(loop, otherPipeline, false, IN_FLIGHT_S, -1, IN_FLIGHT_S));
+            inFlight = syncOf(source);
+            m.put("last", change(loop, ballPipeline, true, LAST_CHANGE_S, 1, 15));
+            m.put("finalPipelineIndex", ll.getLatestResult().getPipelineIndex());
+        } finally {
+            m.put("backRequestEnded", ended(back));
+            m.put("otherInFlightRequestEnded", ended(inFlight));
+            m.put("loopMs", loop.loopMs.summary());
+            m.put("sendersMax", loop.sendersMax);
+            m.put("senders", loop.senders);
+            report.endPhase("pipelineChange", m);
+        }
+    }
+
+    /**
+     * Sets syncOnInit and Tuning.pipeline, then loops the source for at least {@code minS} and, with
+     * {@code afterSyncS} >= 0, until that long after its sync is done; never past {@code maxS}.
+     */
+    private Map<String, Object> change(SourceLoop loop, int target, boolean upload, double minS, double afterSyncS,
+                                       double maxS) {
+        boolean changes = LimelightBallSource.Tuning.pipeline != target;
+        LimelightSync.Request old = syncOf(loop.source);
+        LimelightBallSource.Tuning.syncOnInit = upload;
+        LimelightBallSource.Tuning.pipeline = target;
+        long c0 = System.nanoTime();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("to", target);
+        m.put("upload", upload);
+        m.put("atMs", loop.ms(c0));
+        int problemsFrom = loop.problems.size();
+        Samples periods = new Samples();
+        int sendersMax = 0;
+        double syncDone = Double.NaN;
+        double firstFresh = Double.NaN;
+        while (opModeIsActive()) {
+            periods.tick(System.nanoTime());
+            boolean fresh = loop.step();
+            sendersMax = Math.max(sendersMax, loop.lastSenders);
+            double s = (System.nanoTime() - c0) / 1e9;
+            LimelightSync.Request now = syncOf(loop.source);
+            if (changes && Double.isNaN(syncDone) && now != old && now.isDone()) {
+                syncDone = s * 1000;
+                m.put("problemAtSyncDone", now.problem());
+            }
+            if (fresh && Double.isNaN(firstFresh)) firstFresh = s * 1000;
+            if (s >= maxS) break;
+            if (s < minS) continue;
+            if (afterSyncS < 0) break;
+            if (!changes && !Double.isNaN(firstFresh)) break;
+            if (changes && !Double.isNaN(syncDone) && s * 1000 >= syncDone + afterSyncS * 1000) break;
+        }
+        m.put("syncDoneMs", syncDone);
+        m.put("firstFreshMs", firstFresh);
+        m.put("syncingAtEnd", loop.source.isSyncing());
+        m.put("problems", new ArrayList<>(loop.problems.subList(problemsFrom, loop.problems.size())));
+        m.put("problemAtEnd", loop.source.problem());
+        m.put("loopMs", periods.summary());
+        m.put("sendersMax", sendersMax);
+        return m;
+    }
+
+    private static Map<String, Object> ended(LimelightSync.Request request) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        if (request == null) return m;
+        m.put("pipeline", request.pipeline);
+        m.put("upload", request.upload);
+        m.put("done", request.isDone());
+        m.put("problem", request.problem());
+        return m;
+    }
+
+    private final class SourceLoop {
+        final LimelightBallSource source;
+        final long t0 = System.nanoTime();
+        final Samples loopMs = new Samples();
+        final List<Object[]> problems = new ArrayList<>();
+        final List<double[]> senders = new ArrayList<>();
+        int sendersMax;
+        int lastSenders = -1;
+        long lastSenderSampleNs;
+        String problem;
+
+        SourceLoop(LimelightBallSource source) {
+            this.source = source;
+        }
+
+        double ms(long ns) {
+            return (ns - t0) / 1e6;
+        }
+
+        boolean step() {
+            long now = System.nanoTime();
+            loopMs.tick(now);
+            boolean fresh = source.update();
+            String p = source.problem();
+            if (!Objects.equals(p, problem)) {
+                problems.add(new Object[] {ms(System.nanoTime()), p});
+                problem = p;
+            }
+            if (now - lastSenderSampleNs >= 100_000_000L) {
+                int n = senderThreads();
+                sendersMax = Math.max(sendersMax, n);
+                if (n != lastSenders) senders.add(new double[] {ms(now), n});
+                lastSenders = n;
+                lastSenderSampleNs = now;
+            }
+            report.sendIfDue();
+            sleep(2);
+            return fresh;
+        }
+    }
+
+    // Not Thread.getAllStackTraces(): it suspends every thread, which would show up as loop time.
+    private static int senderThreads() {
+        ThreadGroup root = Thread.currentThread().getThreadGroup();
+        while (root.getParent() != null) root = root.getParent();
+        Thread[] threads = new Thread[root.activeCount() * 2 + 16];
+        int n = 0;
+        for (Thread t : Arrays.copyOf(threads, root.enumerate(threads, true))) if (t.getName().equals(SENDER_THREAD)) n++;
+        return n;
+    }
+
+    static Field syncField() {
+        try {
+            Field f = LimelightBallSource.class.getDeclaredField("sync");
+            if (f.getType() != LimelightSync.Request.class) {
+                throw new IllegalStateException("LimelightBallSource.sync is a " + f.getType() + ", not a LimelightSync.Request");
+            }
+            f.setAccessible(true);
+            return f;
+        } catch (NoSuchFieldException e) {
+            throw new IllegalStateException("LimelightBallSource has no field sync for Bench: Limelight to read", e);
+        }
+    }
+
+    private static LimelightSync.Request syncOf(LimelightBallSource source) {
+        try {
+            return (LimelightSync.Request) syncField().get(source);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("LimelightBallSource.sync can't be read", e);
+        }
     }
 }

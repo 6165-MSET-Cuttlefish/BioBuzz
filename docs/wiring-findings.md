@@ -402,7 +402,9 @@ Worth doing with it:
   (`python3 scripts/bench/run_bench.py --turret-zero --ports-empty`).
 - **OctoQuad unplugged or rebooted:** odometry is lost for the rest of the match (its localizer restarts at the
   origin and its settings are volatile). The turret keeps its angle, which comes from the hub's count, and the
-  flywheels are unaffected.
+  flywheels are unaffected. The restart and the lost settings are untested: Bench: OctoQuad's chain pulls the
+  cable mid-run and reads what comes back
+  (`python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`).
 - **Camera hub's power bank flat:** the webcam fails to open, `WebcamSession.update()` throws, and every OpMode that
   builds `BioBuzzRobot` stops in INIT. Check the power bank before each match. Whether a webcam failure should be a
   Fault instead is a team decision, as it was for the Limelight.
@@ -515,7 +517,10 @@ fetched 2026-11-10:
   is fitted (`Drivetrain` assumes the 80 A scale).
 - **Whether the injector cuts its output** when the SDK disables PWM (`Turret.disable()` does).
 - **Whether the OctoQuad's localizer reset zeroes its channel counts.** Its bank mode is volatile like its velocity
-  interval (the SDK's Javadoc on `setChannelBankConfig`).
+  interval (the SDK's Javadoc on `setChannelBankConfig`). Test: Bench: OctoQuad's chain
+  (`python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`) reads the counts after
+  `resetLocalizerAndCalibrateIMU()` and after `resetEverything()`, and the bank, velocity intervals and directions after
+  a cable pull.
 - **The turret encoder**: which way the 1:2.4 runs and its tooth counts, and whether the 200° is 100° either side of
   straight back, are questions for the team. Whether the split cable can be built and routed across the turret (the
   absolute signal is on the Through Bore's 6-pin connector, not on the 4-pin encoder lead) is for whoever builds it;

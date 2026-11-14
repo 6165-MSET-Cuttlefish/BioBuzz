@@ -66,10 +66,14 @@ PROMPTED = (
      "already set and the step is skipped; over --usb, two adjacent free ports on this Mac"),
     ("limelight", "the Limelight pulled and replugged under Bench: Limelight Fault", ["--limelight", "--interactive"],
      "the Limelight 3A booted on a Control Hub USB port"),
-    ("pinpoint", "the Pinpoint's I2C cable pulled and replugged in Bench: Pinpoint", ["--pinpoint", "--interactive"],
+    ("pinpoint", "the Pinpoint's I2C cable pulled and replugged twice in Bench: Pinpoint (the raw driver, then the "
+     "follower)", ["--pinpoint", "--interactive"],
      "the goBILDA Pinpoint in Control Hub I2C port 1, both pods plugged in and still"),
     ("octoquad", "the OctoQuad's I2C cable pulled and replugged in Bench: OctoQuad", ["--octoquad", "--interactive"],
      "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 3 and 4, still"),
+    ("octoquad_chain", "Bench: OctoQuad's chain: a pod rolled by hand, the cable pulled under Pedro's localizer and "
+     "replugged, pulled under the guard, and plugged in during INIT", ["--octoquad", "--octoquad-chain", "--interactive"],
+     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 0 and 1, still; about 12 min at the hub"),
     ("expansion", "Bench: Expansion Hub again with the Pinpoint and OctoQuad moved to the Expansion Hub",
      ["--expansion", "--interactive"],
      "an Expansion Hub on RS485 on its own 12 V, the Pinpoint in Control Hub I2C port 1 and the OctoQuad in port 2"),

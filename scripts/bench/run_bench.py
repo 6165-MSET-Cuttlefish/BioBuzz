@@ -2410,6 +2410,321 @@ def limelight_tag(ip_address, serial=LIMELIGHT_CONFIG_SERIAL):
             f"ipAddress={attr(ip_address)} />")
 
 
+LIMELIGHT_UPLOAD_SYNC_MS = 2500
+LIMELIGHT_SWITCH_SYNC_MS = 1000
+LIMELIGHT_FIRST_FRAME_MS = 2500
+LIMELIGHT_PUBLISHED_SHARE = 0.99
+LIMELIGHT_STILL_BALLS = 4
+LIMELIGHT_STILL_SEEN_SHARE = 0.5
+LIMELIGHT_STILL_DEVIATION_IN = 2.0
+LIMELIGHT_STILL_SPEED_IPS = 3.0
+LIMELIGHT_CHANGE_FRESH_MS = 3000
+LIMELIGHT_CHANGE_LOOP_MS = 50
+LIMELIGHT_WRONG_PIPELINE = re.compile(r"on pipeline (-?\d+), want (-?\d+)")
+LIMELIGHT_NO_BALLS = ("no Pollen ball was in the Limelight's view: the S2 setup puts 4 balls on taped marks at 24, 48, "
+                      "72 and 96 in on the camera's centreline, with the Limelight about 15.5 in up and 15.9 deg down")
+
+
+def still_balls(phase):
+    """The places seen in at least half the frames, then the rest (flickers)."""
+    frames = phase.get("frames") or 0
+    balls = [b for b in phase.get("balls") or [] if isinstance(b, dict)]
+    real = [b for b in balls if frames and (b.get("framesSeen") or 0) >= LIMELIGHT_STILL_SEEN_SHARE * frames]
+    return real, [b for b in balls if b not in real]
+
+
+def limelight_ball_checks(ll, ball_pipeline=BALL_PIPELINE):
+    """(name, ok, detail, fail_means) for Bench: Limelight's sync runs and its staleness, stillBalls and
+    pipelineChange phases."""
+    ph = dig(ll, "phases", default={}) or {}
+    out = []
+    sy = ph.get("sync") or {}
+    uploads = [(k, sy.get(k) or {}) for k in ("first", "again")]
+    out.append((f"limelight sync: both upload syncs done with no problem within {LIMELIGHT_UPLOAD_SYNC_MS} ms",
+                all(r.get("done") is True and r.get("problem") is None and finite(r.get("ms"))
+                    and r["ms"] <= LIMELIGHT_UPLOAD_SYNC_MS for _, r in uploads),
+                "; ".join(f"{k} {r.get('ms')} ms, done {r.get('done')}, problem {r.get('problem')!r}" for k, r in uploads),
+                "LimelightSync didn't put the uploaded ball pipeline on in time, or at all: a problem names what it saw "
+                "(a refused POST, the upload's stamp never showing); with no problem, every INIT waits longer than the "
+                "~1.7 s the findings give"))
+    switch = sy.get("switchOnly") or {}
+    out.append((f"limelight sync: the switch-only sync (syncOnInit off) done with no problem within "
+                f"{LIMELIGHT_SWITCH_SYNC_MS} ms",
+                switch.get("done") is True and switch.get("problem") is None and finite(switch.get("ms"))
+                and switch["ms"] <= LIMELIGHT_SWITCH_SYNC_MS,
+                f"{switch.get('ms')} ms, done {switch.get('done')}, problem {switch.get('problem')!r}" if switch
+                else "the switch-only run didn't happen",
+                "with syncOnInit off (tuning in the Limelight's web editor), the sync didn't switch to the ball pipeline "
+                "and confirm it as a Python pipeline in time"))
+    off = sy.get("syncOnInitOff") or {}
+    out.append(("limelight sync: with syncOnInit off, LimelightBallSource gets its first frame with no problem",
+                off.get("gotFrame") is True and off.get("problem") is None,
+                f"first frame {off.get('ms')} ms after INIT, frame {off.get('gotFrame')}, problem {off.get('problem')!r}"
+                if off else "the syncOnInit-off run didn't happen",
+                "with syncOnInit off, the source didn't accept the ball pipeline's script, so tuning in the web editor "
+                "would leave the robot without ball frames"))
+    st = ph.get("staleness") or {}
+    first = st.get("firstFrame") or {}
+    out.append((f"limelight: INIT to the first ball-pipeline frame within {LIMELIGHT_FIRST_FRAME_MS} ms with the upload",
+                first.get("gotFrame") is True and first.get("problem") is None and finite(first.get("ms"))
+                and first["ms"] <= LIMELIGHT_FIRST_FRAME_MS,
+                f"{first.get('ms')} ms, frame {first.get('gotFrame')}, problem {first.get('problem')!r}" if first
+                else "the staleness phase didn't run",
+                "an OpMode with ball vision waits longer than that after INIT for its first ball frame, or gets none"))
+    from_first, published = st.get("loopsFromFirstBall") or 0, st.get("loopsWithBalls") or 0
+    share = published / from_first if from_first else None
+    if not st:
+        detail = "the staleness phase didn't run"
+    elif share is None:
+        detail = f"no loop published a ball in {st.get('seconds')} s; {st.get('frames')} new frames; problems " \
+                 f"{st.get('problems')}"
+    else:
+        detail = (f"{published} of {from_first} loops ({share:.2%}) at staleFrameSeconds {st.get('liveThresholdS')} s; "
+                  f"{st.get('liveEpisodes')} stale episodes live; replayed {st.get('replayEpisodes')}")
+    out.append((f"limelight staleness: at the live threshold, {LIMELIGHT_PUBLISHED_SHARE:.0%} of loops after the first "
+                "ball publish balls", share is not None and share >= LIMELIGHT_PUBLISHED_SHARE, detail,
+                LIMELIGHT_NO_BALLS if st and share is None else
+                "balls dropped out of the published list: stale episodes (the replay shows which threshold would have "
+                "none) or tracks lost between frames, either of which a ball-collection plan sees as balls vanishing"))
+    still = ph.get("stillBalls") or {}
+    real, flickers = still_balls(still)
+    out.append((f"limelight still balls: {LIMELIGHT_STILL_BALLS} balls seen in at least half the frames",
+                len(real) == LIMELIGHT_STILL_BALLS,
+                f"{len(real)} balls at {[(round(b.get('meanXIn', 0), 1), round(b.get('meanYIn', 0), 1)) for b in real]} "
+                f"in {still.get('frames')} frames; {len(flickers)} flickers" if still else "the stillBalls phase didn't run",
+                LIMELIGHT_NO_BALLS if not real else
+                "fewer: a ball out of view or not detected at its distance (the summary lists what was seen); more: a "
+                "false detection or one ball split into two places"))
+
+    def per_ball(name, ok, value, means):
+        out.append((f"limelight still balls: {name}", bool(real) and all(ok(b) for b in real),
+                    "; ".join(f"ball at x {b.get('meanXIn', 0):.1f} in: {value(b)}" for b in real) or "no ball seen",
+                    LIMELIGHT_NO_BALLS if not real else means))
+
+    per_ball(f"max deviation under {LIMELIGHT_STILL_DEVIATION_IN:g} in at every distance",
+             lambda b: finite(b.get("maxDeviationIn")) and b["maxDeviationIn"] < LIMELIGHT_STILL_DEVIATION_IN,
+             lambda b: f"max {b.get('maxDeviationIn')} in, SD {b.get('sdIn')} in",
+             "a still ball's tracked position wanders past the planner's 2 in replan distance "
+             "(VisionBallCollectionTest's replanMoveIn), so it would replan with nothing moving")
+    per_ball(f"reported speed p95 under {LIMELIGHT_STILL_SPEED_IPS:g} in/s",
+             lambda b: finite(b.get("speedP95Ips")) and b["speedP95Ips"] < LIMELIGHT_STILL_SPEED_IPS,
+             lambda b: f"p50 {b.get('speedP50Ips')} / p95 {b.get('speedP95Ips')} in/s",
+             "the tracker reports still balls as moving (its isMoving() threshold is 3 in/s)")
+    per_ball("no track id changes", lambda b: b.get("idChanges") == 0,
+             lambda b: f"ids {b.get('ids')}, missing from {b.get('framesMissing')} frames",
+             "a still ball got a new track id: the tracker lost it (missed frames past maxMisses) or forked a "
+             "duplicate, which a plan following ids sees as a new ball")
+    pc = ph.get("pipelineChange") or {}
+    last = pc.get("last") or {}
+    out.append(("limelight pipeline change: never more than one LimelightSync thread",
+                bool(last) and finite(pc.get("sendersMax")) and pc["sendersMax"] <= 1,
+                f"at most {pc.get('sendersMax')} at once; [ms, threads] {pc.get('senders')}" if pc
+                else "the pipelineChange phase didn't run",
+                "a pipeline change started a second sync worker beside the first, so two could POST to the Limelight"))
+    fresh = last.get("firstFreshMs")
+    out.append((f"limelight pipeline change: the ball pipeline with new frames within {LIMELIGHT_CHANGE_FRESH_MS} ms "
+                "of the last change",
+                finite(fresh) and fresh <= LIMELIGHT_CHANGE_FRESH_MS and pc.get("finalPipelineIndex") == ball_pipeline,
+                f"first new frame {fresh} ms after it, its sync done at {last.get('syncDoneMs')} ms with problem "
+                f"{last.get('problemAtSyncDone')!r}; final pipeline {pc.get('finalPipelineIndex')}" if last
+                else "the last change didn't happen",
+                "after a pipeline change made while a sync was in flight, ball frames didn't come back in time"))
+    wrong = [p for p in last.get("problems") or [] if isinstance(p, list) and len(p) > 1 and p[1]
+             and any(int(m.group(2)) == ball_pipeline for m in LIMELIGHT_WRONG_PIPELINE.finditer(str(p[1])))]
+    out.append((f"limelight pipeline change: no 'on pipeline N, want {ball_pipeline}' after the last change",
+                bool(last) and not wrong,
+                f"problems after it [ms, text] {last.get('problems')}" if last else "the last change didn't happen",
+                "the Limelight stayed on another pipeline past the source's grace after the sync said it was done: "
+                "a cancelled sync's switch landed after the new one"))
+    loop_max = dig(pc, "loopMs", "max")
+    out.append((f"limelight pipeline change: loop period under {LIMELIGHT_CHANGE_LOOP_MS} ms throughout",
+                bool(last) and finite(loop_max) and loop_max < LIMELIGHT_CHANGE_LOOP_MS,
+                f"loop {fmt(pc.get('loopMs'))}" if pc else "the pipelineChange phase didn't run",
+                "a pipeline change stalled the loop that calls LimelightBallSource.update()"))
+    return out
+
+
+def limelight_ball_summary(ll):
+    ph = dig(ll, "phases", default={}) or {}
+    s = []
+    sy = ph.get("sync") or {}
+    sw, off = sy.get("switchOnly") or {}, sy.get("syncOnInitOff") or {}
+    s.append(f"- LimelightSync switch only (syncOnInit off): {sw.get('ms')} ms, problem {sw.get('problem')!r}; a "
+             f"LimelightBallSource with syncOnInit off: first frame {off.get('ms')} ms after INIT, problem "
+             f"{off.get('problem')!r}")
+    st = ph.get("staleness") or {}
+    if st:
+        first = st.get("firstFrame") or {}
+        clean = st.get("smallestCleanThresholdS")
+        replay = ", ".join(f"{t} s: {n}" for t, n in (st.get("replayEpisodes") or {}).items())
+        s.append(f"- staleness, {st.get('seconds')} s on the ball pipeline (INIT to its first frame {first.get('ms')} ms "
+                 f"with the upload): {st.get('frames')} new frames, gaps {fmt(st.get('gapMs'))}; "
+                 f"{st.get('loopsWithBalls')} of {st.get('loopsFromFirstBall')} loops published balls from the first "
+                 f"ball, {st.get('firstBallLoopMs')} ms in; stale episodes at the live {st.get('liveThresholdS')} s: "
+                 f"{st.get('liveEpisodes')}; replayed {replay}; longest gap {st.get('longestGapMs')} ms")
+        s.append("- smallest staleFrameSeconds with no stale episode: "
+                 + (f"{clean} s" if clean is not None
+                    else "none of " + ", ".join(st.get("replayEpisodes") or {}) + " s"))
+        hist = st.get("gapHistogram") or {}
+        width, counts = hist.get("bucketMs") or 10, hist.get("counts") or []
+        bins = [f"{i * width:.0f}{'+' if i == len(counts) - 1 else f'-{(i + 1) * width:.0f}'} ms: {n}"
+                for i, n in enumerate(counts) if n]
+        s.append(f"- gaps between new frames: {', '.join(bins) or 'none'}")
+    still = ph.get("stillBalls") or {}
+    if still:
+        real, flickers = still_balls(still)
+        s += [f"- still balls, {still.get('seconds')} s, {still.get('frames')} new frames, a ball being a place "
+              f"{still.get('radiusIn')} in wide (tracked positions in the camera's frame):", "",
+              "| ball at x, y (in) | frames seen / missing | SD / max deviation / spread (in) | speed p50 / p95 / max "
+              "(in/s) | track ids |", "|---|---|---|---|---|"]
+        for b in real + flickers:
+            s.append(f"| {b.get('meanXIn', 0):.1f}, {b.get('meanYIn', 0):.1f}{'' if b in real else ' (flicker)'} | "
+                     f"{b.get('framesSeen')} / {b.get('framesMissing')} | {b.get('sdIn', 0):.2f} / "
+                     f"{b.get('maxDeviationIn', 0):.2f} / {b.get('maxSpreadIn', 0):.2f} | {b.get('speedP50Ips', 0):.2f} / "
+                     f"{b.get('speedP95Ips', 0):.2f} / {b.get('speedMaxIps', 0):.2f} | {b.get('ids')} |")
+        s.append("")
+    pc = ph.get("pipelineChange") or {}
+    if pc:
+        for k in ("toOther", "back", "otherInFlight", "last"):
+            c = pc.get(k) or {}
+            if c:
+                s.append(f"- pipeline change {k}: to {c.get('to')} ({'upload' if c.get('upload') else 'switch only'}) "
+                         f"at {c.get('atMs') or 0:.0f} ms: sync done {c.get('syncDoneMs')} ms (problem "
+                         f"{c.get('problemAtSyncDone')!r}), first new frame {c.get('firstFreshMs')} ms, still syncing "
+                         f"at its end {c.get('syncingAtEnd')}, loop max {dig(c, 'loopMs', 'max')} ms; problems "
+                         f"{c.get('problems')}")
+        s.append(f"- the requests the quick changes replaced ended as: back {pc.get('backRequestEnded')}, other "
+                 f"{pc.get('otherInFlightRequestEnded')}; LimelightSync threads at most {pc.get('sendersMax')}; final "
+                 f"pipeline {pc.get('finalPipelineIndex')}")
+    return s
+
+
+WEBCAM_CONTROLS = ("exposure", "gain", "white balance")
+
+
+def sdk_refuses(control, value, lo, hi):
+    """What the SDK's caching controls refuse before any USB transfer (SDK 12.0.0's CachingExposureControl,
+    CachingGainControl and CachingWhiteBalanceControl)."""
+    if control == "exposure":
+        return value <= 0
+    if control == "gain":
+        return value < 0
+    return not (finite(lo) and finite(hi) and lo <= value <= hi)
+
+
+def webcam_writes(hold):
+    return [w for w in hold.get("blockingWrites") or [] if isinstance(w, list) and len(w) > 1]
+
+
+def webcam_hold_text(control, h):
+    writes = webcam_writes(h)
+    return (f"{control} {h.get('asked', h.get('value'))}: shown {h.get('shownAtEnd')!r}; {len(writes)} blocking "
+            f"write(s) [loop, ms] {[(int(w[0]), round(w[1])) for w in writes]} in {h.get('loops')} loops; rejected "
+            f"{h.get('rejectedAtEnd')!r}; fault {h.get('faultAtEnd')!r}")
+
+
+def webcam_refusals(found):
+    """(control, value, ms, refused by the SDK itself) for each value rejectFind saw refused."""
+    out = []
+    for control in WEBCAM_CONTROLS:
+        one = (found or {}).get(control) or {}
+        for v, ms in one.get("refused") or []:
+            out.append((control, int(v), ms, sdk_refuses(control, int(v), one.get("min"), one.get("max"))))
+    return out
+
+
+def webcam_rejected_checks(wc):
+    """(name, ok, detail, fail_means) for Bench: Webcam's clamp and reject phases."""
+    ph = dig(wc, "phases", default={}) or {}
+    holds = [h for h in (ph.get("clamp") or {}).get("holds") or [] if isinstance(h, dict)]
+    out = []
+    expected = [h for h in holds if h.get("clampExpected")]
+    unshown = [h for h in expected if f"(asked {h.get('asked')}" not in str(h.get("shownAtEnd") or "")]
+    out.append(("webcam clamp: each value outside the camera's range shows '(asked X)'",
+                bool(expected) and not unshown,
+                "; ".join(f"{h.get('control')} {h.get('asked')} (range {h.get('min')} to {h.get('max')}): shown "
+                          f"{h.get('shownAtEnd')!r}" for h in holds) or "the clamp phase didn't run",
+                "WebcamControls sent a clamped value without showing what was asked, so Camera Tune hides that the "
+                "dashboard value is out of range" if expected else
+                "no held value was outside a range the camera reported (or the phase didn't run), so the clamp went "
+                "unexercised"))
+
+    def one_write(h):
+        writes = webcam_writes(h)
+        named = re.search(rf"{re.escape(str(h.get('control')))} -?\d", str(h.get("rejectedAtEnd") or "")) is not None
+        return (h.get("loops") or 0) > 1 and ([w[0] for w in writes] == [0] or (not writes and named))
+
+    out.append(("webcam clamp: one blocking write per held value, in the loop it changed, none after",
+                len(holds) == len(WEBCAM_CONTROLS) and all(one_write(h) for h in holds),
+                "; ".join(webcam_hold_text(h.get("control"), h) for h in holds) or "the clamp phase didn't run",
+                "WebcamControls wrote a held value again (a blocking USB transfer of about 80 ms each time), or never "
+                "sent it; only a value named as rejected may show no write"))
+    for h in [h for h in (ph.get("reject") or {}).get("holds") or [] if isinstance(h, dict)]:
+        control, value = h.get("control"), h.get("value")
+        held, before, restored = h.get("held") or {}, h.get("before") or {}, h.get("restored") or {}
+        label = f"webcam reject, {control} {value}"
+        raised = next((f for f in held.get("fault") or [] if isinstance(f, list) and len(f) > 2 and f[2]), None)
+        out.append((f"{label}: the Webcam fault came within 1 loop, naming the setting",
+                    before.get("faultAtEnd") is None and raised is not None and raised[0] <= 1
+                    and f"{control} {value}" in str(raised[2]),
+                    f"fault before {before.get('faultAtEnd')!r}; changes [loop, ms, text] {held.get('fault')}",
+                    "CellTipCamera didn't raise its Webcam fault in the loop the value was refused, or the fault doesn't "
+                    "say which setting"))
+        out.append((f"{label}: the control shows REJECTED", "REJECTED" in str(held.get("shownAtEnd") or ""),
+                    f"shown {held.get('shownAtEnd')!r}",
+                    "Camera Tune and the dashboard don't show that the camera refused the value"))
+        writes = webcam_writes(held)
+        out.append((f"{label}: at most one blocking write, in the loop it changed (no retry while held)",
+                    (held.get("loops") or 0) > 1 and [w[0] for w in writes] in ([], [0]),
+                    f"{len(writes)} blocking write(s) [loop, ms] {writes} in {held.get('loops')} loops of the hold",
+                    "WebcamControls resent the refused value while it stayed refused: about 80 ms of loop each time"))
+        cleared = next((f for f in restored.get("fault") or [] if isinstance(f, list) and len(f) > 2 and f[2] is None),
+                       None)
+        out.append((f"{label}: the fault cleared after a valid value",
+                    raised is not None and cleared is not None and restored.get("faultAtEnd") is None,
+                    f"back to {h.get('valid')}: fault changes [loop, ms, text] {restored.get('fault')}",
+                    "the Webcam fault stayed up after the camera took a valid value"))
+    return out
+
+
+def webcam_rejected_summary(wc):
+    ph = dig(wc, "phases", default={}) or {}
+    s = []
+    for h in (ph.get("clamp") or {}).get("holds") or []:
+        s.append(f"- clamp: {webcam_hold_text(h.get('control'), h)} (camera range {h.get('min')} to {h.get('max')}; "
+                 f"clamp expected {h.get('clampExpected')})")
+    found = ph.get("rejectFind") or {}
+    for control in WEBCAM_CONTROLS:
+        one = found.get(control)
+        if one:
+            refused = [f"{int(v)} ({ms:.1f} ms)" for v, ms in one.get("refused") or []]
+            s.append(f"- rejectFind {control}: {one.get('tried')} of {one.get('inRange')} values from {one.get('min')} "
+                     f"to {one.get('max')} tried; set() {fmt(one.get('setMs'))}; refused: {', '.join(refused) or 'none'}")
+    if found:
+        refusals = webcam_refusals(found)
+        camera = [f"{c} {v}" for c, v, _, by_sdk in refusals if not by_sdk]
+        sdk = [f"{c} {v}" for c, v, _, by_sdk in refusals if by_sdk]
+        if camera:
+            s.append(f"- the camera itself refused {', '.join(camera)}: the fault path below ran on a camera refusal")
+        elif sdk:
+            s.append(f"- the camera accepted every value tried; only the SDK refused {', '.join(sdk)}, which it never "
+                     "sends: the fault path below ran on that, but a refusal by the camera itself is unexercised on "
+                     "hardware, so the rejected-settings question stays partly answered")
+        else:
+            s.append("- the camera accepted every value tried, so the fault path is unexercised on hardware: the "
+                     "rejected-settings question stays partly answered")
+    reject = ph.get("reject") or {}
+    for k in ("manualOff", "manualOn"):
+        h = reject.get(k)
+        if h:
+            s.append(f"- reject, {k}: {len(webcam_writes(h))} blocking write(s); rejected {h.get('rejectedAtEnd')!r}")
+    for h in reject.get("holds") or []:
+        held, restored = h.get("held") or {}, h.get("restored") or {}
+        s.append(f"- reject: {webcam_hold_text(h.get('control'), dict(held, value=h.get('value')))}; back to "
+                 f"{h.get('valid')}: fault changes [loop, ms, text] {restored.get('fault')}")
+    return s
+
+
 def counted(summary):
     return isinstance(summary, dict) and bool(summary.get("count"))
 
@@ -4572,9 +4887,12 @@ def octoquad_bank_checks(bank, error=""):
     init = bank.get("initRead") or {}
     setup, reset = bank.get("afterLocalizerSetup") or {}, bank.get("afterLocalizerReset") or {}
     finished = restored is not None and bool(reset)
-    lines = [f"- pods on OctoQuad channels {bank.get('podPorts')}: channel 4 is in the second bank, so while it is in "
+    pods = bank.get("podPorts") or []
+    lines = [f"- pods on OctoQuad channels {pods}: channel 4 is in the second bank, so while it is in "
              "pulse-width mode its pod reads a pulse width, not a count; only timings and read-backs are judged (on the "
-             "robot the pods sit on channels 0 and 1)",
+             "robot the pods sit on channels 0 and 1)" if 4 in pods else
+             f"- pods on OctoQuad channels {pods}, as on the robot: channel 4 carries nothing here; only timings and "
+             "read-backs are judged",
              f"- bank as found {found}; after setChannelBankConfig({OCTOQUAD_MIXED_BANKS}) {after_set}; after "
              f"GuardedOctoQuadLocalizer's setup and reset {setup.get('bank')} (RUNNING after {setup.get('runningMs')} ms); "
              f"after its reset() alone {reset.get('bank')} (RUNNING after {reset.get('runningMs')} ms); restored to "
@@ -4936,6 +5254,383 @@ def planner_control_summary(unsliced):
         s.append(f"- The control {PLANNER_CONTROL_WORDS[verdict]}: {detail}. The sliced STOP checks above are "
                  "unproven on this layout: with each plan in one step, STOP still stopped in time.\n")
     return s
+
+
+PINPOINT_SOAK_S = 3600
+PINPOINT_SOAK_QUICK_S = 300
+PINPOINT_SOAK_MIN_S = 150
+PINPOINT_SOAK_MARGIN_S = 240
+PINPOINT_SLOW_MS = 20
+PINPOINT_STALL_MS = 40
+PINPOINT_STEP_DEG = 0.2
+PINPOINT_WINDOW_DEG = 0.5
+PINPOINT_CONTROL_DEG = 0.1
+PINPOINT_RECAL_TIMEOUT_S = 180
+PINPOINT_MATCH_S = 150
+PINPOINT_ROBOT_HZ = 33
+PINPOINT_SOAK_SHORT = ("the soak didn't run its full time (it crashed, the runner gave up, or a STOP ended it): every "
+                       "number below covers only what ran, and a short run bounds the guard question less tightly")
+PINPOINT_SOAK_NOT_READY = ("a healthy Pinpoint at rest reported a status other than READY after its first READY: a guard "
+                           "that stops the OpMode on one such read would have stopped a match here, so a guard needs a "
+                           "grace window at least as long as the longest streak listed")
+PINPOINT_SOAK_STALL = ("a Pinpoint read took over 40 ms with no blocking GC across it: the 41.8 ms follower.update peak "
+                       "seen on the DECODE robot recurs as an I2C stall, and on the robot that loop drives on a "
+                       "40 ms-old pose")
+PINPOINT_SOAK_CONTROL = ("setup: the OctoQuad's heading moved more than 0.1 deg over 5-120 s at rest, or no OctoQuad "
+                         "answered on Control Hub I2C port 2: the board moved, so the Pinpoint's drift can't be judged")
+PINPOINT_SOAK_DRIFT = ("the Pinpoint's heading moved at rest, with the OctoQuad beside it still: BioBuzz Tele's heading "
+                       "lock trusts the Pinpoint's heading, and a start pose set in INIT turns with it")
+PINPOINT_RECAL_MEANS = ("after recalibrateIMU() the Pinpoint (or after resetLocalizerAndCalibrateIMU() the OctoQuad) "
+                        "didn't come back READY (RUNNING) within 15 s, or the run stopped before its 60 s still")
+PINPOINT_RAW_MEANS = ("the raw driver never saw a status other than READY after the unplug prompt: the cable wasn't "
+                      "pulled, or SDK 12's GoBildaPinpointDriver doesn't report a lost device in its status")
+
+
+def soak_ms_line(summary, unit="ms"):
+    if not counted(summary):
+        return "n/a"
+    return (f"{fmt(summary, unit)}; over {PINPOINT_SLOW_MS} ms {summary.get('over20')}, over {PINPOINT_STALL_MS} ms "
+            f"{summary.get('over40')}")
+
+
+def signed_deg(v):
+    return f"{v:+.3f} deg" if finite(v) else "n/a"
+
+
+def heading_drift_line(name, d):
+    if not d:
+        return f"- {name}: no samples"
+    return (f"- {name}: {signed_deg(d.get('change0to5Deg'))} in the first 5 s, {signed_deg(d.get('change5to120Deg'))} over 5-120 s, "
+            f"{d.get('slopeDegPerMin'):+.4f} deg/min from 5 s on, largest change {signed_deg(d.get('maxAbsChangeDeg'))}, "
+            f"{signed_deg(d.get('finalChangeDeg'))} at the end ({d.get('samples')} samples over {d.get('seconds'):.0f} s)"
+            if finite(d.get("slopeDegPerMin")) and finite(d.get("seconds")) else
+            f"- {name}: {signed_deg(d.get('change0to5Deg'))} in the first 5 s, {signed_deg(d.get('change5to120Deg'))} over 5-120 s "
+            f"({d.get('samples')} samples)")
+
+
+def pinpoint_soak_checks(res, outcome, recal_res, recal_outcome, asked_s):
+    soak = res.get("soak") or {}
+    info = res.get("info") or {}
+    status = soak.get("status") or {}
+    reads = soak.get("readMs") or {}
+    slow = soak.get("slowReads") or {}
+    drift = soak.get("drift") or {}
+    pin, octo = drift.get("pinpoint") or {}, drift.get("octoQuad")
+    ran_s = soak.get("seconds")
+    crashed = bool(outcome.get("crashed"))
+    error = outcome.get("errorMessage") or ""
+    after = status.get("readsAfterFirstReady") or 0
+    bad = status.get("notReadyAfterFirstReady")
+    streaks = status.get("streaks") or []
+    guard_ms = status.get("guardWouldStopMs")
+    bound, per_match = 3 / after if after else None, None
+    if bound is not None:
+        per_match = 1 - (1 - min(1.0, bound)) ** (PINPOINT_MATCH_S * PINPOINT_ROBOT_HZ)
+    lines = [f"## Bench: Pinpoint soak (Pedro's PinpointLocalizer, untouched for {asked_s} s, OctoQuad beside it)\n",
+             f"- ran {ran_s if ran_s is None else round(ran_s)} s of {asked_s}; {soak.get('runLoops')} loops; yaw scalar "
+             f"{info.get('yawScalar')}; OctoQuad present {res.get('octoQuadPresent')}; GC counters readable "
+             f"{info.get('gcStatsReadable')}",
+             f"- Pinpoint read (Pedro's update(), timed alone): {soak_ms_line(reads)}",
+             f"- follower.update(): {soak_ms_line(soak.get('followerUpdateMs'))}; loop period "
+             f"{soak_ms_line(soak.get('loopPeriodMs'))}",
+             f"- reads over {PINPOINT_SLOW_MS} ms: {slow.get('over20')} (rate {slow.get('over20Rate')}), "
+             f"{slow.get('over20WithBlockingGc')} with a blocking GC across them; over {PINPOINT_STALL_MS} ms: "
+             f"{slow.get('over40')} (rate {slow.get('over40Rate')}), {slow.get('over40WithBlockingGc')} with a blocking "
+             f"GC, {slow.get('over40WithoutGc')} without; first rows [loop, ms since START, read ms, blocking GCs, GCs] "
+             f"{(slow.get('rows') or [])[:8]}",
+             f"- statuses {status.get('statusCounts')}; {after} reads after the first READY, {bad} of them not READY "
+             f"in {status.get('streakCount')} streaks (longest {status.get('longestStreakReads')} reads, "
+             f"{status.get('longestStreakMs')} ms)",
+             "- a guard that stops on the first non-READY read after READY would "
+             + (f"have stopped {guard_ms / 1000:.1f} s after the follower was built ({status.get('guardWouldStopPhase')})"
+                if finite(guard_ms) else "not have stopped")
+             + (f"; streaks [start ms, status, reads, ms to READY]: "
+                f"{[[s.get('startMs'), s.get('status'), s.get('reads'), s.get('readyAgainAfterMs')] for s in streaks[:8]]}"
+                if streaks else ""),
+             f"- rule of three: with none in {after} reads the 95% bound is {bound:.2e} per read, so at most "
+             f"{per_match:.1%} chance of one in a {PINPOINT_MATCH_S} s match at {PINPOINT_ROBOT_HZ} Hz "
+             f"({PINPOINT_MATCH_S * PINPOINT_ROBOT_HZ} reads)" if bound is not None else
+             "- rule of three: no reads after a READY, so nothing is bounded",
+             heading_drift_line("Pinpoint heading", pin),
+             heading_drift_line("OctoQuad heading (control)", octo) if octo is not None else
+             "- OctoQuad heading (control): no OctoQuad answered on Control Hub I2C port 2"]
+    if crashed:
+        lines.append(f"- CRASHED: {error}")
+    checks = [(f"pinpoint soak: ran its {asked_s} s", not crashed and soak.get("ended") is True and finite(ran_s)
+               and ran_s >= asked_s, f"ran {ran_s} s; ended {soak.get('ended')}; timed out {outcome.get('timedOut')}; "
+               f"crashed {crashed}: {error!r}", PINPOINT_SOAK_SHORT)]
+    checks.append(("pinpoint soak: no status other than READY after the first READY", after > 0 and bad == 0,
+                   f"{bad} of {after} reads after the first READY; streaks [start ms, status, reads, ms to READY] "
+                   f"{[[s.get('startMs'), s.get('status'), s.get('reads'), s.get('readyAgainAfterMs')] for s in streaks[:5]]}"
+                   + (f"; the held guard would have stopped at {guard_ms / 1000:.1f} s" if finite(guard_ms) else ""),
+                   PINPOINT_SOAK_NOT_READY))
+    without = slow.get("over40WithoutGc")
+    checks.append((f"pinpoint soak: no Pinpoint read over {PINPOINT_STALL_MS} ms without a blocking GC across it",
+                   counted(reads) and without == 0,
+                   f"{without} of {slow.get('over40')} reads over {PINPOINT_STALL_MS} ms had no blocking GC; read "
+                   f"{fmt(reads)}", PINPOINT_SOAK_STALL))
+    window = (octo or {}).get("change5to120Deg")
+    control_ok = finite(window) and abs(window) <= PINPOINT_CONTROL_DEG
+    checks.append((f"pinpoint soak: setup: the OctoQuad's heading (the control) moved at most {PINPOINT_CONTROL_DEG} deg "
+                   "over 5-120 s", control_ok, f"OctoQuad {signed_deg(window)} over 5-120 s"
+                   if octo is not None else "no OctoQuad answered on Control Hub I2C port 2", PINPOINT_SOAK_CONTROL))
+    if control_ok:
+        step, span = pin.get("change0to5Deg"), pin.get("change5to120Deg")
+        checks.append((f"pinpoint soak: the Pinpoint's heading at rest moved at most {PINPOINT_STEP_DEG} deg in the first "
+                       f"5 s and {PINPOINT_WINDOW_DEG} deg over 5-120 s",
+                       finite(step) and finite(span) and abs(step) <= PINPOINT_STEP_DEG and abs(span) <= PINPOINT_WINDOW_DEG,
+                       f"{signed_deg(step)} in the first 5 s, {signed_deg(span)} over 5-120 s, {pin.get('slopeDegPerMin')} deg/min",
+                       PINPOINT_SOAK_DRIFT))
+    else:
+        lines.append("- the Pinpoint's drift isn't judged: the OctoQuad control moved or was missing, which voids the "
+                     "comparison")
+    rc = recal_res.get("recal") or {}
+    recal_crashed = bool(recal_outcome.get("crashed"))
+    lines += ["", "### Bench: Pinpoint's recalibration run (raw drivers, no follower)\n",
+              f"- settled READY/RUNNING after {rc.get('settledMs')} ms; recalibrateIMU(): READY again after "
+              f"{rc.get('pinpointRecalMs')} ms (left READY {rc.get('pinpointLeftReady')}); "
+              f"resetLocalizerAndCalibrateIMU(): RUNNING again after {rc.get('octoQuadRecalMs')} ms (left RUNNING "
+              f"{rc.get('octoQuadLeftRunning')})",
+              heading_drift_line("Pinpoint heading after the recalibration", rc.get("pinpointDrift")),
+              heading_drift_line("OctoQuad heading after its reset", rc.get("octoQuadDrift")) if rc.get("octoQuadDrift") else
+              "- OctoQuad heading after its reset: no OctoQuad"]
+    if recal_crashed:
+        lines.append(f"- CRASHED: {recal_outcome.get('errorMessage')}")
+    checks.append(("pinpoint recalibration: the boards recalibrated, read again, and 60 s still were recorded",
+                   not recal_crashed and rc.get("step") == "done" and rc.get("backWithinLimit") is True,
+                   f"step {rc.get('step')}; back within 15 s {rc.get('backWithinLimit')}; crashed {recal_crashed}: "
+                   f"{recal_outcome.get('errorMessage')!r}", PINPOINT_RECAL_MEANS))
+    return checks, lines
+
+
+def pinpoint_raw_checks(rec, res, outcome):
+    d = res.get("dropout") or {}
+    bad = d.get("badLoops") or 0
+    lines = ["## Pinpoint unplug and replug, raw driver (Bench: Pinpoint, rawDropout mode, no follower)\n",
+             f"- firmware {res.get('deviceVersion')}; first status off READY {d.get('firstNotReadyStatus')} at "
+             f"{d.get('firstNotReadyMs')} ms; the pose then {d.get('poseDuringDropout')} ({d.get('firstNotReadyPose')}, "
+             f"last READY pose {d.get('lastReadyPose')})",
+             f"- {bad} loops off READY; READY again at {d.get('readyAgainMs')} ms with pose {d.get('poseWhenReadyAgain')}; "
+             f"after the replug {d.get('afterReplug')}",
+             f"- dashboard: status off READY {rec.get('notReadySeenS')} s after the unplug Enter, READY "
+             f"{rec.get('readyAgainS')} s after the replug Enter; warnings {rec.get('warnings')}",
+             f"- OpMode crashed {outcome.get('crashed')}: {outcome.get('errorMessage')!r}\n"]
+    if "skipped" in rec:
+        return [("pinpoint raw dropout: the unplug step ran", False, rec["skipped"],
+                 "the Pinpoint never read READY before the unplug prompt (pods missing, a loose cable) or the OpMode "
+                 "crashed, so the unplug wasn't tried")], lines
+    return [("pinpoint raw dropout: the unplug showed as a status other than READY", bad > 0,
+             f"{bad} loops off READY; first {d.get('firstNotReadyStatus')}, pose {d.get('poseDuringDropout')}",
+             PINPOINT_RAW_MEANS)], lines
+
+
+OCTOQUAD_CHAIN_PORTS = {"portX": 0, "portY": 1}
+OCTOQUAD_ROLLED = "octoquad_rolled.json"
+KEY_OCTOQUAD_FAULT = "Bench octoquad fault"
+KEY_OCTOQUAD_REPLUG = "Bench octoquad replug"
+OCTOQUAD_EARLY_HOLD_S = 0.3
+OCTOQUAD_EARLY_RUN_S = 5
+OCTOQUAD_EARLY_WAIT_MS = 3050
+OCTOQUAD_OUT_S = 10
+OCTOQUAD_LATE_MS = 5000
+OCTOQUAD_LATE_FAULT_WAIT_S = 8
+OCTOQUAD_STREAK_MS = (200, 1000)
+OCTOQUAD_PULL = (">>> PULL the OctoQuad's I2C cable out of Control Hub I2C port 2 (leave both pods in), then press "
+                 "Enter.")
+OCTOQUAD_PULL_LEAVE = (">>> PULL the OctoQuad's I2C cable out of Control Hub I2C port 2 (leave both pods in) and leave "
+                       "it out, then press Enter.")
+OCTOQUAD_PLUG = ">>> PLUG the OctoQuad's I2C cable back into Control Hub I2C port 2, then press Enter."
+OCTOQUAD_ROLL = ">>> ROLL the odometry pod on OctoQuad channel 0 about 10 cm by hand, then press Enter."
+OCTOQUAD_NOT_RUN = "this step of the chain didn't run (see the error above it), so it wasn't judged"
+OCTOQUAD_EARLY_MEANS = ("START 0.3 s after INIT, before the OctoQuad's first RUNNING, didn't wait for RUNNING and then "
+                        "run: EnhancedOpMode's start waits up to 3 s for GuardedOctoQuadLocalizer, so an auto started "
+                        "early by the drive team would stop with an error or start on the INIT pose")
+OCTOQUAD_MARKERS_MEANS = ("a read of the OctoQuad didn't answer within 5 s of its step (the reset, the full reset, or a "
+                          "plain read): the bench couldn't measure what the reset kept, and on the robot a reset at INIT "
+                          "would leave odometry without data for that long")
+OCTOQUAD_CONTROL_MEANS = ("with Pedro's OctoQuadLocalizer, the control, a pulled cable didn't simply freeze the pose: "
+                          "the OpMode stopped, a fault came, or the pose moved, so Pedro's localizer doesn't behave as "
+                          "docs/hub-bench-findings.md says and the guarded run has nothing to compare with")
+OCTOQUAD_REPLUG_MEANS = ("after the replug the OctoQuad didn't answer within 30 s, so what a power cycle keeps (the bank, "
+                         "the velocity intervals, the directions) wasn't read")
+OCTOQUAD_GUARDED_MEANS = ("with GuardedOctoQuadLocalizer a pulled cable didn't stop the OpMode after a streak of invalid "
+                          "reads with an error naming the OctoQuad, while Pedro's localizer kept running under the same "
+                          "pull: the guard misses a lost OctoQuad, or stops on one read")
+OCTOQUAD_LATE_MEANS = ("an OctoQuad plugged in during INIT didn't clear its fault and reach RUNNING within 5 s of "
+                       "answering: GuardedOctoQuadLocalizer re-sends its setup when the board first answers, so a cable "
+                       "seated late at an event would leave odometry dead until a re-INIT")
+OCTOQUAD_DIRECTIONS_MEANS = ("after a late plug-in the pod directions didn't read back as OctoQuadSetup sets them: the "
+                             "guard's re-sent setup didn't take, so one axis counts backwards")
+OCTOQUAD_LATE_SEED_MEANS = ("a start pose set in INIT before the OctoQuad answered didn't survive its late setup through "
+                            "START + 3 s: the guard sends a pending pose when RUNNING first arrives, so more than "
+                            "0.1 in / 0.2 deg means that pose was lost or overwritten")
+
+
+def chain_outcome(o):
+    return {"crashed": bool(o.get("crashed")), "errorMessage": o.get("errorMessage") or "", "timedOut": o.get("timedOut"),
+            "endedItself": "stopSecondsRunnerSide" not in o}
+
+
+def chain_part(chain, key):
+    part = chain.get(key)
+    return part if isinstance(part, dict) and "outcome" in part else None
+
+
+def ms_or_never(v):
+    return f"{v:.0f} ms" if finite(v) else "never"
+
+
+def octoquad_chain_checks(chain):
+    checks = []
+    lines = ["## Bench: OctoQuad's chain (pods on OctoQuad channels 0 and 1, as on the robot)\n"]
+
+    e = chain_part(chain, "earlystart")
+    if e is None:
+        checks.append(("octoquad earlystart: ran", False, "not run", OCTOQUAD_NOT_RUN))
+    else:
+        early, o = dig(e, "result", "early") or {}, e["outcome"]
+        wait, ran = early.get("startWaitMs"), early.get("ranSeconds")
+        checks.append((f"octoquad earlystart: START {OCTOQUAD_EARLY_HOLD_S} s after INIT waits at most 3 s for RUNNING "
+                       f"and then runs {OCTOQUAD_EARLY_RUN_S} s without throwing",
+                       not o.get("crashed") and finite(wait) and wait <= OCTOQUAD_EARLY_WAIT_MS and finite(ran)
+                       and ran >= OCTOQUAD_EARLY_RUN_S,
+                       f"START waited {ms_or_never(wait)} (from the last INIT loop; RUNNING at that loop "
+                       f"{early.get('validAtLastInitLoop')}); ran {ran} s; crashed {o.get('crashed')}: "
+                       f"{o.get('errorMessage')!r}", OCTOQUAD_EARLY_MEANS))
+        lines.append(f"- early START: {OCTOQUAD_EARLY_HOLD_S} s after INIT, {early.get('msSinceCreateAtStart')} ms after "
+                     f"the localizer was built; START waited {ms_or_never(wait)} for RUNNING; ran {ran} s")
+
+    m = chain_part(chain, "markers")
+    if m is None:
+        checks.append(("octoquad markers: ran", False, "not run", OCTOQUAD_NOT_RUN))
+    else:
+        r, o, runner = m.get("result") or {}, m["outcome"], m.get("runner") or {}
+        mk = r.get("markers") or {}
+        failures = mk.get("readFailures")
+        ok = (not o.get("crashed") and "skipped" not in runner and mk.get("step") == "done" and failures == [])
+        checks.append(("octoquad markers: every read answered within 5 s of its step", ok,
+                       runner.get("skipped") or f"step {mk.get('step')}; no answer for {failures}; crashed "
+                       f"{o.get('crashed')}: {o.get('errorMessage')!r}", OCTOQUAD_MARKERS_MEANS))
+        found, setm, ev = mk.get("found") or {}, mk.get("markersSet") or {}, mk.get("afterResetEverything") or {}
+        lines += [f"- settings as found: bank {found.get('bank')}, velocity intervals {found.get('intervalsMs')} ms, "
+                  f"directions reversed {found.get('directionsReversed')}, uptime {found.get('uptimeMs')} ms",
+                  f"- markers set (channel 7's interval to 17 ms, the bank to {OCTOQUAD_MIXED_BANKS}, not saved to "
+                  f"flash): read back {setm.get('intervalsMs')} ms, {setm.get('bank')}; took {mk.get('markersTook')}",
+                  f"- the pod on channel 0 rolled {mk.get('rollCounts')} counts ({mk.get('positionsBefore')} to "
+                  f"{mk.get('positionsAfterRoll')}); localizer pose then {mk.get('poseAfterRoll')}",
+                  f"- resetLocalizerAndCalibrateIMU(): {mk.get('afterLocalizerReset')}; counts after "
+                  f"{mk.get('positionsAfterLocalizerReset')}, pods zeroed {mk.get('localizerResetZeroedPods')}; pose "
+                  f"{mk.get('poseAfterLocalizerReset')}",
+                  f"- resetEverything(): answered after {mk.get('resetEverythingAnsweredMs')} ms; uptime "
+                  f"{ev.get('uptimeMs')} ms (rebooted {mk.get('rebootedByResetEverything')}); bank {ev.get('bank')} "
+                  f"(kept {mk.get('bankKeptThroughResetEverything')}); intervals {ev.get('intervalsMs')} (channel 7's "
+                  f"marker kept {mk.get('markerIntervalKeptThroughResetEverything')}; changes [channel, before, after] "
+                  f"{mk.get('intervalChanges')}); direction changes {mk.get('directionChanges')}; counts "
+                  f"{mk.get('positionsAfterResetEverything')} (pods zeroed {mk.get('resetEverythingZeroedPods')}); "
+                  f"localizer {mk.get('statusAfterResetEverything')}",
+                  f"- put back: {mk.get('restored')}"]
+
+    u = chain_part(chain, "unguarded")
+    kept_running = False
+    if u is None:
+        checks.append(("octoquad unguarded control: ran", False, "not run", OCTOQUAD_NOT_RUN))
+    else:
+        r, o, runner = u.get("result") or {}, u["outcome"], u.get("runner") or {}
+        d, ug = r.get("dropout") or {}, r.get("unguarded") or {}
+        bad, silent = d.get("badLoops") or 0, d.get("silentBadLoops") or 0
+        kept_running = not o.get("crashed") and not o.get("endedItself") and "skipped" not in runner
+        if "skipped" in runner:
+            checks.append(("octoquad unguarded control: the cable pull ran", False, runner["skipped"], OCTOQUAD_NOT_RUN))
+        else:
+            checks.append(("octoquad unguarded control: with Pedro's OctoQuadLocalizer a pulled cable freezes the pose, "
+                           "the OpMode keeps running and no fault comes",
+                           kept_running and bad > 0 and silent == bad and d.get("poseDuringDropout") == "frozen",
+                           f"pose during the pull {d.get('poseDuringDropout')}; {bad} invalid loops, {bad - silent} with an "
+                           f"OctoQuad fault; still running after {OCTOQUAD_OUT_S} s out {runner.get('runningAfterOutS')}; "
+                           f"stopped by itself {o.get('endedItself')}, crashed {o.get('crashed')}: "
+                           f"{o.get('errorMessage')!r}", OCTOQUAD_CONTROL_MEANS))
+            after = ug.get("afterReplug") or {}
+            checks.append(("octoquad power cycle: after the replug the OctoQuad answered and its settings were read",
+                           bool(after), f"answered again {ms_or_never(ug.get('answeredAgainMs'))} after START, after "
+                           f"{ms_or_never(ug.get('noReplyForMs'))} without a reply", OCTOQUAD_REPLUG_MEANS))
+        mset = ug.get("markersSet") or {}
+        after = ug.get("afterReplug") or {}
+        lines += [f"- Pedro's OctoQuadLocalizer, cable pulled for {OCTOQUAD_OUT_S} s: first invalid read "
+                  f"{d.get('firstInvalidStatus')} (CRC ok {d.get('firstInvalidCrcOk')}), pose {d.get('poseDuringDropout')} "
+                  f"({d.get('firstInvalidPose')}, last valid {d.get('lastValidPose')}); {bad} invalid loops, "
+                  f"{bad - silent} with an OctoQuad fault; faults at the end {ug.get('faultsAtEnd')}; dashboard "
+                  f"warnings {runner.get('warnings')}",
+                  f"- power cycle (the pull): uptime {mset.get('uptimeMs')} ms before, {after.get('uptimeMs')} ms after "
+                  f"(rebooted {ug.get('rebooted')}); bank kept {ug.get('bankKept')} ({after.get('bank')}); channel 7's "
+                  f"17 ms kept {ug.get('markerIntervalKept')}; interval changes [channel, before, after] "
+                  f"{ug.get('intervalChanges')}; direction changes {ug.get('directionChanges')} (reported, not judged: "
+                  f"the code sets them at every INIT)",
+                  f"- localizer RUNNING again {ms_or_never(ug.get('runningAfterAnswerMs'))} after it answered, pose then "
+                  f"{ug.get('poseWhenRunningAgain')}; settings put back {ug.get('restored')}"]
+
+    g = chain.get("guarded")
+    if not isinstance(g, dict) or "outcome" not in g:
+        checks.append(("octoquad guarded pull: ran", False, "not run", OCTOQUAD_NOT_RUN))
+    elif "skipped" in (g.get("runner") or {}):
+        checks.append(("octoquad guarded pull: the cable pull ran", False, g["runner"]["skipped"], OCTOQUAD_NOT_RUN))
+    else:
+        d, o = dig(g, "result", "dropout") or {}, g["outcome"]
+        error = o.get("errorMessage") or ""
+        first, end = d.get("firstInvalidMs"), d.get("finishedMs")
+        stop_ms = end - first if finite(first) and finite(end) else None
+        streak = re.search(r"for (\d+) ms", error)
+        lines.append(f"- GuardedOctoQuadLocalizer, cable pulled and left out: first invalid read at {ms_or_never(first)}, the "
+                     f"OpMode stopped {ms_or_never(stop_ms)} after it (the guard's own count "
+                     f"{streak.group(1) + ' ms' if streak else 'n/a'}); stopped by itself {o.get('endedItself')}, seen "
+                     f"by the runner {dig(g, 'runner', 'stoppedS')} s after the pull's Enter: {error!r}")
+        if not kept_running:
+            lines.append("- the guarded verdict is void: Pedro's localizer, the control, didn't keep running through its "
+                         "own pull (or didn't run), so a stop here can't be told from any stop")
+        else:
+            lo, hi = OCTOQUAD_STREAK_MS
+            checks.append((f"octoquad guarded: an invalid read stops the OpMode after a streak ({lo}-{hi} ms) with an "
+                           "error naming the OctoQuad, the control having kept running",
+                           bool(o.get("endedItself")) and OCTOQUAD_GUARD_PREFIX in error.lower() and stop_ms is not None
+                           and lo <= stop_ms <= hi,
+                           f"stopped by itself {o.get('endedItself')} {ms_or_never(stop_ms)} after the first invalid read: "
+                           f"{error!r}", OCTOQUAD_GUARDED_MEANS))
+
+    j = chain_part(chain, "latejoin")
+    if j is None:
+        checks.append(("octoquad latejoin: ran", False, "not run", OCTOQUAD_NOT_RUN))
+    else:
+        r, o, runner = j.get("result") or {}, j["outcome"], j.get("runner") or {}
+        lj, seed = r.get("latejoin") or {}, r.get("seed") or {}
+        fault, clear, running = lj.get("faultMs"), lj.get("clearAfterAnswerMs"), lj.get("runningAfterAnswerMs")
+        lines.append(f"- late plug-in: INIT with the cable out (answering at INIT {lj.get('answeredAtInit')}): fault at "
+                     f"{ms_or_never(fault)} ({lj.get('faultMessage')!r}); first answer at {ms_or_never(lj.get('answerMs'))} "
+                     f"({lj.get('answerStatus')}); fault cleared {ms_or_never(clear)} and RUNNING {ms_or_never(running)} after "
+                     f"it ({lj.get('runningPhase')}); directions reversed {lj.get('directionsReversed')} on channels "
+                     f"{lj.get('podPorts')}, OctoQuadSetup sets {lj.get('directionsExpected')}; start pose worst "
+                     f"{seed.get('maxOffsetIn')} in / {seed.get('maxTurnDeg')} deg; dashboard: cleared "
+                     f"{runner.get('clearSeenS')} s and RUNNING {runner.get('validSeenS')} s after the plug-in Enter")
+        if "skipped" in runner:
+            checks.append(("octoquad latejoin: INIT with the cable out raised the OctoQuad fault", False,
+                           runner["skipped"], OCTOQUAD_NOT_RUN))
+        else:
+            checks.append((f"octoquad latejoin: with the cable out the fault came within {OCTOQUAD_LATE_MS // 1000} s, and "
+                           f"once plugged in it cleared and RUNNING came within {OCTOQUAD_LATE_MS // 1000} s of the "
+                           "OctoQuad answering",
+                           finite(fault) and fault <= OCTOQUAD_LATE_MS and finite(clear) and clear <= OCTOQUAD_LATE_MS
+                           and finite(running) and running <= OCTOQUAD_LATE_MS,
+                           f"fault at {ms_or_never(fault)}; cleared {ms_or_never(clear)} and RUNNING {ms_or_never(running)} after "
+                           f"it answered; crashed {o.get('crashed')}: {o.get('errorMessage')!r}", OCTOQUAD_LATE_MEANS))
+            checks.append(("octoquad latejoin: the pod directions read back as OctoQuadSetup sets them",
+                           lj.get("directionsMatch") is True,
+                           f"read {lj.get('directionsReversed')}, expected {lj.get('directionsExpected')} (1 = REVERSE) "
+                           f"on channels {lj.get('podPorts')}", OCTOQUAD_DIRECTIONS_MEANS))
+            offset, turn = seed.get("maxOffsetIn"), seed.get("maxTurnDeg")
+            checks.append((f"octoquad latejoin: a start pose set in INIT before the OctoQuad answered held through START + "
+                           f"3 s (within {PINPOINT_SEED_OFFSET_IN} in and {PINPOINT_SEED_TURN_DEG} deg)",
+                           not o.get("crashed") and seed.get("ran") is True and finite(offset) and finite(turn)
+                           and offset <= PINPOINT_SEED_OFFSET_IN and turn <= PINPOINT_SEED_TURN_DEG,
+                           f"worst {offset} in / {turn} deg over {seed.get('loops')} loops", OCTOQUAD_LATE_SEED_MEANS))
+    return checks, lines
 
 
 def write_recovery_checks(res, outcome):
@@ -7162,6 +7857,9 @@ class Runner:
             for r in dig(ph, "closeAtDelay", "runs", default=[]):
                 s.append(f"- close at delay {r['delayMs']} ms: frames {r.get('framesAtClose')}, close {r.get('closeMs', 0):.0f} ms, "
                          f"release {r.get('releaseMs', 0):.1f} ms")
+            for check in webcam_rejected_checks(wc):
+                self.check(*check)
+            s += webcam_rejected_summary(wc)
         s.append("")
         self.summary += s
         self.run_webcam_stops()
@@ -7333,10 +8031,6 @@ class Runner:
             for k in ("first", "again"):
                 v = sy.get(k, {})
                 s.append(f"- LimelightSync {k}: {v.get('ms')} ms, problem {v.get('problem')!r} (stamp {sy.get('stamp')})")
-            if sy:
-                self.check("LimelightSync put the ball pipeline on the Limelight",
-                           all(dig(sy, k, "done") and dig(sy, k, "problem") is None for k in ("first", "again")),
-                           f"sync phase {sy}")
             for k in ("toBallPipeline", "toOtherPipeline", "backToBallPipeline"):
                 v = dig(ph, "pipelineSwitch", k, default={})
                 s.append(f"- switch {k} ({v.get('target')}): {v.get('pipelineSwitchMs')} ms, accepted {v.get('accepted')}; first "
@@ -7372,6 +8066,9 @@ class Runner:
                          f"update {fmt(v.get('updateMs'))}")
             if "threw" in bb:
                 s.append(f"- LimelightBallSource threw: {bb['threw']}")
+            for check in limelight_ball_checks(ll):
+                self.check(*check)
+            s += limelight_ball_summary(ll)
         s.append("")
         self.summary += s
         if self.args.interactive:
@@ -9162,11 +9859,17 @@ class Runner:
             self.log("no Pinpoint answered on I2C bus 1: running Bench: Pinpoint Absent")
             self.summary.append("## Bench: Pinpoint\n\n- no Pinpoint answered on I2C bus 1, so the firmware, start-pose "
                                 "and dropout checks were skipped and Bench: Pinpoint Absent ran instead\n")
+            if self.args.pinpoint_soak:
+                self.summary.append("_Bench: Pinpoint's soak and recalibration runs skipped: no Pinpoint answered on "
+                                    "Control Hub I2C port 1._\n")
             self.run_pinpoint_absent()
             return
         self._pinpoint_seed(o, res)
         if self.args.interactive:
+            self._pinpoint_raw_dropout()
             self._pinpoint_dropout()
+        if self.args.pinpoint_soak:
+            self.run_pinpoint_soak()
 
     def _pinpoint_seed(self, o, res):
         info, seed = res.get("info") or {}, res.get("seed") or {}
@@ -9193,6 +9896,61 @@ class Runner:
                    f"worst {offset} in / {turn} deg over {seed.get('loops')} loops; final status {res.get('finalStatus')}"
                    + (f"; error {o['errorMessage']!r}" if o["crashed"] else ""),
                    PINPOINT_CRASHED if o["crashed"] else PINPOINT_SEED_PENDING)
+
+    def _pinpoint_raw_dropout(self):
+        rec = {"warnings": []}
+
+        def status():
+            warning = (self.dash.status or {}).get("warningMessage") or ""
+            if warning and warning not in rec["warnings"]:
+                rec["warnings"].append(warning)
+            return self.dash.data.get(KEY_PINPOINT_STATUS)
+
+        def script():
+            ready = self.wait_or_crash(lambda: status() == "READY"
+                                       and (telemetry_float(self.dash.data.get(KEY_LOOP)) or 0) > 20, 15)
+            if ready is None:
+                rec["skipped"] = f"the Pinpoint wasn't READY before the unplug (status {status()!r}), or the OpMode crashed"
+                self.log(f"Pinpoint raw dropout skipped: {rec['skipped']}")
+                return
+            self.ask(">>> PULL the Pinpoint's I2C cable out of Control Hub I2C port 1 (leave both pods in), then press "
+                     "Enter.")
+            rec["notReadySeenS"] = self.wait_or_crash(lambda: status() not in (None, "READY"), 10)
+            self.log(f"Pinpoint status {status()!r} on the dashboard {rec['notReadySeenS']} s after Enter")
+            self.ask(">>> PLUG the Pinpoint's I2C cable back into Control Hub I2C port 1, then press Enter.")
+            rec["readyAgainS"] = self.wait_or_crash(lambda: status() == "READY", 30)
+            self.wait_or_crash(keep_watching, 2)
+
+        def keep_watching():
+            status()
+            return False
+
+        o = self.run_opmode("Bench: Pinpoint", "pinpoint_raw_dropout", {"mode": "rawDropout"}, timeout=60,
+                            during=script, result_files=["pinpoint_raw_dropout"], quiet_after=10.0)
+        self.results["pinpoint_raw_dropout"]["runner"] = rec
+        res = self.pull("pinpoint_raw_dropout", required=False) or {}
+        checks, lines = pinpoint_raw_checks(rec, res, o)
+        self.summary += lines
+        for check in checks:
+            self.check(*check)
+
+    def run_pinpoint_soak(self):
+        seconds = self.args.pinpoint_soak
+        expansion = (self.expansion, []) if self.expansion is not None else None
+        self.activate_config(CONFIG_OCTOQUAD, self.main_config(pinpoint=True, octoquad_bus=OCTOQUAD_BUS,
+                                                               expansion=expansion))
+        self.log(f"Bench: Pinpoint soak: {seconds} s, the Pinpoint and the OctoQuad untouched throughout")
+        o = self.run_opmode("Bench: Pinpoint", "pinpoint_soak", {"mode": "soak", "seconds": seconds},
+                            init_hold=PINPOINT_INIT_HOLD_S, timeout=seconds + PINPOINT_SOAK_MARGIN_S, timeout_ok=True,
+                            result_files=["pinpoint_soak"], status_every=30.0)
+        res = self.pull("pinpoint_soak", required=False) or {}
+        r = self.run_opmode("Bench: Pinpoint", "pinpoint_recal", {"mode": "recal"}, timeout=PINPOINT_RECAL_TIMEOUT_S,
+                            timeout_ok=True, result_files=["pinpoint_recal"])
+        recal = self.pull("pinpoint_recal", required=False) or {}
+        checks, lines = pinpoint_soak_checks(res, o, recal, r, seconds)
+        self.summary += lines + [""]
+        for check in checks:
+            self.check(*check)
 
     def _pinpoint_dropout(self):
         rec = {"warnings": []}
@@ -9286,8 +10044,10 @@ class Runner:
         expansion = (self.expansion, []) if self.expansion is not None else None
         self.activate_config(CONFIG_OCTOQUAD, self.main_config(pinpoint=True, octoquad_bus=OCTOQUAD_BUS,
                                                                expansion=expansion))
-        o = self.run_opmode("Bench: OctoQuad", "octoquad_seed", {"mode": "seed"}, init_hold=PINPOINT_INIT_HOLD_S,
-                            timeout=60, timeout_ok=True, result_files=["octoquad_seed"])
+        chain = self.args.octoquad_chain
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_seed", dict({"mode": "seed"}, **(OCTOQUAD_CHAIN_PORTS if chain
+                                                                                       else {})),
+                            init_hold=PINPOINT_INIT_HOLD_S, timeout=60, timeout_ok=True, result_files=["octoquad_seed"])
         res = self.pull("octoquad_seed", required=False) or {}
         if res.get("present") is False:
             self.log(f"no OctoQuad answered on I2C bus {OCTOQUAD_BUS} (chip id {fmt_chip(res.get('chipId'))})")
@@ -9302,7 +10062,105 @@ class Runner:
             self.log("Bench: OctoQuad didn't get through INIT: skipping the OctoQuad unplug step")
             self.summary.append("_OctoQuad unplug and replug skipped: Bench: OctoQuad didn't get through INIT._\n")
             return
+        if chain:
+            self._octoquad_chain()
+            return
         self._octoquad_dropout()
+
+    def _octoquad_chain(self):
+        chain = self.results["octoquad_chain"] = {"ports": OCTOQUAD_CHAIN_PORTS}
+        try:
+            self._octoquad_earlystart(chain)
+            self._octoquad_markers(chain)
+            self._octoquad_unguarded(chain)
+            chain["guarded"] = self._octoquad_dropout(chain=True)
+            self._octoquad_latejoin(chain)
+        finally:
+            checks, lines = octoquad_chain_checks(chain)
+            self.summary += lines + [""]
+            for check in checks:
+                self.check(*check)
+
+    def _octoquad_earlystart(self, chain):
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_earlystart", dict({"mode": "earlystart"}, **OCTOQUAD_CHAIN_PORTS),
+                            init_hold=OCTOQUAD_EARLY_HOLD_S, timeout=60, timeout_ok=True,
+                            result_files=["octoquad_earlystart"])
+        chain["earlystart"] = {"outcome": chain_outcome(o),
+                               "result": self.pull("octoquad_earlystart", required=False) or {}}
+
+    def _octoquad_markers(self, chain):
+        rec = {}
+
+        def script():
+            if self.wait_or_crash(lambda: self.dash.data.get(KEY_PHASE) == "roll", 30) is None:
+                rec["skipped"] = "Bench: OctoQuad never reached its roll step (see the error), so nothing was rolled"
+                self.log(f"OctoQuad markers: {rec['skipped']}")
+                return
+            self.ask(OCTOQUAD_ROLL)
+            self.adb.push_json({"rolled": True}, OCTOQUAD_ROLLED, self.out / "logs" / OCTOQUAD_ROLLED)
+
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_markers", dict({"mode": "markers"}, **OCTOQUAD_CHAIN_PORTS),
+                            timeout=90, timeout_ok=True, during=script, result_files=["octoquad_markers"])
+        chain["markers"] = {"outcome": chain_outcome(o), "runner": rec,
+                            "result": self.pull("octoquad_markers", required=False) or {}}
+
+    def _octoquad_unguarded(self, chain):
+        rec = {"warnings": []}
+
+        def valid():
+            warning = (self.dash.status or {}).get("warningMessage") or ""
+            if warning and warning not in rec["warnings"]:
+                rec["warnings"].append(warning)
+            value = self.dash.data.get(KEY_OCTOQUAD_VALID)
+            return None if value is None else str(value)
+
+        def script():
+            ready = self.wait_or_crash(lambda: valid() == "true"
+                                       and (telemetry_float(self.dash.data.get(KEY_LOOP)) or 0) > 20, 15)
+            if ready is None:
+                rec["skipped"] = (f"the OctoQuad's reads weren't valid before the unplug (status "
+                                  f"{self.dash.data.get(KEY_OCTOQUAD_STATUS)!r}), or the OpMode crashed")
+                self.log(f"OctoQuad unguarded control skipped: {rec['skipped']}")
+                return
+            self.ask(OCTOQUAD_PULL)
+            rec["invalidSeenS"] = self.wait_or_crash(lambda: valid() == "false", 10)
+            self.log(f"keeping the OctoQuad's cable out {OCTOQUAD_OUT_S} s with Pedro's localizer running")
+            self.wait_or_crash(keep_watching, OCTOQUAD_OUT_S)
+            rec["runningAfterOutS"] = not self.crashed()
+            self.ask(OCTOQUAD_PLUG)
+            rec["replugReadS"] = self.wait_or_crash(lambda: self.dash.data.get(KEY_OCTOQUAD_REPLUG) == "read", 30)
+            rec["validAgainS"] = self.wait_or_crash(lambda: valid() == "true", 10)
+            self.wait_or_crash(keep_watching, 2)
+
+        def keep_watching():
+            valid()
+            return False
+
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_unguarded",
+                            dict({"mode": "unguarded", "guard": 0}, **OCTOQUAD_CHAIN_PORTS), timeout=60, during=script,
+                            result_files=["octoquad_unguarded"], quiet_after=10.0)
+        chain["unguarded"] = {"outcome": chain_outcome(o), "runner": rec,
+                              "result": self.pull("octoquad_unguarded", required=False) or {}}
+
+    def _octoquad_latejoin(self, chain):
+        rec = {}
+
+        def script():
+            rec["faultSeenS"] = self.wait_or_crash(lambda: self.dash.data.get(KEY_OCTOQUAD_FAULT) == "up",
+                                                   OCTOQUAD_LATE_FAULT_WAIT_S)
+            if rec["faultSeenS"] is None:
+                rec["skipped"] = ("no OctoQuad fault in INIT: the OctoQuad's cable was in Control Hub I2C port 2 at "
+                                  "INIT (or the OpMode crashed), so the late plug-in wasn't tried")
+                self.log(f"OctoQuad late plug-in skipped: {rec['skipped']}")
+                return
+            self.ask(OCTOQUAD_PLUG)
+            rec["clearSeenS"] = self.wait_or_crash(lambda: self.dash.data.get(KEY_OCTOQUAD_FAULT) == "cleared", 15)
+            rec["validSeenS"] = self.wait_or_crash(lambda: str(self.dash.data.get(KEY_OCTOQUAD_VALID)) == "true", 15)
+
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_latejoin", dict({"mode": "latejoin"}, **OCTOQUAD_CHAIN_PORTS),
+                            during_init=script, timeout=60, timeout_ok=True, result_files=["octoquad_latejoin"])
+        chain["latejoin"] = {"outcome": chain_outcome(o), "runner": rec,
+                             "result": self.pull("octoquad_latejoin", required=False) or {}}
 
     def _octoquad_seed(self, o, res):
         info, seed, cost = res.get("info") or {}, res.get("seed") or {}, res.get("readCostMs") or {}
@@ -9349,7 +10207,7 @@ class Runner:
         for check in checks:
             self.check(*check)
 
-    def _octoquad_dropout(self):
+    def _octoquad_dropout(self, chain=False):
         rec = {"warnings": []}
 
         def valid():
@@ -9367,6 +10225,13 @@ class Runner:
                                   f"{self.dash.data.get(KEY_OCTOQUAD_STATUS)!r}), or the OpMode crashed")
                 self.log(f"OctoQuad dropout skipped: {rec['skipped']}")
                 return
+            if chain:
+                self.ask(OCTOQUAD_PULL_LEAVE)
+                t0 = time.monotonic()
+                self.wait_or_crash(lambda: False, 10)
+                rec["stoppedS"] = round(time.monotonic() - t0, 2) if self.crashed() else None
+                self.log(f"OctoQuad guarded pull: the OpMode stopped {rec['stoppedS']} s after Enter")
+                return
             self.ask(">>> PULL the OctoQuad's I2C cable out of the Control Hub (leave both pods in), then press Enter.")
             rec["invalidSeenS"] = self.wait_or_crash(lambda: valid() == "false", 10)
             self.log(f"OctoQuad status {self.dash.data.get(KEY_OCTOQUAD_STATUS)!r}, valid {valid()!r} on the dashboard "
@@ -9379,10 +10244,13 @@ class Runner:
             valid()
             return False
 
-        o = self.run_opmode("Bench: OctoQuad", "octoquad_dropout", {"mode": "dropout"}, timeout=60, during=script,
-                            result_files=["octoquad_dropout"], quiet_after=10.0)
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_dropout", dict({"mode": "dropout"},
+                                                                         **(OCTOQUAD_CHAIN_PORTS if chain else {})),
+                            timeout=60, during=script, result_files=["octoquad_dropout"], quiet_after=10.0)
         self.results["octoquad_dropout"]["runner"] = rec
         res = self.pull("octoquad_dropout", required=False) or {}
+        if chain:
+            return {"outcome": chain_outcome(o), "runner": rec, "result": res}
         d = res.get("dropout") or {}
         bad, silent = d.get("badLoops") or 0, d.get("silentBadLoops") or 0
         error = o.get("errorMessage") or ""
@@ -9410,7 +10278,8 @@ class Runner:
         self.check("octoquad dropout: an invalid localizer read stops the OpMode or raises a fault",
                    stopped or (bad > 0 and silent == 0),
                    f"{bad} loops with an invalid read reached the bench, {silent} of them with no OctoQuad fault; ended "
-                   f"before the runner's STOP {ended_itself} (crash seen {o['crashed']}): {error!r}",
+                   f"before the runner's STOP {ended_itself} (crash seen {o['crashed']}): {error!r}; no unguarded control "
+                   "ran in this run (--octoquad-chain runs one)",
                    OCTOQUAD_DROPOUT_PENDING if bad or ended_itself else
                    "the localizer reads never went invalid: the cable wasn't pulled, or the reads didn't notice")
 
@@ -10521,12 +11390,22 @@ def parse_args(argv):
                    help="Bench: Limelight Fault: the fault fallback with a limelight configured and nothing answering; "
                         "then Bench: Limelight Hung: INIT, STOP and the next INIT while a Limelight POST hangs")
     p.add_argument("--pinpoint", action="store_true",
-                   help="Bench: Pinpoint (firmware, status, INIT start pose; dropout with --interactive), or Bench: "
-                        "Pinpoint Absent when none answers")
+                   help="Bench: Pinpoint (firmware, status, INIT start pose; with --interactive the cable pulled and "
+                        "replugged twice, under the raw driver and then the follower), or Bench: Pinpoint Absent when "
+                        "none answers")
+    p.add_argument("--pinpoint-soak", nargs="?", type=int, const=-1, default=None, metavar="SECONDS",
+                   help=f"Bench: Pinpoint's soak too (implies --pinpoint): the Pinpoint and the OctoQuad untouched for "
+                        f"SECONDS (default {PINPOINT_SOAK_S}, {PINPOINT_SOAK_QUICK_S} with --quick, at least "
+                        f"{PINPOINT_SOAK_MIN_S}) on bench_octoquad, counting non-READY reads, timing every read and "
+                        "comparing both headings, then a recalibration run")
     p.add_argument("--octoquad", action="store_true",
                    help="Bench: OctoQuad (GuardedOctoQuadLocalizer on Control Hub I2C bus 2: read cost, valid reads, INIT "
                         "start pose, then channels 4-7 in pulse-width mode for the turret zero; dropout with "
                         "--interactive) and Bench: OctoQuad Absent (nothing on I2C bus 3)")
+    p.add_argument("--octoquad-chain", action="store_true",
+                   help="Bench: OctoQuad with its pods on channels 0 and 1, then, prompted (needs --interactive): START "
+                        "0.3 s after INIT, markers and both resets with a pod rolled, a cable pull under Pedro's "
+                        "localizer and its replug, a pull under the guard, and a plug-in during INIT (implies --octoquad)")
     p.add_argument("--expansion", action="store_true",
                    help="Bench: Expansion Hub (the same Lynx commands and odometry reads on each hub; needs an Expansion "
                         "Hub; with --interactive, again with the odometry moved to it)")
@@ -10593,6 +11472,16 @@ def parse_args(argv):
         args.photon = True
     if args.turret_zero_v2:
         args.turret_zero = True
+    if args.pinpoint_soak is not None:
+        if args.pinpoint_soak == -1:
+            args.pinpoint_soak = PINPOINT_SOAK_QUICK_S if args.quick else PINPOINT_SOAK_S
+        elif args.pinpoint_soak < PINPOINT_SOAK_MIN_S:
+            p.error(f"--pinpoint-soak takes at least {PINPOINT_SOAK_MIN_S} seconds: the drift is judged over 5-120 s")
+        args.pinpoint = True
+    if args.octoquad_chain:
+        if not args.interactive:
+            p.error("--octoquad-chain has you roll a pod and pull the OctoQuad's cable: add --interactive")
+        args.octoquad = True
     if args.photon_stop_trials is not None and args.photon_stop_trials < 1:
         p.error("--photon-stop-trials must be at least 1")
     cap = PHOTON_SOAK_MAX_S / 3600

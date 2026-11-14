@@ -32,7 +32,9 @@ Run from the repo root.
 | Bench: Photon's two-hubs-at-once phase: the overlap reading, its record-only line and table | `python3 -I scripts/bench/offline/test_hub_overlap.py` | `... passed, 0 failed` |
 | the benches in `scripts/bench/benches/` ([`../benches/README.md`](../benches/README.md)): each declaration, `order.txt`, their flags and `--help`, the typed `--s3-ports` statement, the session's Needs a person, a stub bench on `fake_hub.py`; then each bench's own file in `benches/` | `python3 -I scripts/bench/offline/test_benches.py` | `... passed, 0 failed` |
 | one bench's own checks and dry run, e.g. Bench: Config Check's | `python3 -I scripts/bench/offline/benches/config_check.py` | `... passed, 0 failed` |
-| `TurretZeroMath` (JUnit) | `./gradlew :TeamCode:testDebugUnitTest` | `BUILD SUCCESSFUL ...` |
+| Bench: Limelight's ball phases, a bench in `run_bench.py`: their verdicts, each weakened, and `run_limelight` on `fake_hub.py` | `python3 -I scripts/bench/offline/benches/limelight.py` | `... passed, 0 failed` |
+| Bench: Webcam's clamped and refused settings, a bench in `run_bench.py`: their verdicts, each weakened, and `run_webcam` on `fake_hub.py` | `python3 -I scripts/bench/offline/benches/webcam.py` | `... passed, 0 failed` |
+| `TurretZeroMath`, `PinpointMath`, `OctoQuadMath`, the vision benches' helpers and the private fields they read (JUnit) | `./gradlew :TeamCode:testDebugUnitTest` | `BUILD SUCCESSFUL ...` |
 
 A bench's offline file goes in `benches/`, named for the bench, whether the bench is new or one in `run_bench.py`
 that an extension adds to; `test_benches.py` runs every file there.
