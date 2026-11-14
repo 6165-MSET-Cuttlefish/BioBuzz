@@ -88,11 +88,10 @@ FtcRobotController tags end at v12.0.
   - Resource IDs for xml files run in name order across our and the SDK's xml files (`advanced_rc_settings`
     0x7f110000 to `teamwebcamcalibrations` 0x7f110017 in a 2026-11-13 debug build's
     `TeamCode/build/intermediates/runtime_symbol_list/debug/processDebugResources/R.txt`), so a change shifts every
-    config named after it. Adding `intake_test.xml` on 2026-11-13 shifted `intake_transfer_shooter` and both
-    `laser_rangefinder` configs by one: a hub left on `intake_transfer_shooter` from before that install loads
-    `intake_test.xml`'s devices, one on `laser_rangefinder` the SDK's `k9usbbot`, one on `laser_rangefinder_i2c`
-    `laser_rangefinder.xml`'s. `betta_decode`, `biobuzz`, `butterfly`, `camera` and `cuttle_decode` kept their IDs,
-    but `biobuzz` now holds the BIOBUZZ robot's layout: a hub that ran Intake Test on it must activate `intake_test`.
+    config named after it: one file added before `intake_transfer_shooter` would make a hub left on that config load
+    the new file's devices, one on `laser_rangefinder` the SDK's `k9usbbot`, and one on `laser_rangefinder_i2c`
+    `laser_rangefinder.xml`'s. The 2026-11-13 rewrite of `biobuzz.xml` added and removed no file, so every ID stayed;
+    `biobuzz` itself now holds the BIOBUZZ robot's layout, and the intake test robot whose layout it held is retired.
   - A by-name lookup would fix it (`getResources().getIdentifier(name, "xml", packageName)` in
     `FtcRobotControllerActivity.requestRobotSetup`, then re-save the config), but `robotcontroller/` is SDK template
     code that CLAUDE.md keeps unedited. The bench already re-activates shipped configs by name

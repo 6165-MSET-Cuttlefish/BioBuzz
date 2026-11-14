@@ -50,12 +50,11 @@ once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Tur
   `BettaConstants` asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to
   the OctoQuad. BioBuzz Basic Tele (`opmodes/tele/BioBuzzBasicTele.java`) is the TeleOp that runs on it today: drive,
   intake, transfer and both flywheels from gamepad 1, with no odometry, cameras or turret.
-- **After the full install that brings it, re-activate the hub's config on the DS** (Configure Robot, pick it,
-  Activate): `intake_test.xml`, the old layout, renumbered the configs after it
-  ([`toolchain-findings.md`](toolchain-findings.md#deploying)). A hub that ran Intake Test on `biobuzz`: activate
-  `intake_test`. `biobuzz` now holds the BIOBUZZ robot's layout under the same ID, so on that robot its motor names
-  would drive other mechanisms. Moving the Expansion Hub between RS485 and USB in `biobuzz.xml` is a `res/` change, so
-  a full install (Run) from a laptop, not a switch on the DS.
+- **`biobuzz` kept its config ID through the rewrite** ([`toolchain-findings.md`](toolchain-findings.md#deploying)),
+  so a hub with `biobuzz` active loads the new layout after the full install with nothing to re-activate. The layout
+  it held before was the intake test robot's, retired 2026-11-13: on that robot the new motor names would drive other
+  mechanisms. Moving the Expansion Hub between RS485 and USB in `biobuzz.xml` is a `res/` change, so a full install
+  (Run) from a laptop, not a switch on the DS.
 
 ## The map
 
