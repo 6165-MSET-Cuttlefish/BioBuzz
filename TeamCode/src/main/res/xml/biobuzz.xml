@@ -21,13 +21,13 @@
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
             <OctoQuadFTC name="octoquad" bus="2" port="0" />
         </LynxModule>
-    </LynxUsbDevice>
-    <LynxUsbDevice name="Expansion Hub Portal" parentModuleAddress="2" serialNumber="DQ8P0FJB">
         <LynxModule name="Expansion Hub 2" port="2">
             <goBILDA5202SeriesMotor name="fr" port="0" />
             <goBILDA5202SeriesMotor name="bl" port="1" />
             <goBILDA5202SeriesMotor name="intake" port="2" />
             <goBILDA5202SeriesMotor name="transfer" port="3" />
+
+            <ContinuousRotationServo name="transferServo" port="0" />
         </LynxModule>
     </LynxUsbDevice>
     <Webcam name="aprilTagDetector" serialNumber="UC852" />
