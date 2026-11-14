@@ -6,6 +6,7 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.CRServoImplEx;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
@@ -85,6 +86,7 @@ public class IntakeTransferShooterTest extends OpMode {
     private CRServoImplEx melonbotics;
     private ServoImplEx blockerServo;
     private VoltageSensor battery;
+    private AnalogInput floodgate;
     private long lastLoopNs;
     private long nextLoopNs;
     private int lateLoops;
@@ -102,6 +104,7 @@ public class IntakeTransferShooterTest extends OpMode {
         melonbotics = hardwareMap.get(CRServoImplEx.class, "transferServo");
         blockerServo = hardwareMap.get(ServoImplEx.class, "hardstop");
         battery = hardwareMap.voltageSensor.iterator().next();
+        floodgate = hardwareMap.get(AnalogInput.class, "floodgate");
         nectarFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         pollenFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
@@ -168,6 +171,10 @@ public class IntakeTransferShooterTest extends OpMode {
         telemetry.addData("Melonbotics power", transfer.melonboticsPower);
         telemetry.addData("Blocker", "%s (%.3f)", blocker.open ? "open" : "closed", blockerPosition);
 
+        double hubAmps = 0;
+        for (LynxModule hub : hubs) hubAmps += hub.getCurrent(CurrentUnit.AMPS);
+        telemetry.addData("Robot current, Floodgate (A)", floodgate.getVoltage() / 3.3 * 80.0);
+        telemetry.addData("Hub current, all hubs (A)", hubAmps);
         telemetry.addData("Battery (V)", battery.getVoltage());
         telemetry.addData("Loop (ms)", (loopStartNs - lastLoopNs) / 1e6);
         telemetry.addData("Late loops (over loopMs + 1 ms)", lateLoops);
