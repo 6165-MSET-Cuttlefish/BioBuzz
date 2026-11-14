@@ -100,7 +100,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | servo 3, 5 | spare | |
 
 **Names in `biobuzz.xml`.** `PollenTurretL` on Control Hub servo 0 and `PollenTurretR` on servo 1 (`Turret` runs R
-`offset` above L; the Betta bot has R on 0), the blocker is `hardstop`, the transfer's
+`offset` above L; the retired Betta bot had R on 0), the blocker is `hardstop`, the transfer's
 continuous-rotation servo on Expansion Hub servo 0 is `transferServo` (read by BioBuzz Basic Tele), the flower intake
 servo is `flowerIntake`, the right and left RGB lights are `rgbRight` and `rgbLeft`, the Prism is `prism` (no code
 reads those four yet), rangefinders A and B are `analog0` and
@@ -194,14 +194,14 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
 | 2 flywheel writes | 3.28 | 3.28 | 2 × 1.64 measured |
 | 4 drive writes, 2 on each hub | 0 | 8.36 | 2 × 1.64 measured + 2 × 2.54 estimated |
 | 3 turret and 2 hood writes | 0 | 7.75 | 5 × 1.55 measured |
-| SDK between loops, telemetry, follower and other CPU | 6.93 | 6.93 | measured on the bench and the Betta bot ([`loop-time-findings.md`](loop-time-findings.md)) |
+| SDK between loops, telemetry, follower and other CPU | 6.93 | 6.93 | measured on the bench and the Betta bot, retired 2026-11-13 ([`loop-time-findings.md`](loop-time-findings.md)) |
 | SDK refresh of every output, per 0.5 s | 82 | 66 | estimated from SDK source |
 | **period** | **18.7** | **36.6** | |
 | the same with every cost at its p95 | 22.4 | 45.1 | |
 
 - **36.6 ms is a ceiling.** It assumes all four drive motors write every loop. `Drivetrain` skips changes under 0.05
   and Pedro's own motor wrapper under 0.01. With each drive motor writing in 0 / 25 / 50 / 75% of loops the period is
-  27.5 / 29.8 / 32.1 / 34.4 ms. The Betta bot's measured cost of driving on the same 2 + 2 split gives 33.5 ms.
+  27.5 / 29.8 / 32.1 / 34.4 ms. The Betta bot's measured cost of driving (retired 2026-11-13) on the same 2 + 2 split gives 33.5 ms.
 - **With the dashboard off**, as at events: about 2.1 ms less (measured on the bench with no Driver Station
   connected): 16.2 parked, 34.2 driving at the ceiling, 29.6 with drive writes in half the loops.
 - **The loop that starts a shot** adds about 6.5 ms: blocker, transfer motor, transfer servo.
@@ -225,7 +225,7 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
     fully, against 16.0 / 21.8 ms for the map in that case. Which it is has not been measured
     ([Still unknown](#still-unknown)). Until it is, wire the map and leave those two signal leads long enough to
     reach either hub; both servos stay on injector B either way.
-- **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot).
+- **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot, retired 2026-11-13).
 
 ## Open choices
 

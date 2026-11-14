@@ -190,7 +190,7 @@ LIMELIGHT_PROXY_PENDING = ("regression: slothboard's Limelight proxy drops the q
 
 LIMELIGHT_FAULT_KEY = "Limelight"
 COLOR_FAULT = "#ff1744"
-# cuttle_decode.xml's Limelight line. With a Limelight plugged in, the fault bench points at TEST-NET-1 (RFC 5737),
+# biobuzz.xml's Limelight line. With a Limelight plugged in, the fault bench points at TEST-NET-1 (RFC 5737),
 # which nothing answers, so the plugged-in one isn't reached.
 LIMELIGHT_CONFIG_SERIAL = "EthernetOverUsb:eth0:172.29.0.22"
 LIMELIGHT_CONFIG_IP = "172.29.0.1"
@@ -326,11 +326,10 @@ FLOODGATE_THRESHOLD_A = 25.0
 FLOODGATE_LIMIT_V = FLOODGATE_THRESHOLD_A / 80.0 * 3.3
 KEY_FLOODGATE_AMPS = "Drivetrain Floodgate Current (A)"
 KEY_LIMITER = "Drivetrain Current Limiter Multiplier"
-FLOODGATE_PENDING = ("the floodgate pin with nothing wired to it (Control Hub analog 0, as on the Betta bot, whose "
-                     f"Floodgate isn't wired) reads {FLOODGATE_LIMIT_V:.2f} V or more, which Drivetrain's current limiter, "
-                     f"on by default, takes for {FLOODGATE_THRESHOLD_A:.0f} A or more, so it scales every teleop drive power "
-                     "down; until a Floodgate is wired, turn Drivetrain.currentLimiterConfig.enabled off for the Betta "
-                     "bot. No fix is in flight: this run decides whether one is needed")
+FLOODGATE_PENDING = (f"the floodgate pin with nothing wired to it (Control Hub analog 0) reads {FLOODGATE_LIMIT_V:.2f} V "
+                     f"or more, which Drivetrain's current limiter, on by default, takes for {FLOODGATE_THRESHOLD_A:.0f} A or more, so it scales every teleop drive power "
+                     "down; on a robot without a Floodgate wired, turn Drivetrain.currentLimiterConfig.enabled off. "
+                     "No fix is in flight: this run decides whether one is needed")
 
 CAPTURE_CLOCK_PENDING = ("EasyOpenCV's captureTimeNanos isn't on System.nanoTime()'s clock, and CellTipCamera's freshness "
                          "gate (0 <= staleness <= maxStalenessMs) reads a stale verdict as NO VERDICT, never TIPPED or "
@@ -5316,7 +5315,7 @@ PINPOINT_SOAK_NOT_READY = ("a healthy Pinpoint at rest reported a status other t
                            "that stops the OpMode on one such read would have stopped a match here, so a guard needs a "
                            "grace window at least as long as the longest streak listed")
 PINPOINT_SOAK_STALL = ("a Pinpoint read took over 40 ms with no blocking GC across it: the 41.8 ms follower.update peak "
-                       "seen on the DECODE robot recurs as an I2C stall, and on the robot that loop drives on a "
+                       "seen on the retired Cuttle bot recurs as an I2C stall, and on the robot that loop drives on a "
                        "40 ms-old pose")
 PINPOINT_SOAK_CONTROL = ("setup: the OctoQuad's heading moved more than 0.1 deg over 5-120 s at rest, or no OctoQuad "
                          "answered on Control Hub I2C port 2: the board moved, so the Pinpoint's drift can't be judged")

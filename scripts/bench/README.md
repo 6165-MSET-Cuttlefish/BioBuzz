@@ -534,7 +534,7 @@ what each OpMode writes during INIT, and how long each INIT and STOP takes. Offl
 ## Bench: Pinpoint soak
 
 Whether a healthy Pinpoint at rest ever reads a status other than READY after its first READY (a guard that stops on
-one such read would stop a match), whether the 41.8 ms `follower.update()` peak seen on the DECODE robot recurs as an
+one such read would stop a match), whether the 41.8 ms `follower.update()` peak seen on the Cuttle bot (retired 2026-11-13) recurs as an
 I2C stall, and how far its heading drifts at rest next to the OctoQuad. It extends Bench: Pinpoint: two more runs of
 the same OpMode, after the seed run.
 
@@ -641,8 +641,8 @@ Bench: Limelight (`--limelight`, and the default run whenever a Limelight answer
 ball frames: whether they go stale, how still balls look through the tracker, and what a pipeline change does mid-run.
 
 **Set up at S2, once:** the Limelight 3A on the Control Hub's USB, on a stand at the height and tilt the SnapScript's
-homography (`H_ARRAY`) assumes: lens about 15.5 in above the floor, tilted about 15.9° down (the Betta bot's mount, not
-the CAD's 16.34 in and 30°). Put 4 Pollen balls on taped marks 24, 48, 72 and 96 in from the lens, on the camera's
+homography (`H_ARRAY`) assumes: lens about 15.5 in above the floor, tilted about 15.9° down (the mount of the Betta bot,
+retired 2026-11-13, not the BIOBUZZ robot's 16.34 in and 30° from the CAD). Put 4 Pollen balls on taped marks 24, 48, 72 and 96 in from the lens, on the camera's
 centreline, and leave them. Nothing else: the bench asks nothing.
 
 **Command:** `python3 scripts/bench/run_bench.py --limelight --ports-empty`, about 2 minutes longer than before.

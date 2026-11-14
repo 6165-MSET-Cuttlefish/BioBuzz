@@ -1,10 +1,31 @@
 # Robot findings
 
-What the code doesn't show about the robots: the BIOBUZZ robot as it stands in CAD, the sizes and masses of the
-Cuttle bot (last season's robot, retired 2026-11-13) and the Betta bot (the robot BioBuzz code runs on today), and
-known problems in the test OpModes and modules that drive them. Read it before writing code for the BIOBUZZ robot's
-shooters, turrets or cameras, before running a shooter or turret test OpMode, or before putting a robot's size into
-code or a `.pp` path file.
+What the code doesn't show about the robots: which robot the team runs, the BIOBUZZ robot as it stands in CAD, the
+sizes and masses of the two retired robots, the Cuttle bot (last season's robot) and the Betta bot (the test robot
+BioBuzz code ran on before the BIOBUZZ robot), and known problems in the test OpModes and modules that drive them.
+Read it before deciding what may run on the BIOBUZZ robot, before writing code for its shooters, turrets or cameras,
+before running a shooter or turret test OpMode, or before putting a robot's size into code or a `.pp` path file.
+
+## One robot (decided 2026-11-13)
+
+The team runs one robot, the BIOBUZZ robot. On 2026-11-13, the day it first ran assembled (on BioBuzz Basic Tele),
+the team retired the Betta bot and the Cuttle bot and decided that the BIOBUZZ robot uses no Pinpoint this year, for
+now: its odometry is the OctoQuad. The hub bench keeps every Pinpoint bench, in case one is added later.
+
+- Removed with them: `decode/` (last season's code) and its gamepad input classes, the Betta bot's test OpModes
+  (Pinpoint Localizer Test, Pinpoint Drive Test, Ball Field Drive, Ivy Test, Ivy Path Test), `BettaShooter` and
+  `scripts/looptimes/analyze_ivy.py`. `git log --diff-filter=D -- <path>` names the commit that deleted each; its
+  parent still has it.
+- Kept: `betta_decode.xml` and `cuttle_decode.xml`, since deleting a `res/xml` file shifts the other configs' resource
+  IDs on every hub ([`toolchain-findings.md`](toolchain-findings.md)); `BettaTurret`, which Bench: Turret PWM drives.
+- Still the Betta bot's, not measured on the BIOBUZZ robot: every value in `pedro/BioBuzzConstants` (drive directions,
+  Pinpoint settings, Foresight gains), `biobuzz/RobotGeometry`'s size and intake, `BallFieldTransform.Mount` and the
+  Limelight's `H_ARRAY` ([`limelight-findings.md`](limelight-findings.md)), and the Close Flower start pose.
+- So, until the follower reads the OctoQuad, BioBuzz Tele and everything else that builds `BioBuzzConstants`'
+  follower (all of `BioBuzzRobot`) stop at INIT on `biobuzz.xml`, which has no Pinpoint
+  ([`wiring-findings.md`](wiring-findings.md)), and until those values are measured nothing that follows a path runs
+  on the robot.
+- Measurements made on the two retired robots stay in these pages, marked "retired 2026-11-13".
 
 ## The BIOBUZZ robot, from CAD
 
@@ -94,7 +115,8 @@ What code has to respect:
 
 ## Setting a robot's size or mass
 
-- **`docs/paths/CloseFlowerAuto.pp` draws the Betta bot sideways: set `rWidth` to 16 and `rHeight` to 15.** In a
+- **`docs/paths/CloseFlowerAuto.pp` draws the Betta bot (retired 2026-11-13, its size still in `RobotGeometry`)
+  sideways: set `rWidth` to 16 and `rHeight` to 15.** In a
   `.pp` file of format 1.x (this one is 1.5.0), `rWidth` is the robot's length along its heading (front to back) and
   `rHeight` its width side to side, although the visualizer versions that wrote 1.x labelled them Width and Height.
   The file has `rWidth` 15 and `rHeight` 16, so the robot it draws and collision-checks is 1 in too short and 1 in
@@ -111,7 +133,7 @@ What code has to respect:
   have no mass or weight setting (read from their published artifacts, 2026-11-10). Keep the numbers for
   simulations.
 
-| | Betta bot | Cuttle bot |
+| | Betta bot (retired 2026-11-13) | Cuttle bot (retired 2026-11-13) |
 |---|---|---|
 | mass | 13.5 kg | 16.3 kg |
 | frame | 16 in front to back, 15 in side to side | not recorded |
@@ -161,10 +183,10 @@ None of these is fixed. Each was read from source on 2026-11-11, with SDK 12.0.0
 
 ## Still unknown
 
-- **Everything in the BIOBUZZ robot section, once the robot exists.** Test: measure each number on the robot and
-  replace it here. First: flywheel inertia (spin-up at full power), the launch angle at each end of hood travel
+- **Everything in the BIOBUZZ robot section, now that the robot is assembled (2026-11-13).** Test: measure each number
+  on the robot and replace it here. First: flywheel inertia (spin-up at full power), the launch angle at each end of hood travel
   (video from the side), the exit height, and how many servos each turret has (the CAD draws a second, unmated
   servo on the nectar pinion).
 - **How the nectar turret encoder is coupled to its 8 mm shaft, and its real slew speed under the shooter's
   inertia.** Test: look at the built turret; time a 180° move from the encoder count.
-- **Both robots' current masses.** Test: weigh each robot as it stands.
+- **The BIOBUZZ robot's mass** (14.6 to 17.6 kg inferred from the CAD). Test: weigh it.

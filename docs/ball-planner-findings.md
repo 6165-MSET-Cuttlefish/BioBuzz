@@ -34,7 +34,8 @@ and Ball Collection Auto default to `onField` off ([CLAUDE.md](../CLAUDE.md), Te
 only with it on.
 
 A ball beside a wall, the centre line or a rail needs the smaller of that half-width and `lengthIn / 2`, plus the
-gap. With `RobotGeometry` (16 in long, 15 in wide, intake 15 in wide and 8 in ahead) and the default 1 in
+gap. With `RobotGeometry` (16 in long, 15 in wide, intake 15 in wide and 8 in ahead: the Betta bot's, retired 2026-11-13, not
+yet the BIOBUZZ robot's) and the default 1 in
 `wallGapIn` and `railGapIn`:
 
 | ball | collectable only if |

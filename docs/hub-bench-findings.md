@@ -29,7 +29,7 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     (`architecture/planner/RouteOptimizer.java:171-214`). One awkward ball makes it shape every full order first, so
     the layout matters as much as the count.
   - Planning time in one call on 2026-10-24, for the 16 × 15 in robot with its intake 8 in ahead that the code uses
-    now, in one half of the field with the HIVE rails and 1 in gaps (`opmodes/test/bench/PlannerWorkload.java`; the
+    now (the Betta bot's, retired 2026-11-13; still in `RobotGeometry`), in one half of the field with the HIVE rails and 1 in gaps (`opmodes/test/bench/PlannerWorkload.java`; the
     two both-sides rows are Bench: Planner Stop's replans, the rest Bench: Hub's):
 
     | balls and layout | p50 | p95 | max | n |
@@ -249,7 +249,7 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 | `pipelineSwitch` to a Limelight that hangs | blocks 15 s | blocks 15 s |
 | `pipelineSwitch`, configured Limelight unplugged | not measured | 3.76 (3 calls) |
 
-## EnhancedOpMode loop (Betta bench robot, Drivetrain + Pedro, idle follower)
+## EnhancedOpMode loop (bench robot on the Betta bot's drive constants, Drivetrain + Pedro, idle follower)
 
 | setting | 2026-10-09 | 2026-10-24 |
 |---|---|---|
@@ -381,10 +381,10 @@ Not run on either date (they need `--interactive`):
   one non-READY read or on a streak. `python3 scripts/bench/run_bench.py --pinpoint --interactive --ports-empty` pulls
   the cable twice, first under the SDK's driver alone (no follower), then under the follower.
 - **Whether a healthy Pinpoint at rest ever reads a status other than READY after its first READY, and whether the
-  41.8 ms `follower.update()` peak logged on the DECODE robot (2026-07-30) recurs as an I2C stall:** test: Bench:
+  41.8 ms `follower.update()` peak logged on the Cuttle bot (2026-07-30; retired 2026-11-13) recurs as an I2C stall:** test: Bench:
   Pinpoint's soak (`python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`). An hour with none bounds the
-  rate at about 1e-5 per read. The driving half needed a count on the Betta bot, retired 2026-11-13 before it was
-  made; the BIOBUZZ robot runs no Pinpoint (2026-11-13).
+  rate at about 1e-5 per read. The driving half was never counted: the Betta bot was retired on 2026-11-13 first,
+  and the BIOBUZZ robot runs no Pinpoint.
 - **Whether a rangefinder in SHORT mode keeps its accuracy at a 10 ms timing budget:** log a fixed target's distance
   at 20 and 10 ms budgets and compare the spread and the mean.
 - **The sliced route search on a hub:** its longest step, plan time from request to done, the loop period while it

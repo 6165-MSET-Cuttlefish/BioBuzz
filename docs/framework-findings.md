@@ -59,7 +59,7 @@ none while `dsTelemetry` is off.
 command stores where a supplier reads it:
 
 - reaches the State at the next loop's refresh and the hardware in that loop's `write()`: one loop late (15.3 ms mean
-  in the Ivy Path Test log, [loop-time-findings.md](loop-time-findings.md));
+  in the Betta bot's Ivy Path Test log, retired 2026-11-13, [loop-time-findings.md](loop-time-findings.md));
 - in an OpMode whose `shouldReadDuringInit()` returns false, isn't refreshed again after `initStates()` until the
   first loop after START, since the refresh is skipped with the reads (`EnhancedOpMode.java:307`). No OpMode turns
   reads off today.
@@ -119,8 +119,8 @@ What the order decides:
   INIT loops included (`:39`, `:149`, `:408-411`), and republishes that reading every loop (`:300-301`). START resets
   the count, so the first loop after START reads fresh (`:192`).
 - The value is therefore up to 49 loops old: about 0.3 s at the bench's 6.3 ms idle loop
-  ([hub-bench-findings.md](hub-bench-findings.md)), 0.75 s at Ivy Path Test's 15.3 ms mean
-  ([loop-time-findings.md](loop-time-findings.md)). A sag shorter than that can fall between two reads unseen.
+  ([hub-bench-findings.md](hub-bench-findings.md)), 0.75 s at the 15.3 ms mean loop of the Betta bot (retired
+  2026-11-13) ([loop-time-findings.md](loop-time-findings.md)). A sag shorter than that can fall between two reads unseen.
 - The read is its own ADC command, never served from the bulk cache, and costs about 1.3 ms on the Control Hub
   ([hub-bench-findings.md](hub-bench-findings.md)): that is why it is throttled. A failed read returns 0.0 V instead
   of throwing ([sdk-hub-findings.md](sdk-hub-findings.md)), and that 0.0 then stands for up to 50 loops.
@@ -141,8 +141,8 @@ do to the flywheels: [flywheel-control-findings.md](flywheel-control-findings.md
 ## Kept on purpose
 
 Nothing in this repo calls these (checked 2026-11-10). Decided 2026-10-18: they stay for reuse on the BIOBUZZ robot.
-Judge other code unused against this repo alone: last season's code left it on 2026-11-13, when the team retired the
-Cuttle bot.
+"Unused" is judged against last season's DECODE code too, not only this repo. That code left this repo on 2026-11-13,
+with the Cuttle bot: before calling other code unused, check it in git history and last season's autos for callers.
 
 | piece | what it is |
 |---|---|

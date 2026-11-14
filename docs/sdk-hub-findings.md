@@ -80,8 +80,9 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   ([gm0](https://gm0.org/en/latest/docs/software/adv-control-system/control-system-internals.html), fetched
   2026-11-10). Where to put a flywheel encoder: CLAUDE.md, Flywheel RPM.
 - No REV or FIRST page found gives a maximum count rate for any port. The Cuttle bot's DECODE shooter (last season's
-  robot, retired 2026-11-13) had a shot table to 3275 rpm (`decode/modules/ShooterInterpolation.java:169` at commit
-  149acacc) on an 8192 counts/rev encoder (`decode/modules/Shooter.java:21` there) on Expansion Hub encoder port 3
+  robot, retired 2026-11-13) had a shot table to 3275 rpm (`decode/modules/ShooterInterpolation.java:169`, deleted
+  2026-11-13: `git log --diff-filter=D -- <path>` names the commit, whose parent has it) on an 8192 counts/rev encoder
+  (`decode/modules/Shooter.java:21` there) on Expansion Hub encoder port 3
   (`TeamCode/src/main/res/xml/cuttle_decode.xml`), about 447,000 counts/s; lost counts there were never checked.
 
 ## Bulk reads

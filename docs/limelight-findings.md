@@ -118,7 +118,7 @@ pipeline and script. Vendor pages fetched 2026-11-10:
 
 | | address | how known |
 |---|---|---|
-| the Limelight | `172.29.0.1` | measured; vendor change log (the subnet) and 3A page (its port-forwarding example); hub configs (`betta_decode.xml:28`, `cuttle_decode.xml:49`) |
+| the Limelight | `172.29.0.1` | measured; vendor change log (the subnet) and 3A page (its port-forwarding example); hub config (`biobuzz.xml:38`) |
 | the address it gives the host | `172.29.0.22` | measured on the Mac; the hub configs' serial number `EthernetOverUsb:eth0:172.29.0.22` |
 | on Windows | the `172.28.0.0/24` subnet instead | vendor change log, Limelight OS 2024.9 |
 | with a USB ID set | the ID becomes the third octet (`172.29.<id>.0/24`) | vendor change log |
@@ -148,10 +148,11 @@ Over the robot Wi-Fi, without the USB cable, the dashboard forwards these ports 
 ## Where the camera mount numbers come from
 
 `BallFieldTransform.Mount` (`BallFieldTransform.java:14-17`) is `xIn` 33.2, `yIn` -0.4, `headingDeg` 0, derived on
-2026-10-03 rather than tape-measured. It places the `(0,0)` crosshair, the ground point `H_ARRAY` calls (0,0),
+2026-10-03 for the Betta bot's Limelight (retired 2026-11-13) rather than tape-measured; the BIOBUZZ robot's mount
+needs its own homography and `Mount`. It places the `(0,0)` crosshair, the ground point `H_ARRAY` calls (0,0),
 relative to the robot centre, the Pinpoint offsets' origin ([`CLAUDE.md`](../CLAUDE.md), Tuning):
 
-- On the Betta bot the Limelight's lens sits 3.5 in ahead of the robot centre, on the centreline (measured 2026-10-03).
+- On the Betta bot the Limelight's lens sat 3.5 in ahead of the robot centre, on the centreline (measured 2026-10-03).
 - Decomposing `H_ARRAY` with the Limelight's lens calibration scaled to `CALIBRATION_SIZE`, 640 × 480
   (`limelight/ball_contour_snapscript.py:28-41`), puts the camera 29.6 in behind and 0.39 in left of the crosshair,
   15.55 in above the ground, pitched 15.85° down, with its optical axis 1.9° right of the calibration board's x axis
@@ -197,8 +198,9 @@ print("axis yaw from the board's x, deg (+ left):", np.degrees(np.arctan2(axis[1
   in the middle of the INIT sync, and a SnapScript edit reaching the Limelight through deploySloth alone. Test:
   `python3 scripts/bench/run_bench.py --limelight-reload` (Bench: Limelight Reload,
   [`scripts/bench/README.md`](../scripts/bench/README.md#bench-limelight-reload)).
-- **Whether the decomposed height and pitch are real.** Tape-measure the Limelight's lens height (should be about
-  15.5 in) and tilt (about 15.9° down) on the Betta bot.
+- **Whether the decomposed height and pitch were real.** The Betta bot that would settle it (lens about 15.5 in up,
+  about 15.9° down) was retired on 2026-11-13: check the method instead on the BIOBUZZ robot's first homography, against
+  its CAD mount (16.34 in up, 30° down).
 - **The websocket commands, port 5805 and the bundle endpoint on other Limelight OS versions.** The unit's OS version on
   2026-09-30 isn't recorded. Re-run the script download and `/api/pipeline-bundle/download` after any Limelight OS
   update, and record the version here.

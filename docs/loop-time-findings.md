@@ -1,9 +1,10 @@
 # Loop-time findings
 
-What costs loop time on the Betta bot and in the SDK, and what to change; read it before shortening the loop or adding
+What costs loop time on the Betta bot (retired 2026-11-13) and in the SDK, and what to change; read it before shortening the loop or adding
 per-loop hub commands. Hub command costs come from [`hub-bench-findings.md`](hub-bench-findings.md). The loop log
-below came from Ivy Path Test and `scripts/looptimes/analyze_ivy.py`, deleted with the Betta bot on 2026-11-13 (both
-are at commit 149acacc): no OpMode logs the BIOBUZZ robot's loop times to a file yet.
+below came from Ivy Path Test and `scripts/looptimes/analyze_ivy.py`, deleted with the Betta bot on 2026-11-13
+(`git log --diff-filter=D -- <path>` names the commit that deleted each; its parent still has it): no OpMode logs the
+BIOBUZZ robot's loop times to a file yet.
 
 ## What to do
 
@@ -26,7 +27,7 @@ are at commit 149acacc): no OpMode logs the BIOBUZZ robot's loop times to a file
 - **Photon**, which sends writes without waiting for each ACK, cut the time spent writing 2.3x on the bench, but stays
   off the robot until its bench block says it is safe ([below](#photon)).
 
-## Ivy Path Test log (2026-10-25, Betta bot, Pinpoint odometry, SDK 12.0.0; hub firmware not recorded)
+## Ivy Path Test log (2026-10-25, Betta bot, retired 2026-11-13; Pinpoint odometry, SDK 12.0.0; hub firmware not recorded)
 
 Run 2 of `/sdcard/FIRST/looptimes/IvyPathTest.csv`: 1280 loops over 19.6 s after START. Run 1 (5.5 s, about 3 minutes
 after boot) averaged 23 ms with one 130 ms loop: the code was still warming up, so judge only warmed-up runs.

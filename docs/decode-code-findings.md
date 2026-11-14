@@ -89,7 +89,7 @@ commit messages, with no method: `MOEbo-Sapiens/MOEbo-Sapiens-Decode` 30 ms with
   the OpMode thread every loop in some path.
 - **Loop structure:** 9 aim from the previous loop's pose, as our `Turret` does in AUTOAIM (it aims in `read()`, which
   runs before `follower.update()`; SOTM aims after). 11 surveys flag per-loop allocations and none measured garbage
-  collection (ours: about 63 kB a loop; 17 collections took 1.1 s of 19.6 s in the Ivy Path Test log).
+  collection (ours: about 63 kB a loop; 17 collections took 1.1 s of 19.6 s in the Ivy Path Test log on the Betta bot, retired 2026-11-13).
 
 ### Per team
 
@@ -306,8 +306,8 @@ Our framework already avoids most of the structural problems that recur in these
 the per-loop housekeeping, Modules are built per OpMode and every State binding is reset at INIT, each State's Module
 becomes a command requirement, and `FieldPose.forAlliance` mirrors every pose authored through it. One recurring bug
 (9 of 23) is ours too: `Turret`'s AUTOAIM aims in `read()`, which `EnhancedOpMode` runs before `follower.update()`, so
-it aims from the previous loop's pose (a loop measured 15.3 ms on average and 19.4 ms while driving on the Betta bot,
-`loop-time-findings.md`); move it into `write()`, where SOTM already is. What is worth adding is mostly Autonomous
+it aims from the previous loop's pose (a loop measured 15.3 ms on average and 19.4 ms while driving on the Betta bot, retired
+2026-11-13, `loop-time-findings.md`); move it into `write()`, where SOTM already is. What is worth adding is mostly Autonomous
 sequencing (end pickups on the transfer counter, shoot before stopping, carry the pose into TeleOp) and tooling.
 
 ### What to copy
@@ -321,7 +321,7 @@ sequencing (end pickups on the transfer counter, shoot before stopping, carry th
 | Shot-table recorder | In the shooter tuning OpMode, one button (a dashboard toggle in one repository) saves the current distance, rpm and hood as a row and telemetry prints the rows as paste-ready code; one repository also writes them to `/sdcard`. | We fill two tables plus droop points by reading telemetry and typing values (`sotm-tuning.md`), and dashboard edits are lost on deploySloth or an app restart. | `Meta-Infinity/DecodePublicRelease`, `Xtendera/OverclockDecode` |
 | Build steps when they start | Build pose-, count- or vision-dependent steps at run time. Ivy 1.1.1's `Commands.lazy(Supplier<Command>)` calls its supplier and starts the result in its start hook, and declares no requirements (javap of `core-1.1.1.jar`): give it the modules with `.requiring(...)`. | 7 of 23 fixed a step's content when it was built, not when it ran. Our ball collection already plans when it starts; later steps should too. | `Scythxrz/TheFBI2025Decode` (legs from the live pose), `Skeleton-Army/FtcRobotController-DECODE` (`DeferredCommand`), `junkjunk123/RevAmped-Decode-V2` (own `Lazy` for Ivy) |
 | Autonomous assembled at INIT | A Driver Station menu during INIT picks a preset routine or its segments (and in 2, start delays) and shows the result. | Matches each alliance partner without a redeploy; the segments would be `RobotActions` and `PathCommands` builders. Alliance stays a dashboard setting made before INIT (CLAUDE.md). | `Andover-Robotics/4410-Decode`, `drwho495/14906Decode`, `Skeleton-Army/FtcRobotController-DECODE`, `dani-Nayal/SolarFlare-Decode`, `Scythxrz/TheFBI2025Decode` |
-| Match log file | Write pose, states, counter and shot events each loop to a file for review after a match. | Our only per-loop file log is Ivy Path Test's CSV, so nothing records what the counter or turrets did in a match. Measure its loop cost first. | `Skeleton-Army/FtcRobotController-DECODE` (PsiKit logs for AdvantageScope); `Xtendera/OverclockDecode` saves Limelight snapshots during Autonomous |
+| Match log file | Write pose, states, counter and shot events each loop to a file for review after a match. | We have no per-loop file log since Ivy Path Test's CSV went with the Betta bot (2026-11-13), so nothing records what the counter or turrets did in a match. Measure its loop cost first. | `Skeleton-Army/FtcRobotController-DECODE` (PsiKit logs for AdvantageScope); `Xtendera/OverclockDecode` saves Limelight snapshots during Autonomous |
 | Pit self-test | An OpMode runs each mechanism for a few seconds and prints PASS or FAIL from its current and encoder. | Two flywheels, two turrets, the OctoQuad and the Limelight to check between matches; our hub bench needs a laptop and adb. | `junkjunk123/RevAmped-Decode-V2` (`AutomatedTest`); diagnostic OpModes in 3 more |
 
 ### Counts

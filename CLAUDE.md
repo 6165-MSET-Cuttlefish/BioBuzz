@@ -4,8 +4,8 @@
 
 - Game code goes in `biobuzz/` (its modules in `biobuzz/modules/`) and `opmodes/`; `architecture/` stays game-agnostic; new Java files go in an existing package. Field constants come from the BIOBUZZ game manual, never guesses.
 - Nothing new at the top level beyond Gradle and repo files: tools go in `scripts/`, documents in `docs/`.
-- No BioBuzz robot yet: BioBuzz code runs on the Betta bot (`betta_decode.xml`, `pedro/BioBuzzConstants`, `biobuzz/RobotGeometry`).
-- `cuttle_decode.xml` is the retired Cuttle bot's config, kept only because deleting a `res/xml` file shifts the other configs' resource IDs (Build & deploy): run nothing on it.
+- One robot, the BIOBUZZ robot (`biobuzz.xml`, `pedro/BioBuzzConstants`, `biobuzz/RobotGeometry`; the last two still hold the retired Betta bot's values). BioBuzz Basic Tele (`opmodes/tele/BioBuzzBasicTele.java`) is the TeleOp that runs on it today. BioBuzz Tele and everything else that builds `BioBuzzConstants`' follower (all of `BioBuzzRobot`) can't INIT on it until its position comes from the OctoQuad: that follower asks for a Pinpoint, which `biobuzz.xml` doesn't have. Run nothing that follows a path on it until its constants are measured (`docs/robots-findings.md`).
+- `betta_decode.xml` and `cuttle_decode.xml` are the retired Betta and Cuttle bots' configs, kept only because deleting a `res/xml` file shifts the other configs' resource IDs (Build & deploy): run nothing on them.
 - In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
 - At events the dashboard stays off: R704(D) bans dashboard-style streaming and the FTC Q&A extends that to the pit and practice field. Run `Enable/Disable Dashboard` before load-in (`docs/game-findings.md`).
@@ -116,13 +116,13 @@ In INIT the follower and Ivy scheduler run but module writes don't (unless `shou
 
 Dashboard edits are lost on deploySloth or an app restart: copy kept values into the source.
 
-- **Pedro** (`BioBuzzConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later (`docs/pedro-findings.md`). The pod offsets are the OctoQuad's: don't overwrite them with AutoTune's Pinpoint results.
+- **Pedro** (`BioBuzzConstants`): its drive directions, Pinpoint settings and Foresight gains are the retired Betta bot's, not the BIOBUZZ robot's: measure each on the robot before anything follows a path. Building its follower recalibrates the Pinpoint's IMU, so keep the board still for the first second of INIT, even if you'll reset the pose later (`docs/pedro-findings.md`).
 - A missing or faulting Pinpoint raises nothing: the pose reads (0, 0, 0) or holds its last value while Pedro drives on it. Check the pose shows the start pose after INIT before any Pedro-driven run (`docs/hub-bench-findings.md`).
 - **Ball detection**: `docs/hsv-tuning-prompt.md` derives starting HSV ranges from photos. Exposure, gain and resolution live in `limelight/ball_pipeline.vpr`: save the web UI's pipeline download over it, or the next synced INIT reverts them.
 - **Homography** (`eocvsim/homography`): a new one moves the (0,0) crosshair, so redo `Mount` in the same change.
 - **Camera Mount** (`BallFieldTransform.Mount`, measured from the Pinpoint offsets' origin): check it in Camera Module Test, robot still, a ball on the centreline at two distances: constant X or Y error is `xIn`/`yIn`, Y error growing with distance `headingDeg`, a left ball reading negative Y `mirrorY`, X error growing with distance the homography. Then, turning in place, a still ball whose field position moves means `xIn`/`yIn` is off.
 
-**AutoTune**: `http://192.168.43.1:10158` on the robot wifi (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, copying each result into the matching `BioBuzzConstants.*Settings` field (the printed code block is Quickstart-shaped: don't paste it). deploySloth doesn't reach a running procedure: close it first. Tests drives up to Distance ahead and to the left: clear that square.
+**AutoTune**: `http://192.168.43.1:10158` on the robot wifi (websocket 12649; over USB, forward both to `localhost`). On the BIOBUZZ robot, Mecanum Tuner runs today (it asks for the motor names: `fl`, `fr`, `bl`, `br`) and measures the drive directions; Pinpoint Tuner needs a Pinpoint, which it doesn't have; Foresight Tuner and Tests build `BioBuzzConstants`' Pinpoint follower, so they wait for the OctoQuad follower. If a Pinpoint goes back on, take its pod offsets from the OctoQuad's measurement, not from Pinpoint Tuner. Copy each result into the matching `BioBuzzConstants.*Settings` field (the printed code block is Quickstart-shaped: don't paste it). deploySloth doesn't reach a running procedure: close it first. Tests drives up to Distance ahead and to the left: clear that square.
 
 ## Testing
 
