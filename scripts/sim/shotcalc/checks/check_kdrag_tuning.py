@@ -9,7 +9,6 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-import shotcore as sc
 import tuner as tu
 from evalcore import Truth
 

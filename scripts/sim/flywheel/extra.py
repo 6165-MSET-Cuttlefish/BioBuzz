@@ -2,7 +2,6 @@
 import os, sys, json
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import numpy as np
 import run_all as R
 from concurrent.futures import ProcessPoolExecutor
 

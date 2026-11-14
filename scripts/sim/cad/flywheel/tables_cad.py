@@ -1,17 +1,15 @@
 """Builds results_tables.txt and results/summary.json from the stage outputs."""
-import json, math, os, sys
+import json, os, sys
 from collections import defaultdict
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np
 import cadcfg as C
-import ballistics as B
 import run_cad as R
 
 RES = os.path.join(HERE, 'results')
 L = []
 P = lambda *a: L.append(' '.join(str(x) for x in a))
-INTS = R.INTERVALS
 DS = [36, 60, 84, 108, 132]
 CM_LABEL = {('oracle', 'none', 0.02): 'ideal', ('team', 'hub', 0.02): 'team/hub', ('team', 'oq', 0.02): 'team/OQ20',
             ('rec', 'hub', 0.02): 'rec/hub', ('rec', 'oq', 0.02): 'rec/OQ20', ('rect', 'hub', 0.02): 'rect/hub',

@@ -1,5 +1,4 @@
 """Scoring windows around the aim-point shot: exit speed (%), hood (deg, exit point moves with the hood) and distance (in)."""
-import math
 import numpy as np
 from cadcore import (simulate, score_of, v_aim, COS, SIN, Z_BOTTOM, AIM_DX, slack)
 
@@ -41,7 +40,6 @@ def analyze(dia, exit_fn, th, D, kq=0.0, kl=0.0, v=None):
     idx = np.where(ok & ~np.isnan(v))[0]
     if idx.size == 0:
         return out
-    # ---- coarse scans: speed and hood
     ns, nh = len(S_GRID), len(H_GRID)
     vv = np.concatenate([np.outer(v[idx], 1 + S_GRID).ravel(), np.repeat(v[idx], nh)])
     tt = np.concatenate([np.repeat(th[idx], ns), (th[idx][:, None] + H_GRID[None, :]).ravel()])
@@ -54,7 +52,6 @@ def analyze(dia, exit_fn, th, D, kq=0.0, kl=0.0, v=None):
     gh = good[idx.size * ns:].reshape(idx.size, nh)
     i0s = int(np.argmin(np.abs(S_GRID)))
     i0h = int(np.argmin(np.abs(H_GRID)))
-    # ---- refine each edge between the last-in and first-out grid points
     jobs = []   # (row, kind, a_in, b_out)
     for k, j in enumerate(idx):
         for kind, g, grid, i0 in (("s", gs[k], S_GRID, i0s), ("h", gh[k], H_GRID, i0h)):
@@ -86,7 +83,6 @@ def analyze(dia, exit_fn, th, D, kq=0.0, kl=0.0, v=None):
             while last + 1 < NREF and gq[last + 1]:
                 last += 1
             out[key][j] = fr[last]
-    # ---- distance window from the stored nominal trajectories (target moved by delta, trajectory fixed)
     T, X, Z, VX, VZ = nom["traj"]
     xo0 = D - AIM_DX
     for j in idx:

@@ -6,7 +6,6 @@ Also: steady-state sustained interval = E_ball / P_net, and the 10-ball energy-b
 import math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-import numpy as np
 from scipy.integrate import solve_ivp
 import cadcfg as C
 import ballistics as B

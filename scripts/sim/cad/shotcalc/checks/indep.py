@@ -1,7 +1,6 @@
 """Independent re-implementation (no import from cadcore/windows): scipy solve_ivp with events at rtol 1e-10,
 geometry re-derived from BioBuzzField.java constants. Window edges by scan + brentq on the slack / vz functions."""
-import math, os, sys, json
-import numpy as np
+import math, os, json
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq
 

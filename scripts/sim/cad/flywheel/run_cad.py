@@ -2,7 +2,7 @@
 
 python3 -I run_cad.py <stage> [workers]
 """
-import itertools, json, math, os, sys, time
+import json, os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import numpy as np

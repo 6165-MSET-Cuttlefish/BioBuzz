@@ -1,6 +1,5 @@
 """STUDY 3: flywheel droop during a burst, and how each hood-compensation scheme copes (plus its TOF effect)."""
 import json
-import math
 import os
 import sys
 import time
@@ -20,7 +19,6 @@ H = sc.H_GRID
 NREP = int(os.environ.get("NREP", "40"))
 CAL = tu.SPACINGS["even5"]
 DQ = np.sort(np.random.default_rng(777).uniform(36, 132, 200))
-METHODS = ["a_none", "b_droop1", "b_droop2", "c_gainConst", "c_gainSched", "d_physDelta", "d_physDelta+droopFit", "oracle"]
 
 
 def hood_runs(T, D, rpm):

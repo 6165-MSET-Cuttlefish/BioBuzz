@@ -61,7 +61,6 @@ for d in (60, 84, 132):
 print("\nCentre of the speed window and of the yaw window (the 'best' choice) vs phi, vmin family: worked out by hand from the windows_nodrag.py output")
 
 print("\nAim-depth variant: aimDepth 0 (aim at the centroid on the face) at phi=60, vmin")
-import geom
 for depth in (3.0, 1.5, 0.0):
     aim = O + CW * Wv - depth * N
     for d in (60, 84, 132):

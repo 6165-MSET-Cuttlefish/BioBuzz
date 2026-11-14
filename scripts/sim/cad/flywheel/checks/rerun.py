@@ -15,7 +15,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import numpy as np
 import flysim_cad as F
-import cadcfg as C
 import ballistics as B
 import run_cad as R
 

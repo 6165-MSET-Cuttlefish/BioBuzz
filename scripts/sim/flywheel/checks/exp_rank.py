@@ -1,10 +1,9 @@
 """Ranking experiments. Usage: python3 -I exp_rank.py TAG GAINS(base|retune|retune_shot) SEEDSTART NSEEDS [ctrls]
 Plant overrides come from env (FLY_KT=ke, FLY_QW, FLY_DT). Writes out_TAG.json next to itself and prints a summary."""
-import os, sys, json, math, itertools, time
+import os, sys, json, math, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import numpy as np
-import flysim as F
 import run_all as R
 from concurrent.futures import ProcessPoolExecutor
 

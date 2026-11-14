@@ -1,5 +1,5 @@
 """Turns out/raw_*.npz into the answers: out/results.json and out/tables.txt."""
-import json, math, os, sys
+import json, os, sys
 import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -275,7 +275,6 @@ def fmt(x, f="{:.1f}", none="-"):
 def analyse_combo(R):
     pd = per_distance(R)
     res = dict(tag=R["tag"], per_distance=pd)
-    # ---- sag coverage for (a) best speed shot and (b) k above the lowest-speed in-travel angle and literal m = k
     res["sag_a"], res["sag_b"], res["sag_lit"] = [], {k: [] for k in KS}, {k: [] for k in KS}
     for i, r in enumerate(pd):
         if not r.get("scores"):
@@ -293,10 +292,8 @@ def analyse_combo(R):
             th0 = R["base"] + k
             j = int(np.argmin(np.abs(R["TH"] - th0)))
             res["sag_lit"][k].append(dict(sag_cover(R, pd, i, th0), shot=shot(R, i, j)) if R["ok"][i, j] else None)
-    # ---- schedules: (i) robust best tolerance (raw per distance), (ii) floor + k
     raw_i = [(r["D"], r["best_robust"]["m"] if r["best_robust"] else None) for r in pd if r.get("scores")]
     res["sched_i_raw"] = raw_i
-    # ---- steepest in-travel scoring m the flywheel can drive at 90 % of 5400 rpm free
     for i, r in enumerate(pd):
         if not r.get("scores"):
             continue
@@ -305,7 +302,6 @@ def analyse_combo(R):
             vmax = 0.9 * 5400 * eta * RPM_TO_INPS
             sel = okT & (R["v"][i] <= vmax)
             r[f"m_cap_{eta}"] = float(R["m"][sel].max()) if sel.any() else None
-    # ---- hood offset needed to absorb a given sag by re-aiming down to the floor (high branch)
     res["need"] = []
     for i, r in enumerate(pd):
         if not r.get("scores"):
@@ -325,7 +321,6 @@ def analyse_combo(R):
                                            rpm_frac=rpm(tgt) / 5400, tof_ms=1000 * g(R, "ta", i, th) if np.isfinite(g(R, "ta", i, th)) else None,
                                            s_w=100 * g(R, "s_w", i, th), dtof_ms=1000 * (g(R, "ta", i, r["th_floor"]) - g(R, "ta", i, th)))
         res["need"].append(row)
-    # ---- unconstrained (any launch angle on the grid) best shots versus the CAD travel
     res["design"] = []
     for i, r in enumerate(pd):
         D = r["D"]

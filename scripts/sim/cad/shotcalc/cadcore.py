@@ -43,7 +43,6 @@ SHOOTERS = {
     "nectar": dict(dia=3.6, mass=(39.0, 41.3, 45.0), mmax=20.0, base={"geo": 60.8, "cal": 57.4},
                    exit=((0.0, 1.23, 12.53), (20.0, 1.60, 13.57))),
 }
-DRAG_CASES = ("none", "low", "nom", "high")
 
 
 def kq_per_in(mass_g, cd, dia_in):
@@ -235,10 +234,6 @@ def v_aim(th_deg, x0, z0, D, kq=0.0, kl=0.0, iters=40, tol=1e-5, vcap=1200.0):
         nd = ~done
         act, lo, hi, flo, fhi, prev = act[nd], lo[nd], hi[nd], flo[nd], fhi[nd], prev[nd]
     return res.reshape(shape)
-
-
-def rpm_for(v_inps, eta):
-    return v_inps / (eta * RPM_TO_INPS)
 
 
 def vmin_search(exit_fn, D, kq=0.0, kl=0.0, lo=35.0, hi=89.5):

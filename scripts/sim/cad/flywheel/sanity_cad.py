@@ -1,7 +1,6 @@
 """Plant checks: motor constants, free speed, momentum transfer vs J/(J+k), energy per ball vs k w^2, required rpm."""
-import json, math, os, sys
+import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import numpy as np
 import flysim_cad as F
 import cadcfg as C
 

@@ -1,6 +1,5 @@
 """STUDY 1: the shot family at each distance, window sizes, and policies for choosing one shot."""
 import json
-import math
 import os
 import sys
 

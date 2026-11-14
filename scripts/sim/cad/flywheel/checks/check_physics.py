@@ -13,10 +13,9 @@ import run_cad as Rc
 RPM = 60 / (2 * math.pi)
 out = {}
 
-# ---- 1. motor constants from the vendor page (independent arithmetic) ----
+print("\n1. motor constants from the vendor page (independent arithmetic)")
 V, I0, Is, Wf = 12.0, 0.25, 9.2, 5800 / RPM
 Ts_page = 1.47 * 0.0980665
-Ts_pdf = 1.74 * 0.0980665
 oz_in = 20.45 * 0.00706155
 R = V / Is
 ke = (V - I0 * R) / Wf
@@ -28,7 +27,7 @@ print(f"stall torque implied by kt=ke and (Istall-I0): {ke*(Is-I0):.4f} N m = {k
 print(f"study: R {F.RM:.4f} ke {F.KE:.5f} kt {F.KT_STALL:.5f}")
 out['motor'] = dict(R=R, ke=ke, kt=kt, kt_over_ke=kt / ke, stall_kgcm_if_kt_eq_ke=ke * (Is - I0) / 0.0980665)
 
-# ---- 2. closed-form momentum / energy for a free wheel (no motor, no friction) ----
+print("\n2. closed-form momentum / energy for a free wheel (no motor, no friction)")
 def free_shot(J, m, f, r, w0, Tc):
     """Independent: d/dt[(J + k s(t)) w] = 0 with s raised cosine; RK45."""
     k = 5 / 6 * m * f * r * r
@@ -67,7 +66,7 @@ for sh in ('pollen', 'nectar'):
         tgt, info = C.target(sh, d, 0.45, 1.0, J)
         print(f"{sh} {d}: study target {tgt*RPM:.1f} rpm, rho {info['rho']:.4f}, closed-form J/(J+k) {J/(J+info['kb']):.4f}, Tc {1000*info['Tc']:.2f} ms")
 
-# ---- 3. independent single-shot ODE WITH the motor held at FF duty (no feedback in contact) ----
+print("\n3. independent single-shot ODE WITH the motor held at FF duty (no feedback in contact)")
 def motor_shot(J, m, f, r, w0, Tc, Voc=12.5, Rint=0.1, T3=0.008, kt_=kt, ke_=ke, R_=R):
     w3 = 3000 / RPM
     Tcf, bf, cf = 0.3 * T3, 0.5 * T3 / w3, 0.2 * T3 / w3 ** 2
@@ -98,7 +97,7 @@ for sh in ('pollen', 'nectar'):
         rho_check = motor_shot(J, m, 0.45, 0.036, tgt, info['Tc'])
         print(f"{sh} {d}: rho (motor at FF through contact) study {info['rho']:.5f} check RK45 {rho_check:.5f}")
 
-# ---- 4. motor power and free speed, independent ----
+print("\n4. motor power and free speed, independent")
 def net_power(w, Voc, Rint=0.1, T3=0.008, n=1, g=1.0, kt_=kt):
     w3 = 3000 / RPM
     Tf = 0.3 * T3 * math.tanh(w) + 0.5 * T3 / w3 * w + 0.2 * T3 / w3 ** 2 * w * w
@@ -119,7 +118,7 @@ Pmax = kt * V * V / (4 * R * ke)
 print(f"one motor, 12 V, no Rint: peak gross mechanical power {Pmax:.1f} W at {V/(2*ke)*RPM:.0f} rpm motor speed (kt=ke: {ke*V*V/(4*R*ke):.1f} W)")
 out['Pmax_gross_12V'] = Pmax
 
-# ---- 5. reflected rotor inertia with g = wheel speed / motor speed ----
+print("\n5. reflected rotor inertia with g = wheel speed / motor speed")
 for g in (0.8, 1.25, 1.5):
     wm_over_ww = 1 / g
     print(f"g {g}: motor turns at w/g -> reflected rotor J = J_r/g^2 = {C.J_ROTOR/g**2:.2e}"
@@ -128,7 +127,7 @@ for g in (0.8, 1.25, 1.5):
 ktw, kew = F.plant_consts(1, 1.5, F.KT_STALL)
 print(f"plant_consts(g=1.5): kew {kew:.5f} = KE/1.5 -> motor speed = wheel speed / g; so rotor reflects as 1/g^2")
 
-# ---- 6. f upper bound: ball rolling without slip on a fixed hood exits at half the wheel surface speed ----
+print("\n6. f upper bound: ball rolling without slip on a fixed hood exits at half the wheel surface speed")
 print("f <= 0.5 for a ball rolling on a fixed hood (centre speed = (wheel surface + 0)/2 at no slip); f = 0.50 is the physical ceiling")
 for sh in ('pollen', 'nectar'):
     rho = C.target(sh, 84, 0.45, 1.0, C.J_ASBUILT[sh])[1]['rho']

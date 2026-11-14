@@ -7,7 +7,6 @@ import ballistics as B
 IN = 0.0254
 RPM = F.RPM
 
-# ---- inertia (kg m^2), wheel-referred ----
 J_DESIGN = 0.78e-4            # [inf] CAD model as of 2026-11-10: wheel 7.3e-5 + hub + shaft + pulleys (no rotor, no roller)
 J_ROTOR = 5.0e-6              # [est] RS-555-class armature ~65 g, r ~12.2 mm, 0.5 m r^2 -> 4.8e-6; range 3e-6..8e-6
 STEALTH_2IN_MASS = 0.1 * 0.45359237   # [vendor] AndyMark Stealth 2 in family weight list "0.03, 0.1, 0.17, 0.3 lbs"

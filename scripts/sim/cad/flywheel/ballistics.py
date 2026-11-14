@@ -159,7 +159,6 @@ def validate():
 
 
 if __name__ == '__main__':
-    import json
     v = validate()
     print(f"aim z {v['aim_z']:.4f} in (ref 56.8151)")
     for r in v['rows']:

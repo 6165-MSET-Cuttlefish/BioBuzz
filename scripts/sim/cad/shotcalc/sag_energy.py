@@ -49,7 +49,6 @@ for name in BALLS:
         b = [r for r in out["rate"] if r["ball"] == name and r["eta"] == eta and r["free"] == 5800]
         print(f" {name:6s} eta {eta:.2f}: " + "  ".join(f"{x['frac']:.0%} free: {x['rate_per_s']:4.1f}/s {x['recover_ms']:4.0f} ms [{y['rate_per_s']:4.1f}]" for x, y in zip(a, b)))
 
-# ---- burst at the stated rapid-fire rate: per-ball drop c/I, full-power recovery between balls (ideal motor, 12 V)
 RATE = 10.9                      # balls/s, transfer-only estimate [inf]
 print(f"burst at {RATE} balls/s, eta .45, shell spin, free 5400: ball n speed below ball 1 (%), n = 2..5, and the 5th ball's per-ball recovery shortfall")
 out["burst"] = []

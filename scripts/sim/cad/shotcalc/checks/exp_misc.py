@@ -1,7 +1,7 @@
 """Sensitivity experiments with the independent solver (indep.py):
 (a) stronger topspin lift than the study's Cl -0.30 bound; (b) Nectar exit geometry / base angle perturbed (hood reshaped,
 numbers not re-derived); (c) min-speed angle and floor penalty under (a) and (b)."""
-import math, sys, os
+import sys, os
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import indep as I

@@ -4,7 +4,6 @@ Same targets and tuned gains as the baseline. Writes results/sens.json and appen
 import json, os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import numpy as np
 import flysim_cad as F
 import cadcfg as C
 import run_cad as R

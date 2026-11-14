@@ -18,7 +18,11 @@ SPIKE_MS = 4.0
 def parse(path):
     runs = []
     for line in open(path, encoding="utf-8"):
+        # A crash cuts its run's last row mid-line, and the next run's header is appended to it.
+        if not line.endswith("\n"):
+            continue
         line = line.rstrip("\n")
+        line = line[max(line.find("# run "), 0):]
         if line.startswith("# run"):
             runs.append({"header": line[2:], "rows": [], "summary": None})
             continue

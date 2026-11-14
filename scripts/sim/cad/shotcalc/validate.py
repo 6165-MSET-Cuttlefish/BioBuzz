@@ -1,10 +1,10 @@
 """Reproduces the drag-free min-speed line and its speed window from ../../ballistics/nodrag.py and windows_nodrag.py
 for a 14 in exit at the turret axis, and the 40 g, Cd 0.45 case of ../../ballistics/run_drag.py, before switching
 to the CAD geometry."""
-import json, math, os, sys
+import json, os, sys
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cadcore import vmin_search, kq_per_in, v_aim, Z_AIM, AIM_DX
+from cadcore import vmin_search, kq_per_in, Z_AIM, AIM_DX
 from windows import analyze
 
 EXIT14 = lambda th: (np.zeros_like(np.asarray(th, float)), np.full_like(np.asarray(th, float), 14.0))

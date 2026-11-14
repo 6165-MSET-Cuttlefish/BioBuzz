@@ -1,7 +1,6 @@
 import math
 import os
 import sys
-import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from geom import *  # noqa
@@ -32,16 +31,6 @@ def for_descent(d, beta_deg):
     vx2 = G * d / (2 * h / d + 2 * tb)
     v = math.sqrt(vx2 * (1 + tth * tth))
     return v, math.atan(tth)
-
-
-def solve_theta(d, v, high=True):
-    # d tan - g d^2 (1+tan^2)/(2v^2) = h
-    a = G * d * d / (2 * v * v)
-    disc = d * d - 4 * a * (a + h)
-    if disc < 0:
-        return None
-    t = (d + (1 if high else -1) * math.sqrt(disc)) / (2 * a)
-    return math.atan(t)
 
 
 print("\nmin-speed line")

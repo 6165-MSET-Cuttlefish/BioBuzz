@@ -1,7 +1,6 @@
 package org.firstinspires.ftc.teamcode.biobuzz;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -199,15 +198,15 @@ public class ShotSolverTest {
 
     @Test
     public void shotFromBehindTheOpeningIsInvalid() {
-        ShotTuning.hiveBadZoneMarginIn = -100;
-        Result r = solver(0, 0).solve(new Motion(58, 60, FACING_AUDIENCE, 0, 0, 0), UP, false, W, 0)[0];
-        assertFalse(r.isValid());
+        Result r = solver(0, 0).solve(new Motion(58, 35, FACING_AUDIENCE, 0, 0, 0), UP, false, W, 0)[0];
+        assertEquals(Invalid.BEHIND_OPENING, r.invalid);
     }
 
     @Test
     public void underTheHiveIsABadZone() {
-        Result r = solver(0, 0).solve(new Motion(58, 80, FACING_AUDIENCE, 0, 0, 0), UP, false, W, 0)[0];
-        assertFalse(r.isValid());
+        ShotTuning.hiveBadZoneMarginIn = 30;
+        Result r = solver(0, 0).solve(new Motion(58, 25, FACING_AUDIENCE, 0, 0, 0), UP, false, W, 0)[0];
+        assertEquals(Invalid.BAD_ZONE, r.invalid);
         assertTrue(BioBuzzField.underHive(58, 80, 0, W));
     }
 

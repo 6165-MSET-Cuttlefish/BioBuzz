@@ -88,9 +88,6 @@ def free_speed_rpm(Voc, Rint, Tcf, bf, cf, Iot=0.0, p=1.0):
     return lo * RPM
 
 
-# ------------------------------------------------------------------------------------------
-# Kalman gain for the [theta, omega, d] observer (computed offline per unique parameter set)
-# ------------------------------------------------------------------------------------------
 _kf_cache = {}
 
 
@@ -111,9 +108,6 @@ def kf_gain(kA, kV, T, qd, sigma_theta):
     return L[:, 0]
 
 
-# ------------------------------------------------------------------------------------------
-# Simulation
-# ------------------------------------------------------------------------------------------
 def simulate(P, ctrl, C, scen):
     """P: per-sim arrays (N,). ctrl: controller name. C: per-sim controller params. scen: scenario dict.
 
@@ -145,7 +139,6 @@ def simulate(P, ctrl, C, scen):
     is_oracle = ctrl == 'oracle'
     if is_hub:
         Tloop = np.full(N, 0.010)
-    # ---- per-seed random streams (common random numbers across controllers / gains) ----
     useeds = np.unique(seed)
     Kmax = int(T_end / 0.006) + 4
     sj = {}
@@ -170,7 +163,6 @@ def simulate(P, ctrl, C, scen):
     next_fire = fire[:, 0].copy()
     ar = np.arange(N)
 
-    # ---- shots ----
     nc = np.rint(Tcon / DT).astype(np.int64)
     if nb:
         tb_nom = np.broadcast_to(shots, (N, nb)).copy()
@@ -189,13 +181,11 @@ def simulate(P, ctrl, C, scen):
     last_start = tb_step[:, -1].copy() if nb else np.zeros(N, np.int64)
     dip_end = tb_step[:, 1].copy() if nb > 1 else (tb_step[:, 0] + int(round(0.6 / DT)))
 
-    # ---- feed-forward ----
     ffV = ffk * ff_table_volts(np.full(N, tgt), Tcf, bf, cf)
     ks_, kv_ = kskv_fit(Tcf, bf, cf)
     ks_ *= ffk; kv_ *= ffk
     kA = kAk * RM * J / KT                      # model V per rad/s^2
 
-    # ---- controller state ----
     Kh = fire.shape[1]
     hist_c = np.zeros((N, Kh))
     hist_tau = np.zeros((N, Kh))
@@ -230,7 +220,6 @@ def simulate(P, ctrl, C, scen):
         hub_c = np.zeros((N, 5)); hub_n = np.zeros(N, np.int64)
         hub_I = np.zeros(N); hub_eprev = np.zeros(N)
 
-    # ---- plant state ----
     w = np.full(N, w0)
     th = th + 0.0
     Vs = Voc.copy()
@@ -241,7 +230,6 @@ def simulate(P, ctrl, C, scen):
         p_app = np.clip(v_ss(w, Tcf, bf, cf) / Voc, 0, 1)
         Vprev[:] = Vprev2[:] = p_app * Voc
 
-    # ---- metric accumulators ----
     bands = (25.0, 50.0, 100.0)
     last_out = {b: np.full(N, -1.0) for b in bands}
     last_out_spin = np.full(N, -1.0)
@@ -258,19 +246,16 @@ def simulate(P, ctrl, C, scen):
 
     for s in range(nsteps):
         t = s * DT
-        # ---------------- apply delayed commands ----------------
         m = pend_step == s
         if m.any():
             p_app[m] = pend_p[m]
             pend_step[m] = -1
-        # ---------------- ball touches ----------------
         mt = cur_start == s
         if mt.any():
             ii = np.nonzero(mt)[0]
             w_touch[ii, bi[ii]] = w[ii] * RPM
             wm_touch[ii, bi[ii]] = wm_last[ii] * RPM
             est_touch[ii, bi[ii]] = est_last[ii] * RPM
-        # ---------------- controller ----------------
         if is_oracle:
             p = np.where(w < tgt, 1.0, np.clip(v_ss(np.full(N, tgt), Tcf, bf, cf) / Vb_prev, 0, 1)) if s > 0 else p_app
             p_app = np.trunc(p * 32767.0) / 32767.0
@@ -417,7 +402,6 @@ def simulate(P, ctrl, C, scen):
                 if ss0s <= s < ss1s:
                     wv = wm_last[idx] * RPM
                     ssm_s[idx] += wv; ssm_q[idx] += wv * wv; ssm_n[idx] += 1
-        # ---------------- plant ----------------
         Iot = sag_I if sag_t0 <= t < sag_t1 else 0.0
         pa = p_app
         Vb = (Voc - Rint * Iot + Rint * pa * KE * w / RM) / (1.0 + Rint * pa * pa / RM)
@@ -455,7 +439,6 @@ def simulate(P, ctrl, C, scen):
             w_exit[ii, bi[ii]] = w[ii] * RPM
             bi[ii] += 1
             cur_start[ii] = np.where(bi[ii] < nbb, tb_step[ii, np.minimum(bi[ii], nbb - 1)], 1 << 60)
-        # ---------------- metrics ----------------
         wr = w * RPM
         err = np.abs(wr - tgt_rpm)
         o = err > 50.0

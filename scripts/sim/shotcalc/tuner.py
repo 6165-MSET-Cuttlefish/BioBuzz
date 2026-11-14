@@ -1,5 +1,4 @@
 """Calibration simulation (a tuner who stops when shots go in) and the shot representations A-F."""
-import math
 import os
 import sys
 
@@ -100,7 +99,6 @@ def min_dist_ref(T, D):
     return int(i + sub.start), int(j)
 
 
-# ----------------------------------------------------------------------------- representations
 def pchip_slopes(x, y):
     h = np.diff(x)
     d = np.diff(y) / h

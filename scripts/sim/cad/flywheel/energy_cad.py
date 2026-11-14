@@ -3,7 +3,6 @@ and the sustained fire rate that power supports with no margin. Writes results/e
 import json, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import numpy as np
 import flysim_cad as F
 import cadcfg as C
 import run_cad as R

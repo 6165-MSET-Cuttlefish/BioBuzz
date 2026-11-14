@@ -1,5 +1,5 @@
 """Compares the reruns in results/ (rerun.py orig, seeds, f040, ktke, dt, heavy) with ../results/summary.json."""
-import json, os, sys
+import json, os
 from collections import Counter
 HERE = os.path.dirname(os.path.abspath(__file__))
 S = json.load(open(os.path.join(HERE, '..', 'results', 'summary.json')))

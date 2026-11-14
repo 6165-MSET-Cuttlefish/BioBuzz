@@ -533,26 +533,26 @@ Line numbers are as of 2026-11-10.
 
 | quantity | where | notes |
 |---|---|---|
-| flywheel inertia J, kg·m², motor rotor included | `JS` in `run_all.py:10` and `tables.py:10`; `SPIN_T` and `REC_T`, `run_all.py:11-12` | The two `JS` lists must match, and every J needs a `SPIN_T` and `REC_T` entry, long enough for every controller to settle: today's are 3 to 9 times the full-power spin-up time `sanity.py` prints. The timing stage (`run_all.py:239`), `extra.py` (four loops, lines 28 to 58), `sanity.py:35,58` and the checks in `checks/` list their own J values. |
-| ball mass, kg, and contact time, s | `m` and `Tc` in `BASE`, `run_all.py:13` (tuning, robust, timing, extra); the core sweep at `run_all.py:206`, `tables.py:72` and `checks/exp_rank.py:12`; `sanity.py:60` | The core sweep's lists in `run_all.py` and `tables.py` must match. |
-| loop period, RPM window, timestamp error, s | `T`, `W` and `tsA` in `BASE`, `run_all.py:13`; the timing sweep at `run_all.py:238` and `:250` | `tsA` is the half-width of a uniform error. Loop jitter (±2 ms) is at `flysim.py:162`, command delay (2 to 4 ms) at `flysim.py:166`. |
+| flywheel inertia J, kg·m², motor rotor included | `JS` in `run_all.py:10` and `tables.py:10`; `SPIN_T` and `REC_T`, `run_all.py:11-12` | The two `JS` lists must match, and every J needs a `SPIN_T` and `REC_T` entry, long enough for every controller to settle: today's are 3 to 9 times the full-power spin-up time `sanity.py` prints. The timing stage (`run_all.py:239`), `extra.py` (four loops, lines 27 to 57), `sanity.py:35,58` and the checks in `checks/` list their own J values. |
+| ball mass, kg, and contact time, s | `m` and `Tc` in `BASE`, `run_all.py:13` (tuning, robust, timing, extra); the core sweep at `run_all.py:206`, `tables.py:72` and `checks/exp_rank.py:11`; `sanity.py:60` | The core sweep's lists in `run_all.py` and `tables.py` must match. |
+| loop period, RPM window, timestamp error, s | `T`, `W` and `tsA` in `BASE`, `run_all.py:13`; the timing sweep at `run_all.py:238` and `:250` | `tsA` is the half-width of a uniform error. Loop jitter (±2 ms) is at `flysim.py:155`, command delay (2 to 4 ms) at `flysim.py:159`. |
 | battery and friction | `Voc`, `Rint` and `fric` (N·m at 3000 RPM) in `BASE`, `run_all.py:13` | |
 | wheel radius and exit fraction | `WHEEL_R`, `EXIT_FRAC`, `SHELL`, `flysim.py:28-30` | A 72 mm wheel acts like a ball 0.5625 times as heavy. |
 | motor | `flysim.py:16-17` | |
-| target RPM | `run_all.py:65` and `:73`; `extra.py:37` sweeps 2500 to 4500 | |
-| how voltage compensation sees the battery | scenario key `vs_tau` (first-order lag, default 0.1 s, `flysim.py:136`) or `vs_hold` (sample-hold) | `extra.py` compares them. |
+| target RPM | `run_all.py:65` and `:73`; `extra.py:36` sweeps 2500 to 4500 | |
+| how voltage compensation sees the battery | scenario key `vs_tau` (first-order lag, default 0.1 s, `flysim.py:130`) or `vs_hold` (sample-hold) | `extra.py` compares them. |
 
 ### Shot
 
 | quantity | where | notes |
 |---|---|---|
-| ball mass, drag and lift | `TRUTHS` and `MAIN_TRUTHS`, `shotcore.py:69-80`; air density `RHO`, `:58`; ball diameter `BALL_D`, `:19` | Add a measured ball as a new name, and add the name to `short()` in `report.py:21` or the report fails. Changing an existing entry needs its cache files deleted. |
-| exit speed per RPM and the hood map | `K_GAIN`, `ETA_DROP`, `TH_LO`, `TH_HI`, `BETA`, `SPEED_CURVE`, `shotcore.py:280-284`; the last three are also read from the environment | These don't touch the cache, but exit speeds must stay inside its 150 to 650 in/s. |
+| ball mass, drag and lift | `TRUTHS` and `MAIN_TRUTHS`, `shotcore.py:66-77`; air density `RHO`, `:56`; ball diameter `BALL_D`, `:19` | Add a measured ball as a new name, and add the name to `short()` in `report.py:21` or the report fails. Changing an existing entry needs its cache files deleted. |
+| exit speed per RPM and the hood map | `K_GAIN`, `ETA_DROP`, `TH_LO`, `TH_HI`, `BETA`, `SPEED_CURVE`, `shotcore.py:275-279`; the last three are also read from the environment | These don't touch the cache, but exit speeds must stay inside its 150 to 650 in/s. |
 | exit height, aim depth, rim clearance, opening | `shotcore.py:14-20` | Delete the cache after changing any of them. |
-| shot noise | `SIG_V`, `SIG_TH`, `evalcore.py:11-12`; flywheel and distance error, `study1.py:22-23` | Each noise level gets its own blur file. |
+| shot noise | `SIG_V`, `SIG_TH`, `evalcore.py:11-12`; flywheel and distance error, `study1.py:21-22` | Each noise level gets its own blur file. |
 | burst model: 300 RPM lost per ball, recovery time, 120 ms feed | `report.py:372-378` | |
-| video frame time for time of flight | `FRAME`, `study2.py:21`, `study4b.py:16`, `checks/check_kdrag_tuning.py:16` | |
-| calibration distances | `SPACINGS`, `tuner.py:16` | |
+| video frame time for time of flight | `FRAME`, `study2.py:21`, `study4b.py:16`, `checks/check_kdrag_tuning.py:15` | |
+| calibration distances | `SPACINGS`, `tuner.py:15` | |
 
 ### Flywheel with the robot's numbers (`cad/flywheel/`)
 
@@ -560,16 +560,16 @@ Rerun from `run_cad.py tune` after changing any of these.
 
 | quantity | where | notes |
 |---|---|---|
-| exit-speed fraction f | `F_EXIT`, `cadcfg.py:32` | Gains are tuned at f 0.45 only (`run_cad.py:164`). A measured exit speed over the encoder's pre-touch speed is not f: divide it by the in-contact ratio (`checks/check_physics.py` section 6). |
-| inertia | `J_DESIGN`, `J_ROTOR`, `J_ROLLER` and `STEALTH_2IN_MASS`, `cadcfg.py:11-16`; the sweep and options `J_STEEL82`, `J_SWEEP`, `J_WHEEL96`, `:17-24` | Plants are built from these in `plants()`, `run_cad.py:32-46`. A spin-down at known current gives the as-built J directly. |
-| friction, N·m at 3000 RPM | `fric` in `plants()`, `run_cad.py:35` (0.010 with two motors, `:40-41`); the default of `rho_ff`, `cadcfg.py:63` | `sens_cad.py` runs 0.004 and 0.016 (`VARIANTS`, `sens_cad.py:13-21`). |
+| exit-speed fraction f | `F_EXIT`, `cadcfg.py:31` | Gains are tuned at f 0.45 only (`run_cad.py:164`). A measured exit speed over the encoder's pre-touch speed is not f: divide it by the in-contact ratio (`checks/check_physics.py` section 6). |
+| inertia | `J_DESIGN`, `J_ROTOR`, `J_ROLLER` and `STEALTH_2IN_MASS`, `cadcfg.py:10-15`; the sweep and options `J_STEEL82`, `J_SWEEP`, `J_WHEEL96`, `:16-23` | Plants are built from these in `plants()`, `run_cad.py:32-46`. A spin-down at known current gives the as-built J directly. |
+| friction, N·m at 3000 RPM | `fric` in `plants()`, `run_cad.py:35` (0.010 with two motors, `:40-41`); the default of `rho_ff`, `cadcfg.py:62` | `sens_cad.py` runs 0.004 and 0.016 (`VARIANTS`, `sens_cad.py:12-20`). |
 | torque constant | `T_STALL` (1.47 kg·cm), `flysim_cad.py:34`; free speed for the back-EMF constant, `FLY_FREE` (default 5800), `:33` | `sens_cad.py` variant `kt=ke` and `checks/rerun.py ktke` run the high case. |
 | battery | `Voc` in `row()`, `run_cad.py:66`; the free speed used for feasibility in `tgt_info()`, `:60` | `sens_cad.py` runs 12.0 and 13.5 V. |
-| ball masses | `BALL`, `cadcfg.py:26-27` | The `mass` stage fires the lightest, nominal and heaviest ball. |
-| contact geometry | `HOOD` wrap and squeeze, `cadcfg.py:28-29`; `contact_time()`, `:50` | |
+| ball masses | `BALL`, `cadcfg.py:25-26` | The `mass` stage fires the lightest, nominal and heaviest ball. |
+| contact geometry | `HOOD` wrap and squeeze, `cadcfg.py:27-28`; `contact_time()`, `:49` | |
 | hood base angle, travel and exit point | `SHOOTERS`, `ballistics.py:29-33` | |
 | rim clearance and aim depth | `AIM_DEPTH, RIM`, `ballistics.py:13` | The reference windows `REF_WIN` and `REF_V` (`:144-145`) are for a 2.8 in ball at 14 in, and `validate()` asserts them. |
-| loop period, window, timestamp error, latency | `T`, `W`, `tsA` in `row()`, `run_cad.py:73`; `LAT`, `cadcfg.py:35` | |
+| loop period, window, timestamp error, latency | `T`, `W`, `tsA` in `row()`, `run_cad.py:73`; `LAT`, `cadcfg.py:34` | |
 | feed intervals and seeds | `INTERVALS`, `SEEDS`, `TUNE_SEEDS`, `run_cad.py:16-20` | |
 
 ### Shot with the robot's geometry (`cad/shotcalc/`)
@@ -581,14 +581,14 @@ need `report.py` again.
 |---|---|---|
 | exit-speed fraction eta and free speed | `ETAS`, `FREES`, `report.py:10-11`; `V_REACH`, `:14` | RPM and reach only; the stored cases don't depend on them. |
 | ball masses and diameters | `SHOOTERS`, `cadcore.py:40-45` | |
-| drag cases and air density | `drag_consts()`, `cadcore.py:54-62`; `RHO`, `:36` | |
+| drag cases and air density | `drag_consts()`, `cadcore.py:53-61`; `RHO`, `:36` | |
 | hood base angle, travel, exit point | `SHOOTERS` `base`, `mmax`, `exit`, `cadcore.py:40-45` | |
 | rim clearance | `RIM`, `cadcore.py:19`, or the environment variable `RIM_CLEARANCE_IN` | Every absolute window depends on it: 0, 1 and 2 in change the widths by about ±25% (`checks/exp_rim.py`). |
 | aim depth and opening | `cadcore.py:14-18` | |
 | lift coefficients | the spin cases in `study.py:49` | |
 | robust-pick thresholds | `HOOD_MIN_SIDE`, `DIST_MIN_SIDE`, `report.py:13` | |
 | hood speed | `HOOD_RATE`, `report.py:9` | |
-| sag model: wheel radius, stall torque, inertia, ball masses, fire rate | `R_W`, `TAU_S`, `I_CAD`, `BALLS`, `sag_energy.py:13-17`; `RATE`, `:53` | |
+| sag model: wheel radius, stall torque, inertia, ball masses, fire rate | `R_W`, `TAU_S`, `I_CAD`, `BALLS`, `sag_energy.py:13-17`; `RATE`, `:52` | |
 
 ### Closed-form calculations (`ballistics/`)
 

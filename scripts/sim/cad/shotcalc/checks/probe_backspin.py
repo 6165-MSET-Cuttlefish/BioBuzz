@@ -1,5 +1,5 @@
 """Probe the Cl +0.15 'best speed' picks: steep backspin shots. Scan z at x = D against v, and the plane crossing."""
-import math, os, sys
+import os, sys
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import indep as I

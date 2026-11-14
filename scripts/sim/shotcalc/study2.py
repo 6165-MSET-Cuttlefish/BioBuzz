@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import shotcore as sc
 import physmodel as pm
 import tuner as tu
-from evalcore import Truth, fmt_table
+from evalcore import Truth
 
 NREP = int(os.environ.get("NREP", "60"))
 SCHEDULES = ["maxP", "minDist", "wander"]

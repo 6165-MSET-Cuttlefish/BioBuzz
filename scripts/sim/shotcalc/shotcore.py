@@ -47,16 +47,13 @@ def w_band(margin=MARGIN):
 
 W_LO, W_HI = w_band()
 W_MID = 0.5 * (W_LO + W_HI)
-U_HALF = OPEN_W / 2 - MARGIN     # lateral allowance near the bottom of the opening (w < shoulder)
 
 
 def opening_origin_x(D):
     return D - AIM_DX
 
 
-# ----------------------------------------------------------------------------- truth models
 RHO = 1.2           # kg/m^3, sea-level-ish room air (assumed)
-AREA_28 = math.pi * (0.0254 * BALL_D / 2) ** 2
 
 
 def quad_k_per_in(mass_g, cd, diam_in=BALL_D):
@@ -185,7 +182,6 @@ def crossings(t, X, Z, VX, VZ, Ds, kq=0.0):
     return out
 
 
-# ----------------------------------------------------------------------------- field grids
 V_MIN, V_MAX, NV = 150.0, 650.0, 360
 TH_MIN, TH_MAX, NTH = 20.0, 88.0, 273      # 0.25 deg
 D_GRID = np.arange(30.0, 141.0, 1.0)
@@ -276,7 +272,6 @@ def trilinear(A, D, v, th):
     return np.where(out_of, np.nan, res)
 
 
-# ----------------------------------------------------------------------------- shooter map
 K_GAIN = 0.09        # in/s per rpm at eta = 1 (assumed: ~96 mm wheel, ball ~45% of surface speed)
 ETA_DROP = float(os.environ.get("ETA_DROP", "0.04"))   # exit-speed efficiency falls 4% from flattest to steepest hood (assumed)
 TH_LO, TH_HI = 30.0, 80.0
@@ -306,16 +301,5 @@ def rpm_to_v(rpm, h, gain=K_GAIN, drop=ETA_DROP):
     return gain * eta(h, drop) * rpm * (1 - SPEED_CURVE * (rpm - 3000) / 3000)
 
 
-def v_to_rpm(v, h, gain=K_GAIN, drop=ETA_DROP):
-    return np.asarray(v, float) / (gain * eta(h, drop))
-
-
-# ----------------------------------------------------------------------------- hood/rpm grid helpers
 H_GRID = np.linspace(0.0, 1.0, 401)          # hood step 0.0025
 R_GRID = np.arange(1500.0, 7000.0, 5.0)      # rpm step 5
-
-
-def field_on_rh(A, D, R=R_GRID, H=H_GRID, gain=K_GAIN):
-    """Sample a field at distance D on the (rpm, hood) grid -> shape (len(R), len(H))."""
-    rr, hh = np.meshgrid(R, H, indexing="ij")
-    return trilinear(A, np.full(rr.shape, D), rpm_to_v(rr, hh, gain), hood_to_theta(hh))

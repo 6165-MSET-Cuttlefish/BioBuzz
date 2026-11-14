@@ -1,5 +1,5 @@
 """Compact text tables from results.json -> results_tables.txt"""
-import os, sys, json, math
+import os, json, math
 from collections import defaultdict
 HERE = os.path.dirname(os.path.abspath(__file__))
 R = json.load(open(os.path.join(HERE, 'results.json')))
