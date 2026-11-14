@@ -198,10 +198,10 @@ def config_cases():
     root = ElementTree.fromstring(xml)
     shipped = ElementTree.fromstring(cp.shipped_xml())
     names = lambda r: sorted((e.tag, e.get("name"), e.get("port")) for e in r.iter() if e.get("name"))
-    added = set(names(root)) - set(names(shipped))
-    expect("bench_biobuzz_cam: biobuzz.xml's devices kept, the webcam and the Limelight added",
-           set(names(shipped)) <= set(names(root))
-           and added == {("Webcam", rb.CELL_TIP_WEBCAM, None), ("EthernetDevice", rb.LIMELIGHT_DEVICE, "0")})
+    cameras = {("Webcam", rb.CELL_TIP_WEBCAM, None), ("EthernetDevice", rb.LIMELIGHT_DEVICE, "0")}
+    expect("bench_biobuzz_cam: biobuzz.xml's devices kept, with one webcam and one Limelight and nothing else added",
+           set(names(shipped)) <= set(names(root)) and set(names(root)) - set(names(shipped)) <= cameras
+           and all(names(root).count(camera) == 1 for camera in cameras))
     webcam = next(root.iter("Webcam"))
     ll = next(root.iter("EthernetDevice"))
     expect("bench_biobuzz_cam: this station's webcam serial and the Limelight's address and serial",
