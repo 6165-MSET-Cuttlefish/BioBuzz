@@ -70,6 +70,13 @@ configurations.configureEach {
     exclude group: 'com.acmerobotics.dashboard'
 }
 
+// Bench OpModes fill the Driver Station's list, so only a build that asks (-Pbench; the bench scripts do) has them.
+if (!providers.gradleProperty('bench').isPresent()) {
+    tasks.withType(JavaCompile).configureEach {
+        exclude '**/opmodes/test/bench/**'
+    }
+}
+
 dependencies {
     implementation 'org.firstinspires.ftc:Inspection:12.0.0'
     implementation 'org.firstinspires.ftc:Blocks:12.0.0'

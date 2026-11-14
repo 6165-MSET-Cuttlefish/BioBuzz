@@ -42,6 +42,13 @@ misbehaves.
   classes share a name (string read from the jar's `MyProcessor` class). Without it a duplicate shows only on the
   hub, where Sloth 0.3.2's `SinisterRegisteredOpModes.register` throws `DuplicateNameException` while building the
   OpMode list.
+- **Bench OpModes are left out of normal builds (2026-11-14).** `TeamCode/build.gradle` excludes
+  `opmodes/test/bench/**` from every `JavaCompile` task unless Gradle gets the `bench` property: `-Pbench`,
+  `bench=true` in a `gradle.properties`, or the environment variable `ORG_GRADLE_PROJECT_bench`, which the bench
+  scripts set. Measured on a Mac with 48 bench OpModes out of 77: a normal build compiles no class from that folder
+  against 196 with the property, the hot-load jar (`TeamCode/build/libs/to_load.jar`) is 280 KB against 515 KB, and
+  `testDebugUnitTest` runs 49 tests against 127. Switching either way needed no clean build. Not measured on a hub:
+  whether the smaller load shortens the 9 s hot load.
 
 [sdk-deps]: https://github.com/FIRST-Tech-Challenge/FtcRobotController/blob/v12.0/build.dependencies.gradle
 
