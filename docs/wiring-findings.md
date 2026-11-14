@@ -46,8 +46,7 @@ once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Tur
   out of the hardware map, so INIT stops; on USB with the wrong serial the SDK only warns and hands out devices that
   ignore every write. Check the robot's Arducam serial too: `UC852` is the bench Arducam's (it may be the same on
   every unit, unverified), and a webcam with another serial fails to open, which stops everything built on
-  `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: the flower intake, lights and Prism
-  (no code names them yet), `Intran`'s `ruler`, `sensorLeft` and `sensorRight` (no port), and the Pinpoint
+  `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s `ruler`, `sensorLeft` and `sensorRight` (no port), and the Pinpoint
   `BettaConstants` asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to
   the OctoQuad. BioBuzz Basic Tele (`opmodes/tele/BioBuzzBasicTele.java`) is the TeleOp that runs on it today: drive,
   intake, transfer and both flywheels from gamepad 1, with no odometry, cameras or turret.
@@ -103,7 +102,9 @@ once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Tur
 
 **Names in `biobuzz.xml`.** `PollenTurretL` on Control Hub servo 0 and `PollenTurretR` on servo 1 (`Turret` runs R
 `offset` above L; the Betta bot has R on 0), the blocker is `hardstop`, the transfer's
-continuous-rotation servo on Expansion Hub servo 0 is `transferServo` (read by BioBuzz Basic Tele), rangefinders A and B are `analog0` and
+continuous-rotation servo on Expansion Hub servo 0 is `transferServo` (read by BioBuzz Basic Tele), the flower intake
+servo is `flowerIntake`, the right and left RGB lights are `rgbRight` and `rgbLeft`, the Prism is `prism` (no code
+reads those four yet), rangefinders A and B are `analog0` and
 `analog1`, the Floodgate is `floodgate`, the OctoQuad `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0,
 read by nothing. The Expansion Hub is address 2 on RS485 and on USB. The rest use the code's names:
 `PollenShooter`, `NectarShooter`, `NectarTurret`, `PollenHood`, `NectarHood`, `fl`, `br`, `fr`, `bl`, `intake`,

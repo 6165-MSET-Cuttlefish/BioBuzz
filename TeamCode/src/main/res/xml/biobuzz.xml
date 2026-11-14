@@ -20,6 +20,7 @@
 
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
             <OctoQuadFTC name="octoquad" bus="2" port="0" />
+            <goBILDAPrism name="prism" bus="3" port="0" />
         </LynxModule>
         <LynxModule name="Expansion Hub 2" port="2">
             <goBILDA5202SeriesMotor name="fr" port="0" />
@@ -28,6 +29,9 @@
             <goBILDA5202SeriesMotor name="transfer" port="3" />
 
             <ContinuousRotationServo name="transferServo" port="0" />
+            <Servo name="flowerIntake" port="1" />
+            <Servo name="rgbRight" port="2" />
+            <Servo name="rgbLeft" port="4" />
         </LynxModule>
     </LynxUsbDevice>
     <Webcam name="aprilTagDetector" serialNumber="UC852" />
