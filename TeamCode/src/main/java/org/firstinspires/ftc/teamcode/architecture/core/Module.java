@@ -119,8 +119,6 @@ public abstract class Module {
 
     final void setTelemetry(DualTelemetry t) { this.telemetry = t; }
 
-    protected final DualTelemetry getTelemetry() { return telemetry; }
-
     protected final String getStateString() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < states.size(); i++) {

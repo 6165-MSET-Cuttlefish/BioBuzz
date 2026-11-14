@@ -148,9 +148,9 @@ and "unused" is judged against last season's DECODE code, not only this repo. Be
 | piece | what it is |
 |---|---|
 | `architecture/hardware/AbsoluteAnalogEncoder.java` | an absolute encoder on an analog port: angle, multi-turn position, an optional filter that drops jumps over a set size |
-| `Module.logDS` (`architecture/core/Module.java:144-150`) | a Driver Station-only line, formatted only in a DS frame |
+| `Module.logDS` (`architecture/core/Module.java:142-148`) | a Driver Station-only line, formatted only in a DS frame |
 | `Drivetrain.isBonk()` (`biobuzz/modules/Drivetrain.java:159-168`) | when called every loop: true once Pedro has been on a path, short of its end, at a speed under 2 (Pedro's velocity units) for 2 s; last season's autos, not in this repo, used it to skip a segment the robot was stuck on |
-| `Camera.getPredictedBallPosition` and `getPredictedFieldPosition` (`biobuzz/modules/Camera.java:119-125`, `:162-168`), with the `predict()` they call on `TrackedBall` and `FieldBall` | where a tracked ball will be after a lookahead, extrapolated at constant velocity |
+| `Camera.getPredictedBallPosition` and `getPredictedFieldPosition` (`biobuzz/modules/Camera.java:118-124`, `:130-136`), with the `predict()` they call on `TrackedBall` and `FieldBall` | where a tracked ball will be after a lookahead, extrapolated at constant velocity |
 | `RobotShape.turnRadius()`, `centreFor`, `intakeAt` and `canTurnAt` (`architecture/planner/RobotShape.java:42-56`, `:132-139`) | footprint geometry for the ball planner |
 
 `decode/` (last season's code) also stays while the Cuttle bot is still driven, decided the same day.

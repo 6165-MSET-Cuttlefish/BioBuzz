@@ -23,7 +23,6 @@ public final class BallTracker {
         /** Alpha-beta gains, 0-1: how hard each detection corrects the predicted position / velocity. */
         public static double positionSmoothing = 0.6;
         public static double velocitySmoothing = 0.35;
-        public static double movingSpeedIps = 3.0;
         /** Faster measured speeds are treated as a mis-association and ignored. */
         public static double maxPlausibleSpeedIps = 250.0;
         /** Velocity multiplier per missed frame. */

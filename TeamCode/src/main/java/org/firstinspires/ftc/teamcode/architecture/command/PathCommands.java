@@ -71,13 +71,6 @@ public final class PathCommands {
                 .setEnd(stopIfInterrupted(f)));
     }
 
-    /** Holds wherever the robot is when the command starts. */
-    public static CommandBuilder hold(Follower f) {
-        // Not PedroCommands.hold(f): that reads the pose when the command is built, which for a
-        // sequence built in initialize() is the pose at INIT rather than the one reached by then.
-        return onFollower(f, Commands.instant(() -> f.hold(f.pose())));
-    }
-
     public static CommandBuilder hold(Follower f, Pose pose) {
         return onFollower(f, PedroCommands.hold(f, pose));
     }

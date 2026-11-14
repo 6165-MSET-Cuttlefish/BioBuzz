@@ -18,7 +18,6 @@ public final class FieldBallTracker {
     public static class Tuning {
         public static double matchRadiusIn = 8.0;
         public static double forgetAfterSeconds = 10.0;
-        public static double movingSpeedIps = 3.0;
     }
 
     private final List<Known> known = new ArrayList<>();
@@ -54,10 +53,6 @@ public final class FieldBallTracker {
         List<FieldBall> result = new ArrayList<>(known.size());
         for (Known k : known) result.add(k.toFieldBall());
         return result;
-    }
-
-    public void reset() {
-        known.clear();
     }
 
     private List<Pairing> buildPairings(List<FieldBall> fresh) {

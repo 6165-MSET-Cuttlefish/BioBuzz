@@ -18,7 +18,6 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.TrackedBall;
 import org.opencv.core.Point;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -126,37 +125,6 @@ public class Camera extends Module {
 
     public List<FieldBall> getFieldBalls() {
         return fieldBalls;
-    }
-
-    public FieldBall getNearestFieldBall() {
-        RobotStateHistory.Sample robot = robotHistory.newest();
-        if (robot == null) return null;
-        FieldBall nearest = null;
-        double bestDistance = Double.MAX_VALUE;
-        for (FieldBall ball : fieldBalls) {
-            double distance = ball.distanceTo(robot.x, robot.y);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                nearest = ball;
-            }
-        }
-        return nearest;
-    }
-
-    public FieldBall getFastestFieldBall() {
-        FieldBall fastest = null;
-        for (FieldBall ball : fieldBalls) {
-            if (fastest == null || ball.speed() > fastest.speed()) fastest = ball;
-        }
-        return fastest;
-    }
-
-    public List<FieldBall> getMovingFieldBalls() {
-        List<FieldBall> moving = new ArrayList<>(fieldBalls.size());
-        for (FieldBall ball : fieldBalls) {
-            if (ball.isMoving()) moving.add(ball);
-        }
-        return Collections.unmodifiableList(moving);
     }
 
     public Pose getPredictedFieldPosition(FieldBall ball) {

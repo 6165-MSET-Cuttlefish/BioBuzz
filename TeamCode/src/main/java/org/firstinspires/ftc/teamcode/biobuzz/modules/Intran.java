@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.biobuzz.modules;
 
-import android.support.v4.app.INotificationSideChannel;
-
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -11,7 +9,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.State;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedServo;
-import org.firstinspires.ftc.teamcode.decode.modules.Magazine;
 
 public class Intran extends Module {
     private final EnhancedMotor intake;

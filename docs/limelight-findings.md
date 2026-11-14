@@ -86,7 +86,7 @@ jumps to the real date ([`CLAUDE.md`](../CLAUDE.md), Build & deploy). If that ha
   that frame and the 127 after it, about 27 s at the ball pipeline's 4.7 results/s, get a capture time decades in the
   past:
   - `Camera` places balls with the oldest robot pose in its 64-loop history instead of the capture-time pose, so field
-    positions are wrong while the robot moves (`Camera.java:82`; `RobotStateHistory.sampleAt` clamps);
+    positions are wrong while the robot moves (`Camera.java:81`; `RobotStateHistory.sampleAt` clamps);
   - frame age and Camera's `Latency (ms)` line read decades;
   - a ball collection waiting for vision never sees a fresh frame and ends SKIPPED after `visionWaitMs` (1 s by
     default; `BallCollection.java:204-208`).

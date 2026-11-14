@@ -72,7 +72,7 @@ Pedro Pathing 3:
 
 **Ball collection** (`RobotActions.collectBalls`) plans once and drives back to where it planned from. It ends SKIPPED on a Limelight fault before it plans, or on a START before the INIT Limelight sync is done (about 2 s; it waits only `visionWaitMs`).
 
-**Vision** (`biobuzz/modules/vision/`): `Camera`'s field-ball getters keep a ball out of view for `forgetAfterSeconds`, frozen where last seen with `visible()` false: check `visible()` before chasing one.
+**Vision** (`biobuzz/modules/vision/`): `Camera.getFieldBalls()` keeps a ball out of view for `forgetAfterSeconds`, frozen where last seen with `visible()` false: check `visible()` before chasing one.
 
 **Ball detection** (`limelight/`) ships as the generated `LimelightFiles`, so deploySloth carries edits. After a lens recalibration, update `LENS_*` in both the SnapScript and `HomographyCalculationPipeline`.
 
@@ -106,6 +106,7 @@ In INIT the follower and Ivy scheduler run but module writes don't (unless `shou
 - A group holds all its children's requirements for its whole run, and a new command interrupts any colliding one of equal or lower priority: a `StateCommands.set` from `gameLoop()` on any module an auto touches kills the whole auto. Build reactions into the sequence, or give the auto `.setPriority(1)` and the reaction `.setBlockedBehavior(BlockedBehavior.QUEUE)`, which runs it after the auto.
 - `PathCommands.remainingBelow` measures the current leg only, and reads the previous path's distance until the follower has updated on the new one, so with a follow scheduled from `gameLoop()` it can fire at once.
 - Ivy's `Commands.waitMs` runs on the wall clock, which jumps decades the first time a DS or the RC web page connects after boot: use `PathCommands.waitMs`.
+- Ivy's `PedroCommands.hold(f)` holds the pose read when the command is built (the INIT pose in a sequence built in `initialize()`): pass the pose, `PathCommands.hold(f, pose)` (`docs/pedro-findings.md`).
 - Race every auto against `PathCommands.waitMs`: `PathCommands.timeout`, or a hand-built `race` to know whether it fired. Reference autos: `opmodes/test/MockAuto`, and `opmodes/test/auto/CloseFlowerAuto` on real paths.
 
 ## Tuning

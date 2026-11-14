@@ -68,6 +68,11 @@ heading, wait for it as `RouteRun` does: heading within 2° and turn rate under 
 (`architecture/planner/RouteRun.java:28-30`). (Read from source: `core` `Foresight.calculateHold`, `timeoutCondition`,
 `reset`, `Follower.isBusy`, `Follower.hold`.)
 
+**Ivy's `PedroCommands.hold(f)` holds the pose read when the command is built.** It returns `hold(f, f.pose())`, so
+in a sequence built in `initialize()` it holds the INIT pose, not where the robot is when the step runs. Pass the pose
+to hold: `PathCommands.hold(f, pose)`. (Read from source: Ivy `com.pedropathing.ivy:pedro` 1.1.1
+`PedroCommands.java:32-34`, 2026-11-11.)
+
 **A Bezier whose derivative reaches zero can throw mid-drive.** `Curve.tangent(t)` normalises the derivative, and
 `Vector2D.normalized()` throws `IllegalArgumentException("Cannot normalize 0 vector")` below a length of 1e-9.
 `Foresight` and `Follower` call it while following, so the OpMode crashes partway along the path, not when the path

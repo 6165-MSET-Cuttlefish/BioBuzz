@@ -28,8 +28,6 @@ public final class FieldBall {
 
     public double headingDeg() { return Math.toDegrees(Math.atan2(vy, vx)); }
 
-    public boolean isMoving() { return speed() >= FieldBallTracker.Tuning.movingSpeedIps; }
-
     public boolean visible() { return visible; }
 
     /** Constant-velocity extrapolation; balls on carpet decelerate, so keep the horizon short. */
