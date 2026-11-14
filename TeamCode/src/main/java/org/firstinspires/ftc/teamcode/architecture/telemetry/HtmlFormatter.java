@@ -65,4 +65,10 @@ public final class HtmlFormatter {
     public static String htmlColorSize(String hex, int size, String text) {
         return htmlColor(hex, htmlSize(size, text));
     }
+
+    /** The Driver Station's FAULT line: bold and red, the key extra large, the message large. */
+    public static String faultLine(String key, String message) {
+        return htmlBold(htmlColor(COLOR_FAULT,
+                htmlSize(FONT_XLARGE, "FAULT " + htmlEscape(key)) + htmlSize(FONT_LARGE, ": " + htmlEscape(message))));
+    }
 }

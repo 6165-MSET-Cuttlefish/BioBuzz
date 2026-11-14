@@ -21,6 +21,8 @@ import java.util.Map;
 public class AnalogPollBench extends OpMode {
     private static final String HINT = "run it on laser_rangefinder.xml, whose analog0 and analog1 are the two rangefinders";
     private static final long CHUNK_NS = 250_000_000L;
+    // Long chunks: the few ms between loop() calls would delay the step that ends a dwell.
+    private static final long RATE_CHUNK_NS = 1_000_000_000L;
     private static final long PACKET_INTERVAL_NS = 100_000_000L;
     private static final double CPU_MS_PER_LOOP = 2.7;
 
@@ -158,10 +160,15 @@ public class AnalogPollBench extends OpMode {
     private double loopSeconds;
     private long pollNs;
     private Poller poller;
+    private String mode;
+    private String label;
 
     @Override
     public void init() {
-        report = new BenchReport("Analog Poll", "analog_poll");
+        Map<String, Object> params = BenchIO.params();
+        mode = BenchIO.param(params, "mode", "refresh");
+        label = BenchIO.param(params, "label", mode);
+        report = new BenchReport("Analog Poll", mode.equals("refresh") ? "analog_poll" : "analog_poll_" + label);
         nameA = BenchIO.param(report.params, "sensorA", "analog0");
         nameB = BenchIO.param(report.params, "sensorB", "analog1");
         refreshSeconds = BenchIO.param(report.params, "refreshSeconds", 4);
@@ -188,8 +195,21 @@ public class AnalogPollBench extends OpMode {
         info.put("pollMs", pollNs / 1e6);
         info.put("cpuMsPerLoop", CPU_MS_PER_LOOP);
         info.put("devices", BenchIO.deviceNames(hardwareMap));
+        info.put("mode", mode);
+        info.put("label", label);
         report.put("info", info);
 
+        if (mode.equals("steady")) {
+            phases.add(new SteadyPhase());
+            return;
+        }
+        if (mode.equals("rate")) {
+            phases.add(new RatePhase());
+            return;
+        }
+        if (!mode.equals("refresh")) {
+            throw new IllegalArgumentException("bench param mode must be refresh, steady or rate, was " + mode);
+        }
         phases.add(new AdcRefresh(nameA, LynxGetADCCommand.Channel.user(portA)));
         phases.add(new AdcRefresh(nameB, LynxGetADCCommand.Channel.user(portB)));
         phases.add(new AdcRefresh("battery monitor", LynxGetADCCommand.Channel.BATTERY_MONITOR));
@@ -268,6 +288,10 @@ public class AnalogPollBench extends OpMode {
     }
 
     private void buildSummary() {
+        if (!mode.equals("refresh")) {
+            for (Phase p : phases) summary.add(((Lines) p).line());
+            return;
+        }
         summary.add("New value every (p50, p10), % of back-to-back reads new, range:");
         for (Phase p : phases) {
             if (p instanceof AdcRefresh) {
@@ -302,6 +326,213 @@ public class AnalogPollBench extends OpMode {
 
     private int adc(LynxGetADCCommand.Channel channel) throws InterruptedException, LynxNackException {
         return new LynxGetADCCommand(hub, channel, LynxGetADCCommand.Mode.ENGINEERING).sendReceive().getValue();
+    }
+
+    private interface Lines {
+        String line();
+    }
+
+    /** One reading per sample period, about one per ADC refresh. */
+    private static final class Trace {
+        private double[] tMs = new double[1024];
+        private int[] mv = new int[1024];
+        private int count;
+
+        void add(double t, int value) {
+            if (count == mv.length) {
+                tMs = Arrays.copyOf(tMs, count * 2);
+                mv = Arrays.copyOf(mv, count * 2);
+            }
+            tMs[count] = t;
+            mv[count] = value;
+            count++;
+        }
+
+        Map<String, Object> analyze(int lowMv, int stepMv) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("count", count);
+            if (count == 0) return m;
+            int[] sorted = Arrays.copyOf(mv, count);
+            Arrays.sort(sorted);
+            double sum = 0;
+            for (int i = 0; i < count; i++) sum += mv[i];
+            double mean = sum / count;
+            double squares = 0;
+            int below = 0;
+            int steps = 0;
+            int largestStep = 0;
+            for (int i = 0; i < count; i++) {
+                squares += (mv[i] - mean) * (mv[i] - mean);
+                if (mv[i] < lowMv) below++;
+                if (i > 0) {
+                    int step = Math.abs(mv[i] - mv[i - 1]);
+                    largestStep = Math.max(largestStep, step);
+                    if (step > stepMv) steps++;
+                }
+            }
+            m.put("meanMv", mean);
+            m.put("sdMv", Math.sqrt(squares / count));
+            m.put("p1Mv", pick(sorted, 1));
+            m.put("p99Mv", pick(sorted, 99));
+            m.put("minMv", sorted[0]);
+            m.put("maxMv", sorted[count - 1]);
+            m.put("belowLowMv", below);
+            m.put("stepsOverStepMv", steps);
+            m.put("largestStepMv", largestStep);
+            m.put("tMs", Arrays.copyOf(tMs, count));
+            m.put("mv", Arrays.copyOf(mv, count));
+            return m;
+        }
+
+        private static int pick(int[] sorted, double p) {
+            int index = (int) Math.ceil(p / 100.0 * sorted.length) - 1;
+            return sorted[Math.max(0, Math.min(sorted.length - 1, index))];
+        }
+    }
+
+    /** Both channels from one bulk read every sampleMs: the rangefinders' spread on a still target, or while a cable is flexed. */
+    private final class SteadyPhase extends Phase implements Lines {
+        final double seconds = BenchIO.param(report.params, "seconds", 60);
+        final long sampleNs = (long) (BenchIO.param(report.params, "sampleMs", 10) * 1e6);
+        final int lowMv = (int) BenchIO.param(report.params, "lowMv", 50);
+        final int stepMv = (int) BenchIO.param(report.params, "stepMv", 200);
+        final Trace a = new Trace();
+        final Trace b = new Trace();
+        final Samples readMs = new Samples();
+        long startNs;
+        long nextNs;
+        Map<String, Object> resultA;
+        Map<String, Object> resultB;
+
+        SteadyPhase() {
+            super("steady " + label);
+        }
+
+        @Override
+        boolean step() throws InterruptedException, LynxNackException {
+            long chunkStart = System.nanoTime();
+            if (startNs == 0) {
+                startNs = chunkStart;
+                nextNs = chunkStart;
+            }
+            while (System.nanoTime() - chunkStart < CHUNK_NS) {
+                long wait = nextNs - System.nanoTime();
+                if (wait > 0) Thread.sleep(wait / 1_000_000, (int) (wait % 1_000_000));
+                nextNs += sampleNs;
+                long t0 = System.nanoTime();
+                LynxGetBulkInputDataResponse r = new LynxGetBulkInputDataCommand(hub).sendReceive();
+                long t1 = System.nanoTime();
+                readMs.addNanos(t1 - t0);
+                double t = ((t0 + t1) / 2 - startNs) / 1e6;
+                a.add(t, r.getAnalogInput(portA));
+                b.add(t, r.getAnalogInput(portB));
+                if (nextNs < t1) nextNs = t1;
+            }
+            loops++;
+            double elapsed = (System.nanoTime() - startNs) / 1e9;
+            report.status("%s %.0f/%.0fs", label, elapsed, seconds);
+            return elapsed >= seconds;
+        }
+
+        @Override
+        void end() {
+            resultA = a.analyze(lowMv, stepMv);
+            resultB = b.analyze(lowMv, stepMv);
+            result.put("what", "LynxGetBulkInputDataCommand every " + sampleNs / 1_000_000 + " ms, both rangefinder "
+                    + "ports from each; steps are between consecutive samples");
+            result.put("seconds", seconds);
+            result.put("sampleMs", sampleNs / 1e6);
+            result.put("lowMv", lowMv);
+            result.put("stepMv", stepMv);
+            result.put("readMs", readMs.summary());
+            result.put(nameA, resultA);
+            result.put(nameB, resultB);
+        }
+
+        @Override
+        public String line() {
+            return String.format(Locale.US, "%s: %s %s, %s %s", label, nameA, spread(resultA), nameB, spread(resultB));
+        }
+
+        private String spread(Map<String, Object> m) {
+            if (m == null || !m.containsKey("p1Mv")) return "no samples";
+            return String.format(Locale.US, "p1-p99 %d-%d mV, %d under %d mV, %d steps over %d mV", (int) m.get("p1Mv"),
+                    (int) m.get("p99Mv"), (int) m.get("belowLowMv"), lowMv, (int) m.get("stepsOverStepMv"), stepMv);
+        }
+    }
+
+    /** Back-to-back GetADC on one rangefinder while a target swings through its beam; keeps each change of reading. */
+    private final class RatePhase extends Phase implements Lines {
+        final double seconds = BenchIO.param(report.params, "seconds", 30);
+        final double thresholdMv = BenchIO.param(report.params, "thresholdMv", 0);
+        final double expectedMs = BenchIO.param(report.params, "expectedMs", 10);
+        final double maxGapMs = BenchIO.param(report.params, "maxGapMs", 60);
+        final String channel = BenchIO.param(report.params, "channel", nameA);
+        final int port;
+        final Samples readMs = new Samples();
+        double[] tMs = new double[1024];
+        int[] mv = new int[1024];
+        int count;
+        long reads;
+        long startNs;
+        DwellStats stats;
+
+        RatePhase() {
+            super("rate " + label);
+            if (!(thresholdMv > 0)) throw new IllegalArgumentException("bench param thresholdMv must be above 0, was " + thresholdMv);
+            if (channel.equals(nameA)) port = portA;
+            else if (channel.equals(nameB)) port = portB;
+            else throw new IllegalArgumentException("bench param channel must be " + nameA + " or " + nameB + ", was " + channel);
+        }
+
+        @Override
+        boolean step() throws InterruptedException, LynxNackException {
+            long chunkStart = System.nanoTime();
+            if (startNs == 0) startNs = chunkStart;
+            LynxGetADCCommand.Channel adcChannel = LynxGetADCCommand.Channel.user(port);
+            while (System.nanoTime() - chunkStart < RATE_CHUNK_NS) {
+                long t0 = System.nanoTime();
+                int value = adc(adcChannel);
+                long t1 = System.nanoTime();
+                readMs.addNanos(t1 - t0);
+                reads++;
+                if (count > 0 && mv[count - 1] == value) continue;
+                if (count == mv.length) {
+                    tMs = Arrays.copyOf(tMs, count * 2);
+                    mv = Arrays.copyOf(mv, count * 2);
+                }
+                tMs[count] = ((t0 + t1) / 2 - startNs) / 1e6;
+                mv[count] = value;
+                count++;
+            }
+            loops++;
+            double elapsed = (System.nanoTime() - startNs) / 1e9;
+            report.status("%s %.0f/%.0fs", label, elapsed, seconds);
+            return elapsed >= seconds;
+        }
+
+        @Override
+        void end() {
+            stats = DwellStats.of(tMs, mv, count, thresholdMv, expectedMs, maxGapMs);
+            result.put("what", "LynxGetADCCommand on " + channel + " back to back; a level step is a reading more than "
+                    + "thresholdMv from the current level, a dwell the time between two steps under maxGapMs apart");
+            result.put("channel", channel);
+            result.put("seconds", seconds);
+            result.put("thresholdMv", thresholdMv);
+            result.put("expectedMs", expectedMs);
+            result.put("maxGapMs", maxGapMs);
+            result.put("reads", reads);
+            result.put("readMs", readMs.summary());
+            result.putAll(stats.toMap());
+            result.put("changeTMs", Arrays.copyOf(tMs, count));
+            result.put("changeMv", Arrays.copyOf(mv, count));
+        }
+
+        @Override
+        public String line() {
+            return String.format(Locale.US, "%s on %s: %d level steps, %.0f%% fast, dwell p50 %.1f ms", label, channel,
+                    stats.timedSteps, 100 * stats.fastFraction(), stats.dwellPercentile(50));
+        }
     }
 
     private abstract class RefreshPhase extends Phase {

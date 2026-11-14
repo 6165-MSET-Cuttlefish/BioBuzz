@@ -494,6 +494,11 @@ fetched 2026-11-10:
 
 ## Still unknown
 
+- **What a flat camera-hub power bank does on a hub:** whether BioBuzz Tele stops in INIT with the bank out, whether
+  `WebcamSession.update()` throws when the bank fails mid-run, how soon the Limelight fault comes, and whether either
+  camera comes back without a re-INIT; [What fails](#what-fails-and-how-this-wiring-behaves) has it from source only.
+  Test: Bench: Camera Power Loss, `python3 scripts/bench/run_bench.py --camera-power --interactive --s3-ports`
+  ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-camera-power-loss)).
 - **The highest count rate hub encoder ports keep up with**, hardware-counted or software-counted. No REV or FIRST
   figure exists. The two encoder tests above settle it for our speeds.
 - **The cost of a write on an RS485 Expansion Hub.** Every 2.5 ms here is the Control Hub cost plus the hop measured

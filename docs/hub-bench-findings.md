@@ -329,6 +329,12 @@ Not run on either date (they need `--interactive`):
 
 ## Still unknown
 
+- **Each rangefinder's own analog update rate at its 10 ms budget, and whether analog0's 4-2926 mV swing of 2026-10-17
+  was the sensor or its cable:** Bench: Analog Poll's still targets can't show the first (hub ADC noise changes the
+  reading at every refresh), and nothing has re-run the second. Test: Bench: Rangefinders, `python3
+  scripts/bench/run_bench.py --rangefinders --interactive --ports-empty`: a fast target's level steps with a 20 ms
+  control on sensor A, and the still, flex and swap phases
+  ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-rangefinders)).
 - **Whether `adb shell getprop ro.serialno` names a Control Hub:** `scripts/bench/session.py` tells the hub from
   another by it, and over Wi-Fi refuses to start where it reads empty. The SDK reads the same property when
   `Build.getSerial()` gives nothing (`Device.getSerialNumber`), and a Control Hub names its Wi-Fi from that serial

@@ -185,7 +185,12 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 | `--photon-i2c` | the Photon block also reads the Pinpoint and the OctoQuad over I2C on both hubs (about 2 min more); a wiring's verdict can only say SAFE with it |
 | `--turret-zero` | only Bench: Turret Zero (below), prompted, with or without `--all`; a run without bench flags, or with `--all` alone, leaves it out |
 | `--config-check` | only Bench: Config Check (below); needs `--s3-ports` and a terminal; a run without bench flags, or with `--all` alone, leaves it out |
-| `--s3-ports` | you type `empty` at the start, saying nothing is plugged into either hub's motor ports 0-3 or servo ports 0-5; a bench that drives them (Bench: Config Check) runs only with it; it also stands for `--ports-empty`; needs a terminal |
+| `--limelight-reload` | only Bench: Limelight Reload (below): about 20 minutes and about 15 Gradle runs, with the Limelight 3A plugged in; a run without bench flags, or with `--all` alone, leaves it out |
+| `--s3-ports` | you type `empty` at the start, saying nothing is plugged into either hub's motor ports 0-3 or servo ports 0-5; a bench that drives them (Bench: Config Check, Bench: Camera Power Loss) runs only with it; it also stands for `--ports-empty`; needs a terminal |
+| `--fault-render` | only Bench: Fault Render (below): you read the Driver Station and answer y or n; needs `--interactive` and a Driver Hub paired with the Control Hub; a run without bench flags, or with `--all` alone, leaves it out |
+| `--fault-render-ds-serial SERIAL` | with `--fault-render`: the Driver Hub's adb serial, its USB cable on this Mac, for a screenshot of it at each question (`raw/ds_*.png`) |
+| `--camera-power` | only Bench: Camera Power Loss (below): you pull and replug the camera hub's power bank; needs `--interactive`, `--s3-ports` and a terminal; a run without bench flags, or with `--all` alone, leaves it out |
+| `--rangefinders` | only Bench: Rangefinders (below): you swing a target, move sensor A to I2C and back, flex and swap the rangefinders' cables; needs `--interactive` and a terminal; a run without bench flags, or with `--all` alone, leaves it out |
 | `--turret-zero-v2` | Bench: Turret Zero with its V2 phase, for when a REV-11-3174 is on hand (implies `--turret-zero`) |
 | `--pinpoint-soak [SECONDS]` | Bench: Pinpoint's soak and recalibration run ([below](#bench-pinpoint-soak)): SECONDS untouched, 3600 by default, 300 with `--quick`, at least 150 (implies `--pinpoint`); a run without bench flags leaves it out |
 | `--octoquad-chain` | Bench: OctoQuad's chain ([below](#bench-octoquad-chain)), prompted, with the pods on OctoQuad channels 0 and 1; needs `--interactive` (implies `--octoquad`) |
@@ -697,6 +702,214 @@ unexercised on hardware and the rejected-settings question stays partly answered
 Only a hub shows: the OV9782's real ranges, whether it refuses any value in them, how long a refused write blocks and
 the text Camera Tune shows. Offline: `python3 -I scripts/bench/offline/benches/webcam.py`.
 
+## Bench: Limelight Reload
+
+Whether `LimelightSync` keeps one POST sender across a real deploySloth, and whether a STOP in the middle of the INIT
+sync leaves a worker behind. Bench: Limelight Hung fakes the reload by reflection; this one runs
+`./gradlew :TeamCode:deploySloth` between INITs. Its OpMode, Bench: Limelight Reload, runs the real
+`LimelightBallSource` in INIT and is never STARTed: the runner STOPs it. It drives no motor or servo.
+
+**Plug in:** the Control Hub on 12 V and the Limelight 3A on a Control Hub USB port, booted. This Mac's `./gradlew`
+must work (add `--gradle-offline` with no internet). Do a full install of this build first.
+
+**Command:** `python3 scripts/bench/run_bench.py --limelight-reload` (with `--ports-empty` when a config on the hub
+names a device on motor ports 0-3 or servo ports 0-1, as for any run). About 20 minutes and about 15 Gradle runs.
+Nothing to do at the hub.
+
+What it does, in order:
+
+1. **Reload**, nine times (0.3, 0.8 and 1.4 s, three rounds): INIT, STOP that far into the sync, list the app's
+   threads over adb 3 s later, deploySloth, wait for `Processed Sloth Load` in logcat, then INIT the reloaded code and
+   hold it until 5 s after its sync ends.
+2. **STOP mid-sync**: STOP 0.3, 0.8 and 1.3 s into the sync and INIT again at once. Then once more with a deploySloth
+   sent while the first run waits in INIT, STOP 0.8 s into the sync, wait for the load, INIT. The Limelight's
+   `/status` is read through the hub's port 5807 about 2 s after each STOP and after the next sync.
+3. **SnapScript stamp**: INIT and read `llpython[0]`. deploySloth a build made with
+   `-Pbench.scriptSalt=limelight-reload-<results folder>`, which `TeamCode/build.gradle` mixes into the stamp, INIT and
+   read it. deploySloth without the salt, INIT and read it again.
+4. **Contention**, on `bench_llfault`, its `limelight` pointed at a fake Limelight on 127.0.0.1:15807 that answers
+   GETs and holds every POST. The fake is kept in `OpMode.blackboard`, so the reloaded code finds it. After
+   `assembleSloth`, twice: INIT until a POST has hung 0.3 s, then STOP, deploySloth, wait for the load and INIT
+   (`after_stop`); or deploySloth while still in INIT, then STOP, wait and INIT (`staged`). The second INIT makes the
+   fake answer; the old POST stays held until the SDK's 15 s POST timeout.
+
+Every run records, every 100 ms, its `LimelightSync` threads (and whether each is inside a POST or waiting for the
+sender), the blackboard semaphore's free permits and the fake's open POSTs. A stopped run leaves a thread that lists,
+1 s and 3 s after STOP, which of its `LimelightSync` threads are still alive.
+
+| judged | FAIL when |
+|---|---|
+| each first INIT was STOPped during its sync (reload, STOP mid-sync) | the STOP came before the sync started or after it ended |
+| each second INIT ran the reloaded code (reload, STOP mid-sync with deploySloth) | no `Processed Sloth Load` within 30 s, or the second run had the first one's class loader |
+| every reloaded sync succeeded | a sync problem, or no live frame within 5 s of INIT |
+| the app never restarted | the pid changed during a trial |
+| no `LimelightSync` thread 5 s after a reloaded sync ended | one in the app, or in adb's thread list |
+| the INIT loop never stalled | a loop of 50 ms or more during a reloaded INIT |
+| STOP mid-sync: the next sync | it failed, finished over 5 s after INIT, or its first frame was off pipeline 4 or the build's stamp |
+| STOP mid-sync: no pipeline switch after the next sync | the results left pipeline 4, the source reported `on pipeline N, want 4`, or `/status` read another pipeline |
+| STOP mid-sync: no thread from the stopped run 3 s after STOP | one still alive and not inside a POST |
+| the salted deploySloth reached the Limelight | its stamp afterwards isn't the salted build's `LimelightFiles` stamp, or didn't change |
+| the unsalted deploySloth put it back | the stamp afterwards isn't the build's own |
+| contention: one sender at the fake | a POST arrived more than 100 ms before an earlier one ended, or nothing was held, reloaded or sent |
+| contention: the semaphore was exercised | in neither trial was the reloaded worker seen waiting for the sender, its permit taken, its sync started: `semaphore not exercised`, a FAIL |
+
+It leaves the hub on a hot-loaded jar of this checkout, as `--sloth` does. Ctrl-C between the salted and the unsalted
+deploySloth leaves the salted jar, which still works (each sync uploads its own stamp) until the next deploySloth or
+full install.
+
+Only a hub shows: how long deploySloth and its load take here, so whether either contention order lands inside the
+15 s POST timeout; whether a deploySloth sent during INIT waits for the STOP, as it does under a running OpMode; real
+sync times; and whether adb lists the worker as `LimelightSync`. Nothing logs a Limelight POST, so a POST after STOP
+shows only as a thread inside `Limelight3A.sendPostRequest`. Offline:
+`python3 -I scripts/bench/offline/benches/limelight_reload.py` (`--gradle` also runs the salt through Gradle); the
+fake across two class loaders: `ReloadFakeTest` in `./gradlew :TeamCode:testDebugUnitTest`.
+
+## Bench: Fault Render
+
+Whether a fault shows on the Driver Station as it does on the dashboard: first, red and larger than the rest, and
+readable with a long message. At an event the Driver Station may be the only screen. Nothing measures this but a person
+looking at the Driver Station, so you answer y or n eight times.
+
+**Plug in:** the Control Hub on 12 V and a Driver Hub paired with it, showing its telemetry. For screenshots, plug the
+Driver Hub's USB cable into this Mac too and pass its adb serial with `--fault-render-ds-serial`. **Nothing on Control
+Hub motor ports 0-3**: Bench: Limelight Fault creeps them at 0.2.
+
+**Command:** `python3 scripts/bench/run_bench.py --fault-render --interactive --ports-empty`, from a terminal, about 8
+minutes. Each question waits until you type y or n and press Enter; anything else is asked again, and a closed terminal
+stops the bench without taking an answer. You can type a photo's file path after the y or n: the runner copies it into
+`raw/`.
+
+What it does, in order:
+
+1. Bench: Limelight Fault in absent mode on `bench_llfault` (a `limelight` that doesn't answer). 5 s after START it
+   asks whether `FAULT Limelight` is the first line on the Driver Station, in red. With a Driver Hub on adb it saves
+   `raw/ds_fault.png`.
+2. Bench: Fault Render on `bench_main`: an EnhancedOpMode with one stub module, `RenderStub`. The runner moves it
+   through five phases by saving its `cue` through the dashboard, then reads the config back. Each phase runs 15 s
+   before its question:
+
+   | phase | what the OpMode does | the question | expected |
+   |---|---|---|---|
+   | short | raises `FAULT Bench: a short test message` | first line, red and larger? (then: a MODULES header with `RenderStub: READY` under it?) | y (y) |
+   | long | the same fault with a 150-character message ending `END` | readable down to END? | y |
+   | two | two faults, `Bench` then `Second`, and ten rows `Line 1` to `Line 10` | both faults first, red, above the rows? | y |
+   | slow | `dsTransmissionIntervalMs` 1000, the message counting seconds | still first and red? | y |
+   | off | `dsTelemetry` off, a new fault `Hidden` | is `FAULT Hidden` anywhere on it? | n |
+
+3. Bench: Fault Render again, INIT only: after its first Driver Station frame it switches Driver Station telemetry off,
+   so that frame stays up. It asks whether the frame shows colours and bold text, not raw tags like `<font>`.
+
+Every check is one answer against what is expected, plus a setup check that Bench: Fault Render reached all five
+phases. Bench: Fault Render puts both toggles back at STOP, crash or not. `summary.md` has, per question, the answer,
+the Driver Station frames opened per second in that phase and the length of the fault lines' HTML (from
+`HtmlFormatter.faultLine`, which `DualTelemetry.addFault` sends).
+
+Only a hub and a person show: everything this bench judges. Offline (`python3 -I
+scripts/bench/offline/benches/fault_render.py`) checks the order of the questions, the cue, the screenshots, a crash
+mid-phase, a closed terminal and Ctrl-C at a question; JUnit checks the fault line's markup.
+
+## Bench: Camera Power Loss
+
+What a flat power bank on the powered USB hub that carries the webcam and the Limelight does, before INIT and
+mid-run. [`docs/wiring-findings.md`](../../docs/wiring-findings.md) says from source that every OpMode that builds
+`BioBuzzRobot` then stops in INIT; this bench checks that on a hub, against a control INIT with the bank in.
+`BioBuzzRobot` looks up drive motors on the Expansion Hub, so the Expansion Hub has to be there.
+
+**Plug in:** the Control Hub on 12 V; an Expansion Hub on RS485 at address 2, powered from the Control Hub's second
+XT30 port; the webcam and the Limelight 3A on the powered USB hub, its power bank plugged in, on the Control Hub's USB
+3.0 port. **Nothing on either hub's motor ports 0-3 or servo ports 0-5**: BioBuzz Tele may write its motors during
+INIT.
+
+**Command:** `python3 scripts/bench/run_bench.py --camera-power --interactive --s3-ports`, from a terminal, about 10
+minutes. At the start you type `empty` for the ports. Then each prompt asks you to unplug or plug back the power bank's
+cable, and waits for Enter; a closed terminal stops the bench.
+
+What it does, in order:
+
+1. Writes `bench_biobuzz_cam`: `res/xml/biobuzz.xml` as it is in this checkout, with its `aprilTagDetector` webcam set
+   to the attached webcam's serial and its `limelight` to the Limelight the probe found (each added if missing).
+2. The control: INITs BioBuzz Tele on it with the bank in, holds INIT 6 s and STOPs it. It never STARTs it.
+3. Only if the control held INIT: asks you to unplug the bank, runs Bench: Probe (which cameras still answer), INITs
+   BioBuzz Tele again the same way and records how INIT ended: the error, the first team-code frame of the stack in
+   logcat and the first constructor in it. Then asks you to plug the bank back in.
+4. Runs Bench: Probe every 10 s until the webcam and the Limelight are both back, for up to 180 s; if they aren't, the
+   bench stops there.
+5. On `bench_main`, STARTs Bench: Full Load Soak in mode `powerloss`: `CellTipCamera` on the webcam and `Camera` on
+   the Limelight, as in a match. Once its frames are healthy it waits 20 s, asks you to pull the bank, then after 10 s
+   to plug it back, and watches 60 s more without a re-INIT.
+
+| judged | FAIL when |
+|---|---|
+| control (setup) | BioBuzz Tele didn't hold INIT with the bank in, so step 3 doesn't run |
+| INIT with the bank out | step 3 didn't run, the probe still found a camera, or INIT held as it did in the control |
+| the Limelight fault, mid-run | not raised within 1 s of the Limelight's last good poll before it |
+| no crash, mid-run | the OpMode crashed after the pull (in a match that stops the robot) |
+
+Recorded: per INIT its outcome, error, first team-code frame and constructor; with the bank out, what the probe found;
+mid-run, the Limelight fault's time from the last good poll and from your Enter, the webcam's last frame against that
+poll, the cell tip verdict and its staleness at the fault, the loop period's p95 before and after the pull (and every
+10 s), and whether each camera came back without a re-INIT. Until `biobuzz.xml` is rewritten to the map, expect the
+control to stop at a device it doesn't name: that FAILs setup and skips step 3, and the mid-run part runs anyway.
+
+Only a hub shows: everything this bench judges and records. Offline: `python3 -I
+scripts/bench/offline/benches/camera_power.py` (the prompts in order, the control first, the probes, a failing control,
+a crash at the pull, cameras that don't come back, Ctrl-C at a prompt); JUnit checks `SoakWindows`.
+
+## Bench: Rangefinders
+
+The two Brushland laser rangefinders on their analog ports: how much they wobble on a still card, how often their
+analog output steps for a moving target (each sensor should step at every 10 ms measurement), and, if one swings, whether
+the sensor, its cable or the hub port does it. The hub's ADC refreshes every 10 ms whatever the sensor does, so a still
+target can't show the sensor's own rate: a fast target can, with a 20 ms control on sensor A to prove the bench tells
+10 ms from 20 ms.
+
+**Plug in:** the Control Hub on 12 V; rangefinder A on Control Hub analog port 1 and B on analog port 3
+(`laser_rangefinder.xml`'s ports), both aimed at a matte card about 150 mm away; the Prism in Control Hub I2C port 3
+(the bench has you unplug it for the control). Have a fast target ready: a card on a swinging arm passing through 50-300
+mm, or a slotted disc spun by hand. Nothing on any motor or servo port: the bench drives none.
+
+**Command:** `python3 scripts/bench/run_bench.py --rangefinders --interactive --ports-empty`, from a terminal, about 25
+minutes. Every step waits for Enter. A timed step (a swing or a flex) starts when the runner prints `GO`; a closed
+terminal stops the bench.
+
+What it does, in order, on `bench_rangefinders` (`laser_rangefinder.xml`'s two analog inputs, no motor) unless said:
+
+1. **Still**, 60 s: Bench: Analog Poll in mode `steady` reads both ports in one bulk read every 10 ms. A port that
+   reads under 50 mV the whole time stops the bench: the sensor isn't plugged in.
+2. **Rate at the stored budget**: the runner prints how fast the target has to move (each 10 ms update has to move the
+   reading over 3x the still SD). You swing it through A's beam 20 times in 30 s, then through B's, while Bench: Analog
+   Poll in mode `rate` reads that port with back-to-back GetADC commands. `DwellStats` finds the level steps: a reading
+   more than 3x the still SD from the mean of the current level. A dwell is the time between two steps of one pass.
+3. **Control on A** (you unplug the Prism and move A to Control Hub I2C port 3, on `bench_rf_i2c`): Bench: Rangefinder
+   Read reads A's settings and never writes. It keeps reading while you plug A in, so A sees I2C traffic in its first
+   second and leaves analog mode. They go to `raw/rangefinder_asfound.json`. The runner saves Configure Laser
+   Rangefinder's settings through the dashboard (they go back to a 20 ms budget at every app restart), reads them back,
+   and only then STARTs it to write a 20 ms budget. You move A back to analog port 1 and step 2 runs again on A. Then
+   A goes back on I2C, its as-found settings are written the same way, and Bench: Rangefinder Read reads them back. If
+   anything fails after the 20 ms write, the bench writes the as-found settings back before it stops; only Ctrl-C
+   skips that, and then the log says how to do it by hand.
+4. **Flex**: 20 s each, A's cable end to end, then B's, both ports read as in step 1.
+5. **Swaps**, each 30 s still then 20 s of flexing both cables: the sensors exchanged at the sensor end (A on cable B),
+   then each back on its own cable and the cables exchanged at the hub (cable A in port 3). Then everything back.
+
+| judged | FAIL when |
+|---|---|
+| still, A and B (step 1) | p99-p1 is 50 mV or more, or any reading is under 50 mV |
+| rate, A and B (step 2) | dwell p50 outside 9-12 ms; or not enough motion: under 200 timed steps, or under 80% of them fast enough (no verdict) |
+| control (setup, step 3) | dwell p50 outside 18-22 ms at 20 ms, not enough motion, or not run: then the 10 ms results mean nothing |
+| A's read-back (step 3) | A doesn't read back the settings in `raw/rangefinder_asfound.json` |
+| swaps (steps 1, 4, 5) | no sensor, cable or port is in every channel that read under 50 mV or stepped over 200 mV and in none that didn't; with no such reading anywhere it says "swing not reproduced", which is not a PASS |
+
+`summary.md` has a row per arrangement, phase and port (mean, SD, p1-p99, min-max, readings under 50 mV, steps over
+200 mV), a row per rate run (level steps, the share fast enough, dwell p10/p50/p90, steps per second), A's settings as
+found, as written and as read back, and what the swaps found. If the bench stops part way, the log lists what to put
+back by hand.
+
+Only a hub and a person show: every number this bench judges. Offline: `python3 -I
+scripts/bench/offline/benches/rangefinders.py` (the prompts in order, the statics saved before each START, A back at its
+as-found settings even when the control's timing run crashes, a sensor that never answers on I2C, a dead sensor, a slow
+swing, a bad cable named, Ctrl-C); JUnit checks `DwellStats` on 10 and 20 ms staircases and a slow sweep.
+
 ## Bench: Turret Zero
 
 Settles whether the nectar turret's Through Bore can be zeroed once at INIT from its absolute output on OctoQuad
@@ -831,15 +1044,20 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; SET (3 runs), WRITE and DELETE from idle each restart the robot in the same process: no SDK `deadline expired ... EventLoop`, no Control Hub `Relaunching the RC`; thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT and ART's dump of the frozen pid (runs last) |
 | Bench: Sloth Probe | Gradle | INIT racing deploySloth, the OpMode list during a load, the load signal, the jar surviving an app restart |
 | Bench: Config Check (`--config-check --s3-ports`) | an Expansion Hub on RS485 at address 2; both hubs' motor ports 0-3 and servo ports 0-5 empty | see Bench: Config Check above |
+| Bench: Limelight Reload (`--limelight-reload`) | the Limelight 3A; Gradle | see Bench: Limelight Reload above |
+| Bench: Limelight Fault, Bench: Fault Render (`--fault-render --interactive`) | a Driver Hub paired with the Control Hub; Control Hub motor ports 0-3 empty | see Bench: Fault Render above |
+| BioBuzz Tele, Bench: Probe, Bench: Full Load Soak (`--camera-power --interactive --s3-ports`) | the webcam and the Limelight on a powered USB hub; an Expansion Hub on RS485 at address 2; both hubs' motor ports 0-3 and servo ports 0-5 empty | see Bench: Camera Power Loss above |
+| Bench: Analog Poll (modes `steady` and `rate`), Bench: Rangefinder Read, Configure Laser Rangefinder (`--rangefinders --interactive`) | both rangefinders on Control Hub analog ports 1 and 3, a fast target, the Prism to unplug | see Bench: Rangefinders above |
 | Bench: Turret Zero (`--turret-zero`) | an OctoQuad and a Through Bore on a split cable | see Bench: Turret Zero above |
 | Bench: Dashboard Off (`--dashboard-off` only) | `run-as` | see [Dashboard Off](#dashboard-off) |
 
 The OpModes also run from the dashboard, but they expect the runner's configs and write results only to the hub.
 
-**Bench: Analog Poll** is run by hand only: `laser_rangefinder.xml` active, both rangefinders plugged in (it commands no
-motor). About 80 s after START the DS and dashboard show its summary; the rest is in `analog_poll.json` in the hub's
-bench folder. It measures how often each analog value refreshes and what a poller thread (`pollMs` in that folder's
-`params.json`, default 10) costs a stand-in robot loop.
+**Bench: Analog Poll** in its default mode (`refresh`) is run by hand only: `laser_rangefinder.xml` active, both
+rangefinders plugged in (it commands no motor). About 80 s after START the DS and dashboard show its summary; the rest
+is in `analog_poll.json` in the hub's bench folder. It measures how often each analog value refreshes and what a poller
+thread (`pollMs` in that folder's `params.json`, default 10) costs a stand-in robot loop. Its `steady` and `rate`
+modes are Bench: Rangefinders' (above).
 
 ## Offline checks
 

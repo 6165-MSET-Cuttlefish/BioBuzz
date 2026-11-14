@@ -156,11 +156,7 @@ public class DualTelemetry implements Telemetry {
 
     /** Driver Station: one big red line. Dashboard: plain keyed row {@code FAULT <key>}. */
     public void addFault(String key, String message) {
-        if (isDSFrame()) {
-            dsTelemetry.addLine(htmlBold(htmlColor(COLOR_FAULT,
-                    htmlSize(FONT_XLARGE, "FAULT " + htmlEscape(key))
-                            + htmlSize(FONT_LARGE, ": " + htmlEscape(message)))));
-        }
+        if (isDSFrame()) dsTelemetry.addLine(faultLine(key, message));
         emit("FAULT " + key, message, false, true);
     }
 

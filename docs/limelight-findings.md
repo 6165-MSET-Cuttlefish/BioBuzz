@@ -177,6 +177,11 @@ print("axis yaw from the board's x, deg (+ left):", np.degrees(np.arctan2(axis[1
   `Fault`) showing `Limelight: no data for` then `Limelight cleared` confirms the first effect; Camera's
   `Latency (ms)` reading decades on the DS for about 27 s confirms the second, which needs the jump inside a window of
   about 10 ms, so repeat the test.
+- **Whether one sender holds across a real deploySloth.** Bench: Limelight Hung's `reinit_fresh` starts a second
+  worker by reflection, against a fake, not from a reloaded class. Never measured with a real Limelight either: a STOP
+  in the middle of the INIT sync, and a SnapScript edit reaching the Limelight through deploySloth alone. Test:
+  `python3 scripts/bench/run_bench.py --limelight-reload` (Bench: Limelight Reload,
+  [`scripts/bench/README.md`](../scripts/bench/README.md#bench-limelight-reload)).
 - **Whether the decomposed height and pitch are real.** Tape-measure the Limelight's lens height (should be about
   15.5 in) and tilt (about 15.9° down) on the Betta bot.
 - **The websocket commands, port 5805 and the bundle endpoint on other Limelight OS versions.** The unit's OS version on

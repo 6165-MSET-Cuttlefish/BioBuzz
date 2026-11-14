@@ -5736,6 +5736,7 @@ class Runner:
         self.thread_listings = []
         self.dashboard_left_off = None
         self.typed_statements = set()
+        self.module_configs = []
 
     def log(self, text):
         line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}"
@@ -6052,7 +6053,7 @@ class Runner:
         """Deletes the bench_* files with adb rather than DELETE_HARDWARE_CONFIG, which restarts the robot each time
         and activates "no config" if the one it deletes is active."""
         active = self.active_config()
-        doomed = [n for n in BENCH_CONFIGS if n in self.adb.config_names() and n != keep]
+        doomed = [n for n in self.configs_to_delete() if n in self.adb.config_names() and n != keep]
         if active in doomed:
             raise BenchError(f"{active} is still the active hardware config, so the bench configs weren't deleted")
         for name in doomed:
@@ -10519,16 +10520,16 @@ class Runner:
     def gradle_command(self, *tasks):
         return [str(REPO_ROOT / "gradlew"), *tasks, "--console=plain"] + (["--offline"] if self.args.gradle_offline else [])
 
-    def _deploy_sloth(self, run_id, on_pushed, timeout_s=None):
-        """Runs deploySloth, calling on_pushed the moment it prints that the jar is on the hub. deploySloth then
-        waits for the hub's lock file with no timeout of its own, so it is killed after timeout_s
-        (SLOTH_DEPLOY_TIMEOUT_S by default)."""
+    def _deploy_sloth(self, run_id, on_pushed, timeout_s=None, gradle_args=()):
+        """Runs deploySloth (with gradle_args, such as a -P property), calling on_pushed the moment it prints that the
+        jar is on the hub. deploySloth then waits for the hub's lock file with no timeout of its own, so it is killed
+        after timeout_s (SLOTH_DEPLOY_TIMEOUT_S by default)."""
         self.adb.mark(f"{SLOTH_DEPLOY_MARK} {run_id}")
         if self.link.usb:
             # The Load plugin's adb connect 192.168.43.1 runs only when `adb devices` lists nothing (AutoConnect.MAINTAIN).
             self.adb.ensure_connected()
         t0 = time.monotonic()
-        proc = subprocess.Popen(self.gradle_command(":TeamCode:deploySloth"), cwd=REPO_ROOT,
+        proc = subprocess.Popen(self.gradle_command(":TeamCode:deploySloth", *gradle_args), cwd=REPO_ROOT,
                                 env=dict(os.environ, ANDROID_SERIAL=self.adb.serial),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         lines = []
@@ -10744,7 +10745,7 @@ class Runner:
                 break
             time.sleep(2)
         if not self.args.keep_configs:
-            for n in BENCH_CONFIGS:
+            for n in self.configs_to_delete():
                 if n != target and n in self.adb.config_names():
                     self.adb.remove_config(n)
         self.log(f"hardware config {self.adb.active_config()} is active (restored over adb alone)")
@@ -11039,6 +11040,7 @@ class Runner:
             raise BenchError(f"{bench.title} runs only once {bench.statement}'s statement has been typed")
         if bench.drives:
             self.log(f"{bench.title} commands {bench.powers}")
+        self.module_configs += [c for c in bench.configs if c.startswith("bench_") and c not in self.module_configs]
         record = self.results[bench.name] = {}
         try:
             bench.run(self, record)
@@ -11048,6 +11050,11 @@ class Runner:
         for name, ok, detail, means in bench.checks(record):
             self.check(name, ok, detail, means)
         self.summary += bench.summary(record)
+
+    def configs_to_delete(self):
+        """The bench_* configs the end of a run deletes: the in-place benches', and those of the benches from
+        scripts/bench/benches/ this run ran. Looking for every bench's would add an adb call per config to every run."""
+        return tuple(dict.fromkeys(IN_PLACE_BENCH_CONFIGS + tuple(self.module_configs)))
 
     def selection(self):
         a = self.args

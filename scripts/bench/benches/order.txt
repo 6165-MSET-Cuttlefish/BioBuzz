@@ -1,1 +1,5 @@
 config_check
+limelight_reload
+fault_render
+camera_power
+rangefinders

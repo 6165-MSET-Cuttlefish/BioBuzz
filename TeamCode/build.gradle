@@ -117,7 +117,7 @@ abstract class GenerateLimelightFiles extends DefaultTask {
         long fileId = ids[0][1] as long
 
         def crc = new java.util.zip.CRC32()
-        crc.update((script + '\u0000' + pipeline).getBytes('UTF-8'))
+        crc.update((script + '\u0000' + pipeline + scriptSalt.map { '\u0000' + it }.getOrElse('')).getBytes('UTF-8'))
         // llpython reaches the hub as 32-bit floats, which hold integers exactly only below 2^24.
         long stamp = 0x800000L | (crc.value & 0x7FFFFFL)
         String uploaded = script.replaceFirst(/(?m)^SCRIPT_ID = \d+\.0$/,
@@ -155,11 +155,16 @@ final class LimelightFiles {
         }
         return b.append('"').toString()
     }
+
+    // Only scripts/bench/run_bench.py --limelight-reload sets it (-Pbench.scriptSalt), to give a deploySloth a new stamp.
+    @Input @org.gradle.api.tasks.Optional
+    abstract Property<String> getScriptSalt()
 }
 
 def generateLimelightFiles = tasks.register('generateLimelightFiles', GenerateLimelightFiles) { t ->
     t.scriptFile.set(rootProject.layout.projectDirectory.file('limelight/ball_contour_snapscript.py'))
     t.pipelineFile.set(rootProject.layout.projectDirectory.file('limelight/ball_pipeline.vpr'))
+    t.scriptSalt.set(providers.gradleProperty('bench.scriptSalt'))
 }
 
 androidComponents {

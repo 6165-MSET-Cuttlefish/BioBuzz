@@ -157,6 +157,11 @@ and "unused" is judged against last season's DECODE code, not only this repo. Be
 
 ## Still unknown
 
+- **Whether a fault shows on the Driver Station as it does on the dashboard:** first, big and red, readable with a
+  150-character message, still first at a 1000 ms Driver Station interval, and absent with `dsTelemetry` off; and
+  whether the first Driver Station frame after INIT shows its markup rendered. No bench run has had a Driver Station.
+  Test: Bench: Fault Render, `python3 scripts/bench/run_bench.py --fault-render --interactive --ports-empty` with a
+  Driver Hub paired ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-fault-render)).
 - **Field order from `getDeclaredFields()` on the Control Hub.** It decides today's order within a discovery pass, and
   whether that order survives a rename. Test: INIT any BioBuzz OpMode and read the MODULES group on the dashboard.
   Declaration order lists Drivetrain, CellTipCamera, Camera (in SOTM Test then Turret, Shooter); field-name order

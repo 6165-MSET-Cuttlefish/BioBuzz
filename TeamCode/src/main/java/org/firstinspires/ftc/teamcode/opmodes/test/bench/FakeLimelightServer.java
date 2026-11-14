@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.LongSupplier;
 
 final class FakeLimelightServer {
     /** HANG_POSTS answers every GET and holds every POST and DELETE: a Limelight serving results that won't take a command. */
@@ -60,6 +61,7 @@ final class FakeLimelightServer {
     private final List<Request> posts = new ArrayList<>();
     private final int balls;
     private final double scriptId;
+    private final LongSupplier threadCpuNanos;
     private final long bootNanos = System.nanoTime();
     private volatile Mode mode = Mode.OK;
     private volatile int pipeline = 4;
@@ -74,14 +76,20 @@ final class FakeLimelightServer {
 
     /** Reports {@code scriptId} in llpython[0], and as pID the pipeline of the last switch it answered. */
     FakeLimelightServer(int balls, double scriptId) {
+        this(PORT, balls, scriptId, Debug::threadCpuTimeNanos);
+    }
+
+    /** Port 0 takes a free port; off a hub, threadCpuNanos stands in for android.os.Debug's per-thread CPU clock. */
+    FakeLimelightServer(int port, int balls, double scriptId, LongSupplier threadCpuNanos) {
         this.balls = balls;
         this.scriptId = scriptId;
+        this.threadCpuNanos = threadCpuNanos;
         try {
             server = new ServerSocket();
             server.setReuseAddress(true);
-            server.bind(new java.net.InetSocketAddress(InetAddress.getByName("127.0.0.1"), PORT));
+            server.bind(new java.net.InetSocketAddress(InetAddress.getByName("127.0.0.1"), port));
         } catch (IOException e) {
-            throw new IllegalStateException("can't listen on 127.0.0.1:" + PORT + " for the fake Limelight", e);
+            throw new IllegalStateException("can't listen on 127.0.0.1:" + port + " for the fake Limelight", e);
         }
         thread = new Thread(this::serve, "bench-fake-limelight");
         thread.start();
@@ -89,6 +97,10 @@ final class FakeLimelightServer {
 
     void setMode(Mode mode) {
         this.mode = mode;
+    }
+
+    int port() {
+        return server.getLocalPort();
     }
 
     long requests() {
@@ -148,9 +160,9 @@ final class FakeLimelightServer {
                 } catch (SocketException closed) {
                     return;
                 }
-                long cpu0 = Debug.threadCpuTimeNanos();
+                long cpu0 = threadCpuNanos.getAsLong();
                 handle(s);
-                cpuNanos += Debug.threadCpuTimeNanos() - cpu0;
+                cpuNanos += threadCpuNanos.getAsLong() - cpu0;
                 requests++;
             }
         } catch (Throwable t) {
