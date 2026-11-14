@@ -3,8 +3,8 @@
 What the code doesn't show about the robots: the BIOBUZZ robot as it stands in CAD, the sizes and masses of the
 Cuttle bot (last season's robot, retired 2026-11-13) and the Betta bot (the robot BioBuzz code runs on today), and
 known problems in the test OpModes and modules that drive them. Read it before writing code for the BIOBUZZ robot's
-shooters, turrets or cameras, before running a shooter, turret or Ivy test OpMode, or before putting a robot's size
-into code or a `.pp` path file.
+shooters, turrets or cameras, before running a shooter or turret test OpMode, or before putting a robot's size into
+code or a `.pp` path file.
 
 ## The BIOBUZZ robot, from CAD
 
@@ -158,15 +158,6 @@ None of these is fixed. Each was read from source on 2026-11-11, with SDK 12.0.0
   first missing name (`HardwareMap.get`). Use Intake Transfer Shooter Test, which drives the same rig with both
   shooters; it lacks only the gamepad1 A blocker toggle, and its dashboard `blocker.open` does the same. Proposed fix:
   delete the OpMode, or keep it for a config made on the Driver Station.
-- **Ivy Test's spin-up triggers clear each other instead of themselves.** `spinUpHigh`, scheduled while `b` is set,
-  clears `a` (`opmodes/test/IvyTest.java:34`), and `spinUpLow`, scheduled while `a` is set, clears `b` (`:43`;
-  scheduling at `:69-70`), while `stop` and `increment` clear their own triggers (`:50`, `:60`). The trigger that was
-  set stays set, so its command is scheduled again every loop: with `b` set, `end` holds the flywheels at 0 for one
-  loop and the next puts 0.8 back; with `a` set, `spinUpLow` writes 0.3 every loop, the loop `stop` writes 0
-  included (scheduling read from Ivy core 1.1.1's bytecode). It drives the Cuttle bot's flywheels: only
-  `cuttle_decode.xml` has `leftFlywheel` and `rightFlywheel`. Until it's fixed, clear `a` or `b` on the dashboard
-  before setting `end`. Proposed fix: have each command clear its own trigger, once the teammates who wrote it
-  confirm the swap isn't part of the experiment.
 
 ## Still unknown
 

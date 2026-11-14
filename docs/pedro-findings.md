@@ -98,8 +98,8 @@ IMU under the default `ResetMode.RECALIBRATE_IMU` and then runs `Thread.sleep(50
 
 - The sleep is most of the 585 ms localizer build measured in [`hub-bench-findings.md`](hub-bench-findings.md).
 - `reset()` is public and sleeps on every call: never call it from a loop.
-- The only way around it is to drive `GoBildaPinpointDriver` yourself, as `opmodes/test/BettaBareDrive.java:25-31`
-  does.
+- The only way around it is to drive `GoBildaPinpointDriver` yourself, as Bench: Pinpoint does
+  (`opmodes/test/bench/PinpointBench.java`).
 - (Read from source: `revhub` `PinpointLocalizer.java:49, 95-107`, `PinpointConfig.java:25`.)
 
 **Mecanum has no battery-voltage compensation.** `MecanumConfig` holds only motor names and directions,
@@ -175,7 +175,7 @@ The guard can't catch everything (read from source: Quickstart 4f33ef5 `Foresigh
 - **A Pinpoint that stops giving good data.** The SDK's driver keeps the previous value for a NaN or out-of-range
   read (the pose freezes), and a failed I2C read can read as zeros, putting the pose back at the test's start
   ([`sdk-hub-findings.md`](sdk-hub-findings.md)). Pedro's `PinpointLocalizer.update` doesn't check the status, so the
-  guard never trips. Run Pinpoint Localizer Test right before Foresight.
+  guard never trips. Check the pose reads the start pose after INIT right before Foresight.
 - **The driving steps have no timeout.** With a bad pose a step drives on at its power until stopped: full power in
   the velocity and deceleration steps, which have no guard at all, and up to 0.7 forward or 1.0 strafe in the braking
   steps.

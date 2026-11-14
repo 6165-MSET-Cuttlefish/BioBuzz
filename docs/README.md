@@ -9,7 +9,7 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 
 | page | read it before |
 |---|---|
-| [`robots-findings.md`](robots-findings.md) | writing code for the BIOBUZZ robot's shooters, turrets or cameras, running a shooter, turret or Ivy test OpMode, or setting a robot's size in code or a `.pp` file |
+| [`robots-findings.md`](robots-findings.md) | writing code for the BIOBUZZ robot's shooters, turrets or cameras, running a shooter or turret test OpMode, or setting a robot's size in code or a `.pp` file |
 | [`wiring-findings.md`](wiring-findings.md) | wiring the BIOBUZZ robot, writing its hardware config, or moving a device between hubs or ports |
 | [`game-findings.md`](game-findings.md) | packing for an event, adding anything that talks over Wi-Fi or USB, changing HIVE numbers in `BioBuzzField`, or planning routes under the HIVE |
 | [`parts-findings.md`](parts-findings.md) | buying or swapping a Through Bore encoder or a flywheel motor |

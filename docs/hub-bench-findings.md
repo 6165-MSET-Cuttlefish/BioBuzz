@@ -59,8 +59,8 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     (read from source), so the pose stays at (0, 0, 0) however the robot moves, and Pedro drives without ever seeing
     progress.
   - Faulting (read from source; not yet seen on a hub): a bad read keeps the previous pose, a failed one snaps it to
-    (0, 0, 0), and Pedro never reads the status: [`sdk-hub-findings.md`](sdk-hub-findings.md#device-drivers). Only
-    Pinpoint Localizer Test, Pinpoint Drive Test and Ball Field Drive show the Pinpoint's status.
+    (0, 0, 0), and Pedro never reads the status: [`sdk-hub-findings.md`](sdk-hub-findings.md#device-drivers). No
+    robot OpMode shows the Pinpoint's status; Bench: Pinpoint does.
   - A guard, like `GuardedOctoQuadLocalizer` for the OctoQuad (below), must check at INIT that the Pinpoint answers
     and stop with an error naming it and its port, then check the status on every read, counting non-READY only after
     the first READY. The Pinpoint reported `FAULT_BAD_READ` right after `BettaConstants.create`, then READY 71 ms
@@ -383,7 +383,8 @@ Not run on either date (they need `--interactive`):
 - **Whether a healthy Pinpoint at rest ever reads a status other than READY after its first READY, and whether the
   41.8 ms `follower.update()` peak logged on the DECODE robot (2026-07-30) recurs as an I2C stall:** test: Bench:
   Pinpoint's soak (`python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`). An hour with none bounds the
-  rate at about 1e-5 per read; the driving half still needs a count in Pinpoint Localizer Test on the Betta bot.
+  rate at about 1e-5 per read. The driving half needed a count on the Betta bot, retired 2026-11-13 before it was
+  made; the BIOBUZZ robot runs no Pinpoint (2026-11-13).
 - **Whether a rangefinder in SHORT mode keeps its accuracy at a 10 ms timing budget:** log a fixed target's distance
   at 20 and 10 ms budgets and compare the spread and the mean.
 - **The sliced route search on a hub:** its longest step, plan time from request to done, the loop period while it

@@ -43,7 +43,7 @@ Telemetry shows, per shooter: valid or the reason not, target CELL, virtual targ
 
 SOTM is only as good as pose and velocity.
 
-1. In **Pinpoint Localizer Test**, push the robot forward, then left: x, then y, must rise.
+1. Only once the robot's position comes from the OctoQuad and its constants are measured (`CLAUDE.md`, Tuning): in **OctoQuad Localizer Test**, push the robot forward, then left: x, then y, must rise.
 2. Check the velocity sign: in SOTM Test with the robot at heading 90°, press Y until telemetry shows SOTM ON, then drive forward. The virtual target must move **toward the audience** (opposite to travel). If it moves with the robot, the velocity sign is wrong: stop and fix that first.
 3. Drive a lap and return to the start mark: the pose should come back within about an inch.
 

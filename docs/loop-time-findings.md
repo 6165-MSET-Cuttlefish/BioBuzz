@@ -1,9 +1,9 @@
 # Loop-time findings
 
 What costs loop time on the Betta bot and in the SDK, and what to change; read it before shortening the loop or adding
-per-loop hub commands. Hub command costs come from [`hub-bench-findings.md`](hub-bench-findings.md); re-measure after
-any hardware or layout change: run Ivy Path Test, `adb pull /sdcard/FIRST/looptimes/IvyPathTest.csv`, then
-`python3 scripts/looptimes/analyze_ivy.py IvyPathTest.csv`.
+per-loop hub commands. Hub command costs come from [`hub-bench-findings.md`](hub-bench-findings.md). The loop log
+below came from Ivy Path Test and `scripts/looptimes/analyze_ivy.py`, deleted with the Betta bot on 2026-11-13 (both
+are at commit 149acacc): no OpMode logs the BIOBUZZ robot's loop times to a file yet.
 
 ## What to do
 
