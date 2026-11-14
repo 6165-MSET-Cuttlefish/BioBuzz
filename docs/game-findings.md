@@ -70,8 +70,8 @@ What our code serves on the robot's Wi-Fi today (read from source):
 
 | what | when | what stops it |
 |---|---|---|
-| dashboard packet: field overlay, pose, faults, plus telemetry lines while `dashboardTelemetry` is on (`architecture/core/EnhancedOpMode.java:492`, `updateDashboard`) | every INIT and run loop of every `EnhancedOpMode` (`:168`, `:235`) | slothboard off: `sendTelemetryPacket` returns at once |
-| dashboard camera stream from the cell-tip webcam, 30 fps (`biobuzz/modules/vision/WebcamSession.java:67`) | from INIT of every OpMode on `BioBuzzRobot`, which always builds `CellTipCamera` (`biobuzz/BioBuzzRobot.java:32`); BioBuzz Tele included | slothboard off: `startCameraStream` returns at once. `setCameraStreamEnabled(false)` exists; only `WebcamBench` calls it |
+| dashboard packet: field overlay, pose, faults, plus telemetry lines while `dashboardTelemetry` is on (`architecture/core/EnhancedOpMode.java:489`, `updateDashboard`) | every INIT and run loop of every `EnhancedOpMode` (`:167`, `:234`) | slothboard off: `sendTelemetryPacket` returns at once |
+| dashboard camera stream from the cell-tip webcam, 30 fps (`biobuzz/modules/vision/WebcamSession.java:63`) | from INIT of every OpMode on `BioBuzzRobot`, which always builds `CellTipCamera` (`biobuzz/BioBuzzRobot.java:32`); BioBuzz Tele included | slothboard off: `startCameraStream` returns at once. `setCameraStreamEnabled(false)` exists; only `WebcamBench` calls it |
 | Limelight proxy: the Limelight's MJPEG video (port 5800), web UI (5801) and APIs (5805, 5807), forwarded from 172.29.0.1 (slothboard `LimelightProxyManager`) | while slothboard is on | slothboard off |
 | slothboard's web server (port 8000) | always; while off it answers a client only with status, plus the config, OpMode and hardware config lists when the client connects | nothing ([Still unknown](#still-unknown)) |
 | AutoTune's web server (10158) and websocket (12649), started at every app start (`com.pedropathing.tuning.autotune.Hooks`) | always; sends only to a connected client | nothing ([Still unknown](#still-unknown)) |

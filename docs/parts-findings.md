@@ -52,11 +52,13 @@ page][gb5202] (discontinued, replaced by the 5203), read 2026-11-10. Tested spee
 - The simulations used 1.47, the conservative choice: peak power about 22.5 W at 12 V, against 26.6 W with 1.74
   (computed). With 1.74, simulated rapid fire is one or two feed-interval steps faster at long range.
 
-**No SDK motor type fits.** SDK 12.0.0 (decompiled) has none with 28 counts per revolution or near 6000 RPM. The
-shooter test config, `TeamCode/src/main/res/xml/intake_transfer_shooter.xml`, makes both flywheels
-`goBILDA5202SeriesMotor` (lines 5 and 8): the 99.5:1 gearmotor, 2786 counts per revolution, 60 RPM, which
-`getVelocity(AngleUnit)` and `RUN_USING_ENCODER` scale by. `biobuzz/modules/Shooter.java` avoids both: it sets
-`RUN_WITHOUT_ENCODER` (line 301) and reads raw counts (line 335).
+**No SDK motor type fits.** SDK 12.0.0 (decompiled) has none with 28 counts per revolution or near 6000 RPM. Intake
+Transfer Shooter Test's config, `TeamCode/src/main/res/xml/intake_transfer_shooter.xml`, makes its flywheels
+(`pollenFlywheel`, `nectarFlywheel`) `goBILDA5202SeriesMotor` (lines 5 and 8): the 99.5:1 gearmotor, 2786 counts per
+revolution, 60 RPM, which `getVelocity(AngleUnit)` and `RUN_USING_ENCODER` scale by. `biobuzz/modules/Shooter.java`
+avoids both: it sets `RUN_WITHOUT_ENCODER` (line 301) and reads raw counts (line 335). That test reads raw counts too
+(`rpm()`, `opmodes/test/IntakeTransferShooterTest.java:199-209`). No config in the repo declares Shooter's
+`PollenShooter` and `NectarShooter` yet.
 
 ## 82 mm steel flywheel (goBILDA 3628-0032-0082)
 
@@ -150,8 +152,9 @@ supply 5 V ([REV][revexh]; Axon labels 4.8 V as hub voltage); the CAD runs the s
   (`PwmControl.PwmRange.defaultRange`, RobotCore 12.0.0 decompiled): at the servo's 0.15°/µs that is 270°, 31.5° of
   hood (computed). The CAD's hood travel is 30° on Pollen, 20° on Nectar. 500-2500 µs gives 300°, 35.0° of hood.
 - To widen it, call `setPwmRange(new PwmRange(500, 2500))`, or declare the hood as the SDK's built-in `ServoFullRange`
-  config type (500-2500 µs; read from source, not tried on a hub). Today the shooter test config declares both hoods
-  as plain `Servo` (`intake_transfer_shooter.xml` lines 10-11) and nothing under `biobuzz/` calls `setPwmRange`.
+  config type (500-2500 µs; read from source, not tried on a hub). Today Intake Transfer Shooter Test's config
+  declares its hoods as plain `Servo` (`intake_transfer_shooter.xml` lines 10-11), no config declares Shooter's
+  `PollenHood`/`NectarHood` yet, and nothing under `biobuzz/` calls `setPwmRange`.
 
 ## Game balls
 

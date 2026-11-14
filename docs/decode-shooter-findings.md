@@ -4,7 +4,7 @@ What 23 FTC teams' public DECODE-season (2025-26) code does to choose a shot and
 evidence when changing our shooter; the conclusions drawn from it are in
 [`flywheel-control-findings.md`](flywheel-control-findings.md) and
 [`shot-calculation-findings.md`](shot-calculation-findings.md). The same 23 repositories' loop time, ball counting,
-TeleOp automation and structure are in [`decode-code-survey.md`](decode-code-survey.md).
+TeleOp automation and structure are in [`decode-code-findings.md`](decode-code-findings.md).
 
 ## What it shows
 

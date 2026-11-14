@@ -198,7 +198,7 @@ so expect both go runs to fall short.
 Whether to raise `PHOTON_SOAK_MAX_S` or re-derive the loss target from a measured loop rate is not decided. Settle it
 before the first go run, not after one fails. Where the numbers come from (`scripts/bench/run_bench.py`):
 
-- **Loss target:** `PHOTON_SOAK_LOSS_TARGET` = 4.4e-7 lost writes per write (line 1388), at most 0.1 lost writes per
+- **Loss target:** `PHOTON_SOAK_LOSS_TARGET` = 4.4e-7 lost writes per write (line 2537), at most 0.1 lost writes per
   match. It assumes about 6 changing writes a loop on the Control Hub at 150 Hz for 150 s, 1.35e5 parallel writes a
   match, or 2.25e5 with a USB Expansion Hub (0.1 / 2.25e5 = 4.4e-7). That is a design estimate, not a measurement: the
   fork's bench loop with 12 changing writes ran at 16 ms, about 62 Hz
@@ -206,7 +206,7 @@ before the first go run, not after one fails. Where the numbers come from (`scri
   `EnhancedServo` goes out again once 250 ms have passed since its last send (`WriteCache.RESEND_NANOS`).
 - **Writes needed:** with zero losses in n writes the 95% upper bound on the loss rate is 3/n (the rule of three,
   `photon_soak_checks`), so the bound needs ceil(3 / 4.4e-7) = 6,818,182 writes per hub.
-- **Caps:** `PHOTON_SOAK_MAX_S` = 4 h and `PHOTON_SOAK_WRITES_PER_HUB` = 1e7 (lines 105-106), whichever comes first.
+- **Caps:** `PHOTON_SOAK_MAX_S` = 4 h and `PHOTON_SOAK_WRITES_PER_HUB` = 1e7 (lines 132-133), whichever comes first.
   At 508 writes a second, 1e7 takes about 5.5 h, so the 4 h cap ends the soak.
 
 The go run adds 200 STOP trials per condition, more lost-write trials and the long soak. `--interactive` needs a

@@ -27,7 +27,7 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 
 | page | read it before |
 |---|---|
-| [`sdk-hub-findings.md`](sdk-hub-findings.md) | writing a hardware wrapper, sensor thread or voltage compensation, or trusting a hub's encoder velocity |
+| [`sdk-hub-findings.md`](sdk-hub-findings.md) | writing a hardware wrapper, sensor thread or voltage compensation, trusting a hub's encoder velocity, or bumping the SDK |
 | [`hub-bench-findings.md`](hub-bench-findings.md) | changing the planner, hub or I2C traffic, odometry, the Limelight, background threads or stop paths |
 | [`loop-time-findings.md`](loop-time-findings.md) | trying to shorten the loop, or adding per-loop hub commands |
 | [`photon-bench.md`](photon-bench.md) | using Photon in a robot OpMode, or running its hub bench |
@@ -48,21 +48,21 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 | page | read it before |
 |---|---|
 | [`toolchain-findings.md`](toolchain-findings.md) | changing AGP, Gradle or a dependency, or when deploySloth, a hardware config or adb misbehaves |
-| [`dashboard-findings.md`](dashboard-findings.md) | using the dashboard's Hardware Config View or Enable/Disable switch, replacing or bumping the dashboard, or writing a test OpMode's `@Config` knobs |
+| [`dashboard-findings.md`](dashboard-findings.md) | using the dashboard's Hardware Config View or Enable/Disable switch, replacing or bumping the dashboard or the SDK, or writing a test OpMode's `@Config` knobs |
 
 **Other teams' code**
 
 | page | read it before |
 |---|---|
-| [`decode-shooter-survey.md`](decode-shooter-survey.md) | looking for how other teams choose a shot or control a flywheel: 23 DECODE-season repositories |
-| [`decode-code-survey.md`](decode-code-survey.md) | looking for how other teams handle loop time, ball counting, TeleOp automation or code structure: the same 23 repositories |
+| [`decode-shooter-findings.md`](decode-shooter-findings.md) | looking for how other teams choose a shot or control a flywheel: 23 DECODE-season repositories |
+| [`decode-code-findings.md`](decode-code-findings.md) | looking for how other teams handle loop time, ball counting, TeleOp automation or code structure: the same 23 repositories |
 
 **Files**
 
 | page | read it before |
 |---|---|
 | [`paths/`](paths) | editing an auto's poses: one Pedro visualizer export per auto |
-| [`calibration-chessboard-3in-letter.pdf`](calibration-chessboard-3in-letter.pdf) | recalibrating a camera lens: the board to print |
+| [`calibration-chessboard-3in-letter.pdf`](calibration-chessboard-3in-letter.pdf) | fitting the ball camera's homography (`eocvsim/homography`) or calibrating a camera lens: the board to print |
 | [`legal/`](legal) | nothing: licence texts the SDK ships |
 
 ## Recording a finding

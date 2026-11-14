@@ -5,7 +5,7 @@
 - Game code goes in `biobuzz/` (its modules in `biobuzz/modules/`) and `opmodes/`; `architecture/` stays game-agnostic; new Java files go in an existing package. Field constants come from the BIOBUZZ game manual, never guesses.
 - Nothing new at the top level beyond Gradle and repo files: tools go in `scripts/`, documents in `docs/`.
 - No BioBuzz robot yet: BioBuzz code runs on the Betta bot (`betta_decode.xml`, `pedro/BettaConstants`, `biobuzz/RobotGeometry`).
-- `decode/` runs only on the Cuttle bot (`cuttle_decode.xml`) and shares `biobuzz/modules/Drivetrain`. Run nothing built on `BettaConstants` there: Cuttle's config has every device a BioBuzz OpMode uses, so one starts with Betta's constants and no error.
+- `decode/` runs only on the Cuttle bot (`cuttle_decode.xml`) and shares `biobuzz/modules/Drivetrain`. Run nothing built on `BettaConstants` there: Cuttle's config has every device `BettaConstants` and `BioBuzzRobot` use, so an OpMode built on either starts there on Betta's constants with no error.
 - In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
 - At events the dashboard stays off: R704(D) bans dashboard-style streaming and the FTC Q&A extends that to the pit and practice field. Run `Enable/Disable Dashboard` before load-in (`docs/game-findings.md`).
@@ -23,8 +23,8 @@ Claude updates this file unasked, in the same commit as any change it describes.
 ## Build & deploy
 
 - **TeamCode** (Run button, full install): on a fresh hub, after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`), and after any change to a `@Pinned` class (`architecture/hardware/photon/`): deploySloth never reloads those, and says nothing.
-- **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; it can take 5 s, so without one wait 6) before redeploying or pressing INIT, or the app restarts or the INIT never runs.
-- The hub's clock reads about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth.
+- **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; it can take 5 s, so without one wait 6) before redeploying or pressing INIT, or the app restarts or the INIT never runs (`docs/hub-bench-findings.md`).
+- The hub's clock may read about 1970 after boot (unchecked) until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth (`docs/toolchain-findings.md`).
 - Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK); after an AGP or Gradle bump, also `:TeamCode:assembleSloth`, which hooks AGP's dex task by name. Unit tests (no hardware): `./gradlew :TeamCode:testDebugUnitTest`.
 - Decline Android Studio's AGP upgrade: AGP 9 breaks `assembleSloth`, so deploySloth, and Gradle 9.6 or later won't load AGP 8 (`docs/toolchain-findings.md`).
 - After a full install that adds, renames or deletes a `res/xml` file, re-activate the hub's hardware config on the DS: the hub stores it by resource ID, which shifts, so it can load another config's devices under the old name (`docs/toolchain-findings.md`).
@@ -35,8 +35,8 @@ Claude updates this file unasked, in the same commit as any change it describes.
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
 - slothboard 6165.7's restart after a dashboard hardware-config switch, save or delete at idle hasn't run on a hub (Bench: Freeze Dump checks it); if it still deadlocks, the app freezes 10 s and is relaunched, ready about 53 s later. Its tag isn't published on the fork yet (`docs/dashboard-findings.md`).
-- Close the dashboard tab when timing loops: it reads every hub's voltage each second.
-- A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code.
+- Close the dashboard tab when timing loops: it reads every hub's voltage each second (`docs/dashboard-findings.md`).
+- A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code (`docs/loop-time-findings.md`).
 
 Pedro Pathing 3:
 
@@ -55,7 +55,7 @@ Pedro Pathing 3:
 
 - Author poses for RED with `FieldPose.forAlliance(x, y, heading)` and take path headings from those poses: a raw radian passed to a path (e.g. `linear(...)`) isn't mapped to BLUE.
 - `Robot` puts the follower at a placeholder pose every INIT: call `robot.follower.setPose(start)` in `initialize()` before building paths. Odometry runs from INIT, so put the robot on its start before INIT and don't move it after.
-- Set `Context.allianceColor` on the dashboard before INIT (modules and paths read it then), never from an OpMode.
+- Set `Context.allianceColor` on the dashboard before INIT (modules and paths read it then), never from an OpMode. With the dashboard off, as at events, it stays RED, so a blue match runs as RED (`docs/game-findings.md`).
 
 **Ball routing**
 
@@ -64,9 +64,9 @@ Pedro Pathing 3:
 - Collections plan 4 balls (`BallCollection.BALLS`; Ball Collection plans its four slots): the order search is n!, and 5 balls take up to 15 s on a hub.
 - Drive a plan only with `RouteRun`: `Plan.intake`/`Plan.back` are for drawing. They join the drives without the plan's turns in place, and Pedro moves to a compound path's next piece as soon as it would start braking (`ForesightConfig.pathSkip`, on by default), cutting reversals.
 
-**Photon** (`architecture/hardware/photon/`, the team's fork of SolversLib Photon): only an OpMode annotated `@Photon` gets its hubs swapped for `PhotonLynxModule`s at INIT, and they stay swapped until the hardware map is rebuilt (config change or Restart Robot). `PhotonCore.enable()` throws unless that swap worked; it then sends RUN_WITHOUT_ENCODER `setPower` and servo pulse-width writes without waiting for each ACK, from any thread, on hubs with their own USB link. An RS485 Expansion Hub, and every command while disabled, takes the SDK's path. Every class there, nested ones included, must be `@Pinned`, with no lambdas or anonymous classes: an unpinned one is reloaded by deploySloth with its own copy of the statics. `@Photon` isn't inherited: a Photon variant of an OpMode is a subclass annotated `@Photon` (`FrameworkLoopPhotonBench`). `setMaxParallelWrites` takes 1 to 64. Don't send commands through a replaced hub object (an I2C client built on one shares its I2C lock, but a reply to a message number both objects hold is dropped and counted as `numberClashes`, and both commands time out). `PhotonCore.setWriteProfiling(true)` times every step of each parallel write, read per hub with `writeProfile(hub)`: bench use only.
+**Photon** (`architecture/hardware/photon/`, the team's fork of SolversLib Photon): only an OpMode annotated `@Photon` gets its hubs swapped for `PhotonLynxModule`s at INIT, and they stay swapped until the hardware map is rebuilt (config change or Restart Robot). `PhotonCore.enable()` throws unless that swap worked; it then sends RUN_WITHOUT_ENCODER `setPower` and servo pulse-width writes without waiting for each ACK, from any thread, on hubs with their own USB link. An RS485 Expansion Hub, and every command while disabled, takes the SDK's path. Every class there, nested ones included, must be `@Pinned`, with no lambdas or anonymous classes: an unpinned one is reloaded by deploySloth with its own copy of the statics. `@Photon` isn't inherited: a Photon variant of an OpMode is a subclass annotated `@Photon` (`FrameworkLoopPhotonBench`). `setMaxParallelWrites` takes 1 to 64. Don't send commands through a replaced hub object (an I2C client built on one shares its I2C lock, but a reply to a message number both objects hold is dropped and counted as `numberClashes`, and both commands time out). `PhotonCore.setWriteProfiling(true)` times every step of each parallel write, read per hub with `writeProfile(hub)`: bench use only. Status and bench: `docs/photon-bench.md`.
 
-**Faults** (`core/Faults`) show only in an `EnhancedOpMode`, and on the Driver Station only while `OptimizationToggles.dsTelemetry` is on (`docs/framework-findings.md`); a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
+**Faults** (`architecture/core/Faults`) show only in an `EnhancedOpMode`, and on the Driver Station only while `OptimizationToggles.dsTelemetry` is on (`docs/framework-findings.md`); a bare `OpMode` shows the problem itself (`BallFieldDriveTest`).
 
 **Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision calls `disableBallVision()` in `initialize()`.
 
@@ -113,7 +113,7 @@ In INIT the follower and Ivy scheduler run but module writes don't (unless `shou
 
 Dashboard edits are lost on deploySloth or an app restart: copy kept values into the source.
 
-- **Pedro** (`BettaConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later. The pod offsets are the OctoQuad's: don't overwrite them with AutoTune's Pinpoint results. Pod directions are the Pinpoint's own, not the OctoQuad's: before any Pedro-driven run, push the robot forward, then left, in Pinpoint Localizer Test and check x, then y, rises.
+- **Pedro** (`BettaConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later (`docs/pedro-findings.md`). The pod offsets are the OctoQuad's: don't overwrite them with AutoTune's Pinpoint results. Pod directions are the Pinpoint's own, not the OctoQuad's: before any Pedro-driven run, push the robot forward, then left, in Pinpoint Localizer Test and check x, then y, rises.
 - A missing or faulting Pinpoint raises nothing: the pose reads (0, 0, 0) or holds its last value while Pedro drives on it. Check the pose shows the start pose after INIT before any Pedro-driven run (`docs/hub-bench-findings.md`).
 - **Ball detection**: `docs/hsv-tuning-prompt.md` derives starting HSV ranges from photos. Exposure, gain and resolution live in `limelight/ball_pipeline.vpr`: save the web UI's pipeline download over it, or the next synced INIT reverts them.
 - **Homography** (`eocvsim/homography`): a new one moves the (0,0) crosshair, so redo `Mount` in the same change.
@@ -138,7 +138,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 - **Hub-reading threads** (reference: `biobuzz/modules/TransferCounter`): poll at 10 ms, the hub's ADC refresh; faster only costs loop time (`docs/hub-bench-findings.md`). Any such thread:
   - Call `start()` on the OpMode thread and `stop()` from the OpMode's stop, not `Module.stop()`, which also runs mid-OpMode.
   - Loop only while the OpMode thread `isAlive()`: after a crash the SDK calls no OpMode hook, so that is the only stop signal.
-  - Stop with a volatile flag and `join`, never `interrupt()`: the SDK's `MessageKeyedLock.release` calls `lockInterruptibly()`, so an interrupt mid-command can leave the hub's USB lock held until it's abandoned after 500 ms, stalling every thread's hub commands.
+  - Stop with a volatile flag and `join`, never `interrupt()`: the SDK's `MessageKeyedLock.release` calls `lockInterruptibly()`, so an interrupt mid-command can leave the hub's USB lock held until it's abandoned after 500 ms, stalling every thread's hub commands (`docs/sdk-hub-findings.md`).
   - Catch `Throwable` into a volatile field and rethrow it on the OpMode thread.
   - Read with its own `LynxGetBulkInputDataCommand`, never through `AnalogInput` or `clearBulkCache()`: the MANUAL bulk cache is shared across threads.
   - No writes or telemetry from the thread.
@@ -148,18 +148,18 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 
 **Control Hub bench** (`scripts/bench/`): read `docs/hub-bench-findings.md` before changing the planner, hub or I2C traffic, odometry, Limelight or stop paths.
 - A new bench goes in its own file in `scripts/bench/benches/`, listed in its `order.txt`; extend a bench already in `run_bench.py` in place (`scripts/bench/benches/README.md`).
-- **Photon block** (`run_bench.py --photon`, with `--usb-expansion` or `--photon-rs485`): its verdict in `summary.md` is the only go/no-go for Photon on the robot, and only the go run for the robot's wiring can say SAFE (`--photon-soak --photon-i2c`, plus `--interactive` cable pulls on USB; `scripts/bench/README.md`); a shorter run says PASSED at best. `--photon-i2c` needs the OctoQuad in Control Hub I2C port 2 and the Pinpoint in Expansion Hub I2C port 1 (no rangefinders: the team's are stored in analog mode, and I2C traffic in their first second after power-up switches them back). Its stock baseline must be the first OpMode after an app restart. Bench: Photon Stop's and Bench: Photon Stop Linear's negative controls deliberately breach STOP's gate, Bench: Photon Stop Race raises it mid-write and leaves it raised until the next INIT, and Bench: Photon's I2C negative control skips the hub's I2C lock: run them only through the runner, with the bench ports empty.
+- **Photon block** (`run_bench.py --photon`): only a SAFE TO TRY ON THE ROBOT verdict from the go run for the robot's wiring clears Photon for the robot; how to run each block and what it needs: `docs/photon-bench.md`. Bench: Photon Stop's and Bench: Photon Stop Linear's negative controls deliberately breach STOP's gate, Bench: Photon Stop Race raises it mid-write and leaves it raised until the next INIT, and Bench: Photon's I2C negative control skips the hub's I2C lock: run them only through the runner, with the bench ports empty.
 - A goBILDA 5202 motor is CCW, so its hub register holds minus the commanded power: compare register read-backs through `PhotonChannel.motorRegister`.
 - `--dashboard-off` switches the hub's dashboard off on purpose and turns it back on over adb at the end; if that fails, the hub stays off until the command the runner prints is run. Keep it out of the default run and `--all`.
 - **Session** (`scripts/bench/session.py`): one start runs every unattended stage and puts the hub back. Prompted benches never go in it: a new runner prompt goes in its `PROMPTED` list (`offline/test_session.py` fails until it does).
 
 ## Conventions
 
-- An SDK bump sets `versionCode`/`versionName` to that SDK's FtcRobotController manifest values.
+- An SDK bump sets `versionCode`/`versionName` to that SDK's FtcRobotController manifest values, then rechecks `docs/sdk-hub-findings.md` and the dashboard-gamepad check in `docs/dashboard-findings.md` (What the team build fixes over stock).
 - Comments: none by default, in any language; only a one-line WHY a competent reader would otherwise get wrong. Usage notes go in this file.
 - Vendored, never hand-edited, never holding tuned values (those go in `BettaConstants`/`OctoQuadLocalizerTest`): `vendor/<source>/` (its `*_REV` names upstream and the only edits), `pedro/procedures/`, `robotcontroller/` and every `res/` file but the hardware configs. Refresh Prism and the procedures with `scripts/update-*.sh`, one commit each; the procedures' commit also carries any Pedro version bump the Quickstart made, in `TeamCode/build.gradle` (the script doesn't touch it); `robotcontroller/` and `res/` from the SDK's FtcRobotController at its tag; the rest by recopying upstream and reapplying its `*_REV` edits.
 - Fail fast: no catch to keep a loop alive, no silent fallback, no optional devices (`hardwareMap.get`, never `tryGet`); numeric guards and try/finally are fine. Only exceptions: a webcam setting the camera rejects raises the `Webcam` fault and a Limelight problem the `Limelight` fault instead of throwing, with Limelight-dependent actions falling back; a Photon swap failure at INIT (then `PhotonCore.enable()` throws) or a dead Photon sweeper raises a global warning and leaves writes on the SDK's path.
-- `Limelight3A`:
+- `Limelight3A` (`docs/limelight-findings.md`):
   - Every `boolean` call but `isRunning`/`isConnected` is an HTTP POST or DELETE that blocks up to 15 s and fails as a bare `false`: make them only from `LimelightSync`'s one background thread (newest request wins), and only when what's wanted changes.
   - `LLResult.getPipelineType()` is always empty (use `getStatus()`); llpython keeps the last script's output on every pipeline.
   - Poll errors are swallowed: health is `isConnected()`, `getTimeSinceLastUpdate()` and the result's contents.

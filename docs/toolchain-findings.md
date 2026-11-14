@@ -63,7 +63,8 @@ misbehaves.
 Newest versions are from Maven Central, Google Maven, `repo.dairy.foundation` and `services.gradle.org`; the SDK's
 FtcRobotController tags end at v12.0.
 
-- `scripts/` Python imports only the standard library (checked 2026-11-10).
+- `scripts/bench/` and `scripts/looptimes/` Python imports only the standard library (checked 2026-11-11);
+  `scripts/sim/` needs numpy, and scipy for some steps (`scripts/sim/README.md`, Before running).
 - `vendor/prism`, `vendor/digitalchickenlabs` and `vendor/sdk` match upstream's current revision apart from the edits
   their `*_REV` files list (diffed 2026-11-10). `vendor/brushland` is unchecked (Still unknown).
 - Everything on Dairy's and acmerobotics' `ftc-dashboard` master is in the team's slothboard fork. The one open
@@ -102,6 +103,13 @@ FtcRobotController tags end at v12.0.
   before the push and polls it after (`Load/.../DeploySloth.kt:49` and `:89`), while the runtime's lock file is
   `sloth.lock` in that folder (`SlothTeamCodeLoader.kt:25`). `lock` never exists, so both checks pass at once. Only a
   change to Dairy's Load plugin fixes it.
+- **After the hub boots, connect the DS before deploySloth**, or the load can be deleted at the next app restart,
+  leaving the installed APK's code to run. At app start Sloth 0.3.2 keeps the newest load jar only if its file time is
+  later than the package's `lastUpdateTime`, and otherwise logs `removing outdated sloth load` and deletes it
+  (`SlothTeamCodeLoader.kt:191-202`, read from the 0.3.2 sources jar). Unchecked: that the hub's clock reads about
+  1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`, and that the hub's clock rather
+  than the laptop's stamps the pushed jar; no dated measurement records either. The hub bench's app-restart check
+  (`sloth_persistence` in `scripts/bench/run_bench.py`) logs which clock stamped the jar.
 - **With two adb devices attached, set `ANDROID_SERIAL`.** The Load plugin runs `adb` without `-s` (Sloth 0.3.2,
   `DeploySloth.kt`, `RemoveRemoteSloth.kt`). With two hubs, or one hub on both USB and Wi-Fi, deploySloth fails with
   adb's more-than-one-device error, and `removeSlothRemote` (which Gradle's `installDebug` runs first) ignores adb's
@@ -153,9 +161,9 @@ FtcRobotController tags end at v12.0.
   the odd localhost ports 5555 to 5585 ([adb docs](https://developer.android.com/tools/adb), fetched 2026-11-10). A
   fake hub on `127.0.0.1:5555` was picked up as `emulator-5554` and churned about every 1.3 s, disturbing a real hub's
   Wi-Fi ADB session on the same laptop (2026-10-22). In a harness, rewrite the hub address `192.168.43.1:5555`
-  (`scripts/bench/run_bench.py:38-39`) to something like `127.0.0.1:15555`, use a fake adb (first on `PATH`, or
-  in-process like `FakeAdb` in `scripts/bench/photon-offline/runner/dryrun_photon_block.py:84`), and never run
-  `adb kill-server` or `adb connect`. Isolated like that, it can run while someone uses a real hub.
+  (`HUB_IP` and `ADB_PORT` in `scripts/bench/run_bench.py`) to something like `127.0.0.1:15555`, use a fake adb
+  (first on `PATH`, or in-process like `FakeAdb` in `scripts/bench/photon-offline/runner/dryrun_photon_block.py:85`),
+  and never run `adb kill-server` or `adb connect`. Isolated like that, it can run while someone uses a real hub.
 
 ## Still unknown
 

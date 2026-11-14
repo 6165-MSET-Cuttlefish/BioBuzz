@@ -4,8 +4,8 @@ How to choose flywheel speed and hood angle for a shot, what our robot's hoods a
 sagging flywheel, and how much to lead a moving shot. Read it before changing `biobuzz/ShotSolver.java`, the tables in
 `biobuzz/ShotTuning.java`, or [`sotm-tuning.md`](sotm-tuning.md).
 
-Researched 2026-11-10 from 23 DECODE teams' code ([`decode-shooter-survey.md`](decode-shooter-survey.md)), public FRC
-code, Chief Delphi posts, projectile calculations on our CELL geometry, a generic simulation and a rerun with the
+Researched 2026-11-10 from 23 DECODE teams' code ([`decode-shooter-findings.md`](decode-shooter-findings.md)), public
+FRC code, Chief Delphi posts, projectile calculations on our CELL geometry, a generic simulation and a rerun with the
 robot's CAD numbers ("The simulations"). **Nothing here has been measured on our shooters.** Exit speed per RPM,
 launch angle, ball mass, drag and spin are assumed; the tests at the end replace the assumptions.
 

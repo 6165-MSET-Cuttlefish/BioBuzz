@@ -28,7 +28,7 @@ root. Everything is read from source on 2026-11-10 unless marked otherwise.
 centred on the ball at one of 72 headings (every 5°, `RoutePathBuilder.HEADING_STEPS`), keeps its whole footprint
 inside the area and more than the gap from every obstacle. The footprint is the rectangle around frame and intake:
 half-width `max(widthIn, intakeWidthIn) / 2`, back `lengthIn / 2`, front `max(lengthIn / 2, intakeOffsetIn)`
-(`architecture/planner/RobotShape.java:35-37`). With `onField` on, the area is `BioBuzzField.ownHalf(wallGapIn)` and
+(`architecture/planner/RobotShape.java:28-30`). With `onField` on, the area is `BioBuzzField.ownHalf(wallGapIn)` and
 the obstacles are the two HIVE rails (`biobuzz/BallCollection.java:92-99`). Ball Collection, Vision Ball Collection
 and Ball Collection Auto default to `onField` off ([CLAUDE.md](../CLAUDE.md), Testing), so the limits below apply
 only with it on.

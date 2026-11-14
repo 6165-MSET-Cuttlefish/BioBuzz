@@ -61,8 +61,8 @@ Read from source on 2026-11-10:
 - `CellTipCamera.isTipped()` returns that verdict if it is at most `maxStalenessMs` (250 ms) old, and false
   otherwise: a camera that stops delivering frames reads neither TIPPED nor scorable
   (`biobuzz/modules/CellTipCamera.java:77-81`). `RobotActions.checkTip()` ends on the first TIPPED reading, or after
-  `checkTipTimeoutMs` (10 s) (`biobuzz/RobotActions.java:19-24`). SOTM Test's `flipOnCameraTip` flips the aimed CELL
-  on each new TIPPED reading ([sotm-tuning.md](sotm-tuning.md)).
+  `checkTipTimeoutMs` (10 s) (`biobuzz/RobotActions.java:19-24`). With `cellByFieldHalf` off (it defaults on), SOTM
+  Test's `flipOnCameraTip` flips the aimed CELL on each new TIPPED reading ([sotm-tuning.md](sotm-tuning.md)).
 
 What follows from that:
 

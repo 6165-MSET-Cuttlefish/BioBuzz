@@ -2,7 +2,7 @@
 
 What 23 FTC teams' public DECODE-season (2025-26) code does in four areas, and what our robot should take from it.
 Read the section for the area you are about to work on. How the same teams choose a shot and control a flywheel is
-in [`decode-shooter-survey.md`](decode-shooter-survey.md), which also lists each repository and the commit read.
+in [`decode-shooter-findings.md`](decode-shooter-findings.md), which also lists each repository and the commit read.
 
 Read from source on 2026-11-10. One reader per repository traced a full loop from the competition TeleOp and main
 Auto; each section's counts were then recomputed from those 23 write-ups, and its ideas and every statement about
@@ -266,8 +266,8 @@ Port that gate to TeleOp first, then the ideas below. No survey result reports a
 - **Trims.** 4 of 15 add a step every loop while the button is held, so the rate follows loop time; 3 keep trims in
   statics that carry into later OpModes; one goal nudge did nothing at an event because the new `Pose` was discarded.
 - **Aiming a loop late.** 9 compute aim or shooter targets before that loop's odometry update. So does our `Turret`
-  AUTOAIM state (read from source): it aims in `read()` (`biobuzz/modules/Turret.java:110-116`), which runs before
-  `follower.update()` (`architecture/core/EnhancedOpMode.java:309-312`), so it lags one loop, 15.3 ms mean in
+  AUTOAIM state (read from source): it aims in `read()` (`biobuzz/modules/Turret.java:109-115`), which runs before
+  `follower.update()` (`architecture/core/EnhancedOpMode.java:307-310`), so it lags one loop, 15.3 ms mean in
   `docs/loop-time-findings.md`. Turret Aim Test aims this way; SOTM Test's default aim solves in `gameLoop()`.
 
 ### Per team

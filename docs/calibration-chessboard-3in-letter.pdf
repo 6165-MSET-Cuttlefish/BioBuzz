@@ -20,7 +20,7 @@ stream
 0 g
 BT /F2 18.0 Tf 72.000 720.000 Td (Homography calibration chessboard) Tj ET
 BT /F1 10.0 Tf 72.000 687.600 Td (10 x 7 squares of 3.00 in \(9 x 6 inner corners\), with a 3 in white border: 36 x 27 in overall.) Tj ET
-BT /F1 10.0 Tf 72.000 671.760 Td (Set SQUARE_SIZE_INCHES = 3.0 in eocvsim/homography \(or the measured size, see step 6\).) Tj ET
+BT /F1 10.0 Tf 72.000 671.760 Td (Set SQUARE_SIZE_INCHES = 3.0 in eocvsim/homography \(or the measured size, see step 5\).) Tj ET
 BT /F1 10.0 Tf 72.000 655.920 Td () Tj ET
 BT /F1 10.0 Tf 72.000 640.080 Td (1. Print pages 2-19 at Actual size / 100% \(not Fit to page\). Both scale bars on every page) Tj ET
 BT /F1 10.0 Tf 72.000 624.240 Td (   must measure exactly 6.00 in; if not, fix the printer scaling and reprint.) Tj ET

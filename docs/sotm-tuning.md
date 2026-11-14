@@ -17,7 +17,7 @@ All SOTM tunables are in the dashboard group **Shot Tuning** (`biobuzz/ShotTunin
 
 A CELL's opening does not face straight up. It faces the audience wall or the rear wall, tilted 30° upward, and the turrets only reach the robot's rear half. So every shot is taken:
 
-- from **beside** the HIVE (audience side for the CELL that starts up, rear side after a TIP),
+- from **beside** the HIVE (for RED, the audience side for the CELL that starts up and the rear side after a TIP; for BLUE the other way round),
 - with the robot's **back toward the HIVE**,
 - and never from under the HIVE frame (the solver refuses it).
 
@@ -31,11 +31,11 @@ From straight in front of the HIVE the opening is edge-on and nothing will go in
 | A / B | Flywheels on / off |
 | Hold RT | Fire: opens the hardstop while every enabled shooter is ready |
 | X | Switch the target CELL (`STARTS_UP` ↔ `STARTS_DOWN`); only with `cellByFieldHalf` off |
-| Y | SOTM on / off (off = aim as if standing still) |
+| Y | SOTM on / off (off = aim as if standing still). Off after an app restart or deploySloth (`sotmEnabled`); the telemetry SOTM line shows which |
 
 Dashboard group **SOTM Test**: `startX`, `startY`, `startHeadingDeg` (RED coordinates; put the robot there before INIT), `pollenEnabled`, `nectarEnabled`, `aim` (`LEGACY` = the old `Turret` auto-aim, the shot solved as if standing still), `cellByFieldHalf`, `flipOnCameraTip`.
 
-**Which CELL it aims at.** With `cellByFieldHalf` on (the default), the turrets aim at the CELL facing the half of the field the robot is in: the audience-side CELL from the audience half, the rear one from the rear half. Within `cellSwitchBandIn` (3 in) of the midline it keeps its last choice. It does not know which CELL is up: if the one on your side is tipped down, drive to the other side. With it off, X chooses, and `flipOnCameraTip` flips the choice on each TIP the webcam sees.
+**Which CELL it aims at.** With `cellByFieldHalf` on (the default), the turrets aim at the CELL facing the half of the field the robot is in: the audience-side CELL from the audience half, the rear one from the rear half. Within **Shot Tuning** `cellSwitchBandIn` (3 in) of the midline it keeps its last choice. It does not know which CELL is up: if the one on your side is tipped down, drive to the other side. With it off, X chooses, and `flipOnCameraTip` flips the choice on each TIP the webcam sees.
 
 Telemetry shows, per shooter: valid or the reason not, target CELL, virtual target and distance, time of flight, turret angle and rate feedforward, flywheel target and droop, hood, and where the ball crosses the opening.
 
@@ -44,7 +44,7 @@ Telemetry shows, per shooter: valid or the reason not, target CELL, virtual targ
 SOTM is only as good as pose and velocity.
 
 1. In **Pinpoint Localizer Test**, push the robot forward, then left: x, then y, must rise.
-2. Check the velocity sign: in SOTM Test with the robot at heading 90°, drive forward. The virtual target must move **toward the audience** (opposite to travel). If it moves with the robot, the velocity sign is wrong: stop and fix that first.
+2. Check the velocity sign: in SOTM Test with the robot at heading 90°, press Y until telemetry shows SOTM ON, then drive forward. The virtual target must move **toward the audience** (opposite to travel). If it moves with the robot, the velocity sign is wrong: stop and fix that first.
 3. Drive a lap and return to the start mark: the pose should come back within about an inch.
 
 ## Step 2: turrets (Turret Aim Test)
@@ -54,7 +54,7 @@ For each of `Turret.Tuning.nectar` and `pollen`:
 1. `leftPosition`, `backPosition`, `rightPosition`: the servo positions that point the turret exactly robot-left, straight back and robot-right (dpad left / down / right).
 2. Pollen only (two servos): `offset` so the two servos don't fight. Keep each end at least `offset` inside 0 to 1.
 3. `x`, `y`: the pivot, forward and left of the robot's centre, in inches.
-4. Press A (AUTOAIM) and drive around: the turret should stay on the dashboard goal.
+4. Press A (AUTOAIM) and push the robot around by hand (Turret Aim Test has no drive controls): the turret should stay on the dashboard goal.
 
 Then copy the pivot into **Shot Tuning** for the same shooter: `pivotForwardIn` = `x`, `pivotLeftIn` = `y`. The two must match.
 
@@ -94,7 +94,7 @@ Repeat for the other element. Then do the same from a second angle (not just str
 
 ## Step 5: time of flight
 
-At each table distance, film a shot in slow motion (240 fps). Count frames from the ball leaving the shooter to it crossing the opening; `tofS` = frames ÷ frame rate. Enter it in the same table point.
+At each table distance, film a shot in slow motion (240 fps). Count frames from the ball leaving the shooter to it crossing the opening. The solver takes `tofS` as the time to the aim point, `aimDepthIn` (3 in) past the opening's centre inside the CELL, which the video can't show, so add the extra time: about 15 ms at 11 ft and 45 ms at 3 ft ([`shot-calculation-findings.md`](shot-calculation-findings.md#leading-a-moving-shot)). `tofS` = frames ÷ frame rate + that extra. Enter it in the same table point.
 
 This is the number that decides how far the turret leads when moving, so measure it; don't guess.
 
@@ -114,7 +114,7 @@ Once droop points exist, widen that shooter's `rpmTolerance` to about the droop 
 
 ## Step 7: moving shots
 
-Now drive. Change one thing at a time, and test each with the motion that isolates it. "Ahead" means the ball lands past the CELL in the direction the robot is travelling (too little lead); "behind" is the opposite (too much).
+Press Y until telemetry shows SOTM ON, then drive. Change one thing at a time, and test each with the motion that isolates it. "Ahead" means the ball lands past the CELL in the direction the robot is travelling (too little lead); "behind" is the opposite (too much).
 
 | Order | Tunable | Test | Symptom → change |
 |---|---|---|---|
@@ -153,12 +153,14 @@ What each `Valid` reason means:
 | `TURRET_RANGE` | Target is outside the turret's travel: turn the robot's back to the HIVE |
 | `TURRET_RATE` | Turret would have to turn faster than `maxTurretRateDegPerS` |
 | `TOO_FAST` | Robot faster than `maxShotSpeedInPerS` |
+| `EXIT_OFFSET` | `exitLeftIn` is at least the distance to the target: check its value (Step 2) |
 | `BEHIND_OPENING` | Robot is on the wrong side of the opening, or between it and the HIVE's centre: move out to the side the CELL faces |
 | `RISING` | Ball would still be climbing at the opening: needs a steeper, slower shot there |
 | `MISSES_OPENING`, `NO_ENTRY` | Ball would hit the edge or miss: usually shooting from too far off to the side |
 | `BAD_ZONE` | Under the HIVE |
 | `KEEP_OUT` | Turrets in a configured clash |
-| `NOT_CONVERGED`, `NOT_FINITE` | Table has a gap or bad value: check for empty or out-of-order points |
+| `NOT_FINITE` | The element's table has no point with a distance above 0, or the pose or velocity isn't a number |
+| `NOT_CONVERGED` | The virtual target didn't settle: time of flight rises too steeply with distance for the robot's speed toward or away from the CELL; check the table for a mistyped `tofS` |
 
 ## Step 9: save it
 

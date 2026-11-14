@@ -379,15 +379,15 @@ For this wiring to work:
   counted angle with the commanded angle once the servo has settled; on a jump, raise a Fault and fall back to the
   commanded angle.
 - **One Control Hub bulk read at the top of the loop, with a timestamp.** Call `getBulkData()` on the Control Hub
-  where `EnhancedOpMode` now clears caches (`architecture/core/EnhancedOpMode.java:297`, `:407`), stamp it, and have
-  `Shooter.measure()` (`biobuzz/modules/Shooter.java:333-343`) use that stamp. Keep `clearBulkCache()` on the
+  where `EnhancedOpMode` now clears caches (`architecture/core/EnhancedOpMode.java:295`, `:404`), stamp it, and have
+  `Shooter.measure()` (`biobuzz/modules/Shooter.java:331-341`) use that stamp. Keep `clearBulkCache()` on the
   Expansion Hub: a hub that is never cleared returns its first snapshot for the rest of the OpMode.
 - **One failed-read flag per loop.** A failed bulk read returns all zeros without an exception
   ([`sdk-hub-findings.md`](sdk-hub-findings.md)). Set a flag from `isFake()` and have every reader skip that loop:
   the flywheel RPM history, the turret angle, the transfer counter (it would count a ball twice) and the Floodgate
   limiter.
 - **Fetch the battery sensor by name** ("Control Hub"), not `hardwareMap.voltageSensor.iterator().next()`
-  (`EnhancedOpMode.java:114`), which returns the Control Hub only by the order of a hash map. Ignore readings under
+  (`EnhancedOpMode.java:113`), which returns the Control Hub only by the order of a hash map. Ignore readings under
   6 V: a failed read returns 0 and is held for 50 loops.
 - **Detect a lost Expansion Hub.** With nothing read from it the code cannot see it drop. Poll
   `LynxModule.isNotResponding()` on both hubs each loop (it sends no command) and raise a Fault.

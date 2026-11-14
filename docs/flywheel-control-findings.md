@@ -5,8 +5,8 @@ encoders, and where our loop (`biobuzz/modules/Shooter.java`) loses accuracy. Re
 controller, its RPM measurement, the RPMs in the shot table, or the shooter hardware.
 
 Researched 2026-11-10 from the code of 23 DECODE-season (2025-26) FTC teams
-([`decode-shooter-survey.md`](decode-shooter-survey.md)), FRC code and forum posts, the FTC SDK 12.0.0 source, vendor
-documents and two simulations, both checked independently: a generic study, and a rerun with the robot's numbers
+([`decode-shooter-findings.md`](decode-shooter-findings.md)), FRC code and forum posts, the FTC SDK 12.0.0 source,
+vendor documents and two simulations, both checked independently: a generic study, and a rerun with the robot's numbers
 from the CAD model as of 2026-11-10 ([`robots-findings.md`](robots-findings.md)). **Nothing here is measured on our
 shooters, and the robot isn't built.** Code paths are under `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`,
 line numbers as of 2026-11-10 (commit 366596c).
@@ -287,7 +287,7 @@ Why not the alternatives:
 ## What other teams run
 
 Of 23 DECODE teams' competition code, read twice and independently
-([`decode-shooter-survey.md`](decode-shooter-survey.md)), 14 run feedforward (kV, often kS) plus a large P with no
+([`decode-shooter-findings.md`](decode-shooter-findings.md)), 14 run feedforward (kV, often kS) plus a large P with no
 working integral; 3 full power below a band and feedforward inside it; 2 pure bang-bang; 2 a normal loop with
 bang-bang only while feeding; 1 a three-mode hybrid (spin-up, recover, hold); 1 its own loop on top of the hub's
 velocity mode.

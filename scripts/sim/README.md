@@ -238,7 +238,7 @@ encoder windows and ball contact, but with every plant and ball value set per ru
 | stall torque | 1.47 kg·cm, so the torque constant is 0.01567 N·m/A | the product page, https://www.gobilda.com/5000-series-12vdc-motor-with-8mm-rex-pinion-shaft/, as read on 2026-11-10 (not saved). The spec sheet prints "1.74 kg.cm (20.45 oz-in)"; 20.45 oz-in is 1.47 kg·cm. Which figure is the typo is not settled; 1.74 is close to what a torque constant equal to the back-EMF constant gives, and `sens_cad.py` and `checks/rerun.py ktke` run that case |
 | drive | 1:1 belt, 72 mm goBILDA Rhino wheel (3614-0014-0072), r = 36 mm | the CAD model as of 2026-11-10; Nectar's 1:1 is assumed |
 | inertia | design 0.78e-4 kg·m² (wheel 7.3e-5, hub, shaft, pulleys); motor rotor 5e-6 (3e-6 to 8e-6); Pollen's feed roller 1.96e-5. As built: Pollen 1.026e-4, Nectar 0.83e-4 | design: inferred from the CAD model as of 2026-11-10. Rotor: estimated (an RS-555-class armature); the vendor lists no rotor inertia. Roller: estimated, 0.6 m r² for an AndyMark 2 in Stealth wheel taken as 0.1 lb (https://www.andymark.com/products/2-in-stealth-wheel-8mm-bore-60a-durometer lists 0.03, 0.1, 0.17 and 0.3 lb without sizes; saved copy read 2026-11-10) plus 2e-6 for shaft and pulley. Nectar is modelled without a roller |
-| inertia sweep and changes | 1.2, 1.6, 2.4 and 4.0e-4; goBILDA 82 mm steel flywheel 3628-0032-0082, 152 g, 1651 g·cm²; a 96 mm Rhino wheel (3614-0014-0096, 142 g, inertia 2.17e-4 scaled from the 72 mm wheel); gear ratios 0.8, 1.25 and 1.5 (wheel speed over motor speed); a second motor | steel flywheel: https://www.gobilda.com/steel-flywheel-82mm-diameter-152g-1651-g-cm/ as read on 2026-11-10 (not saved), its fit on the shooter unverified. 96 mm wheel: https://www.servocity.com/3614-series-rhino-wheel-14mm-bore-96mm-diameter-30a-durometer as read on 2026-11-10 (not saved) |
+| inertia sweep and changes | 1.2, 1.6, 2.4 and 4.0e-4; goBILDA 82 mm steel flywheel 3628-0032-0082, 152 g, 1651 g·cm²; a 96 mm Rhino wheel (3614-0014-0096, 142 g, inertia 2.17e-4 scaled from the 72 mm wheel); gear ratios 0.8, 1.25 and 1.5 (wheel speed over motor speed); the motor turns at the wheel speed over g, so a geared plant reflects the rotor as J_rotor / g² (`plants()`, `run_cad.py:44-45`); a second motor | steel flywheel: https://www.gobilda.com/steel-flywheel-82mm-diameter-152g-1651-g-cm/ as read on 2026-11-10 (not saved), its fit on the shooter unverified. 96 mm wheel: https://www.servocity.com/3614-series-rhino-wheel-14mm-bore-96mm-diameter-30a-durometer as read on 2026-11-10 (not saved) |
 | balls | Pollen 24.9 g (23.5 to 27.2), radius 35.6 mm; Nectar 41.3 g (39 to 45), radius 45.7 mm; thin shells | sizes from the CAD model as of 2026-11-10; masses from a vendor listing not re-checked (unverified) |
 | exit-speed fraction f | 0.35, 0.45, 0.50 of the wheel's surface speed at exit | assumed; a ball rolling on a fixed hood cannot pass 0.50 |
 | contact time | 2L / v, with L the hood arc the ball centre travels: radius (wheel + ball − 1.1 or 1.3 mm squeeze), wrap 31° Pollen, 23° Nectar (54° and 32° with the side guides, a sensitivity case) | wrap and radii from the CAD model as of 2026-11-10; the model is assumed |
@@ -294,8 +294,7 @@ and `tables_cad.py` before `sens_cad.py` (which appends to its output), `budget_
 | compact results; hood-optimistic line | `python3 -I scripts/sim/cad/flywheel/compact_cad.py` | 1 s | `results_cad.json`; the hood line goes to the terminal |
 | one run, traced | `python3 -I scripts/sim/cad/flywheel/trace_cad.py team hub 0.01 0 0.15` (controller, measurement, kP, kI, interval, then optional plant and shooter) | 1 s | terminal only |
 
-`results/` ends at about 570 MB. On 2026-11-10 every stage above, run from these files, reproduced the earlier run
-bit for bit except the geared plants, which moved with the rotor-inertia fix described below.
+`results/` ends at about 570 MB.
 
 ### Checks: `cad/flywheel/checks/`
 
@@ -354,29 +353,6 @@ the headings the scripts print.
 The friction comparison with the motor's no-load current, the hood servo's travel and the steel flywheel's fit are
 arithmetic or reading, not outputs of these scripts.
 
-### The rotor-inertia fix on 2026-11-10
-
-`plants()` in `run_cad.py` used to reflect the motor rotor onto the wheel as J_rotor × g², with g the wheel speed over
-the motor speed. The motor turns at the wheel speed over g, so the reflected inertia is J_rotor / g²; the code now
-uses that. Only the geared plants changed: Pollen g1.5 J went from 1.09e-4 to 1.00e-4, g1.25 from 1.05e-4 to 1.01e-4,
-g0.8 from 1.01e-4 to 1.05e-4; Nectar 0.89, 0.86 and 0.81e-4 became 0.80, 0.81 and 0.86e-4. Their gains were retuned.
-Every other tuned gain and every other row of `results_tables.txt`, `headline.txt` and `budget.txt` came out bit for
-bit the same, except the overall wheel-energy-over-ball-energy range in ENERGY (2.06 to 3.13 became 2.06 to 3.15).
-Numbers an earlier write-up quoted that moved (best real loop, f 0.45, drag-free, 36/60/84/108/132 in):
-
-| plant | before | now |
-|---|---|---|
-| Pollen g1.25 | 92/105/105/120/135 | 92/105/120/120/150 |
-| Pollen g1.5 | 92/105/105/120/150 | 92/92/105/120/150 |
-| Nectar g1.25 | 120/135/175/200/250 | 120/135/175/200/300 |
-| Nectar g1.5 | 135/150/175/200/250 | 135/150/175/250/250 |
-| Nectar g0.8, ideal loop | 135/175/300/infeasible/infeasible | 120/175/250/infeasible/infeasible |
-| target as a share of free speed: Pollen g0.8 at 132 in; Nectar g1.25 and g1.5 at 132 in | 97%; 77% and 69% | 96%; 78% and 70% |
-
-Pollen g0.8 (92/92/120/175/>300) and Pollen g1.25 with the steel flywheel (92/92/92/105/120) did not change, and
-neither did any CHEAPEST CHANGE cell. The ball-mass spread of the geared plants is now 0.03 to 0.11 points wider
-than as built instead of slightly narrower (Pollen g1.5 at 84 in, f 0.45: −0.99/+0.61% against −0.96/+0.59%).
-
 ## Shot calculation with the robot's geometry: `cad/shotcalc/`
 
 ### What it models
@@ -396,7 +372,7 @@ offset). The target, aim point and entry rule are the generic study's, read from
 | spin lift | lift coefficient −0.30 and −0.15 (topspin) and +0.15 (backspin), nominal drag, `geo` base | assumed |
 | flywheel | 72 mm wheel at 1:1, 0.14842 in/s of surface speed per RPM; exit speed = eta × surface speed, eta 0.35, 0.45 or 0.50; free speed 5400 or 5800 RPM | wheel from the CAD model; eta assumed; free speeds as given to the study |
 | hood speed | 78°/s with no load: 0.09 s per 60° at 6 V through 8.571:1 | vendor, https://www.gobilda.com/2000-series-dual-mode-servo-25-3-speed/, as read on 2026-11-10 (not saved); slower at 4.8 V and under load |
-| shot picks | robust: the widest speed window among shots whose hood window is at least ±2° and distance window at least ±3 in; best speed and robust picks also need an exit speed the flywheel can reach (`V_REACH`: 90% of 5400 RPM at eta 0.45, 324.6 in/s) and hood and distance windows open on both sides | assumed |
+| shot picks | robust: the widest speed window among shots whose hood window is at least ±2° and distance window at least ±3 in; best speed and robust picks also need an exit speed the flywheel can reach (`V_REACH`: 90% of 5400 RPM at eta 0.45, 324.6 in/s) and hood and distance windows open on both sides; when no shot passes, the robust pick reads `none` and schedule `i` holds the last distance's m | assumed |
 | sag model (`sag_energy.py`) | per-ball sag = (1 + k)/2 · m · eta · r² / I, I = 0.78e-4 (also 1e-4, 1.5e-4, 3e-4); stall 1.47 kg·cm at 12 V; 10.9 balls a second | inertia inferred from the CAD model as of 2026-11-10; motor from https://www.gobilda.com/5203-series-yellow-jacket-motor-1-1-ratio-24mm-length-8mm-rex-shaft-6000-rpm-3-3-5v-encoder/; model order-of-magnitude |
 
 Schedules in the tables: `i` is the best-tolerance schedule (the robust pick at each distance, made non-increasing in
@@ -416,7 +392,7 @@ steeper than `floor` to leave room for the hood to cover sag.
 `study.py` skips any case whose `out/raw_<case>.npz` exists: delete `out/` after changing anything in
 `cadcore.py` or `windows.py`. `report.py` reports whichever cases exist; `tables.txt` prints the `nom` cases of each
 shooter and base in full and every case in its CROSS-CASE SUMMARY. On 2026-11-10 `checks/rerun_case.py` reproduced
-two cases bit for bit, and `report.py` on the stored cases reproduced the earlier report except for the fix below.
+two cases bit for bit.
 
 ### Checks: `cad/shotcalc/checks/`
 
@@ -467,23 +443,6 @@ the headings `report.py` prints into `out/tables.txt`; rows of other drag and sp
 
 The comparisons with `rpmTolerance = 75` and `exitHeightIn = 14` (`ShotTuning.java:66` and `:48`) and the hood servo
 arithmetic are worked out by hand from these tables.
-
-### The shot-pick fix on 2026-11-10
-
-`report.py` used to pick the best-speed shot from every scoring shot in the travel, and fell back to that shot when no
-shot passed the robust filter. In the backspin case (+0.15) it chose shots at 79 to 84° that need 353 to 626 in/s and
-have hood and distance windows closed on one side. Now both picks need a reachable speed and windows open on both
-sides, and the robust pick is reported as `none` when nothing passes; schedule `i` then holds the last distance's m.
-What moved:
-
-- Nectar, `geo` base, 132 in, every drag case: the robust pick is `none` (it was the m 0 shot, 3.19% wide at nominal
-  drag, whose hood window is only +1.86° on the high side). Schedule `i` still holds m 0 there and its row still
-  shows 3.19%; the HOOD FLOOR line's "CAD best width" at 132 in now prints `-`.
-- Backspin +0.15, Pollen: best-speed picks went from m 21.5 to 26.5 (353 to 626 in/s) to the normal m 0 to 13.5 (203
-  to 289 in/s), and their sag cover from 43 to 60% to 0 to 1.2%. Nectar at 120 and 132 in: best speed from m 18.5
-  and 18 to m 0; robust pick `none`.
-- Nothing else: no schedule row, width, RPM, time of flight, reach, interpolation or CROSS-CASE SUMMARY number
-  changed.
 
 ## Closed-form shot calculations: `ballistics/`
 

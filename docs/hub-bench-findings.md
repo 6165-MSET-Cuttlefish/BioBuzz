@@ -58,12 +58,9 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     config to name the device. With no device version read, SDK 12's `GoBildaPinpointDriver.update()` reads nothing
     (read from source), so the pose stays at (0, 0, 0) however the robot moves, and Pedro drives without ever seeing
     progress.
-  - Faulting (read from source): on a read with a NaN or an implausible value (its default `LOCAL_TEST` check; ours
-    reports device version 4), the driver keeps the previous value and reports `FAULT_BAD_READ`. A failed I2C read
-    returns zero bytes (`TimestampedI2cData.makeFakeData`), which pass that check, so a Pinpoint that stops answering
-    mid-run should snap the pose to (0, 0, 0) with status `NOT_READY` rather than freeze it (not yet seen on a hub).
-    Pedro 3.0.2's `PinpointLocalizer.update()` never reads `getDeviceStatus()`, and only the test OpModes Pinpoint
-    Localizer Test, Pinpoint Drive Test and Ball Field Drive show it.
+  - Faulting (read from source; not yet seen on a hub): a bad read keeps the previous pose, a failed one snaps it to
+    (0, 0, 0), and Pedro never reads the status: [`sdk-hub-findings.md`](sdk-hub-findings.md#device-drivers). Only
+    Pinpoint Localizer Test, Pinpoint Drive Test and Ball Field Drive show the Pinpoint's status.
   - A guard, like `GuardedOctoQuadLocalizer` for the OctoQuad (below), must check at INIT that the Pinpoint answers
     and stop with an error naming it and its port, then check the status on every read, counting non-READY only after
     the first READY. The Pinpoint reported `FAULT_BAD_READ` right after `BettaConstants.create`, then READY 71 ms

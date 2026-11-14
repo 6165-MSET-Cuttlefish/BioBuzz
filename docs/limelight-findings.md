@@ -45,7 +45,7 @@ Read from source on 2026-11-10: `LimelightSync`, `LimelightBallSource`, `TeamCod
   restart.
 - **Why a thread.** SDK 12 gives `init()`, `init_loop()` and `loop()` no time limit (`OpMode`'s `msStuckDetect*` fields
   are deprecated: "OpModes no longer have a time limit"), so a slow INIT isn't killed. The reason is STOP: a
-  `Limelight3A` POST can block 15 s ([`CLAUDE.md`](../CLAUDE.md), Conventions), which on the OpMode thread freezes INIT,
+  `Limelight3A` POST can block 15 s ([below](#sdk-12-limelight3a-timing)), which on the OpMode thread freezes INIT,
   and a STOP during it outlasts the SDK's 900 ms stop window ([hub-bench-findings.md](hub-bench-findings.md)). On its
   own thread, `LimelightBallSource.stop()` cancels the sync before its next POST (`LimelightBallSource.java:185-192`);
   one already sent finishes on that daemon thread (`LimelightSync.java:47-48`, `:80-82`). A crash in the thread is
@@ -58,8 +58,23 @@ Read from source on 2026-11-10: `LimelightSync`, `LimelightBallSource`, `TeamCod
 
 ## SDK 12 `Limelight3A` timing
 
-Read from source: SDK 12.0.0 `Hardware` sources, `com.qualcomm.hardware.limelightvision.Limelight3A` and `LLResult`.
-CLAUDE.md already covers the blocking POSTs, swallowed poll errors and `setPollRateHz` while polling.
+Read from source: SDK 12.0.0 `Hardware` sources, `com.qualcomm.hardware.limelightvision.Limelight3A` and `LLResult`,
+except where a line says measured.
+
+- Every `boolean` method but `isRunning` and `isConnected` is an HTTP POST or DELETE on the calling thread
+  (`sendPostRequest`, `sendDeleteRequest`). It blocks until the Limelight answers or the read timeout below runs out,
+  and any failure returns a bare `false`: the exception is caught and nothing is logged.
+- Poll errors are swallowed: `updateLatestResult` catches every exception and `sendGetRequest` returns null on any
+  failure. Health shows only as `isConnected()`, `getTimeSinceLastUpdate()` and the result's contents.
+- `setPollRateHz` returns at once while polling. `pause()` only marks the poller stopped, and the next `start()` keeps
+  the schedule running at the old rate; only `stop()` shuts the poller down, so the following `start()` uses the new
+  rate. `resetDeviceConfigurationForOpMode()` is empty, so the rate stays on the device object across OpModes, and an
+  app restart builds a new one at 10 ms. That deploySloth resets it is unchecked.
+- `LLResult.getPipelineType()` is `jsonData.optString("pipelineType", "")` (`LLResult.java:361-362`): empty whenever
+  the Limelight's results lack that key, which they always did on the team's Limelight 3A (measured 2026-09-30,
+  Limelight OS version not recorded). Use `getStatus()`.
+- llpython (the script's output array) keeps the last script's output on every pipeline (measured on the same unit
+  on 2026-09-30).
 
 | what | behaviour |
 |---|---|
@@ -72,9 +87,9 @@ CLAUDE.md already covers the blocking POSTs, swallowed poll errors and `setPollR
 
 ### The wall-clock jump
 
-The hub's clock reads about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`, then
-jumps to the real date ([`CLAUDE.md`](../CLAUDE.md), Build & deploy). If that happens while `LimelightBallSource` runs
-(read from source; neither effect measured, and neither is guarded in code):
+The hub's clock may read about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`, then
+jump to the real date (unchecked: [`toolchain-findings.md`](toolchain-findings.md#deploying)). If that happens while
+`LimelightBallSource` runs (read from source; neither effect measured, and neither is guarded in code):
 
 - **A false fault for one loop.** Until the next poll lands (about 10 ms), `getTimeSinceLastUpdate()` returns decades.
   `connectionProblem()` compares it with `noDataFaultMs` (250), so a loop that reads it then raises the Limelight

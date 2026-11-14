@@ -25,6 +25,10 @@ fork commit unless noted. Java paths are under `TeamCode/src/main/java/org/first
 - **Put test OpMode knobs in groups**, as in [Test OpMode knobs](#test-opmode-knobs). By the source, a `final`
   holder, a Pedro `Pose` or a top-level static array of objects shows nothing editable, and a reassigned holder's
   edits go nowhere.
+- **Close the dashboard tab while timing loops.** An open tab asks for the robot's status every second, and each
+  answer reads every hub's battery voltage with a `getInputVoltage` call, which sends an ADC command and waits for the
+  reply. Read from source: the team build's `FtcDashboard.getRobotStatus` and the client's `socketMiddleware.ts`, and
+  SDK 12.0.0's `LynxModule.getInputVoltage`. What it adds to a loop hasn't been measured.
 - For events, follow [`game-findings.md`](game-findings.md), which covers the competition rule on dashboards.
 
 ## The Hardware Config View freezes the app
