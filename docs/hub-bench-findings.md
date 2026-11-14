@@ -157,6 +157,14 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   - With nothing on the bus, or an MK1 reporting `FAULT_NO_IMU`, INIT hangs with no message.
   - STOP gets out: the SDK force-stopped the OpMode in about 1.3 s without restarting the app.
   - Pedro's `update()` also silently skips invalid reads (CRC error or not RUNNING) and keeps the last pose.
+  - The vendored `pedro/procedures/OctoQuadTuner` builds Pedro's localizer, so it hangs INIT the same way.
+  - What the guard does (read from `architecture/hardware/GuardedOctoQuadLocalizer.java` and
+    `architecture/core/EnhancedOpMode.java:186-187` on 2026-11-12): it never waits in INIT, and raises the `OctoQuad`
+    fault when the OctoQuad isn't RUNNING 3 s after its last reset or reports `FAULT_NO_IMU` on 3 reads in a row.
+    `EnhancedOpMode`'s START calls `awaitRunning()`, which waits for RUNNING until those 3 s are up, then throws
+    naming the problem; an OpMode that isn't an `EnhancedOpMode` calls `awaitRunning()` itself before driving. Once
+    RUNNING, invalid reads for more than 250 ms in a row throw. A pose set before RUNNING is written to the OctoQuad at
+    RUNNING.
   - `GuardedOctoQuadLocalizer` with nothing on the bus (Bench: OctoQuad Absent, 2026-10-24): the bench robot built in
     75 ms, the `OctoQuad` fault came 2979 ms into INIT, INIT kept looping (7.26 / 10.06 / 17.68), and START stopped the
     OpMode with an error naming the OctoQuad. It hasn't run with an OctoQuad plugged in.
@@ -300,6 +308,20 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 - **Floodgate:** an unwired floodgate pin reads 0.001 V, so Drivetrain's current limiter stays at 1.0.
 - **Ivy timeout:** `PathCommands.timeout(15000)` ended 15.008 s (2026-10-09) and 15.006 s (2026-10-24) after START.
 - **Config baseline:** slothboard's config baseline lists every `@Config` class.
+
+## Known problems in the bench code
+
+- **Bench: Limelight Fault can hold STOP past the 900 ms window in its replug step.** Its `onEnd()` puts the
+  Limelight back on the runner's pipeline with `ll.pipelineSwitch(...)` on the OpMode thread during STOP
+  (`opmodes/test/bench/LimelightFaultBench.java:330-343`), a POST that blocks up to 15 s on a hung Limelight
+  ([Hub costs](#hub-costs-control-hub-bulk-caching-off-unless-noted)) and that [`CLAUDE.md`](../CLAUDE.md)
+  (Conventions) keeps to `LimelightSync`'s thread. A Limelight that answered a poll in the last second but hangs on
+  that POST would hold STOP past the window and restart the app. It runs only when the runner passes
+  `restorePipeline`, which it does only in the interactive replug step (`scripts/bench/run_bench.py:7063`), not run
+  on either date. Read from source, 2026-11-11; not seen on a hub, not fixed. Proposed fix: hand the restore to
+  `LimelightSync`'s thread, or, as a bench-only exception to that rule, send it from a one-shot daemon thread; wait at
+  most 300 ms for it and report it as pending at STOP otherwise; dropping the restore isn't a fix, since the next
+  synced INIT selects the ball pipeline, not the one the runner saved.
 
 ## Setup
 

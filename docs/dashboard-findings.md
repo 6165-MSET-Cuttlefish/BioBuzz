@@ -167,10 +167,14 @@ Read from source (`FtcDashboardScanner.java`, `ReflectionConfig.java`, `Variable
   - Inside a group the filter checks the holder field's `final`, not each field's. A `final` value field in a group
     shows, though `FieldProvider` sets it with a plain `Field.set`; a `final` object field in a group is empty.
   - Array elements are filtered by the array field itself, so a top-level `public static` array of objects shows every
-    element as an empty group. An object array that is an instance field of a group works.
-  - `ShotTuning.keepOuts` (`biobuzz/ShotTuning.java:183`) is such a top-level array, so by this reading its keep-out
-    angles can't be entered on the dashboard, which [`sotm-tuning.md`](sotm-tuning.md) (Step 8) expects. Until the
-    Config View shows otherwise, set them in the source or move the array into a group.
+    element as an empty group. An object array that is an instance field of a group works. The pinned 6165.7 build
+    does this: `ReflectionConfig.createVariableFromArrayField` skips every element's fields when the array field is
+    `static` or `final` (javap of the core jar in `TeamCode/libs/m2/`, 2026-11-11).
+  - **Known problem, not fixed:** `ShotTuning.keepOuts` (`biobuzz/ShotTuning.java:183`) is such a top-level array, so
+    its keep-out angles can't be entered on the dashboard, which [`sotm-tuning.md`](sotm-tuning.md) (Step 8)
+    expects. Until it's fixed, enter them in `ShotTuning.java`. Proposed fix: make the array an instance field of a
+    group in `ShotTuning`, its values still 0 (or, the owner's choice, have the team's slothboard fork check each
+    element field's own modifiers).
 
 ## Stock FTC Dashboard with Sloth
 

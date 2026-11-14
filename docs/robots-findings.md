@@ -1,9 +1,10 @@
 # Robot findings
 
 What the code doesn't show about the robots: the BIOBUZZ robot as it stands in CAD, what no code holds or has checked
-on the Cuttle bot (last season's robot), and the sizes and masses of it and the Betta bot (the robot BioBuzz code
-runs on today). Read it before writing code for the BIOBUZZ robot's shooters, turrets or cameras, before running
-anything on the Cuttle bot, or before putting a robot's size into code or a `.pp` path file.
+on the Cuttle bot (last season's robot), the sizes and masses of it and the Betta bot (the robot BioBuzz code runs on
+today), and known problems in the test OpModes and modules that drive them. Read it before writing code for the
+BIOBUZZ robot's shooters, turrets or cameras, before running anything on the Cuttle bot or a shooter, turret or Ivy
+test OpMode, or before putting a robot's size into code or a `.pp` path file.
 
 ## The BIOBUZZ robot, from CAD
 
@@ -132,6 +133,14 @@ and nothing below has been checked on it.
   writes the hood only when the computed position is within 0.585-0.905 (`HoodState.RESET` to `RESET + TOP`, lines
   75-84); outside that the servo stays where it was. If the hood stops following, compare the `Hood Position`
   telemetry line with that range. Last season's code did the same.
+- **Switch close and far shooting with gamepad2 A and B, never the dashboard's `isCloseTele`.** The mode is held
+  twice: `Turret.isCloseTele` (`decode/modules/Turret.java:28`, dashboard group Decode Turret) picks the turret's
+  offsets and nudges (`:89`, `:109`), and `ShooterInterpolation.activeMode`
+  (`decode/modules/ShooterInterpolation.java:18`, not on the dashboard) picks the shot tables (`:192`, `:202`, `:216`;
+  `decode/modules/Shooter.java:103`, `:123`). Decode Tele's A and B set both (`decode/opmodes/DecodeTele.java:226-235`),
+  so the two disagree only after a dashboard edit of `isCloseTele`, which moves the turret's aim and leaves the shot
+  tables as they were. Read from source, 2026-11-11; not fixed. Proposed fix: drop `isCloseTele` and have the turret
+  read `activeMode`.
 
 ## Setting a robot's size or mass
 
@@ -162,6 +171,52 @@ and nothing below has been checked on it.
   `intakeWidthIn` 15, its middle `intakeOffsetIn` 8 in ahead of the robot's centre.
 - Cuttle bot mass: `mass(16.3)` in last season's Pedro constants, 2026-02-19, since commented out; Pedro 2.1.1's
   source gives no unit, so kg is assumed. Unverified.
+
+## Known problems in test OpModes and modules
+
+None of these is fixed. Each was read from source on 2026-11-11, with SDK 12.0.0's sources from the Gradle cache.
+
+- **Turret Aim Test can't put the nectar turret at a calibrated end of 0 or 1.** `TurretServos.turnTo` keeps every
+  turret inside −`offset` to 1 − `offset`, the room a second servo needs (`biobuzz/modules/Turret.java:203`), but
+  the nectar turret has one servo (`:79`), and `offset` does nothing else for it (`:207`). With the source's
+  `nectar.offset` 0.01 and `rightPosition` 1 (`:31-32`), dpad right commands 0.99 and Nectar Position reads 0.990; a
+  negative offset would cut the left end instead. It matters only for a calibrated end within `offset` of 0 or 1.
+  Until it's fixed, set `Turret.Tuning.nectar.offset` to 0. Proposed fix: clip by `offset` only on a turret with two
+  servos. To check a fix: with `nectar.rightPosition` 1, dpad right must read 1.000 and face exactly robot-right,
+  and pollen's second servo must still run `offset` above its first.
+- **Intake Transfer Shooter Test's RPM spikes for one window when `reverseFlywheel` or `reverseEncoder` is flipped
+  mid-run.** `rpm()` (`opmodes/test/IntakeTransferShooterTest.java:199-210`) divides the change in count across its
+  window, and a flip changes the sign of new counts only: the SDK negates `getCurrentPosition()` on a REVERSE motor
+  (`DcMotorImpl.adjustPosition`), `reverseEncoder` negates at `:203`, and nothing clears the window. Until the old
+  samples leave the window (`rpmWindowMs`, 50 ms) the RPM is off by about 0.29 × the encoder count, some 300,000
+  once the wheel has turned 125 times, the kV estimate spikes with it, and with `targetRpm` set and `kP` above 0
+  `power()` pins the output at 0 or 1. Until it's fixed, flip them in open loop (`targetRpm` 0) and ignore that
+  moment's readings. Proposed fix: do as `Shooter` does, applying `reverseEncoder` to the rate and clearing the window
+  when the motor's direction flips (`biobuzz/modules/Shooter.java:308-312`, `:339-340`).
+- **Intake Transfer Shooter Test's `stop()` doesn't stop the transfer's continuous-rotation servo.**
+  `melonbotics.setPower(0)` (`opmodes/test/IntakeTransferShooterTest.java:183`) is a servo pulse-width write
+  (`CRServoImpl.setPower`), which the SDK refuses during STOP without an error
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md#opmode-lifecycle)). Whether the servo stops then depends only on the
+  hub's fail-safe, which nobody has measured. Until it's fixed, set `transfer.melonboticsPower` to 0 before pressing
+  STOP. Proposed fix: `melonbotics.setPwmDisable()` in `stop()`, which the SDK still sends. To check, on
+  `intake_transfer_shooter.xml`: set `melonboticsPower` to 0.5, press STOP before and after the fix, and watch
+  whether the servo keeps turning; logcat shows a `nack rec'd` line for each refused write.
+- **Simple Intake Transfer Shooter Test can't INIT on any hardware config in the repo.** It looks up `flywheel` and
+  `hood` (`opmodes/test/SimpleIntakeTransferShooterTest.java:33`, `:36`). `intake_transfer_shooter.xml` names them
+  `pollenFlywheel`, `nectarFlywheel`, `pollenHood` and `nectarHood`, no config has a `flywheel`, and the two with a
+  `hood` (`betta_decode.xml`, `cuttle_decode.xml`) have no `transfer` or `blocker`; `hardwareMap.get` throws on the
+  first missing name (`HardwareMap.get`). Use Intake Transfer Shooter Test, which drives the same rig with both
+  shooters; it lacks only the gamepad1 A blocker toggle, and its dashboard `blocker.open` does the same. Proposed fix:
+  delete the OpMode, or keep it for a config made on the Driver Station.
+- **Ivy Test's spin-up triggers clear each other instead of themselves.** `spinUpHigh`, scheduled while `b` is set,
+  clears `a` (`opmodes/test/IvyTest.java:34`), and `spinUpLow`, scheduled while `a` is set, clears `b` (`:43`;
+  scheduling at `:69-70`), while `stop` and `increment` clear their own triggers (`:50`, `:60`). The trigger that was
+  set stays set, so its command is scheduled again every loop: with `b` set, `end` holds the flywheels at 0 for one
+  loop and the next puts 0.8 back; with `a` set, `spinUpLow` writes 0.3 every loop, the loop `stop` writes 0
+  included (scheduling read from Ivy core 1.1.1's bytecode). It drives the Cuttle bot's flywheels: only
+  `cuttle_decode.xml` has `leftFlywheel` and `rightFlywheel`. Until it's fixed, clear `a` or `b` on the dashboard
+  before setting `end`. Proposed fix: have each command clear its own trigger, once the teammates who wrote it
+  confirm the swap isn't part of the experiment.
 
 ## Still unknown
 

@@ -99,6 +99,14 @@ All of it ran on a hub on 2026-11-11 (the table above) except the tap, sampler a
 run. Offline it passes the suite in
 [`scripts/bench/photon-offline/`](../scripts/bench/photon-offline/README.md).
 
+Run the mutants suite on an idle machine. On 2026-11-12, on a Mac at load average 40 to 140, the harness (108),
+runner (414), dry-run and lock-leak (13) suites passed, but mutants said 13 of 16 twice, and 15 of 16 at load average
+56. Every mutant failed all the checks named for it; the ones counted missed also failed other checks, not the same
+ones each run, so the suite counted them missed. One of those was a timing check: `enabled: 6 writes return before
+their 20 ms ACKs` took 42 and 58 ms there, against 1.0 ms in the harness run. Rerun the same day with the load average
+between 4 and 11 on 10 cores, all five passed and mutants said 16 of 16
+([`photon-offline-results.txt`](photon-offline-results.txt)).
+
 ## Before every run
 
 **Install.** Full install from Android Studio (TeamCode configuration, Run button), from the same checkout you run the

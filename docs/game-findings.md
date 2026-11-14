@@ -28,7 +28,8 @@ before changing HIVE numbers in `BioBuzzField` or planning routes under the HIVE
 - **The A-frame legs lean in over the lane between the HIVE rails**, and `BioBuzzField.hiveRails()`, the planner's
   only obstacles on the field, leaves them out. Before routing a robot under the frame, add the legs for its height
   ([HIVE geometry](#hive-geometry-field-cad)). Clear of the legs, any legal robot fits under a HIVE at rest.
-- **`BioBuzzField`'s HIVE numbers stand:** they match the CAD and the manual within 0.13 in.
+- **`BioBuzzField`'s HIVE numbers stand:** they match the CAD and the manual within 0.13 in. `cellOpening` combines
+  two of them wrongly, putting the opening 0.68 in too far toward the pivot ([below](#hive-geometry-field-cad)).
 
 ## Sources
 
@@ -139,6 +140,14 @@ measured from the STEP file above; `am-...` are its part names.
   58.75 to 82.75) passes under at any legal height. The shot solver still refuses shots from under the frame
   ([sotm-tuning.md](sotm-tuning.md)).
 - **The code's numbers stand.** Every value in the table agrees within 0.13 in, too little to matter for aiming.
+- **Known problem, not fixed: `cellOpening` puts the CELL opening 0.68 in too far toward the pivot.** It puts the
+  opening's bottom edge at the bar's end in plan, 21.455 × cos 30° = 18.58 in from the pivot, and at the lip height,
+  53.5 in (`biobuzz/BioBuzzField.java:122`, `:133`). With the pivot 43.95 in up both can't hold: the bar's end is
+  54.68 in up, so a bottom edge at 53.5 in lies 1.36 in below it, square to the bar, which is 19.26 in from the pivot
+  in plan. The CAD's 21.394 in and 53.375 in give 19.26 in too, and 19.25 in as the table rounds them (21.39 in,
+  53.38 in; computed 2026-11-12). The solver's aim point, entry check and `BEHIND_OPENING` rule all use this opening,
+  so all three sit 0.68 in toward the pivot. Proposed fix: place the bottom edge (53.5 − 43.95 − 21.455 × sin 30°) /
+  cos 30° along the opening's face from the bar's end, with the pivot height as a constant.
 
 ## Still unknown
 

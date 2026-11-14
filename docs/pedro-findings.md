@@ -141,6 +141,10 @@ only `ForesightTuner.java` and its dependency file, which now pins `revhub` 3.0.
 - Run `scripts/update-pedro-quickstart.sh`, set `tuning` to 1.0.3 in `TeamCode/build.gradle` in the same commit
   (CLAUDE.md, Conventions), then do a full install. The script copies master's current head: if it prints a commit
   other than 4f33ef5, read what else changed before running it on the robot.
+- AutoTune lists only the procedures `pedro/Tuning.java` registers: Mecanum, Pinpoint, Foresight and Tests. The
+  script copies every Quickstart procedure, so five more (`OctoQuadTuner`, `OTOSTuner`, `ThreeWheelIMUTuner`,
+  `ThreeWheelTuner`, `TwoWheelTuner`; 1,606 lines) ship in every APK where nothing can reach them, and one deleted by
+  hand comes back at the next refresh (read from source, 2026-11-12). To drop them, narrow the script's copy list.
 - What the new `ForesightTuner` adds (read from source, Quickstart 4f33ef5):
   - It stops with a message when a measured value is NaN, infinite, or not positive where it must be, and when a
     run-up calibration has fewer than 2 usable samples or a slope that isn't negative. The vendored copy checks only
