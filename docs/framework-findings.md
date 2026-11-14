@@ -61,8 +61,8 @@ command stores where a supplier reads it:
 - reaches the State at the next loop's refresh and the hardware in that loop's `write()`: one loop late (15.3 ms mean
   in the Ivy Path Test log, [loop-time-findings.md](loop-time-findings.md));
 - in an OpMode whose `shouldReadDuringInit()` returns false, isn't refreshed again after `initStates()` until the
-  first loop after START, since the refresh is skipped with the reads (`EnhancedOpMode.java:307`). Only `DecodeTele`
-  turns reads off today, and its modules bind no tunables.
+  first loop after START, since the refresh is skipped with the reads (`EnhancedOpMode.java:307`). No OpMode turns
+  reads off today.
 
 What to do:
 
@@ -135,15 +135,14 @@ What the order decides:
 | `EnhancedMotor.withVoltageCompensation(ref)`: power × ref / V, then clamped to ±1 | skips scaling below 6 V | `architecture/hardware/WriteCache.java:15-16`, `:32-37`; `architecture/hardware/EnhancedMotor.java:35` |
 | `Shooter`'s flywheel headroom, min(1, V / 13) | none | `biobuzz/modules/Shooter.java:317` |
 
-`withVoltageCompensation` is on both BioBuzz flywheels and both `decode/` flywheels, at 13 V
-(`biobuzz/modules/Shooter.java:294`, `decode/modules/Shooter.java:87-88`). What the stale value and the missing guard
+`withVoltageCompensation` is on both BioBuzz flywheels, at 13 V (`biobuzz/modules/Shooter.java:294`). What the stale value and the missing guard
 do to the flywheels: [flywheel-control-findings.md](flywheel-control-findings.md#where-our-loop-loses-accuracy).
 
 ## Kept on purpose
 
-Nothing in this repo calls these (checked 2026-11-10). Decided 2026-10-18: they stay for reuse on the BIOBUZZ robot,
-and "unused" is judged against last season's DECODE code, not only this repo. Before calling other code unused, check
-`decode/` and last season's code for callers.
+Nothing in this repo calls these (checked 2026-11-10). Decided 2026-10-18: they stay for reuse on the BIOBUZZ robot.
+Judge other code unused against this repo alone: last season's code left it on 2026-11-13, when the team retired the
+Cuttle bot.
 
 | piece | what it is |
 |---|---|
@@ -152,8 +151,6 @@ and "unused" is judged against last season's DECODE code, not only this repo. Be
 | `Drivetrain.isBonk()` (`biobuzz/modules/Drivetrain.java:159-168`) | when called every loop: true once Pedro has been on a path, short of its end, at a speed under 2 (Pedro's velocity units) for 2 s; last season's autos, not in this repo, used it to skip a segment the robot was stuck on |
 | `Camera.getPredictedBallPosition` and `getPredictedFieldPosition` (`biobuzz/modules/Camera.java:118-124`, `:130-136`), with the `predict()` they call on `TrackedBall` and `FieldBall` | where a tracked ball will be after a lookahead, extrapolated at constant velocity |
 | `RobotShape.turnRadius()`, `centreFor`, `intakeAt` and `canTurnAt` (`architecture/planner/RobotShape.java:34-48`, `:121-128`) | footprint geometry for the ball planner |
-
-`decode/` (last season's code) also stays while the Cuttle bot is still driven, decided the same day.
 
 ## Still unknown
 

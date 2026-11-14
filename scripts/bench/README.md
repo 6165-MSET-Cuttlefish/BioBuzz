@@ -488,7 +488,6 @@ shipped config, holds INIT 4 s, then STOPs it. It never STARTs one. No new OpMod
 |---|---|
 | BioBuzz Tele, Turret Aim Test, SOTM Test, BioBuzz Shooter Test, Intake Transfer Shooter Test | `biobuzz` |
 | Cell Tip Test | `camera` |
-| Decode Tele | `cuttle_decode` |
 
 **Plug in:** the Control Hub on 12 V; an Expansion Hub on RS485 at address 2, powered from the Control Hub's second
 XT30 port (every shipped config with an Expansion Hub names it at address 2); the Pinpoint in Control Hub I2C port 1,
@@ -509,8 +508,8 @@ What it does, in order:
    the probe didn't reach both hubs, no robot OpMode is INITed. `bench_photon` names servos only on ports 0 and 1 of
    each hub, so the probe-only run turns off no other servo port's signal; `--s3-ports` has servo ports 0-5 of both
    hubs empty anyway.
-3. Activates each shipped config by name, with the resource id this install gives it (three config switches), and
-   INITs that config's OpModes one at a time (seven INITs). Then it switches back to `bench_main`.
+3. Activates each shipped config by name, with the resource id this install gives it (two config switches), and
+   INITs that config's OpModes one at a time (six INITs). Then it switches back to `bench_main`.
 
 | judged, per OpMode | FAIL when |
 |---|---|
@@ -518,10 +517,9 @@ What it does, in order:
 | no NullPointerException, no hang over 10 s, same pid | INIT threw a NullPointerException, INIT or its error took over 10 s to show, STOP took over 10 s, or the Robot Controller app restarted |
 | the port probe (once) | a motor port drew current, or the probe didn't cover 4 motor ports on each of 2 hubs |
 
-Two errors are explained, because the device is somewhere else at this station: `aprilTagDetector failed to open`
-when no attached webcam has the config's serial, and Decode Tele's errors about its I2C devices (its config puts the
-Pinpoint, the Prism and the colour sensors on ports this station uses for other things). The code throws there rather
-than reporting a fault and going on, so INIT ends and the lookups after it don't run. That check FAILs as "not
+One error is explained, because the device is absent at this station: `aprilTagDetector failed to open` when no
+attached webcam has the config's serial. The code throws there rather than reporting a fault and going on, so INIT
+ends and the lookups after it don't run. That check FAILs as "not
 judged", not as a bad config: this station can't check those lookups, and step 1's list covers only some of them.
 
 The `summary.md` table gives, per OpMode: the INIT outcome, the error, the device a missing-device error names, the
@@ -529,7 +527,7 @@ time from INIT to the error and the pid before and after. Until `biobuzz.xml` is
 [`docs/wiring-findings.md`](../../docs/wiring-findings.md), the `biobuzz` OpModes are expected to FAIL their lookup
 check.
 
-Only a hub shows: the real error text each OpMode throws, whether the allowed errors read the way the bench expects,
+Only a hub shows: the real error text each OpMode throws, whether the allowed error reads the way the bench expects,
 what each OpMode writes during INIT, and how long each INIT and STOP takes. Offline:
 `python3 -I scripts/bench/offline/benches/config_check.py`.
 

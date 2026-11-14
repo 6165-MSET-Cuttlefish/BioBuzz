@@ -5,7 +5,7 @@ from xml.etree import ElementTree
 
 PAIRS = (("BioBuzz Tele", "biobuzz"), ("Turret Aim Test", "biobuzz"), ("SOTM Test", "biobuzz"),
          ("BioBuzz Shooter Test", "biobuzz"), ("Intake Transfer Shooter Test", "biobuzz"),
-         ("Cell Tip Test", "camera"), ("Decode Tele", "cuttle_decode"))
+         ("Cell Tip Test", "camera"))
 CONFIGS = tuple(dict.fromkeys(config for _, config in PAIRS))
 EXPANSION_ADDRESS = 2
 HOLD_S = 4.0
@@ -17,8 +17,6 @@ PROBE_MOTORS_PER_HUB = 4
 MISSING_DEVICE = re.compile(r'Unable to find a hardware device with (?:the )?name "([^"]*)"(?: and type (\w+))?')
 NULL_POINTER = "NullPointerException"
 WEBCAM_OPEN_FAILED = re.compile(r"(\S+) failed to open")
-# The Cuttle bot's config: at this station its I2C devices other than the IMU are on other ports or not plugged in.
-ELSEWHERE_HERE = {"Decode Tele": "cuttle_decode"}
 JAVA_ROOT = "TeamCode/src/main/java"
 TEAMCODE = "org/firstinspires/ftc/teamcode"
 LOOKUP_LITERALS = (re.compile(r'\.get\(\s*[\w.]+\.class\s*,\s*"([^"]+)"\s*\)'),
@@ -27,7 +25,7 @@ LOOKUP_LITERALS = (re.compile(r'\.get\(\s*[\w.]+\.class\s*,\s*"([^"]+)"\s*\)'),
 LOOKUP_MEANS = ("this OpMode can't INIT on the config it ships for: its code asks for a device the config doesn't "
                 "name (or names with another type), or INIT stopped on an error this station doesn't explain before "
                 "every lookup ran; fix the config (res/xml) or the code's device name. 'Not judged': INIT stopped at a "
-                "device that is elsewhere at this station, and the code throws there instead of reporting a fault and "
+                "device that is absent at this station, and the code throws there instead of reporting a fault and "
                 "going on, so the lookups after it are unchecked (step 1's source list covers some)")
 CLEAN_MEANS = ("INIT on its own config threw a NullPointerException, took over 10 s to show or to stop, or restarted "
                "the Robot Controller app: a driver would see the app hang or restart at INIT")
@@ -51,26 +49,13 @@ def config_webcams(xml_text):
     return {e.get("name"): e.get("serialNumber") for e in ElementTree.fromstring(xml_text).iter("Webcam")}
 
 
-def elsewhere_tokens(xml_text):
-    """Words an error about one of this config's I2C devices (the IMU aside) would carry: its name and its type."""
-    tokens = set()
-    for e in ElementTree.fromstring(xml_text).iter():
-        if e.get("bus") is None or not e.get("name") or "imu" in e.tag.lower():
-            continue
-        tokens.add(e.get("name").lower())
-        kind = re.sub(r"^(gobilda|rev)|v\d+$", "", e.tag.lower())
-        if len(kind) >= 4:
-            tokens.add(kind)
-    return sorted(tokens)
-
-
 def missing_device(error):
     m = MISSING_DEVICE.search(error or "")
     return None if m is None else {"name": m.group(1), "type": m.group(2)}
 
 
-def allowed_fault(pair, webcams_attached, config_cameras, elsewhere):
-    """Why this INIT error is about a device that is elsewhere or absent at this station, or None."""
+def allowed_fault(pair, webcams_attached, config_cameras):
+    """Why this INIT error is about a device that is absent at this station, or None."""
     error = (pair.get("error") or "") if pair.get("crashed") else ""
     if not error or missing_device(error) or NULL_POINTER in error:
         return None
@@ -78,14 +63,10 @@ def allowed_fault(pair, webcams_attached, config_cameras, elsewhere):
     if m and m.group(1) in config_cameras and config_cameras[m.group(1)] not in webcams_attached:
         return (f"{m.group(1)} failed to open: the config names webcam {config_cameras[m.group(1)]}, and the attached "
                 f"webcams are {sorted(webcams_attached) or 'none'}")
-    squashed = re.sub(r"\s+", "", error.lower())
-    hit = next((t for t in elsewhere if re.sub(r"\s+", "", t) in squashed), None)
-    if hit is not None:
-        return f"an error about {hit}, an I2C device of {pair['config']} that isn't on that port at this station"
     return None
 
 
-def pair_checks(pair, webcams_attached, config_cameras, elsewhere):
+def pair_checks(pair, webcams_attached, config_cameras):
     """(lookups ok, detail) and (clean ok, detail) for one OpMode INITed on its own config."""
     if pair.get("notRun"):
         return (False, f"not run: {pair['notRun']}"), (False, f"not run: {pair['notRun']}")
@@ -94,7 +75,7 @@ def pair_checks(pair, webcams_attached, config_cameras, elsewhere):
         return (False, why), (False, why)
     error = (pair.get("error") or "") if pair.get("crashed") else ""
     missing = missing_device(error)
-    allowed = allowed_fault(pair, webcams_attached, config_cameras, elsewhere)
+    allowed = allowed_fault(pair, webcams_attached, config_cameras)
     if missing is not None:
         lookups = (False, f"INIT stopped at a missing device: {missing['name']!r}"
                           + (f" as {missing['type']}" if missing["type"] else "") + f" ({error[:240]!r})")
@@ -139,7 +120,7 @@ def checks(record):
             *probe_check(record.get("portProbe")), PROBE_MEANS)]
     attached = set(record.get("webcams") or [])
     for pair in record.get("pairs") or []:
-        lookups, clean = pair_checks(pair, attached, pair.get("cameras") or {}, pair.get("elsewhere") or [])
+        lookups, clean = pair_checks(pair, attached, pair.get("cameras") or {})
         out.append((f"config check: {pair['opmode']} on {pair['config']}: every hardware lookup found its device",
                     *lookups, LOOKUP_MEANS))
         out.append((f"config check: {pair['opmode']} on {pair['config']}: no NullPointerException, no hang over "
@@ -260,9 +241,7 @@ def port_probe(r, record):
 
 
 def run(r, record):
-    record["pairs"] = [{"opmode": o, "config": c, "cameras": config_webcams(config_xml(c)),
-                        "elsewhere": elsewhere_tokens(config_xml(c)) if ELSEWHERE_HERE.get(o) == c else []}
-                       for o, c in PAIRS]
+    record["pairs"] = [{"opmode": o, "config": c, "cameras": config_webcams(config_xml(c))} for o, c in PAIRS]
     record["webcams"] = sorted(w["serial"] for w in (r.probe or {}).get("webcams", []) if w.get("attached"))
     record["desktop"] = desktop_lookups(rb.REPO_ROOT)
     if not r.switch_with_adb:

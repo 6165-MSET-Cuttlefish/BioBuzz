@@ -1,10 +1,10 @@
 # Robot findings
 
-What the code doesn't show about the robots: the BIOBUZZ robot as it stands in CAD, what no code holds or has checked
-on the Cuttle bot (last season's robot), the sizes and masses of it and the Betta bot (the robot BioBuzz code runs on
-today), and known problems in the test OpModes and modules that drive them. Read it before writing code for the
-BIOBUZZ robot's shooters, turrets or cameras, before running anything on the Cuttle bot or a shooter, turret or Ivy
-test OpMode, or before putting a robot's size into code or a `.pp` path file.
+What the code doesn't show about the robots: the BIOBUZZ robot as it stands in CAD, the sizes and masses of the
+Cuttle bot (last season's robot, retired 2026-11-13) and the Betta bot (the robot BioBuzz code runs on today), and
+known problems in the test OpModes and modules that drive them. Read it before writing code for the BIOBUZZ robot's
+shooters, turrets or cameras, before running a shooter, turret or Ivy test OpMode, or before putting a robot's size
+into code or a `.pp` path file.
 
 ## The BIOBUZZ robot, from CAD
 
@@ -92,56 +92,6 @@ What code has to respect:
 - **Where the flywheel encoders plug in is undecided**: see
   [`flywheel-control-findings.md`](flywheel-control-findings.md#where-to-plug-the-flywheel-encoders).
 
-## Before running anything on the Cuttle bot
-
-`decode/` is the only code for the Cuttle bot ([CLAUDE.md](../CLAUDE.md), Project context); its one OpMode is Decode
-Tele, last season's TeleOp on this framework. Nothing in the repo shows it has run on that robot since it was ported,
-and nothing below has been checked on it.
-
-- **No code holds the PTOs or the initial lift.** A PTO (power take-off) is a servo-engaged coupling that lets the
-  drive motors run the endgame lift; the initial lift is that lift's first stage, on two continuous-rotation servos.
-  Before driving, check by hand that both PTOs are disengaged and stay disengaged with their servos unpowered. If they
-  don't, hold them in a `decode/` module's `write()`.
-  - The devices, in `TeamCode/src/main/res/xml/cuttle_decode.xml`: `leftPto` (Expansion Hub servo port 2, line 33),
-    `rightPto` (Expansion Hub servo port 5, line 36), `leftInitial` and `rightInitial` (Control Hub servo ports 3
-    and 4, lines 13-14), and the lift's analog encoders `leftInitialEncoder` and `rightInitialEncoder` (lines 40
-    and 18). No Java file in `TeamCode/src/main/java` names any of them (read from source, 2026-11-10).
-  - Last season's code held the PTOs disengaged at `leftPto` 0.4 and `rightPto` 0.5, and held the initial lift with a
-    position loop on those encoders (state `HOLD_BELLYPAN`); `git log -S leftPto` finds it. Whether 0.4 and 0.5 still
-    disengage is unchecked.
-  - A hold in code covers only START to STOP. Before each OpMode's INIT the SDK turns every servo's pulse off
-    (`OpModeManagerImpl.resetHardwareForOpMode()`, which reaches `LynxServoController.floatHardware()`; SDK 12.0.0
-    source), and `EnhancedOpMode` writes no module during INIT. Through INIT the PTOs must stay put on their own.
-- **Check drive and odometry directions before trusting Decode Tele.** It drives with last season's constants,
-  copied into `decode/CuttleDrive.java` and not checked on the robot since (read from source):
-
-  | setting | value | line |
-  |---|---|---|
-  | motor directions | `fl`, `bl` REVERSE; `fr`, `br` FORWARD | 27-30 |
-  | Pinpoint pods | goBILDA 4-bar | 38 |
-  | Pinpoint pod offsets | x -5.5 in, y 1.0 in | 39-40 |
-  | Pinpoint encoder directions | x and y both REVERSED | 41-42 |
-
-  - Wheels off the ground: drive forward, strafe left and turn left, and check every wheel turns the right way.
-  - On the ground, in Decode Tele itself (Pinpoint Localizer Test uses `BettaConstants`): press gamepad1 B, which sets
-    the pose facing 0° (the INIT placeholder pose faces 90°, where pushing forward raises Y instead). Push the robot
-    forward, then left: `Robot Position` (ROBOT STATUS group) X must rise, then Y. Then turn it in place: X and Y
-    should barely move.
-  - The Pinpoint is on the Expansion Hub, I2C bus 3 (`cuttle_decode.xml` line 45), where each I2C read costs more
-    loop time than on the Control Hub ([hub-bench-findings.md](hub-bench-findings.md)).
-- **The hood can stop moving with no warning.** `Shooter.write()` (`decode/modules/Shooter.java` lines 164-167)
-  writes the hood only when the computed position is within 0.585-0.905 (`HoodState.RESET` to `RESET + TOP`, lines
-  75-84); outside that the servo stays where it was. If the hood stops following, compare the `Hood Position`
-  telemetry line with that range. Last season's code did the same.
-- **Switch close and far shooting with gamepad2 A and B, never the dashboard's `isCloseTele`.** The mode is held
-  twice: `Turret.isCloseTele` (`decode/modules/Turret.java:28`, dashboard group Decode Turret) picks the turret's
-  offsets and nudges (`:89`, `:109`), and `ShooterInterpolation.activeMode`
-  (`decode/modules/ShooterInterpolation.java:18`, not on the dashboard) picks the shot tables (`:192`, `:202`, `:216`;
-  `decode/modules/Shooter.java:103`, `:123`). Decode Tele's A and B set both (`decode/opmodes/DecodeTele.java:226-235`),
-  so the two disagree only after a dashboard edit of `isCloseTele`, which moves the turret's aim and leaves the shot
-  tables as they were. Read from source, 2026-11-11; not fixed. Proposed fix: drop `isCloseTele` and have the turret
-  read `activeMode`.
-
 ## Setting a robot's size or mass
 
 - **`docs/paths/CloseFlowerAuto.pp` draws the Betta bot sideways: set `rWidth` to 16 and `rHeight` to 15.** In a
@@ -226,10 +176,4 @@ None of these is fixed. Each was read from source on 2026-11-11, with SDK 12.0.0
   servo on the nectar pinion).
 - **How the nectar turret encoder is coupled to its 8 mm shaft, and its real slew speed under the shooter's
   inertia.** Test: look at the built turret; time a 180° move from the encoder count.
-- **Do `leftPto` 0.4 and `rightPto` 0.5 still disengage?** Test: on the Cuttle bot, set each from the dashboard's
-  Hardware view and look at the PTO.
-- **What does the initial lift do with `leftInitial` and `rightInitial` unpowered?** Test: run Decode Tele through
-  INIT, START and STOP and watch the lift.
-- **Are Decode Tele's drive directions, Pinpoint encoder directions and pod offsets right?** Test: the checks above.
 - **Both robots' current masses.** Test: weigh each robot as it stands.
-- **The Cuttle bot's frame size.** Test: measure it front to back and side to side.

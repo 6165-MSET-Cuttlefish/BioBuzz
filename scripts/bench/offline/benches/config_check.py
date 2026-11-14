@@ -1,6 +1,6 @@
 """Bench: Config Check offline: its verdicts on synthetic results (each one fails when weakened), its source scan, and
 the bench end to end on fake_hub.py with an Expansion Hub at address 2: the typed ports statement before any adb
-command, the port probe gate, three shipped configs by name, seven INITs and no START. No hub, no adb, no network.
+command, the port probe gate, two shipped configs by name, six INITs and no START. No hub, no adb, no network.
 Run with: python3 -I scripts/bench/offline/benches/config_check.py
 """
 import contextlib
@@ -62,7 +62,6 @@ def good_record():
     for opmode, config in cc.PAIRS:
         xml = cc.config_xml(config)
         record["pairs"].append({"opmode": opmode, "config": config, "cameras": cc.config_webcams(xml),
-                                "elsewhere": cc.elsewhere_tokens(xml) if cc.ELSEWHERE_HERE.get(opmode) == config else [],
                                 "initSeenS": 0.6, "crashed": False, "error": "", "stopS": 0.4, "pidBefore": 4000,
                                 "pidAfter": 4000, "appRestarted": False})
     return record
@@ -112,7 +111,9 @@ def only_fails(v, *keys):
 CASES = [
     ("every OpMode held INIT on its own config: all pass", good_record, lambda v: only_fails(v)),
     ("a missing device on its own config fails the lookup check alone",
-     lambda: crash(good_record(), "Turret Aim Test", NECTAR), lambda v: only_fails(v, ("Turret Aim Test", "lookups"))),
+     lambda: crash(good_record(), "Turret Aim Test", NECTAR),
+     lambda v: only_fails(v, ("Turret Aim Test", "lookups"))
+     and v.detail[("Turret Aim Test", "lookups")].startswith("INIT stopped at a missing device")),
     ("the SDK's other two missing-device messages fail it too",
      lambda: crash(crash(good_record(), "SOTM Test", 'Unable to find a hardware device with name "PollenHood"'),
                    "BioBuzz Tele", 'Unable to find a hardware device with the name "NectarShooter"'),
@@ -130,14 +131,15 @@ CASES = [
      lambda: (pair(r := good_record(), "Cell Tip Test").update(failed="Cell Tip Test to INIT timed out"), r)[1],
      lambda v: only_fails(v, ("Cell Tip Test", "lookups"), ("Cell Tip Test", "clean"))),
     ("an app restart (pid changed) fails the clean check",
-     lambda: (pair(r := good_record(), "Decode Tele").update(pidAfter=4001, appRestarted=True), r)[1],
-     lambda v: only_fails(v, ("Decode Tele", "clean"))),
+     lambda: (pair(r := good_record(), "BioBuzz Shooter Test").update(pidAfter=4001, appRestarted=True), r)[1],
+     lambda v: only_fails(v, ("BioBuzz Shooter Test", "clean"))),
     ("a pid change the runner didn't flag as a restart still fails",
-     lambda: (pair(r := good_record(), "Decode Tele").update(pidAfter=4001), r)[1],
-     lambda v: only_fails(v, ("Decode Tele", "clean"))),
+     lambda: (pair(r := good_record(), "BioBuzz Shooter Test").update(pidAfter=4001), r)[1],
+     lambda v: only_fails(v, ("BioBuzz Shooter Test", "clean"))),
     ("an OpMode not run fails both",
-     lambda: (pair(r := good_record(), "Decode Tele").update(notRun="this install doesn't ship cuttle_decode"), r)[1],
-     lambda v: only_fails(v, ("Decode Tele", "lookups"), ("Decode Tele", "clean"))),
+     lambda: (pair(r := good_record(), "Intake Transfer Shooter Test")
+              .update(notRun="this install doesn't ship intake_transfer_shooter"), r)[1],
+     lambda v: only_fails(v, ("Intake Transfer Shooter Test", "lookups"), ("Intake Transfer Shooter Test", "clean"))),
     ("the webcam failing to open with another serial attached is explained, but its lookups after it didn't run: "
      "not judged, so not a PASS",
      lambda: crash(good_record(), "Cell Tip Test", WEBCAM),
@@ -145,21 +147,13 @@ CASES = [
     ("the webcam failing to open with the config's own serial attached fails, as unexplained",
      lambda: (lambda r: (r.update(webcams=["UC852"]), r)[1])(crash(good_record(), "Cell Tip Test", WEBCAM)),
      lambda v: only_fails(v, ("Cell Tip Test", "lookups")) and not not_judged(v, "Cell Tip Test")),
-    ("Decode Tele stopping at its Pinpoint (its config has it on the Expansion Hub): no lookup after it ran, so not "
-     "judged, not a PASS",
-     lambda: crash(good_record(), "Decode Tele", PINPOINT),
-     lambda v: only_fails(v, ("Decode Tele", "lookups")) and not_judged(v, "Decode Tele")),
-    ("the same Pinpoint error from a BioBuzz OpMode fails as unexplained: the allowance is Decode Tele's",
+    ("a Pinpoint error fails as unexplained: no OpMode has an I2C allowance at this station",
      lambda: crash(good_record(), "BioBuzz Tele", PINPOINT),
      lambda v: only_fails(v, ("BioBuzz Tele", "lookups")) and not not_judged(v, "BioBuzz Tele")),
-    ("a missing device is never allowed, even one Decode Tele's allowance names",
-     lambda: crash(good_record(), "Decode Tele", 'Unable to find a hardware device with name "pinpoint" and type '
-                                                 'SparkFunOTOS'),
-     lambda v: only_fails(v, ("Decode Tele", "lookups"))
-     and v.detail[("Decode Tele", "lookups")].startswith("INIT stopped at a missing device")),
-    ("a NullPointerException naming an allowed device still fails",
-     lambda: crash(good_record(), "Decode Tele", NPE + " in prism"),
-     lambda v: only_fails(v, ("Decode Tele", "lookups"), ("Decode Tele", "clean"))),
+    ("a NullPointerException alongside an allowed webcam error still fails",
+     lambda: crash(good_record(), "Cell Tip Test", WEBCAM + " after " + NPE),
+     lambda v: only_fails(v, ("Cell Tip Test", "lookups"), ("Cell Tip Test", "clean"))
+     and not not_judged(v, "Cell Tip Test")),
     ("an error the station doesn't explain fails the lookup check",
      lambda: crash(good_record(), "Intake Transfer Shooter Test", "java.lang.IllegalStateException: boom"),
      lambda v: only_fails(v, ("Intake Transfer Shooter Test", "lookups"))),
@@ -207,7 +201,7 @@ def verdict_cases():
     expect("summary: the table names the missing device and the OpMode's config", "| Turret Aim Test | biobuzz | threw |"
            in text and "| NectarTurret |" in text)
     expect("summary: one row per OpMode, and a line per OpMode for the source scan",
-           sum(f"| {o} |" in text for o in ROBOT_OPMODES) == len(ROBOT_OPMODES) and text.count("names; not in") == 7)
+           sum(f"| {o} |" in text for o in ROBOT_OPMODES) == len(ROBOT_OPMODES) and text.count("names; not in") == 6)
     names = [c[0] for c in BENCH.checks(good_record())]
     expect("checks: the probe, then two per OpMode", len(names) == 1 + 2 * len(cc.PAIRS) and len(set(names)) == len(names))
 
@@ -266,9 +260,6 @@ def source_scan():
            "PollenHood" in (shooter.get("literals") or []) and shooter.get("files", 0) > 1)
     expect("source scan: the bench OpModes aren't followed", not any("/opmodes/test/bench/" in str(v)
                                                                    for v in found.values()))
-    expect("record: Decode Tele alone gets the station's allowance, from cuttle_decode's I2C devices",
-           {"pinpoint", "prism", "backleftcolor", "colorsensor"} <= set(cc.elsewhere_tokens(cc.config_xml("cuttle_decode")))
-           and "imu" not in cc.elsewhere_tokens(cc.config_xml("cuttle_decode")))
 
 
 class FakeStdin:
@@ -362,7 +353,7 @@ def on_the_fake_hub():
     expect("--s3-ports with the terminal closed before an answer: refused before any adb command",
            code == 1 and hub.calls == [])
 
-    hub = Station(crashes={"Turret Aim Test": NECTAR, "Cell Tip Test": WEBCAM, "Decode Tele": PINPOINT})
+    hub = Station(crashes={"Turret Aim Test": NECTAR, "Cell Tip Test": WEBCAM})
     code, out, stdin = station_run(["--config-check", "--s3-ports"], hub)
     summary = (out / "summary.md").read_text()
     log = (out / "run.log").read_text()
@@ -385,22 +376,20 @@ def on_the_fake_hub():
     expect("bench_photon names servos on ports 0 and 1 of each hub only, as the probe's servos=2 would",
            servo_ports == [("173", "0"), ("173", "1"), ("2", "0"), ("2", "1")])
     shipped = [s for s in hub.switched if s["name"] in cc.CONFIGS]
-    expect("three shipped configs, each activated by name with this install's resource id",
+    expect("two shipped configs, each activated by name with this install's resource id",
            [s["name"] for s in shipped] == list(cc.CONFIGS)
            and all(s["location"] == "RESOURCE" and s["resourceId"] == hub.probe["shippedConfigs"][s["name"]]
                    for s in shipped))
-    expect("seven INITs, in the table's order, each on its own config", robot_inits == ROBOT_OPMODES)
+    expect("six INITs, in the table's order, each on its own config", robot_inits == ROBOT_OPMODES)
     expect("no robot OpMode was ever STARTed", not set(starts) & set(ROBOT_OPMODES))
-    expect("then back to bench_main before the restore", names[names.index("cuttle_decode") + 1] == rb.CONFIG_MAIN)
+    expect("then back to bench_main before the restore", names[names.index(cc.CONFIGS[-1]) + 1] == rb.CONFIG_MAIN)
     expect("summary: Turret Aim Test's missing NectarTurret fails its lookup check",
            check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup").startswith("- FAIL")
            and "'NectarTurret' as Servo" in check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup"))
-    expect("summary: the webcam with another serial and Decode Tele's Pinpoint stop INIT where this station explains "
-           "it, so their lookups FAIL as not judged",
+    expect("summary: the webcam with another serial stops INIT where this station explains it, so its lookups FAIL as "
+           "not judged",
            check_line(summary, "Cell Tip Test on camera: every hardware lookup").startswith("- FAIL")
-           and "not judged" in check_line(summary, "Cell Tip Test on camera: every hardware lookup")
-           and check_line(summary, "Decode Tele on cuttle_decode: every hardware lookup").startswith("- FAIL")
-           and "not judged" in check_line(summary, "Decode Tele on cuttle_decode: every hardware lookup"))
+           and "not judged" in check_line(summary, "Cell Tip Test on camera: every hardware lookup"))
     expect("summary: the OpModes that held INIT pass, and the probe passes",
            check_line(summary, "BioBuzz Tele on biobuzz: every hardware lookup").startswith("- PASS")
            and check_line(summary, "port probe").startswith("- PASS"))
@@ -431,7 +420,7 @@ def on_the_fake_hub():
 
 
 def declaration():
-    expect("declared: flag-only, needs a person, the S3 statement, Bench: Photon Stock, bench_photon and three shipped "
+    expect("declared: flag-only, needs a person, the S3 statement, Bench: Photon Stock, bench_photon and two shipped "
            "configs", not BENCH.default and BENCH.person is not None and BENCH.statement == "--s3-ports"
            and BENCH.opmodes == ("Bench: Photon Stock",) and BENCH.configs == (rb.CONFIG_PHOTON,) + cc.CONFIGS)
     expect("its Needs a person command parses and carries --s3-ports",
