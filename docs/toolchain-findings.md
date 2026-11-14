@@ -85,6 +85,9 @@ FtcRobotController tags end at v12.0.
     `RobotConfigFileManager.getActiveConfig`; our
     `TeamCode/src/main/java/org/firstinspires/ftc/robotcontroller/internal/FtcRobotControllerActivity.java:716-728`).
     A stored ID that names no XML falls back to no config.
+  - Seen on a hub (Bench: Probe's config-by-name step, 2026-11-14, on a build without a by-name lookup):
+    `laser_rangefinder` saved with `intake_transfer_shooter`'s resource ID loaded `intake_transfer_shooter`'s
+    devices, and so did `bench_unshipped`, a name the build doesn't ship, saved with that ID.
   - Resource IDs for xml files run in name order across our and the SDK's xml files (`advanced_rc_settings`
     0x7f110000 to `teamwebcamcalibrations` 0x7f110017 in a 2026-11-13 debug build's
     `TeamCode/build/intermediates/runtime_symbol_list/debug/processDebugResources/R.txt`), so a change shifts every
@@ -162,6 +165,14 @@ FtcRobotController tags end at v12.0.
   print "You have not agreed to the Xcode license agreements" and exit 69 (seen 2026-11-12). Run
   `sudo xcodebuild -license` in Terminal. Until then `bare_hub.sh` stops and says so; before 2026-11-12 its `--build`
   passed the uncommitted-changes check and stamped the APK with an empty commit.
+- **Run a hub bench session on a Mac doing nothing else: quit Android Studio and any other IDE, and start no Gradle
+  build of your own until it ends.** On 2026-11-14 the Mac ran out of memory and restarted 30 minutes into a session
+  over USB (reported by the person running it), ending the session with the hub on a bench config and the session's
+  put-back never run. The runner's text logs stop mid config switch, though its other files show that switch finished
+  and the next bench had started; none holds memory figures, so what used the memory is unknown. By then the session
+  itself had run Gradle 8 times (a build check, then 7 deploySloths, each 3–15 s), as its Sloth benches must. Before the
+  next session on that hub, check which config is active: a session takes whatever it finds as the hub's own config to
+  put back.
 - **Fake hubs stay off ports 5554 to 5585 and never touch the real adb.** The adb server finds emulators by scanning
   the odd localhost ports 5555 to 5585 ([adb docs](https://developer.android.com/tools/adb), fetched 2026-11-10). A
   fake hub on `127.0.0.1:5555` was picked up as `emulator-5554` and churned about every 1.3 s, disturbing a real hub's

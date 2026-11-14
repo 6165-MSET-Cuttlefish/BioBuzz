@@ -13,7 +13,9 @@ then needs nobody until it ends, and puts the hub back however it ends. Each sta
 folder.
 
 1. Plug in what the session should bench (below), power the Control Hub from a 12 V battery, empty the bench ports,
-   close every dashboard tab, no Driver Station; the Mac on power with its lid open.
+   close every dashboard tab, no Driver Station; the Mac on power with its lid open, Android Studio and any other IDE
+   quit, and no Gradle build of your own until the session ends: on 2026-11-14 a Mac ran out of memory and restarted
+   mid-session ([`docs/toolchain-findings.md`](../../docs/toolchain-findings.md#laptop-and-adb)).
 2. From the worktree root, on the hub's Wi-Fi: `python3 scripts/bench/session.py`; over a USB data cable to its USB-C
    port, the Mac on its own network: `python3 scripts/bench/session.py --usb` (`--serial S` when adb lists several USB
    devices). Without more, the hub must already run this checkout's build (the Run button's full install). Add

@@ -57,9 +57,11 @@ Cause, from thread dumps taken during the freeze on 2026-10-24 and the source (`
   No published tag of the team build fixes it (newest `0.3.2+0.6.0-6165.6`, checked 2026-11-10).
 - Fix for the team build: have each handler's lambda return whether a restart is needed, and call `attemptRestart()`
   after `activeOpMode.with` returns, posted to the UI thread the way the SDK's own Restart Robot menu item runs.
-  `0.3.2+0.6.0-6165.7`, which TeamCode pins, is built that way from a fork commit whose tag isn't published yet; it
-  hasn't run on a hub; Bench: Freeze Dump (`scripts/bench/run_bench.py --freeze-dump`) checks it. Configs still switch
-  on the Driver Station ([Do this](#do-this)).
+  `0.3.2+0.6.0-6165.7`, which TeamCode pins, is built that way from a fork commit whose tag isn't published yet. Bench:
+  Freeze Dump (`scripts/bench/run_bench.py --freeze-dump`) passed with it on a hub, in one run on a bench build
+  (2026-11-14): SET (3 runs), WRITE and DELETE from idle each restarted the robot in the same process, ready 10.7–11.8 s
+  after the change, with no `deadline expired waiting for service termination: EventLoop` line and no relaunch. Configs
+  still switch on the Driver Station ([Do this](#do-this)).
 - Switching configs over adb, as the bench runner does, never froze: 14 switches on 2026-10-24.
 
 To debug any app freeze (measured 2026-10-24): run `adb logcat -G 8M` first, since the hub's `Lights Hal` lines
@@ -197,9 +199,10 @@ Sloth, including one that only adds Pedro's AutoTune: the POMs of `com.pedropath
 
 ## Still unknown
 
-- **Whether the handler fix ends the freeze.** Run Bench: Freeze Dump on a hub with 6165.7 installed: each SET, WRITE
-  and DELETE from idle should restart the robot in the same process, with no `has not reported itself as alive` or
-  `deadline expired waiting for service termination: EventLoop` line in logcat.
+- **Whether the handler fix ends the freeze every time.** Bench: Freeze Dump passed once on a hub (above). Rerun it on
+  main's build and on another hub: each SET, WRITE and DELETE from idle should restart the robot in the same process,
+  with no `has not reported itself as alive` or `deadline expired waiting for service termination: EventLoop` line in
+  logcat.
 - **Whether the adb recovery brings the dashboard back, and whether off really stops everything and survives an app
   restart, a reboot and a reinstall.** Test: Bench: Dashboard Off on a bare hub, `python3 scripts/bench/run_bench.py
   --dashboard-off --ports-empty` ([how](../scripts/bench/README.md#dashboard-off)). It switches the dashboard off

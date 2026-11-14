@@ -10,20 +10,53 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 
 ## Design around these
 
-- **Route planner: one `RouteOptimizer.Search.step()` per loop; rerun Bench: Hub and Bench: Planner Stop on a hub
-  before trusting a STOP during a 4-ball plan.** Ball Collection Auto, Vision Ball Collection and Ball Collection plan
-  4 balls (`BallCollection.BALLS`) on the OpMode thread, one step per loop. A step shapes visit orders for
-  `VisibilityGraphPlanner.routeSearchSliceMs` (20 ms) and overruns it by at most one `shape()` call
+- **Route planner: one `RouteOptimizer.Search.step()` per loop. Its longest step on a hub is 321 ms, so Ball
+  Collection Auto's STOP is estimated at about 917 ms, over the 900 ms window: don't trust a STOP during its 4-ball
+  plan until steps are shorter or the webcam closes after the window.** Ball Collection Auto, Vision Ball Collection
+  and Ball Collection plan 4 balls (`BallCollection.BALLS`) on the OpMode thread, one step per loop. A step shapes visit
+  orders for `VisibilityGraphPlanner.routeSearchSliceMs` (20 ms) and overruns it by at most one `shape()` call
   (`architecture/planner/RouteOptimizer.java:143-154`), so STOP waits for one step, not a plan
-  ([`ball-planner-findings.md`](ball-planner-findings.md)). The sliced search hasn't run on a hub: every hub number
-  below was measured planning in one call.
-  - Estimate for the sliced search (simulated: a desktop replay of the 2026-10-24 layouts that drops the same balls as
-    the hub and ran 28–35× faster, median 32×, scaled back by that): the longest step about 110 ms (100–115) for
-    random 4-ball layouts and about 240 ms (210–260) for the 4-ball Planner Stop layout. From request to done in an
-    `EnhancedOpMode`, whose loop runs between steps, a 4-ball plan takes about 1.3× as long as in one call (random
-    layouts p50 about 730 ms, worst about 3.3 s). STOP would wait about 255 ms (up to about 275) in Vision Ball
-    Collection and Ball Collection; in Ball Collection Auto, one step plus the loop's tail plus a webcam close of up to
-    581 ms (below) comes to about 830 ms (up to about 855), 45–70 ms inside the 900 ms window.
+  ([`ball-planner-findings.md`](ball-planner-findings.md)).
+  - The sliced search on a hub (Bench: Hub's planner phase, 2026-11-14, over USB, on the 2026-10-24 hub; that build's
+    planner code is main's):
+
+    | | p50 | p95 | max | n |
+    |---|---|---|---|---|
+    | every step | 45.7 | 81.5 | 273.4 | 6186 |
+    | time past the 20 ms slice | 25.7 | 61.5 | 253.4 | 6186 |
+    | longest step of a plan, 4 balls, random | 45.3 | 87.1 | 92.5 | 48 |
+    | longest step of a plan, 4 balls on both sides of the rail (Planner Stop's layout) | 263.6 | 273.4 | 273.4 | 5 |
+    | longest step of a plan, 5 balls, random | 76.6 | 107.8 | 131.4 | 40 |
+    | plan, request to done, 4 balls, random | 588 | 1980 | 2583 | 48 |
+    | plan, request to done, 4 balls on both sides of the rail | 1423 | 1448 | 1448 | 5 |
+
+    - The desktop estimate (below) was right for random layouts (about 110 ms) and low for Planner Stop's layout
+      (about 240 ms, 210–260): the hub's 263–273 ms is above its top, and Bench: Planner Stop's 290–321 ms (below)
+      further above.
+    - Plan times are close to planning in one call (table below). This bench's loop does almost nothing between
+      steps: its period was 47.6 / 83.8 / 277.2, about 2 ms over the step. The 1.3× estimate for an
+      `EnhancedOpMode` loop is untested.
+    - The first 4-ball plan in a fresh app process took 2183 ms, longest step 124 ms.
+    - It allocated 7.0 GB in 303 s, 1.14 MB a loop: 809 collections, none blocking, the collector thread using 14.6% of
+      a core.
+  - STOP during the sliced search (Bench: Planner Stop, 2026-11-14, a later run on the same hub over USB, no webcam:
+    the 4-ball layout on both sides of the rail and a 5-ball one, replanning back to back in INIT as Vision Ball
+    Collection does, STOP sent 0.05, 0.3 or 0.6 s after the runner saw a plan end, 9 trials each):
+    - No STOP restarted the app. The hub logged STOP to idle in 29–282 ms with 4 balls and 41–107 ms with 5.
+    - The longest step of each 4-ball trial was 289.8–321.4 ms, over the bench's 300 ms limit in 4 of 9 (its check
+      FAILs); steps ran 66–71 ms at p50. With 5 balls the longest was 93.6–107.8 ms.
+    - Plans from request to done: 4 balls 1527 / 1655 / 1767 (n=36), 5 balls 952 / 1013 / 1016 (n=37).
+    - The unsliced control, each 4-ball plan in one step (longest 1448–1673 ms), overran the window on 3 of 3 STOPs:
+      two restarted the app, the third reached idle 1030 ms after STOP.
+  - What it means for STOP (estimate: the longest step plus the desktop replay's loop tail of about 15 ms): about
+    336 ms in Vision Ball Collection and Ball Collection, well inside the window; in Ball Collection Auto, plus a webcam
+    close of up to 581 ms (below), about 917 ms, about 17 ms over the 900 ms window. That needs STOP to land as the
+    longest step begins and the slowest webcam close; the measured STOPs without a webcam, at most 282 ms, plus 581 ms
+    come to 863 ms. Bench: Planner Stop's webcam trials, which measure it, didn't run (no webcam plugged in).
+  - The estimate (simulated: a desktop replay of the 2026-10-24 layouts that drops the same balls as the hub and ran
+    28–35× faster, median 32×, scaled back by that): the longest step about 110 ms (100–115) for random 4-ball
+    layouts and about 240 ms (210–260) for the 4-ball Planner Stop layout; in an `EnhancedOpMode`, a 4-ball plan
+    about 1.3× as long as in one call (random layouts p50 about 730 ms, worst about 3.3 s).
   - Why it's slow (read from source): it bounds every order of the full ball set (n!) and shapes them best bound
     first, dropping to n − 1 balls only when no full order is drivable
     (`architecture/planner/RouteOptimizer.java:171-214`). One awkward ball makes it shape every full order first, so
@@ -58,6 +91,11 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     config to name the device. With no device version read, SDK 12's `GoBildaPinpointDriver.update()` reads nothing
     (read from source), so the pose stays at (0, 0, 0) however the robot moves, and Pedro drives without ever seeing
     progress.
+  - Missing again (2026-11-14, over USB, the same hub, nothing on I2C bus 1): the same result. The follower built in
+    578 ms, `follower.update()` ran 4.09 / 5.61 / 21.82 (n=200), no error and no fault, and every sampled pose (one per
+    50 updates) read (0, 0, 0) after `setPose(56, 8, 90°)`. Logcat showed the SDK's reads of the Pinpoint getting
+    nothing back (`readStatusQuery: cbExpected=5 cbRead=0`, 201 times). Main still builds a plain `PinpointLocalizer`
+    (`pedro/BioBuzzConstants.java:120-121`), as the bench's follower did.
   - Faulting (read from source; not yet seen on a hub): a bad read keeps the previous pose, a failed one snaps it to
     (0, 0, 0), and Pedro never reads the status: [`sdk-hub-findings.md`](sdk-hub-findings.md#device-drivers). No
     robot OpMode shows the Pinpoint's status; Bench: Pinpoint does.
@@ -65,17 +103,21 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     and stop with an error naming it and its port, then check the status on every read, counting non-READY only after
     the first READY. The Pinpoint reported `FAULT_BAD_READ` right after `BioBuzzConstants.create`, then READY 71 ms
     later.
-- **Every app start takes about 37 s; budget 40–45 s for a config switch or a STOP-time app restart at a match.**
-  On 14 config switches on a bare hub (2026-10-24), process start to `INIT FINISH` in logcat took 37.1–38.1 s.
+- **Every app start takes 37–41 s; budget 40–45 s for a config switch or a STOP-time app restart at a match.**
+  On 14 config switches on a bare hub (2026-10-24), process start to `INIT FINISH` in logcat took 37.1–38.1 s; on 9
+  on the same hub with a bigger build (2026-11-14, 127 OpModes against 60), 38.8–39.4 s.
   - A config switch over adb, timed by the bench runner from the switch to the dashboard reporting the robot ready,
-    took 42.4–44.6 s on 2026-10-24.
+    took 42.4–44.6 s on 2026-10-24. From the switch to the runner's dashboard reconnect, on its whole-second log
+    times: 40–42 s (14 switches, 2026-10-24, over Wi-Fi), 42–43 s (10 switches, 2026-11-14, over USB). Each switch
+    worked first time on both dates.
   - 12.1–12.3 s of it is one class scanner, Pedro AutoTune's `com.pedropathing.tuning.autotune.TunerScanner`
     (`com.pedropathing:tuning:1.0.1`, `TeamCode/build.gradle:86`), which calls `getDeclaredMethods()` on each class it
     is handed. Sinister, the class-scanning library under Sloth, runs it at app start, and the main thread waits on
     Sinister's scanners (`running scanners for load`) until it ends.
   - Every start logs an ANR (Android's "application not responding" report), `ANR in com.qualcomm.ftcrobotcontroller`
     (reason: executing a service, `FtcRobotControllerWatchdogService` in 26 of 27), about 26 s in: 13 of 13 starts on
-    2026-10-09, 14 of 14 on 2026-10-24. The same process went on to finish INIT every time, so it isn't a crash.
+    2026-10-09, 14 of 14 on 2026-10-24, 9 of 9 config switches on 2026-11-14. The same process went on to finish INIT
+    every time, so it isn't a crash.
 - **The SDK's stop window is 900 ms** (`OpModeInternal.MS_BEFORE_FORCE_STOP_AFTER_STOP_REQUESTED`), plus 100 ms of
   grace, covering whatever `init_loop()`/`loop()` is running and `stop()`. Overrunning it restarts the app.
   - In the 100 ms of grace every hub command throws `ForceStopException`, a `finally`'s too, so a loop still running
@@ -98,16 +140,30 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     `processFrame` holds, so a frame that arrives after it skips detection
     (`biobuzz/modules/vision/CellTipPipeline.java:90-91` and `:157-163`).
 - **deploySloth: wait for the `Processed Sloth Load` toast before INIT ([`CLAUDE.md`](../CLAUDE.md), Build &
-  deploy).** A fixed 5 s wait is marginal; without the toast, allow 6 s.
-  - The jar loaded 4.3–4.8 s (2026-10-09) and 4.7–5.2 s (2026-10-24) after the push, which comes about 0.1–0.2 s
-    before deploySloth returns.
-  - INIT sent the moment the jar was pushed, or right as deploySloth returned, restarted the app (both dates).
-  - INIT sent 0.5–2 s after it returned didn't report within 30 s (both dates).
-  - INIT 5 s after ran the new code (both dates); on 2026-10-24 the load had ended only about 0.2 s before.
+  deploy); without the toast, allow 12 s, not 5 or 6.** A hot load took about 9 s on 2026-11-14, and INIT sent during
+  it restarts the app or is dropped.
+  - Push to `Processed Sloth Load`: 4.3–4.8 s (2026-10-09, 52 OpModes, another hub), 4.7–5.2 s (2026-10-24, 60
+    OpModes), 9.47, 8.98 and 9.09 s (2026-11-14, 127 OpModes, the 2026-10-24 hub). On the same hub the load time
+    nearly doubled as the OpMode count more than doubled. That is a correlation, not a proven cause: the build
+    changed in every other way too. The push comes about 0.1–0.2 s before deploySloth returns (2026-10-09 and
+    2026-10-24).
+  - INIT sent the moment the jar was pushed, or right as deploySloth returned, restarted the app (all three dates).
+    On 2026-11-14 INIT 0.5 s after it returned did too, where on the earlier dates it was dropped. The SDK logged
+    `OpMode '$Stop$Robot$' stuck in stop(). Restarting robot controller app.` 1.1–1.4 s after `Staged Sloth Load`;
+    its thread dump shows the OpMode thread inside Sinister's unload (`SinisterImpl.scanUnload`), called from Sloth's
+    own OpMode's `loop()` (`OnBotLoadEventHandler$OpMode.loop`).
+  - INIT sent 1, 2 or 5 s after it returned was dropped on 2026-11-14 (logcat `initOpMode(): Was unable to find
+    metadata for OpMode Bench: Sloth Probe`): no restart, and nothing ran. The 5 s INIT reached the hub 4.0 s before
+    the load ended. On 2026-10-09 and 2026-10-24, INIT 0.5–2 s after was dropped the same way, and INIT 5 s after ran
+    the new code; on 2026-10-24 the load had ended only about 0.2 s before.
+  - So the 12 s is the longest load measured (9.5 s, three loads) plus margin. Not yet measured: an INIT sent after
+    a load this long has ended (no run on 2026-11-14 sent one), and how long a load takes on main's build, which has
+    77 `@TeleOp`/`@Autonomous` annotations against the bench build's 127 (counted in source, 2026-11-14).
   - A deploySloth sent while an OpMode runs leaves it running; the load is staged and lands after STOP, processed
-    11.25 s after the push (2026-10-24).
-  - A hot-loaded jar survives an app restart.
-  - The OpMode list stayed correct throughout a load.
+    11.25 s (2026-10-24) and 15.4 s (2026-11-14) after the push, both counting the wait for STOP.
+  - A hot-loaded jar survives an app restart. On 2026-11-14, after the restart at the push, the new process logged
+    `sloth upload is newer`, then `Processed Sloth Load` during start-up; that start took 40.8 s to `INIT FINISH`.
+  - The OpMode list stayed correct throughout a load (all three dates).
 - **After a hub fail-safe, `EnhancedMotor` and `EnhancedServo` reach the hub again only on `WriteCache`'s re-send: up
   to 250 ms plus a loop.** Nothing clears the cache on a fail-safe, and an unchanged value goes out again only once
   `RESEND_NANOS` (250 ms) has passed (`architecture/hardware/WriteCache.java:4` and `:18-26`). Don't lengthen it.
@@ -167,7 +223,8 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     RUNNING.
   - `GuardedOctoQuadLocalizer` with nothing on the bus (Bench: OctoQuad Absent, 2026-10-24): the bench robot built in
     75 ms, the `OctoQuad` fault came 2979 ms into INIT, INIT kept looping (7.26 / 10.06 / 17.68), and START stopped the
-    OpMode with an error naming the OctoQuad. It hasn't run with an OctoQuad plugged in.
+    OpMode with an error naming the OctoQuad. The same on 2026-11-14 over USB: built in 78 ms, the fault 2982 ms into
+    INIT, INIT 7.15 / 10.14 / 18.60, the START error naming the OctoQuad. It hasn't run with an OctoQuad plugged in.
 - **Limelight ball pipeline (pipeline 4): slow with balls in view.** Design vision-dependent timing for about 4–5 new
   results a second and about 0.26 s from capture to the hub.
   - Pipeline latency (`tl`) by the ball count it reported: every count from 3 to 10, p50 209–225 (n=95), flat rather
@@ -298,7 +355,7 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   0.5 s after that.
 - **Drive hand-back:** Drivetrain gets the motors back from Pedro within 2 loops in every hand-back case.
 - **Hardware view:** a stale Power edit doesn't drive a motor under the next OpMode.
-- **Telemetry survives:** a NaN in a field overlay doesn't kill dashboard telemetry.
+- **Telemetry survives:** a NaN in a field overlay doesn't kill dashboard telemetry (again on 2026-11-14).
 - **Limelight proxy:** slothboard's proxy keeps query strings. Every Limelight POST was accepted.
 - **Limelight fault:**
   - Raised 456 ms (2026-10-09) and 490 ms (2026-10-24) after INIT.
@@ -310,6 +367,14 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 - **Config baseline:** slothboard's config baseline lists every `@Config` class.
 
 ## Known problems in the bench code
+
+- **The deploySloth race's INIT delays are now too short to run the hot-loaded probe, so "the hot-loaded jar survives
+  an app restart" FAILs without testing anything.** Its last INIT goes 5 s after deploySloth returns
+  (`scripts/bench/run_bench.py:10524`), which landed mid-load on 2026-11-14 (above), and with no probe run from a hot
+  jar the check reports False instead of not judged (`:10712-10713`). The jar did survive the restart in that run's
+  logcat. Proposed fix (written, not on main yet): a seventh deploySloth that INITs once `Processed Sloth Load` is in
+  logcat, with its own check that FAILs if that INIT restarts the app, gets no report or runs the APK's code, and the
+  restart check reported as not judged when no probe ran from a hot jar. Delete this entry when it lands.
 
 - **Bench: Limelight Fault can hold STOP past the 900 ms window in its replug step.** Its `onEnd()` puts the
   Limelight back on the runner's pipeline with `ll.pipelineSwitch(...)` on the OpMode thread during STOP
@@ -325,7 +390,9 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 
 ## Setup
 
-Two runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one through `scripts/bench/bare_hub.sh`:
+Three runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one through `scripts/bench/bare_hub.sh`, the
+2026-11-14 one through `scripts/bench/session.py --usb --install`, then `run_bench.py --usb` by itself for the benches
+that session didn't reach:
 
 - **2026-10-09:**
   - REV Control Hub, firmware 1.8.2, Android 7.1.2, FTC SDK 12.0.0, BNO055 IMU.
@@ -340,6 +407,33 @@ Two runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one throu
   not from the installed APK. Its planner planned in one call (the sliced search came after); its `WriteCache` is
   this build's. Its Pinpoint localizer added a status check that fires only after a READY and sends no hub command,
   so with no Pinpoint it behaved as the plain Pedro `PinpointLocalizer` this build uses.
+- **2026-11-14:** the 2026-10-24 hub, same firmware (1.8.2), Android and SDK, bare, on a battery that read
+  14.11 V falling to 13.64 V, reached over a USB cable from a Mac (`--usb`), the hub's first bench run that way. The
+  build was a bench branch with 127 OpModes; its planner code and its plain Pedro Pinpoint follower are main's.
+  - What worked over the cable: the session backed up the hub's app (its APK, configs and Sloth folder), installed
+    the bench build and started the app, up about 42 s after launch; the probe (about 2 min); 11 config switches over
+    adb, each first time; one `adb forward` to the dashboard port, made at the default suite's start, still carrying
+    the dashboard after 8 config switches and 3 app restarts. Against the 2026-10-24 Wi-Fi run on this hub, Bench:
+    Hub's bus costs matched within about 0.1 ms at p50 (bulk read 2.23 against 2.34, four motor writes 5.67 against
+    5.69), its IMU reads within 0.25 ms (yaw/pitch/roll 5.49 against 5.26), and Bench: Framework Loop's settings within
+    0.5 ms (defaults 6.33 against 6.34).
+  - It stopped 27 minutes into the default suite, when the Mac restarted (out of memory, as reported by the person
+    running it). The runner's text logs stop at 11:32:10, mid config switch, but its other files show the switch to
+    `bench_octoquad_absent` finished (`INIT FINISH` in that switch's logcat, saved at 11:32:54) and Bench: OctoQuad
+    Absent had started: its parameters were pushed at 11:32:55, and the power log runs to 11:32:52. Not run: Bench:
+    OctoQuad Absent (interrupted), Webcam Stop with no webcam, Planner Stop, Overlay NaN, Config by name and Freeze
+    Dump, then the session's Planner Stop with its control and Dashboard Off, and its put-back. What a Mac running a
+    session needs: [`toolchain-findings.md`](toolchain-findings.md#laptop-and-adb).
+  - After the restart, the same hub over USB, with no new install: `run_bench.py --usb --ports-empty --octoquad
+    --absent --planner-stop --overlay-nan --config-by-name --freeze-dump`, twice. At 12:07 it stopped at once:
+    Bench: OctoQuad Absent was still in INIT, in the app process whose `INIT FINISH` the session's last config switch
+    logged, so the session had INITed it and the OpMode had held there since. By 12:10 the app had restarted, and the
+    second run did all six benches. Bench: OctoQuad skipped its checks (no OctoQuad answered). Results: Bench: Planner
+    Stop under Route planner above; OctoQuad Absent under the OctoQuad; Config by name in
+    [`toolchain-findings.md`](toolchain-findings.md#deploying); Freeze Dump in
+    [`dashboard-findings.md`](dashboard-findings.md); Webcam Stop with no webcam and Overlay NaN passed. That run took
+    `bench_octoquad_absent` as the hub's own config and left the hub on it again. Still not run: the session's Dashboard
+    Off and its put-back.
 
 Not run on either date (they need `--interactive`):
 - Pinpoint, OctoQuad and Limelight unplug/replug;
@@ -367,9 +461,13 @@ Not run on either date (they need `--interactive`):
 - **Whether a hub back from a reboot is ready for the next runner once the session's wait ends:** it waits for adb,
   the RC app's pid and port 8000 in the hub's socket table, not for the robot's setup. Test: pull the hub's battery
   lead for a few seconds late in a session's default suite, and check the next stage's runner connects.
-- **Whether a run over the USB cable (`run_bench.py --usb`) measures what a Wi-Fi run does:** `summary.md`'s `Link:`
-  line labels every run, so cable numbers stay out of the Wi-Fi ones above until the default bench, run both ways on
-  one hub, shows the same Bench: Hub bus call costs and Bench: Framework Loop loop periods.
+- **Whether the cable changes anything the default suite measures beyond Bench: Hub's bus costs and Bench: Framework
+  Loop's periods:** those matched on one hub (2026-10-24 over Wi-Fi, 2026-11-14 over USB, [Setup](#setup)), with
+  builds three weeks apart. `summary.md`'s `Link:` line labels every run; compare the rest when a session over the
+  cable finishes.
+- **How long a hot load takes on main's build, and whether INIT after it ends runs the new code on a build this
+  size:** on 2026-11-14 no INIT came after a load ended. Test: deploySloth main's build by hand on a bare hub, time the
+  push to `Processed Sloth Load` in logcat a few times, and INIT once after each.
 - **Where the ball pipeline's slowdown starts, and which step costs it:** time each SnapScript stage (mask,
   distance-transform split, homography, drawing) with 0, 1, 2 and 3 balls in view, well after the pipeline switch,
   reporting the stage times in spare llpython slots.
@@ -387,10 +485,8 @@ Not run on either date (they need `--interactive`):
   and the BIOBUZZ robot runs no Pinpoint.
 - **Whether a rangefinder in SHORT mode keeps its accuracy at a 10 ms timing budget:** log a fixed target's distance
   at 20 and 10 ms budgets and compare the spread and the mean.
-- **The sliced route search on a hub:** its longest step, plan time from request to done, the loop period while it
-  plans, and STOP during it: run Bench: Hub and Bench: Planner Stop. The estimate above is from a desktop replay. Test:
-  `scripts/bench/run_bench.py --hub --planner-stop --ports-empty`; `--planner-stop` adds an unsliced control, plans
-  made in one step, which must overrun STOP at least once on that hub, or the Planner Stop checks are unproven there.
+- **A plan's time from request to done inside a collection OpMode's own loop:** Bench: Hub and Bench: Planner Stop
+  time it in their own loops (above); no bench times it in an `EnhancedOpMode`.
 - **How long `EnhancedMotor` and `EnhancedServo` stay off after a fail-safe that lands just after a write:** both
   dates' single trial landed just before a re-send. Bench: Write Recovery fails safe seven times, 0–235 ms after a
   write, and judges each against `WriteCache`'s re-send period plus 2 loops; run it, and Bench: Write Recovery Photon
@@ -399,8 +495,8 @@ Not run on either date (they need `--interactive`):
   start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`. START before the first
   RUNNING, the cable plugged in during INIT, and the same pull under Pedro's `OctoQuadLocalizer` as the control:
   `python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`.
-- **Whether Ball Collection Auto's STOP fits the stop window with the webcam open:** the about 830 ms (up to about 855)
-  above is an estimate. Test: `scripts/bench/run_bench.py --planner-stop --ports-empty` with a UVC webcam on the
+- **Whether Ball Collection Auto's STOP fits the stop window with the webcam open:** the about 917 ms above is an
+  estimate. Test: `scripts/bench/run_bench.py --planner-stop --ports-empty` with a UVC webcam on the
   Control Hub's USB (Bench: Planner Stop's webcam trials: a planner slice, the loop's tail and `CellTipCamera.stop()`
   in one STOP, the worst case included).
 - **Whether closing the webcam after the stop window works on a hub:** move the close out of `CellTipCamera.stop()`,
