@@ -1,9 +1,11 @@
 """session.py against fake_hub.py's Control Hub with every stage's runner stubbed (no hub, no adb, no network; about
-1 min): the plan for a bare hub, an Expansion Hub on USB, one on RS485 and every optional device; every question before
-the first stage and none after; a failing stage, a stage that raises and a hub reboot don't stop the chain, another
-hub, a hijacked adb port and a statement that doesn't cover a stage do; Ctrl-C during each stage still puts the hub
-back; every prompted bench in "Needs a person" with a command run_bench.py's parser takes; bare_hub.sh --install-only;
-run_bench.py --probe-only and --photon-soak-hours. Run with: python3 -I scripts/bench/offline/test_session.py
+1 min): the plan for a bare hub, an Expansion Hub on USB, one on RS485 and every optional device; Bench: Planner Stop's
+control in every session, Bench: Limelight Reload with a Limelight and Gradle, the Pinpoint soak with --pinpoint-soak;
+every question before the first stage and none after; a failing stage, a stage that raises and a hub reboot don't stop
+the chain, another hub, a hijacked adb port and a statement that doesn't cover a stage do; Ctrl-C during each stage
+still puts the hub back; every prompted bench in "Needs a person" with a command run_bench.py's parser takes;
+bare_hub.sh --install-only; run_bench.py --probe-only and --photon-soak-hours. Run with:
+python3 -I scripts/bench/offline/test_session.py
 """
 import contextlib
 import importlib.util
@@ -93,7 +95,9 @@ class FakeProc:
 def stage_key(argv):
     if "--probe-only" in argv:
         return "restore" if str(argv[argv.index("--out") + 1]).endswith("99-restore") else "probe"
-    for flag, key in (("--photon-soak", "photon_soak"), ("--photon", "photon"), ("--dashboard-off", "dashboard_off")):
+    for flag, key in (("--photon-soak", "photon_soak"), ("--photon", "photon"), ("--dashboard-off", "dashboard_off"),
+                      ("--planner-stop", "planner_stop"), ("--limelight-reload", "limelight_reload"),
+                      ("--pinpoint-soak", "pinpoint_soak")):
         if flag in argv:
             return key
     return "default"
@@ -207,13 +211,26 @@ def plans():
     expect("bare hub: the statement names the Control Hub's bench ports alone",
            'Type "empty" once nothing is plugged into Control Hub motor ports 0-3 and servo ports 0-1:' in console
            and "Expansion Hub's motor ports" not in console.split("=== Plan")[0])
-    expect("bare hub: the plan is the default suite, then Bench: Dashboard Off, with durations",
-           "1. Default suite: about 45-90 min" in plan and "2. Bench: Dashboard Off: about 10 min" in plan
-           and "3." not in plan.split("In all")[0] and "In all about" in plan)
-    expect("bare hub: the plan says why the Photon block doesn't run",
-           "not run: Photon block: no Expansion Hub" in plan)
-    expect("bare hub: the stages ran in order (probe, default, Dashboard Off) and the session ended clean",
-           stub.keys() == ["probe", "default", "dashboard_off"] and code == 0)
+    expect("bare hub: the plan is the default suite, Bench: Planner Stop with its control, then Bench: Dashboard Off, "
+           "with durations", "1. Default suite: about 45-90 min" in plan
+           and "2. Bench: Planner Stop with its control: about 10-15 min" in plan
+           and "3. Bench: Dashboard Off: about 10 min" in plan
+           and "4." not in plan.split("In all")[0] and "In all about" in plan)
+    expect("bare hub: the plan says why the Photon block, Bench: Limelight Reload, the Pinpoint soak and Bench: Planner "
+           "Stop's webcam trials don't run",
+           "not run: Photon block: no Expansion Hub" in plan and "not run: Bench: Limelight Reload: no Limelight" in plan
+           and "not run: Bench: Pinpoint soak: not asked for (session.py --pinpoint-soak adds it" in plan
+           and "not run: Bench: Planner Stop's webcam trials: no webcam plugged in" in plan)
+    expect("bare hub: the stages ran in order (probe, default, Planner Stop, Dashboard Off) and the session ended clean",
+           stub.keys() == ["probe", "default", "planner_stop", "dashboard_off"] and code == 0)
+    planner = stub.argv("planner_stop")
+    expect("bare hub: Bench: Planner Stop's runner gets --planner-stop, which run_bench.py parses, and drives only the "
+           "Control Hub's bench ports, which the statement named",
+           rb.parse_args(planner[2:]).planner_stop and "--ports-empty" in planner
+           and not set(planner) & set(S.PROMPTED_FLAGS)
+           and "2. Bench: Planner Stop with its control: about 10-15 min: its six sliced trials again, then the "
+               "unsliced control, which is meant to overrun STOP, so the app may restart three times; drives Control "
+               "Hub motor ports 0-3 and servo ports 0-1" in plan)
     default = stub.argv("default")
     expect("bare hub: the default suite's runner gets no bench flag, --ports-empty, the cable's serial and its own "
            "folder", "--ports-empty" in default and default[default.index("--serial") + 1] == fake_hub.USB_SERIAL
@@ -233,7 +250,7 @@ def plans():
            and ">>> empty" in (s.folder / "console.log").read_text())
     text = index(s)
     expect("the index lists every stage with its verdict line and its summary's path",
-           all(f"| {n} |" in text for n in ("00-probe", "01-default", "02-dashboard_off"))
+           all(f"| {n} |" in text for n in ("00-probe", "01-default", "02-planner_stop", "03-dashboard_off"))
            and "5 checks passed; runner exit 0" in text and "01-default/summary.md" in text)
 
     hw = dict(BARE, usbRevHubs=[USB_EH])
@@ -245,16 +262,16 @@ def plans():
     expect("USB Expansion Hub: the statement names both hubs' bench ports",
            "Control Hub motor ports 0-3 and servo ports 0-1 and the Expansion Hub's motor ports 0-3 and servo ports 0-1:"
            in console)
-    expect("USB Expansion Hub: the plan is default, the Photon block on USB without I2C, then Dashboard Off",
-           "1. Default suite" in plan and "2. Photon block (usb wiring): about 53 min" in plan
-           and "3. Bench: Dashboard Off" in plan)
+    expect("USB Expansion Hub: the plan is default, Planner Stop, the Photon block on USB without I2C, then Dashboard Off",
+           "1. Default suite" in plan and "2. Bench: Planner Stop with its control" in plan
+           and "3. Photon block (usb wiring): about 53 min" in plan and "4. Bench: Dashboard Off" in plan)
     expect("USB Expansion Hub: the plan says why the I2C reads and the go run don't run",
            "not run: the Photon block's I2C reads (--photon-i2c): the OctoQuad isn't in Control Hub I2C port 2" in plan
            and "not run: the Photon go run's long soak: on USB wiring the go run needs its cable pulls" in plan)
     photon = stub.argv("photon")
     expect("USB Expansion Hub: the Photon runner gets --photon --usb-expansion, no --photon-i2c, no prompt flag",
            "--usb-expansion" in photon and "--photon-i2c" not in photon and "--interactive" not in photon
-           and stub.keys() == ["probe", "default", "photon", "dashboard_off"])
+           and stub.keys() == ["probe", "default", "planner_stop", "photon", "dashboard_off"])
     expect("USB Expansion Hub: Needs a person names the I2C run that was left out",
            "(photon_i2c)" in index(s) and "--photon --usb-expansion --photon-i2c --ports-empty" in index(s))
 
@@ -265,10 +282,22 @@ def plans():
     plan = console.split("=== Plan", 1)[-1]
     expect("every optional device on USB wiring: no go-run question, since that go run needs its cable pulls",
            len(stdin.reads) == 3 and no_reads_after_start(stdin) and "go run too" not in console)
-    expect("every optional device: the plan is default, Photon with I2C, Dashboard Off, and says why no go run",
-           "1. Default suite: about 55-75 min" in plan and "2. Photon block (usb wiring): about 55 min" in plan
-           and "3. Bench: Dashboard Off" in plan and "needs its cable pulls (--interactive)" in plan
-           and stub.keys() == ["probe", "default", "photon", "dashboard_off"])
+    expect("every optional device: the plan is default, Planner Stop with its webcam trials, Limelight Reload, Photon "
+           "with I2C, Dashboard Off, and says why no go run",
+           "1. Default suite: about 60-80 min" in plan
+           and "2. Bench: Planner Stop with its control: about 20-30 min" in plan
+           and ", then 20 trials with the webcam open" in plan
+           and "3. Bench: Limelight Reload: about 20 min: about 15 Gradle runs, deploySloth between INITs; drives no "
+               "port" in plan
+           and "4. Photon block (usb wiring): about 55 min" in plan
+           and "5. Bench: Dashboard Off" in plan and "needs its cable pulls (--interactive)" in plan
+           and "webcam trials" not in plan.split("In all")[1]
+           and stub.keys() == ["probe", "default", "planner_stop", "limelight_reload", "photon", "dashboard_off"])
+    reload = stub.argv("limelight_reload")
+    expect("every optional device: Bench: Limelight Reload's runner gets --limelight-reload, which run_bench.py parses, "
+           "and no prompt flag", rb.parse_args(reload[2:]).limelight_reload and "--ports-empty" in reload
+           and not set(reload) & set(S.PROMPTED_FLAGS))
+
     expect("every optional device: it says the default suite runs Pinpoint Absent with the Pinpoint on the Expansion Hub",
            "runs Bench: Pinpoint Absent in its place" in plan)
     expect("every optional device: Needs a person names Bench: Pinpoint with the Pinpoint back on the Control Hub",
@@ -288,8 +317,8 @@ def plans():
            and "about 50 min" in plan)
     soak = stub.argv("photon_soak")
     expect("RS485 with the I2C reads: the go run ran after the short block passed, asked with the docs' order",
-           stub.keys() == ["probe", "default", "photon", "photon_soak", "dashboard_off"]
-           and "--photon-soak" in soak and "--photon-i2c" in soak and "3. Photon go run with the long soak (rs485 "
+           stub.keys() == ["probe", "default", "planner_stop", "photon", "photon_soak", "dashboard_off"]
+           and "--photon-soak" in soak and "--photon-i2c" in soak and "4. Photon go run with the long soak (rs485 "
            "wiring)" in plan and "only once the USB short block has passed too" in console)
     s, stub, hub, code, console, stdin = run_session(["y", "c", "y", "empty"], dict(BARE, expansion=2))
     expect("RS485 without the I2C reads: no go-run question, no soak, and the plan says why",
@@ -311,6 +340,39 @@ def plans():
            and "verdict is NOT SAFE" in index(s) and code == 1)
 
 
+def new_stages():
+    s, stub, hub, code, console, stdin = run_session(["n", "empty"], BARE, argv=("--usb", "--pinpoint-soak"))
+    plan = console.split("=== Plan", 1)[-1]
+    soak = stub.argv("pinpoint_soak")
+    expect("--pinpoint-soak: no extra question; Bench: Pinpoint soak runs after Planner Stop, before Dashboard Off",
+           len(stdin.reads) == 2 and no_reads_after_start(stdin)
+           and stub.keys() == ["probe", "default", "planner_stop", "pinpoint_soak", "dashboard_off"] and code == 0)
+    expect("--pinpoint-soak: the runner gets --pinpoint-soak alone, which run_bench.py takes as the hour, with "
+           "--ports-empty and no prompt flag", rb.parse_args(soak[2:]).pinpoint_soak == rb.PINPOINT_SOAK_S
+           and "--ports-empty" in soak and "--quick" not in soak and not set(soak) & set(S.PROMPTED_FLAGS))
+    expect("--pinpoint-soak: the plan gives its time and the Control Hub ports its idle follower writes 0 to",
+           "3. Bench: Pinpoint soak: about 70 min: Bench: Pinpoint, then an hour with the Pinpoint and the OctoQuad "
+           "untouched, then the recalibration run; drives Control Hub motor ports 0-3 and servo ports 0-1" in plan
+           and "4. Bench: Dashboard Off" in plan and "not run: Bench: Pinpoint soak" not in plan)
+    usb_eh = (lambda h: setattr(h, "usb_rev_hubs", [USB_EH]))
+    s, stub, hub, code, console, stdin = run_session(["e", "y", "empty"], dict(BARE, usbRevHubs=[USB_EH]),
+                                                     argv=("--usb", "--pinpoint-soak"), setup=usb_eh)
+    expect("--pinpoint-soak with the Pinpoint answered as on the Expansion Hub: no soak, and the plan says why",
+           "pinpoint_soak" not in stub.keys() and "not run: Bench: Pinpoint soak: the Pinpoint is Expansion Hub I2C "
+           "port 1 (your answer), not in Control Hub I2C port 1" in console.split("=== Plan", 1)[-1])
+    hw = dict(BARE, limelight={"ipAddress": "172.29.0.1"})
+    s, stub, hub, code, console, stdin = run_session(["n", "empty"], hw, gradle=(1, 1))
+    expect("a Limelight but no Gradle build: no Bench: Limelight Reload, and the plan says why",
+           "limelight_reload" not in stub.keys() and "--no-sloth" in stub.argv("default")
+           and "not run: Bench: Limelight Reload: Gradle can't build here" in console.split("=== Plan", 1)[-1])
+    s, stub, hub, code, console, stdin = run_session(["n", "empty"], hw, argv=())
+    reload = stub.argv("limelight_reload")
+    expect("a Limelight over Wi-Fi with Gradle building only offline: Bench: Limelight Reload runs with "
+           "--gradle-offline, after Planner Stop",
+           stub.keys() == ["probe", "default", "planner_stop", "limelight_reload", "dashboard_off"]
+           and "--gradle-offline" in reload and "--usb" not in reload)
+
+
 def chain():
     def fail_default(st, argv, folder):
         write_stage(folder, "default", None, fails=3, stopped="a bench raised")
@@ -322,7 +384,7 @@ def chain():
                                                      setup=usb_eh)
     text = index(s)
     expect("a failing stage (exit 1, 3 checks failed, stopped early) doesn't stop the chain",
-           stub.keys() == ["probe", "default", "photon", "dashboard_off"] and code == 1)
+           stub.keys() == ["probe", "default", "planner_stop", "photon", "dashboard_off"] and code == 1)
     expect("the index gives its verdict line and lists its failures",
            "3 of 8 checks failed; stopped early: a bench raised; runner exit 1" in text
            and "- broken 2: detail 2 (FAIL means: something)" in text)
@@ -332,7 +394,7 @@ def chain():
 
     s, stub, hub, code, console, stdin = run_session(["c", "y", "empty"], hw, on={"photon": raises}, setup=usb_eh)
     expect("a stage that raises doesn't stop the chain: Dashboard Off still runs",
-           stub.keys() == ["probe", "default", "photon", "dashboard_off"] and code == 1
+           stub.keys() == ["probe", "default", "planner_stop", "photon", "dashboard_off"] and code == 1
            and "the session couldn't run it: OSError: no python3 here" in index(s))
 
     procs = {}
@@ -349,7 +411,8 @@ def chain():
     s, stub, hub, code, console, stdin = run_session(["c", "y", "empty"], hw, on={"default": hangs}, setup=usb_eh)
     expect("a stage past its time limit gets Ctrl-C (so its runner puts the hub back), and the chain goes on",
            getattr(procs["default"], "signals", []) == [signal.SIGINT]
-           and stub.keys() == ["probe", "default", "photon", "dashboard_off"] and "ran past its 4.0 h limit" in index(s))
+           and stub.keys() == ["probe", "default", "planner_stop", "photon", "dashboard_off"]
+           and "ran past its 4.0 h limit" in index(s))
 
     def reboot(st, argv, folder):
         write_stage(folder, "default", None)
@@ -358,8 +421,8 @@ def chain():
 
     s, stub, hub, code, console, stdin = run_session(["c", "y", "empty"], hw, on={"default": reboot}, setup=usb_eh)
     expect("a hub reboot mid-session doesn't stop the chain: the session waits for it on the cable and goes on",
-           hub.reboots == 1 and stub.keys() == ["probe", "default", "photon", "dashboard_off"]
-           and "waiting for the hub before Photon block" in console and not s.stopped)
+           hub.reboots == 1 and stub.keys() == ["probe", "default", "planner_stop", "photon", "dashboard_off"]
+           and "waiting for the hub before Bench: Planner Stop with its control" in console and not s.stopped)
 
     def left_on_bench(st, argv, folder):
         write_stage(folder, "default", None, stopped="restoring the config failed")
@@ -422,8 +485,9 @@ def unsafe():
         return FakeProc()
 
     s, stub, hub, code, console, stdin = run_session(["c", "y", "empty"], hw, on={"default": swap}, setup=usb_eh)
-    expect("another Expansion Hub on USB before the Photon block stops the session",
-           stub.keys() == ["probe", "default"] and "not DQ2AB3CD" in s.stopped)
+    expect("another Expansion Hub on USB before the Photon block stops the session (Bench: Planner Stop, on the "
+           "Control Hub's ports alone, still ran before it)",
+           stub.keys() == ["probe", "default", "planner_stop"] and "not DQ2AB3CD" in s.stopped)
     expect("a statement that doesn't cover a stage's ports stops it, even if the plan were wrong",
            guard_check())
 
@@ -444,8 +508,12 @@ def guard_check():
 
 
 def ctrl_c():
-    hw = dict(BARE, expansion=2)
-    for key in ("probe", "default", "photon", "photon_soak", "dashboard_off"):
+    hw = dict(BARE, expansion=2, limelight={"ipAddress": "172.29.0.1"})
+    cases = [(key, hw, ["y", "e", "y", "y", "", "y", "empty"], ("--usb", "--install"))
+             for key in ("probe", "default", "planner_stop", "limelight_reload", "photon", "photon_soak", "dashboard_off")]
+    cases.append(("pinpoint_soak", dict(BARE, expansion=2), ["y", "c", "y", "y", "empty"],
+                  ("--usb", "--install", "--pinpoint-soak")))
+    for key, hw, answers, argv in cases:
         state = {}
         put_back = []
 
@@ -477,7 +545,7 @@ def ctrl_c():
 
         mine, theirs = (fake_hub.USB_SERIAL, 7777, 8000), ("R58M90ABCDE", 7778, 8000)
         s, stub, hub, code, console, stdin = run_session(
-            ["y", "e", "y", "y", "", "y", "empty"], hw, argv=("--usb", "--install"), on={key: interrupted},
+            answers, hw, argv=argv, on={key: interrupted},
             hub=fake_hub.Hub(usb=True, foreign_forwards=[mine, theirs]))
         later = hub.calls[state.get("restoredAt", 0):]
         expect(f"Ctrl-C during {key}: every adb command of the put-back ran with Ctrl-C ignored, so its children "
@@ -660,7 +728,8 @@ def spawn_cases():
 
     s, stub, hub, code, console, stdin = run_session(["n", "empty"], BARE, on={"default": hangup})
     expect("a closed terminal mid-stage (SIGHUP to the session and its runner) ends neither: the runner finishes and "
-           "the next stage starts", hung["proc"].returncode == 0 and stub.keys() == ["probe", "default", "dashboard_off"]
+           "the next stage starts", hung["proc"].returncode == 0
+           and stub.keys() == ["probe", "default", "planner_stop", "dashboard_off"]
            and s.stopped is None)
 
     probe = [sys.executable, "-I", "-c", "import signal; print(signal.getsignal(signal.SIGINT) is "
@@ -764,7 +833,7 @@ def put_back_cases():
                                                      on={"default": table_flaky}, setup=usb_eh)
     expect("an unreadable socket table after a stage: the session waits instead of taking port 8000 as up",
            "the hub's socket table couldn't be read" in console and hub.socket_table_failures == 0
-           and stub.keys() == ["probe", "default", "photon", "dashboard_off"] and not s.stopped)
+           and stub.keys() == ["probe", "default", "planner_stop", "photon", "dashboard_off"] and not s.stopped)
 
 
 PROMPT_SITES = {"gp_interactive": "gamepad", "run_clock": "clock", "run_limelight_replug": "limelight",
@@ -935,7 +1004,7 @@ def runner_flags():
 
 
 def main():
-    for section in (plans, questions, chain, unsafe, ctrl_c, spawn_cases, install_checks, put_back_cases, needs_a_person,
+    for section in (plans, new_stages, questions, chain, unsafe, ctrl_c, spawn_cases, install_checks, put_back_cases, needs_a_person,
                     install_only, runner_flags):
         try:
             section()

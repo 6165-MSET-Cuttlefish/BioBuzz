@@ -1,5 +1,5 @@
 config_check
-limelight_reload
-fault_render
 camera_power
+fault_render
 rangefinders
+limelight_reload

@@ -2,7 +2,7 @@
 """Start it once: asks everything first, probes the hub, prints the plan, then runs every bench stage the plugged-in
 hardware allows back to back, each in its own results folder, and puts the hub back however it ends.
 
-    python3 scripts/bench/session.py [--usb [--serial S]] [--install]
+    python3 scripts/bench/session.py [--usb [--serial S]] [--install] [--pinpoint-soak]
 
 See "Start it once" in scripts/bench/README.md. Python 3 standard library only.
 """
@@ -719,9 +719,11 @@ class Session:
         devices = [d for d, present in (("a webcam", hw.get("webcam")), ("the Limelight", hw.get("limelight")),
                                         (f"an Expansion Hub on RS485 at address {hw.get('expansion')}", rs485))
                    if present]
-        minutes = (55, 75) if devices else (45, 90)
+        minutes = (60, 80) if devices else (45, 90)
         self.stages.append(Stage("default", "Default suite", [], f"about {minutes[0]}-{minutes[1]} min", drives={CH},
                                  limit_s=4 * 3600, minutes=minutes))
+        self.plan_planner_stop(hw.get("webcam"))
+        self.plan_limelight_reload(hw.get("limelight"))
         if self.pinpoint == "expansion-hub":
             self.notes.append("The Pinpoint is in Expansion Hub I2C port 1, so the default suite's Bench: Pinpoint finds "
                               "none in Control Hub I2C port 1 and runs Bench: Pinpoint Absent in its place"
@@ -751,6 +753,7 @@ class Session:
             self.skipped.append(("Photon block", f"no Expansion Hub answered on RS485 at address {a.expansion_address}"))
         else:
             self.skipped.append(("Photon block", "no Expansion Hub (it needs one, on USB or RS485)"))
+        self.plan_pinpoint_soak()
         rejoin = ("it waits for the hub on the cable" if a.usb
                   else "the Mac must rejoin the hub's Wi-Fi by itself, so leave auto-join on for it")
         self.stages.append(Stage("dashboard_off", "Bench: Dashboard Off", ["--dashboard-off"],
@@ -761,6 +764,41 @@ class Session:
                               "Photon verdict can't pass.")
         self.needs = list(PROMPTED) + self.needs
         self.print_plan(devices)
+
+    def plan_planner_stop(self, webcam):
+        minutes = (20, 30) if webcam else (10, 15)
+        about = (f"about {minutes[0]}-{minutes[1]} min: its six sliced trials again, then the unsliced control, which is "
+                 "meant to overrun STOP, so the app may restart three times"
+                 + (", then 20 trials with the webcam open" if webcam else ""))
+        self.stages.append(Stage("planner_stop", "Bench: Planner Stop with its control", ["--planner-stop"], about,
+                                 drives={CH}, limit_s=2 * 3600, minutes=minutes))
+        if not webcam:
+            self.skipped.append(("Bench: Planner Stop's webcam trials", "no webcam plugged in"))
+
+    def plan_limelight_reload(self, limelight):
+        if not limelight:
+            self.skipped.append(("Bench: Limelight Reload", "no Limelight answered on the Control Hub's USB"))
+        elif "--no-sloth" in self.runner_flags:
+            self.skipped.append(("Bench: Limelight Reload", "Gradle can't build here, and it runs deploySloth about 14 "
+                                 "times"))
+        else:
+            self.stages.append(Stage("limelight_reload", "Bench: Limelight Reload", ["--limelight-reload"],
+                                     "about 20 min: about 15 Gradle runs, deploySloth between INITs", limit_s=2 * 3600,
+                                     minutes=(20, 30)))
+
+    def plan_pinpoint_soak(self):
+        title = "Bench: Pinpoint soak"
+        if not self.args.pinpoint_soak:
+            self.skipped.append((title, "not asked for (session.py --pinpoint-soak adds it: about 70 min more, the "
+                                        "Pinpoint in Control Hub I2C port 1 and the OctoQuad in port 2, both taped down)"))
+        elif self.pinpoint in ("expansion-hub", "none"):
+            self.skipped.append((title, f"the Pinpoint is {PINPOINT_PLACES[self.pinpoint]} (your answer), not in "
+                                        "Control Hub I2C port 1"))
+        else:
+            self.stages.append(Stage("pinpoint_soak", title, ["--pinpoint-soak"],
+                                     "about 70 min: Bench: Pinpoint, then an hour with the Pinpoint and the OctoQuad "
+                                     "untouched, then the recalibration run", drives={CH}, limit_s=3 * 3600,
+                                     minutes=(70, 80)))
 
     def plan_photon(self):
         wiring = {"usb": "--usb-expansion", "rs485": "--photon-rs485"}[self.topology]
@@ -1058,6 +1096,9 @@ def parse_args(argv):
                    help=f"answer: the long Photon soak's cap in hours (at most {SOAK_CAP_H:g}), 0 for none")
     p.add_argument("--restore-app", choices=("yes", "no"), default=None,
                    help="answer, with --install: put the hub's own app back at the end")
+    p.add_argument("--pinpoint-soak", action="store_true",
+                   help="also run Bench: Pinpoint's hour-long soak, before Bench: Dashboard Off (about 70 min more; the "
+                        "Pinpoint in Control Hub I2C port 1 and the OctoQuad in port 2, both taped down)")
     p.add_argument("--out", default=None, help="the session folder (default bench-results/session-<time>)")
     args = p.parse_args(argv)
     if args.serial and not args.usb:

@@ -24,8 +24,10 @@ folder.
 
 | plug in | the session adds |
 |---|---|
-| nothing (a bare hub) | the default suite and Bench: Dashboard Off: about 1-2 h |
-| a webcam, the Limelight, a Pinpoint (Control Hub I2C port 1), an OctoQuad (port 2), an Expansion Hub on RS485 | their benches in the default suite ([Optional hardware](#optional-hardware)) |
+| nothing (a bare hub) | the default suite, Bench: Planner Stop with its unsliced control (it may restart the app three times) and Bench: Dashboard Off: about 1-2 h |
+| a webcam, the Limelight, a Pinpoint (Control Hub I2C port 1), an OctoQuad (port 2), an Expansion Hub on RS485 | their benches in the default suite ([Optional hardware](#optional-hardware)); a webcam also adds Bench: Planner Stop's 20 webcam trials, about 10 min |
+| the Limelight 3A, with Gradle building on this Mac | Bench: Limelight Reload, about 20 min and about 15 Gradle runs ([below](#bench-limelight-reload)); left out when Gradle can't build |
+| `--pinpoint-soak`, with the Pinpoint in Control Hub I2C port 1 and the OctoQuad in port 2, both pods in each, both boards taped down | Bench: Pinpoint's hour-long soak and its recalibration run, about 70 min, before Bench: Dashboard Off ([below](#bench-pinpoint-soak)) |
 | an Expansion Hub on 12 V from the Control Hub's second XT30 port, on USB only or on RS485 only (address 2, or `--expansion-address N`), nothing on its motor ports 0-3 or servo ports 0-1 | the Photon block for that wiring, about 50-55 min |
 | that, plus the Pinpoint in **Expansion Hub** I2C port 1 and the OctoQuad in Control Hub I2C port 2 | the Photon block's I2C reads (`--photon-i2c`); the default suite then runs Bench: Pinpoint Absent in place of Bench: Pinpoint |
 | that, on RS485 wiring, and the go run asked for (asked only there: the USB go run needs its cable pulls, so it stays in Needs a person; answer yes once a USB short block has passed too, as [`docs/photon-bench.md`](../../docs/photon-bench.md) orders the runs) | the RS485 go run, its soak's cap + 2-3 h, only if the short block says PASSED THIS RUN and its 60 s soak rate can reach the loss bound within the cap |
@@ -38,7 +40,7 @@ on the Control Hub's USB (`--rs485 yes|no`); with an Expansion Hub, where the Pi
 control-hub|expansion-hub|none`), whether the OctoQuad is in Control Hub I2C port 2 (`--octoquad yes|no`), and, on RS485
 with the Pinpoint and OctoQuad there, whether to add the go run and its soak's cap in hours, at most the runner's 4
 (`--soak-hours H`, 0 for none); with `--install`, whether to put the hub's own app back at the end (`--restore-app
-yes|no`); last, typed `empty`, the statement that nothing is plugged into the ports its stages drive, which it names
+yes|no`); `--pinpoint-soak` is a flag only, never asked; last, typed `empty`, the statement that nothing is plugged into the ports its stages drive, which it names
 (Control Hub motor ports 0-3 and servo ports 0-1, and the Expansion Hub's when there is one). The statement stands in
 for `--ports-empty` and the Photon block's confirmation.
 
@@ -48,7 +50,8 @@ saved switch (a hub with the dashboard off is refused, with the command that tur
 with `--install` (`bare_hub.sh --install-only`, once the hub still reads the same `ro.serialno`; over Wi-Fi
 `bare_hub.sh` reads it again before its backup and before installing); Gradle checked as `bare_hub.sh` does;
 `run_bench.py --probe-only` (about 3 min) for what is plugged in; then the plan, with each stage's time, what it drives
-and why anything is left out; then the default suite, the Photon block, the soak, Bench: Dashboard Off last.
+and why anything is left out; then the default suite, Bench: Planner Stop with its control, Bench: Limelight Reload, the
+Photon block, the go run's soak, the Pinpoint soak, Bench: Dashboard Off last.
 
 It goes on after a stage that fails, exits non-zero or can't start, and after a hub restart or reboot (it waits up to
 300 s for adb, the RC app and the dashboard's port). A stage past its time limit gets Ctrl-C, so its runner puts the hub
@@ -70,8 +73,9 @@ the exact command and what to have on the table) and what is left by hand; `cons
 (`00-probe`, `01-default`, ...); `install/` with `--install`.
 
 By hand afterwards: the Needs a person runs (the `--interactive` prompts, the Photon cable pulls inside the USB go
-run, Bench: Dashboard Off's battery pull, Bench: Turret Zero, Bench: Config Check's typed ports statement); Bench:
-Pinpoint's hour-long soak, which needs nobody but isn't in the session ([below](#bench-pinpoint-soak)); the
+run, Bench: Dashboard Off's battery pull, Bench: Turret Zero, Bench: Config Check's typed ports statement, Bench: Fault
+Render, Bench: Camera Power Loss, Bench: Rangefinders, Bench: OctoQuad's chain); Bench: Pinpoint's hour-long soak if
+the session ran without `--pinpoint-soak` ([below](#bench-pinpoint-soak)); the
 Pinpoint back to Control Hub I2C port 1 if it was on the Expansion Hub; `bash .../REINSTALL.sh` (`summary.md` names
 it) if it installed and you kept the bench build; whatever the Put back section says failed; and the bench ports
 plugged back before the hub goes on a robot.
@@ -131,7 +135,7 @@ name devices on the bench ports unless you add `--ports-empty` once they are unp
 4. Close every dashboard tab: its status requests read hub voltage on the bus being timed, and its Gamepad view sends
    gamepad states.
 5. From the repo root: `python3 scripts/bench/run_bench.py` (the Mac's own python3 3.9+, nothing to install). About
-   55 to 75 minutes with every device plugged in, about 45 on a bare hub; the Photon block is a separate run
+   60 to 80 minutes with every device plugged in, about 45 on a bare hub; the Photon block is a separate run
    (`--photon`, below).
    The longest: Thread Lifecycle 6 (2 of them its Sloth reload), Freeze Dump 6 (five dashboard config changes; on
    slothboard 6165.6 or older each one freezes the app until it is killed and relaunched), Config by name 3 (three
@@ -149,16 +153,21 @@ Missing hardware skips its benches, and the summary says so.
 | plug in | where | runs |
 |---|---|---|
 | a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam ([its clamped and refused settings](#bench-webcams-clamped-and-refused-settings) included), Webcam Stop, Webcam Thread Failure; with `--planner-stop`, Bench: Planner Stop's webcam trials |
-| the Limelight 3A, booted, with 4 Pollen balls in its view ([below](#bench-limelights-ball-phases)) | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery |
-| a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent) |
+| the Limelight 3A, booted, with 4 Pollen balls in its view ([below](#bench-limelights-ball-phases)) | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery; with `--limelight-reload` and this Mac's Gradle, Bench: Limelight Reload |
+| a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent); with `--pinpoint-soak`, the OctoQuad in bus 2 too and both boards taped down, its soak |
 | an OctoQuad MK2, pods on encoder ports 3 and 4, still (on the robot they sit on 0 and 1) | Control Hub I2C bus 2 | Bench: OctoQuad, its bank phase included |
+| the same OctoQuad with its pods moved to channels 0 and 1 | Control Hub I2C bus 2 | with `--octoquad-chain --interactive`, Bench: OctoQuad's chain ([below](#bench-octoquad-chain)) |
+| a Driver Hub paired with the Control Hub, showing its telemetry (its USB cable on this Mac too, for screenshots) | the Control Hub's Wi-Fi | with `--fault-render --interactive`, Bench: Fault Render ([below](#bench-fault-render)) |
+| laser rangefinders A and B aimed at a matte card about 150 mm away, a fast target, the Prism | A on Control Hub analog port 1, B on analog port 3; the Prism in I2C port 3, to unplug when asked | with `--rangefinders --interactive`, Bench: Rangefinders ([below](#bench-rangefinders)) |
+| the webcam and the Limelight 3A on a powered USB hub with its power bank, and an Expansion Hub on RS485 at address 2 with nothing on its ports | the USB hub on Control Hub USB 3.0; the Expansion Hub on 12 V from the Control Hub's second XT30 port | with `--camera-power --interactive --s3-ports`, Bench: Camera Power Loss ([below](#bench-camera-power-loss)) |
 | a REV Expansion Hub on its own 12 V | RS485, address 2 (`--expansion-address N`) | Bench: Expansion Hub (reads only) |
 | a REV Expansion Hub on 12 V, **nothing on its motor ports 0-3 or servo ports 0-1** (the Photon block drives them) | Control Hub USB to its mini-USB, no RS485 cable | the Photon block with `--usb-expansion` |
 | the same Expansion Hub, same empty ports | RS485 only, address 2 (`--expansion-address N`) | the Photon block with `--photon-rs485` |
 | the Pinpoint and the OctoQuad, for the Photon block's I2C reads | OctoQuad: Control Hub I2C port 2; Pinpoint: **Expansion Hub I2C port 1** (Control Hub port 1 with no Expansion Hub) | the Photon block with `--photon-i2c` |
 
 `--interactive` adds terminal prompts: pull and replug the Limelight, Pinpoint and OctoQuad cables (pods stay in; the
-Pinpoint's twice, under its raw driver and then under the follower); move
+Pinpoint's twice, under its raw driver and then under the follower; with `--octoquad-chain`, a pod rolled by hand and the
+OctoQuad's cable pulled twice and plugged in during INIT); move
 the Pinpoint and OctoQuad to the Expansion Hub's I2C ports 1 and 2 and back; open http://192.168.43.1:8080 during
 Bench: Clock on a hub whose clock still reads about 1970; drive the dashboard's Gamepad view with the keyboard, the
 on-screen stick and a USB pad (close the tab afterwards); with `--dashboard-off`, pull the Control Hub's battery lead
@@ -428,7 +437,7 @@ bench OpModes on `bench_main` do, which `--ports-empty` already covers.
 
 **Command:** its six sliced trials run in every run without bench flags. Named, it adds its unsliced control and,
 with a webcam plugged in, its webcam trials: `python3 scripts/bench/run_bench.py --planner-stop --ports-empty`. A
-person does nothing.
+person does nothing. `session.py` runs it, named, in every session.
 
 The unsliced control is three more 4-ball trials with each plan in one step, as before the search was sliced (that
 layout took 1452-1728 ms in one call on 2026-10-24). The OpMode sets `VisibilityGraphPlanner.routeSearchSliceMs` to
@@ -529,8 +538,9 @@ each, both boards taped down. Nothing on the motor ports 0-3 or servo ports 0-1 
 `fr`, `bl`, `br`, as Bench: Pinpoint's seed run does).
 
 **Command:** `python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`, about 70 minutes (`--pinpoint-soak 300`,
-or `--quick`, for a five-minute look). Nobody touches the bench for the hour: start it before a break. It switches to
-`bench_octoquad` and puts the config back at the end.
+or `--quick`, for a five-minute look). Nobody touches the bench for the hour: start it before a break, or start a
+session with `--pinpoint-soak`, which runs it before Bench: Dashboard Off. It switches to `bench_octoquad` and puts the
+config back at the end.
 
 The runs, on `bench_octoquad`:
 
@@ -714,7 +724,7 @@ must work (add `--gradle-offline` with no internet). Do a full install of this b
 
 **Command:** `python3 scripts/bench/run_bench.py --limelight-reload` (with `--ports-empty` when a config on the hub
 names a device on motor ports 0-3 or servo ports 0-1, as for any run). About 20 minutes and about 15 Gradle runs.
-Nothing to do at the hub.
+Nothing to do at the hub. `session.py` runs it whenever the probe finds a Limelight and Gradle builds.
 
 What it does, in order:
 
