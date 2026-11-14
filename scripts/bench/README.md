@@ -70,9 +70,10 @@ the exact command and what to have on the table) and what is left by hand; `cons
 (`00-probe`, `01-default`, ...); `install/` with `--install`.
 
 By hand afterwards: the Needs a person runs (the `--interactive` prompts, the Photon cable pulls inside the USB go
-run, Bench: Dashboard Off's battery pull, Bench: Turret Zero); the Pinpoint back to Control Hub I2C port 1 if it was
-on the Expansion Hub; `bash .../REINSTALL.sh` (`summary.md` names it) if it installed and you kept the bench build;
-whatever the Put back section says failed; and the bench ports plugged back before the hub goes on a robot.
+run, Bench: Dashboard Off's battery pull, Bench: Turret Zero, Bench: Config Check's typed ports statement); the
+Pinpoint back to Control Hub I2C port 1 if it was on the Expansion Hub; `bash .../REINSTALL.sh` (`summary.md` names
+it) if it installed and you kept the bench build; whatever the Put back section says failed; and the bench ports
+plugged back before the hub goes on a robot.
 
 ## Bare hub, unattended
 
@@ -179,6 +180,8 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 | `--photon-stop-trials N`, `--photon-seed N` | STOP trials per condition (default 40); the seed for the STOP delays (default: the time, logged) |
 | `--photon-i2c` | the Photon block also reads the Pinpoint and the OctoQuad over I2C on both hubs (about 2 min more); a wiring's verdict can only say SAFE with it |
 | `--turret-zero` | only Bench: Turret Zero (below), prompted, with or without `--all`; a run without bench flags, or with `--all` alone, leaves it out |
+| `--config-check` | only Bench: Config Check (below); needs `--s3-ports` and a terminal; a run without bench flags, or with `--all` alone, leaves it out |
+| `--s3-ports` | you type `empty` at the start, saying nothing is plugged into either hub's motor ports 0-3 or servo ports 0-5; a bench that drives them (Bench: Config Check) runs only with it; it also stands for `--ports-empty`; needs a terminal |
 | `--turret-zero-v2` | Bench: Turret Zero with its V2 phase, for when a REV-11-3174 is on hand (implies `--turret-zero`) |
 | `--quick` | shorter phases, noisier numbers |
 | `--all` | every bench but the Photon block, Bench: Turret Zero and Dashboard Off; stops if no webcam, Limelight or Expansion Hub is plugged in |
@@ -401,6 +404,58 @@ while the dashboard was on; while off, every window must have no telemetry packe
 that stayed open, the bench's camera source must have served no frame, the INIT must be ignored, and each proxy port
 that listened before the switch must be closed (one that didn't listen before isn't judged).
 
+## Bench: Config Check
+
+Whether each robot OpMode gets past every hardware lookup on the config it ships for. It INITs each one on its own
+shipped config, holds INIT 4 s, then STOPs it. It never STARTs one. No new OpMode: it runs the robot's own.
+
+| OpMode | config |
+|---|---|
+| BioBuzz Tele, Turret Aim Test, SOTM Test, BioBuzz Shooter Test | `biobuzz` |
+| Intake Transfer Shooter Test | `intake_transfer_shooter` |
+| Cell Tip Test | `camera` |
+| Decode Tele | `cuttle_decode` |
+
+**Plug in:** the Control Hub on 12 V; an Expansion Hub on RS485 at address 2, powered from the Control Hub's second
+XT30 port (every shipped config with an Expansion Hub names it at address 2); the Pinpoint in Control Hub I2C port 1,
+the OctoQuad in port 2, the Prism in port 3; the webcam and the Limelight on the Control Hub's USB. **Nothing on
+either hub's motor ports 0-3 or servo ports 0-5**: the robot OpModes may write their motors and servos during INIT.
+
+**Command:** `python3 scripts/bench/run_bench.py --config-check --s3-ports`, from a terminal, about 8 minutes. At the
+start it asks you to unplug everything from both hubs' motor ports 0-3 and servo ports 0-5 and to type `empty`.
+Anything else, or no terminal, stops it before its first adb command. It needs the Run button's debuggable build.
+
+What it does, in order:
+
+1. Reads each OpMode's source on this Mac for the device names it passes as string literals to `hardwareMap.get` or
+   an `Enhanced*` constructor, and lists the ones its config lacks. A record only: names kept in constants or arrays
+   aren't seen.
+2. Writes `bench_photon` with the Expansion Hub on RS485 and runs Bench: Photon Stock's motor port probe alone
+   (`probeOnly`): 0.1 power for 0.2 s on each motor port 0-3 of both hubs, one at a time. If one draws over 0.3 A, or
+   the probe didn't reach both hubs, no robot OpMode is INITed.
+3. Activates each shipped config by name, with the resource id this install gives it (four config switches), and
+   INITs that config's OpModes one at a time (seven INITs). Then it switches back to `bench_main`.
+
+| judged, per OpMode | FAIL when |
+|---|---|
+| every hardware lookup found its device | INIT threw the SDK's missing-device error (`Unable to find a hardware device with name ...`), or any other error but the two below, or the OpMode didn't run |
+| no NullPointerException, no hang over 10 s, same pid | INIT threw a NullPointerException, INIT or its error took over 10 s to show, STOP took over 10 s, or the Robot Controller app restarted |
+| the port probe (once) | a motor port drew current, or the probe didn't cover 4 motor ports on each of 2 hubs |
+
+Two errors are allowed, because the device is somewhere else at this station: `aprilTagDetector failed to open` when
+no attached webcam has the config's serial, and Decode Tele's errors about its I2C devices (its config puts the
+Pinpoint, the Prism and the colour sensors on ports this station uses for other things). An allowed error ends INIT,
+so the lookups after it don't run: step 1's list covers those.
+
+The `summary.md` table gives, per OpMode: the INIT outcome, the error, the device a missing-device error names, the
+time from INIT to the error and the pid before and after. Until `biobuzz.xml` is rewritten to the map in
+[`docs/wiring-findings.md`](../../docs/wiring-findings.md), the `biobuzz` OpModes are expected to FAIL their lookup
+check.
+
+Only a hub shows: the real error text each OpMode throws, whether the allowed errors read the way the bench expects,
+what each OpMode writes during INIT, and how long each INIT and STOP takes. Offline:
+`python3 -I scripts/bench/offline/benches/config_check.py`.
+
 ## Bench: Turret Zero
 
 Settles whether the nectar turret's Through Bore can be zeroed once at INIT from its absolute output on OctoQuad
@@ -530,6 +585,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | (config by name, Bench: Probe) | run-as | a shipped config saved with another shipped config's resource id loads its own XML; a name the build doesn't ship loads no config (both FAIL on a build without re-resolving by name at robot setup) |
 | Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; SET (3 runs), WRITE and DELETE from idle each restart the robot in the same process: no SDK `deadline expired ... EventLoop`, no Control Hub `Relaunching the RC`; thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT and ART's dump of the frozen pid (runs last) |
 | Bench: Sloth Probe | Gradle | INIT racing deploySloth, the OpMode list during a load, the load signal, the jar surviving an app restart |
+| Bench: Config Check (`--config-check --s3-ports`) | an Expansion Hub on RS485 at address 2; both hubs' motor ports 0-3 and servo ports 0-5 empty | see Bench: Config Check above |
 | Bench: Turret Zero (`--turret-zero`) | an OctoQuad and a Through Bore on a split cable | see Bench: Turret Zero above |
 | Bench: Dashboard Off (`--dashboard-off` only) | `run-as` | see [Dashboard Off](#dashboard-off) |
 
@@ -549,6 +605,9 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
 
 ## Notes for changing the bench
 
+- A new bench goes in its own file in `scripts/bench/benches/`: [`benches/README.md`](benches/README.md) says what
+  the files are, the rules each bench keeps and how to extend a bench that is in `run_bench.py` without spreading
+  the edit.
 - The active config is read from the hub, never from slothboard's broadcast lists, which a restart can drop. To switch,
   the runner stops the app, writes `RobotConfigFile`'s Gson form under `pref_hardware_config_filename` in its default
   SharedPreferences with `run-as com.qualcomm.ftcrobotcontroller` (needs the Run button's debuggable APK; a running app

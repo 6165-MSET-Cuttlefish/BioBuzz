@@ -788,9 +788,25 @@ def prompt_sites():
     return found
 
 
+def module_prompts():
+    """{bench name: whether its file in scripts/bench/benches/ waits for a person anywhere}."""
+    out = {}
+    for b in rb.MODULE_BENCHES:
+        text = pathlib.Path(b.module.__file__).read_text()
+        out[b.name] = any(n in text for n in (".ask(", ".answer(", "input(", ".tell("))
+    return out
+
+
 def needs_a_person():
     sites = prompt_sites()
-    asks = {m for m, kinds in sites.items() if kinds - {"tell"}} - {"photon_guard_ports"}
+    asks = {m for m, kinds in sites.items() if kinds - {"tell"}} - {"photon_guard_ports", "port_statements"}
+    expect("the typed port statements are asked only for a bench that declares a person, and the session gives no "
+           "stage their flags", set(rb.TYPED_STATEMENTS) <= set(S.PROMPTED_FLAGS)
+           and all(b.person for b in rb.MODULE_BENCHES if b.statement in rb.TYPED_STATEMENTS))
+    prompts = module_prompts()
+    expect(f"every bench in scripts/bench/benches/ that waits for a person declares one (not: "
+           f"{sorted(n for n, asks in prompts.items() if asks and not rb.module_bench(n).person)})",
+           all(rb.module_bench(n).person for n, asks in prompts.items() if asks))
     expect(f"every place run_bench.py waits for a person is a known prompted bench (unknown: "
            f"{sorted(asks - set(PROMPT_SITES))})", asks == set(PROMPT_SITES))
     expect("the only other prompts are the Photon block's: the ports confirmation and the I2C plug-in notes, which the "
@@ -802,6 +818,8 @@ def needs_a_person():
     keys = set(re.findall(r"\*\* \((\w+)\)\. Have: ", text))
     expect("Needs a person names every prompted bench, each with what to have on the table",
            set(PROMPT_SITES.values()) <= keys and text.count("Have: ") == len(keys))
+    expect("Needs a person names every bench in scripts/bench/benches/ that declares a person",
+           {b.name for b in rb.MODULE_BENCHES if b.person} <= keys)
     commands = re.findall(r"`python3 scripts/bench/run_bench.py ([^`]*)`", text)
     bad = []
     for c in commands:

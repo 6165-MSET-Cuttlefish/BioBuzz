@@ -30,7 +30,8 @@ public class PhotonStockBench extends PhotonWorkload {
         if (i2c != null) report.put("i2cInfo", i2c.info());
         report.put("enableRefused", enableRefused());
         report.save();
-        boolean probe = BenchIO.param(report.params, "portProbe", 0) != 0;
+        boolean probeOnly = BenchIO.param(report.params, "probeOnly", 0) != 0;
+        boolean probe = probeOnly || BenchIO.param(report.params, "portProbe", 0) != 0;
         if (!report.holdUntilStart(this)) return;
         if (probe) {
             Map<String, Object> ports = portProbe();
@@ -38,6 +39,13 @@ public class PhotonStockBench extends PhotonWorkload {
             report.save();
             if (!(Boolean) ports.get("empty")) {
                 report.done("a motor port drew current: refusing to run the Photon benches");
+                report.holdUntilStop(this);
+                return;
+            }
+            if (probeOnly) {
+                rig.zeroMotors();
+                rig.disableServos();
+                report.done("port probe only: no motor port drew current");
                 report.holdUntilStop(this);
                 return;
             }

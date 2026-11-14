@@ -29,6 +29,7 @@ import sys
 import threading
 import time
 import traceback
+import types
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ElementTree
@@ -4700,6 +4701,7 @@ class Runner:
         self.thread_method = None
         self.thread_listings = []
         self.dashboard_left_off = None
+        self.typed_statements = set()
 
     def log(self, text):
         line = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {text}"
@@ -9647,15 +9649,16 @@ class Runner:
                 self.run_probe()
                 self.record_hardware()
             else:
+                self.port_statements()
                 self.connect()
                 self.run_probe()
                 self.contained("saved_configs", self.run_saved_configs)
                 wanted = self.selection()
                 self.activate_config(CONFIG_MAIN, self.main_config())
-                for name in BENCHES:
+                for name in bench_order():
                     if name in wanted:
                         self.log(f"=== {name} ===")
-                        self.guarded(name, getattr(self, f"run_{name}"))
+                        self.guarded(name, self.bench_step(name))
         except BenchError as e:
             error = str(e)
             self.log(f"STOPPED: {e}")
@@ -9783,13 +9786,61 @@ class Runner:
         if self.note_pid() != before and len(self.restarts) == waited:
             self.restarts.append({"during": "recovery", "pid": self.known_pid})
 
+    def port_statements(self):
+        """Each typed port statement this run needs, before its first adb command: a bench that drives more than
+        --ports-empty covers runs only once the person has typed that those ports are empty."""
+        for flag in TYPED_STATEMENTS:
+            ports = next(p for f, p, _ in PORT_STATEMENTS if f == flag)
+            named = [b for b in MODULE_BENCHES if b.statement == flag and getattr(self.args, b.name)]
+            given = getattr(self.args, flag[2:].replace("-", "_"))
+            if named and not given:
+                raise BenchError(f"{', '.join(b.title for b in named)} drives {ports.describe()}. Unplug everything "
+                                 f"from them, then rerun with {flag}.")
+            if not given:
+                continue
+            if not sys.stdin.isatty():
+                raise BenchError(f"{flag} has you type that nothing is plugged into {ports.describe()}, so it needs "
+                                 "a terminal")
+            for b in named:
+                self.log(f"{b.title} commands {b.powers}")
+            try:
+                reply = self.answer(f">>> Unplug everything from {ports.describe()}. Then type empty.")
+            except EOFError:
+                raise BenchError(f"the terminal closed before the {flag} statement; nothing was changed on the "
+                                 "hub") from None
+            if reply != "empty":
+                raise BenchError(f"{flag}: you typed {reply!r}, not empty, so the run stopped; nothing was changed on "
+                                 "the hub")
+            self.typed_statements.add(flag)
+
+    def bench_step(self, name):
+        bench = module_bench(name)
+        return getattr(self, f"run_{name}") if bench is None else (lambda: self.run_module_bench(bench))
+
+    def run_module_bench(self, bench):
+        """A bench from scripts/bench/benches/: its run fills the record, then its checks and summary read only the
+        record. The hub is left on the main bench config, as every in-place bench leaves it."""
+        if bench.statement in TYPED_STATEMENTS and bench.statement not in self.typed_statements:
+            raise BenchError(f"{bench.title} runs only once {bench.statement}'s statement has been typed")
+        if bench.drives:
+            self.log(f"{bench.title} commands {bench.powers}")
+        record = self.results[bench.name] = {}
+        try:
+            bench.run(self, record)
+        finally:
+            if self.dash.fatal is None and self.active_config() != CONFIG_MAIN:
+                self.activate_config(CONFIG_MAIN, self.main_config())
+        for name, ok, detail, means in bench.checks(record):
+            self.check(name, ok, detail, means)
+        self.summary += bench.summary(record)
+
     def selection(self):
         a = self.args
-        every = [n for n in BENCHES if n != "octoquad_absent"]
+        every = [n for n in bench_order() if n != "octoquad_absent"]
         chosen = {n for n in every if getattr(a, n)}
         explicit = bool(chosen) or a.all
         if not chosen:
-            chosen = set(every) - set(FLAG_ONLY_BENCHES)
+            chosen = set(every) - set(FLAG_ONLY_BENCHES) - {b.name for b in MODULE_BENCHES if not b.default}
         if "octoquad" in chosen:
             chosen.add("octoquad_absent")
         if a.no_sloth:
@@ -9809,6 +9860,11 @@ class Runner:
                           "Limelight bench",
                           "No Limelight answers on an Ethernet-over-USB interface: plug the Limelight 3A into a "
                           "Control Hub USB port and wait for it to boot, or drop --limelight")
+        for bench in MODULE_BENCHES:
+            if bench.name in chosen and bench.needs is not None:
+                missing = bench.needs(self)
+                self._skip_unless(chosen, explicit, bench.name, missing is None, missing, bench.title,
+                                  f"{(missing or '')[:1].upper()}{(missing or '')[1:]}, or drop {bench.flag}")
         self.log(f"benches: {sorted(chosen)}")
         return chosen
 
@@ -9820,6 +9876,222 @@ class Runner:
         self.log(f"{why}: skipping the {what}")
         self.summary.append(f"_{what[0].upper()}{what[1:]} skipped: {why}._\n")
         chosen.discard(name)
+
+
+class BenchLayoutError(Exception):
+    """A file in scripts/bench/benches/ that doesn't follow that folder's README."""
+
+
+class RunnerNamespace:
+    """What a bench module sees as `rb`: this file's globals, read at each use."""
+
+    def __init__(self, namespace):
+        object.__setattr__(self, "_namespace", namespace)
+
+    def __getattr__(self, name):
+        try:
+            return self._namespace[name]
+        except KeyError:
+            raise AttributeError(f"run_bench has no {name}") from None
+
+    def __setattr__(self, name, value):
+        raise AttributeError("a bench module reads run_bench's globals; it never sets them")
+
+
+def port_list(ports):
+    runs = []
+    for p in sorted(ports):
+        if runs and p == runs[-1][1] + 1:
+            runs[-1][1] = p
+        else:
+            runs.append([p, p])
+    return ", ".join(f"{a}" if a == b else f"{a}-{b}" for a, b in runs)
+
+
+class Ports:
+    """The motor and servo ports a bench drives, by hub."""
+    HUBS = (("controlHub", "Control Hub"), ("expansionHub", "the Expansion Hub's"))
+
+    def __init__(self, ch_motors=(), ch_servos=(), eh_motors=(), eh_servos=()):
+        self.ports = {("controlHub", "motor"): frozenset(ch_motors), ("controlHub", "servo"): frozenset(ch_servos),
+                      ("expansionHub", "motor"): frozenset(eh_motors), ("expansionHub", "servo"): frozenset(eh_servos)}
+
+    def __bool__(self):
+        return any(self.ports.values())
+
+    def within(self, other):
+        return all(ports <= other.ports[key] for key, ports in self.ports.items())
+
+    def describe(self):
+        parts = []
+        for hub, words in self.HUBS:
+            kinds = [f"{kind} ports {port_list(self.ports[(hub, kind)])}" for kind in ("motor", "servo")
+                     if self.ports[(hub, kind)]]
+            if kinds:
+                parts.append(f"{words} {' and '.join(kinds)}")
+        return " and ".join(parts) or "no motor or servo port"
+
+
+S3_PORTS = Ports(ch_motors=range(4), ch_servos=range(6), eh_motors=range(4), eh_servos=range(6))
+PORT_STATEMENTS = (("--ports-empty", Ports(ch_motors=BENCH_MOTOR_PORTS, ch_servos=BENCH_SERVO_PORTS), None),
+                   ("--s3-ports", S3_PORTS,
+                    "you type at the start that nothing is plugged into either hub's motor ports 0-3 or servo ports "
+                    "0-5 (needs a terminal); a bench that drives them runs only with it; it stands for --ports-empty "
+                    "too"))
+TYPED_STATEMENTS = ("--s3-ports",)
+
+
+class Person:
+    """What session.py's Needs a person says about a bench that waits for someone: what it is, what to have on the
+    table, and the run_bench.py flags that run it (the bench's flag, and its typed statement's, by default)."""
+
+    def __init__(self, what, have, flags=None):
+        self.what, self.have, self.flags = what, have, flags
+
+
+class Bench:
+    """One bench in its own file, scripts/bench/benches/<name>.py, declared there as BENCH = Bench(...).
+    scripts/bench/benches/README.md says what each field means."""
+
+    def __init__(self, name, title, flag, help, run, checks, summary, default=False, options=(), needs=None,
+                 person=None, drives=None, powers=None, configs=(), opmodes=()):
+        self.name, self.title, self.flag, self.help = name, title, flag, help
+        self.run, self.checks, self.summary = run, checks, summary
+        self.default, self.options, self.needs, self.person = default, tuple(options), needs, person
+        self.drives = Ports() if drives is None else drives
+        self.powers, self.configs, self.opmodes = powers, tuple(configs), tuple(opmodes)
+        self.statement = None
+        self.person_flags = ()
+
+
+BENCH_FOLDER = Path(__file__).resolve().parent / "benches"
+BENCH_ORDER_FILE = "order.txt"
+IN_PLACE_BENCH_OPMODES = tuple(BENCH_OPMODES)
+IN_PLACE_BENCH_CONFIGS = tuple(BENCH_CONFIGS)
+MODULE_BENCHES = ()
+
+
+def bench_layout_problems(bench, name, taken):
+    """Why this declaration can't be run safely, or an empty list."""
+    problems = []
+    if not isinstance(bench, Bench):
+        return ["it declares no BENCH = rb.Bench(...)"]
+    if bench.name != name:
+        problems.append(f"its name is {bench.name!r}, not its file's {name!r}")
+    if bench.flag != "--" + name.replace("_", "-"):
+        problems.append(f"its flag is {bench.flag!r}, not --{name.replace('_', '-')}")
+    if bench.name in taken:
+        problems.append(f"{bench.name} is already a bench")
+    if not bench.title.startswith("Bench: "):
+        problems.append(f"its title {bench.title!r} doesn't start with 'Bench: '")
+    if not bench.help:
+        problems.append("it has no help text")
+    for field in ("run", "checks", "summary"):
+        if not callable(getattr(bench, field)):
+            problems.append(f"its {field} isn't a function")
+    if bench.needs is not None and not callable(bench.needs):
+        problems.append("its needs isn't a function")
+    for option in bench.options:
+        if not (isinstance(option, tuple) and len(option) == 2 and str(option[0]).startswith("--")
+                and isinstance(option[1], dict)):
+            problems.append(f"option {option!r} isn't (\"--flag\", {{argparse keywords}})")
+    if not isinstance(bench.drives, Ports):
+        problems.append("its drives isn't rb.Ports(...)")
+    elif bench.drives:
+        if not bench.powers:
+            problems.append("it drives ports but its powers doesn't say what it commands on them")
+        bench.statement = next((flag for flag, ports, _ in PORT_STATEMENTS if bench.drives.within(ports)), None)
+        if bench.statement is None:
+            problems.append(f"no port statement covers {bench.drives.describe()}: add one to PORT_STATEMENTS")
+    if bench.default and bench.statement not in (None, "--ports-empty"):
+        problems.append(f"it is in the default suite but needs {bench.statement}, which a default run never gives")
+    if bench.default and bench.person is not None:
+        problems.append("it is in the default suite but waits for a person: make it flag-only")
+    if bench.statement in TYPED_STATEMENTS and bench.person is None:
+        problems.append(f"{bench.statement} is typed at the terminal, so it needs a person = rb.Person(...)")
+    if bench.person is not None and not isinstance(bench.person, Person):
+        problems.append("its person isn't rb.Person(...)")
+    for config in bench.configs:
+        if not config.startswith("bench_") and not (REPO_ROOT / SHIPPED_CONFIG_DIR / f"{config}.xml").exists():
+            problems.append(f"config {config} is neither a bench_* config it writes nor shipped in res/xml")
+    if isinstance(bench.person, Person):
+        bench.person_flags = tuple(bench.person.flags or [bench.flag] + (
+            [bench.statement] if bench.statement in TYPED_STATEMENTS else []))
+    return problems
+
+
+def load_benches(folder=None):
+    """The benches in scripts/bench/benches/, in order.txt's order. A file it doesn't list, a name it lists twice
+    or without a file, or a declaration that breaks a rule stops run_bench.py before it does anything."""
+    folder = Path(folder or BENCH_FOLDER)
+    order = folder / BENCH_ORDER_FILE
+    names = [line.strip() for line in order.read_text().splitlines() if line.strip()] if order.exists() else []
+    files = {p.stem for p in folder.glob("*.py")} if folder.is_dir() else set()
+    problems = [f"{n} is listed twice in {order}" for n in sorted({n for n in names if names.count(n) > 1})]
+    problems += [f"{order} lists {n}, but {folder / (n + '.py')} doesn't exist" for n in names if n not in files]
+    problems += [f"{folder / (n + '.py')} isn't listed in {order}" for n in sorted(files - set(names))]
+    if problems:
+        raise BenchLayoutError("; ".join(problems))
+    benches, taken = [], set(BENCHES)
+    for name in names:
+        path = folder / f"{name}.py"
+        module = types.ModuleType(f"bench_{name}")
+        module.__file__ = str(path)
+        # Looked up at each use, not copied: the offline tests swap this file's subprocess and clock after it loads.
+        module.rb = RunnerNamespace(globals())
+        exec(compile(path.read_text(), str(path), "exec"), module.__dict__)
+        bench = module.__dict__.get("BENCH")
+        problems = bench_layout_problems(bench, name, taken)
+        if problems:
+            raise BenchLayoutError(f"{path}: " + "; ".join(problems))
+        bench.module = module
+        taken.add(name)
+        benches.append(bench)
+    return tuple(benches)
+
+
+def use_benches(benches):
+    """Makes these the benches from scripts/bench/benches/: their flags, run order, OpModes and bench configs."""
+    global MODULE_BENCHES, BENCH_OPMODES, BENCH_CONFIGS
+    MODULE_BENCHES = tuple(benches)
+    BENCH_OPMODES = list(dict.fromkeys(IN_PLACE_BENCH_OPMODES + tuple(o for b in MODULE_BENCHES for o in b.opmodes)))
+    BENCH_CONFIGS = tuple(dict.fromkeys(IN_PLACE_BENCH_CONFIGS + tuple(
+        c for b in MODULE_BENCHES for c in b.configs if c.startswith("bench_"))))
+
+
+def bench_order():
+    """Every bench in run order: BENCHES, with scripts/bench/benches/'s inserted in order.txt's order just before
+    Bench: Turret Zero, so Turret Zero, Freeze Dump and Dashboard Off stay last."""
+    i = BENCHES.index("turret_zero")
+    return BENCHES[:i] + tuple(b.name for b in MODULE_BENCHES) + BENCHES[i:]
+
+
+def module_bench(name):
+    return next((b for b in MODULE_BENCHES if b.name == name), None)
+
+
+def needs_a_person():
+    """session.py's Needs a person entries for the benches in scripts/bench/benches/: (key, what, flags, have)."""
+    return tuple((b.name, b.person.what, list(b.person_flags), b.person.have) for b in MODULE_BENCHES
+                 if b.person is not None)
+
+
+def person_flags():
+    """Flags that make a run wait for someone at its terminal, which session.py never gives one of its stages."""
+    return tuple(TYPED_STATEMENTS) + tuple(b.flag for b in MODULE_BENCHES if b.person is not None)
+
+
+def add_module_bench_flags(p):
+    statements = [(flag, help) for flag, _, help in PORT_STATEMENTS if help is not None]
+    if not (MODULE_BENCHES or statements):
+        return
+    g = p.add_argument_group("benches in scripts/bench/benches/ (its README.md)")
+    for b in MODULE_BENCHES:
+        g.add_argument(b.flag, action="store_true", help=b.help)
+        for flag, keywords in b.options:
+            g.add_argument(flag, **keywords)
+    for flag, help in statements:
+        g.add_argument(flag, action="store_true", help=help)
 
 
 def parse_args(argv):
@@ -9956,7 +10228,10 @@ def parse_args(argv):
     p.add_argument("--hub-serialno", default=None,
                    help="the hub's ro.serialno (session.py passes it): every adb connection check reads it, and a hub "
                         "that reads otherwise stops the run with nothing more sent to it, its config not put back")
+    add_module_bench_flags(p)
     args = p.parse_args(argv)
+    if getattr(args, "s3_ports", False):
+        args.ports_empty = True
     if args.usb and args.host != HUB_IP:
         p.error("--host is the hub's Wi-Fi address; with --usb the runner reaches the hub's ports through the cable")
     if args.hub_serialno is not None and not args.hub_serialno.strip():
@@ -9974,7 +10249,7 @@ def parse_args(argv):
     cap = PHOTON_SOAK_MAX_S / 3600
     if args.photon_soak_hours is not None and not (args.photon_soak and 0 < args.photon_soak_hours <= cap):
         p.error(f"--photon-soak-hours takes --photon-soak and a number of hours above 0, at most {cap:g}")
-    if args.probe_only and (args.list_configs or args.all or any(getattr(args, n, False) for n in BENCHES)):
+    if args.probe_only and (args.list_configs or args.all or any(getattr(args, n, False) for n in bench_order())):
         p.error("--probe-only runs no bench: leave out the bench flags, --all and --list-configs")
     return args
 
@@ -9988,6 +10263,8 @@ def main(argv=None):
         return 2
     return runner.run()
 
+
+use_benches(load_benches())
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -50,10 +50,11 @@ GRADLE_LIMIT_S = 600
 REINSTALL_LIMIT_S = 1800
 # What the runner's own finally may take to put the config back after a Ctrl-C, plus its summary.
 RUNNER_RESTORE_S = rb.RESTORE_WINDOW_S + 300
-PROMPTED_FLAGS = ("--interactive", "--turret-zero", "--turret-zero-v2")
+PROMPTED_FLAGS = ("--interactive", "--turret-zero", "--turret-zero-v2") + rb.person_flags()
 UNREADABLE = "unreadable"
 
-# Every bench that stops for a person: (key, what it is, run_bench.py flags, what to have on the table).
+# Every bench that stops for a person: (key, what it is, run_bench.py flags, what to have on the table); the ones in
+# scripts/bench/benches/ come from their declarations.
 PROMPTED = (
     ("gamepad", "Bench: Gamepad and Gamepad Linear driven by hand from the dashboard's Gamepad view",
      ["--gamepad", "--interactive"],
@@ -83,7 +84,7 @@ PROMPTED = (
     ("turret_zero", "Bench: Turret Zero (add --turret-zero-v2 with a REV-11-3174 on hand)", ["--turret-zero"],
      "the OctoQuad in Control Hub I2C port 2 with nothing on its channel 4, a REV Through Bore V1 on a stand with a "
      "12-mark dial, the REV-31-1815 cable, the split cable, a multimeter; about 25 min at the hub"),
-)
+) + rb.needs_a_person()
 
 
 class Stop(Exception):

@@ -2,8 +2,9 @@
 
 Desktop checks for `run_bench.py`'s check of adb's server port, its saved-configs listing and `--list-configs`,
 Bench: Dashboard Off, Bench: OctoQuad's bank phase, Bench: Turret Zero, Bench: Photon's two-hubs-at-once phase,
-`--usb` and `session.py`. They need no hub: the hub, adb, `lsof` and the dashboard are stubs, nothing binds or connects to adb's port
-5037 or the emulator ports 5554-5585, and nothing reaches the network. They catch regressions before a hub run; they
+`--usb`, `session.py` and the benches in `scripts/bench/benches/` ([`../benches/README.md`](../benches/README.md)).
+They need no hub: the hub, adb, `lsof` and the dashboard are stubs, nothing binds or connects to adb's port 5037 or the
+emulator ports 5554-5585, and nothing reaches the network. They catch regressions before a hub run; they
 don't replace it. The rest of the Photon block has its own: [`../photon-offline/README.md`](../photon-offline/README.md).
 
 ## Before running
@@ -29,7 +30,12 @@ Run from the repo root.
 | Bench: Turret Zero's verdicts, good and broken results (`turret_zero_fixtures.py` builds them) | `python3 -I scripts/bench/offline/test_turret_zero_checks.py` | `... passed, 0 failed` |
 | `run_turret_zero` end to end with the hub stubbed and the answers scripted: prompt order, config, params, the default run unchanged | `python3 -I scripts/bench/offline/dryrun_turret_zero.py` | `... passed, 0 failed` |
 | Bench: Photon's two-hubs-at-once phase: the overlap reading, its record-only line and table | `python3 -I scripts/bench/offline/test_hub_overlap.py` | `... passed, 0 failed` |
+| the benches in `scripts/bench/benches/` ([`../benches/README.md`](../benches/README.md)): each declaration, `order.txt`, their flags and `--help`, the typed `--s3-ports` statement, the session's Needs a person, a stub bench on `fake_hub.py`; then each bench's own file in `benches/` | `python3 -I scripts/bench/offline/test_benches.py` | `... passed, 0 failed` |
+| one bench's own checks and dry run, e.g. Bench: Config Check's | `python3 -I scripts/bench/offline/benches/config_check.py` | `... passed, 0 failed` |
 | `TurretZeroMath` (JUnit) | `./gradlew :TeamCode:testDebugUnitTest` | `BUILD SUCCESSFUL ...` |
+
+A bench's offline file goes in `benches/`, named for the bench, whether the bench is new or one in `run_bench.py`
+that an extension adds to; `test_benches.py` runs every file there.
 
 Run them after changing those parts of `run_bench.py` or `bare_hub.sh`, and `check_dashboard_api.py` after any
 slothboard bump. Clean up with `rm -rf scripts/bench/offline/out`.
