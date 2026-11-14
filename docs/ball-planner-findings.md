@@ -79,7 +79,9 @@ Both compare the ball's centre with half the intake width. `Ball.radius` is set 
 grab, and `RouteRun` drives the plan without checking what went in.
 
 Fix: compare with `intakeWidthIn / 2` minus the ball's radius, or minus a capture margin measured on the intake, in
-both places. A narrower reach means more stops per curve, so rerun Bench: Hub afterwards.
+both places. A narrower reach means more stops per curve, so rerun Bench: Hub afterwards. How much longer plans take
+then is unknown; test: `scripts/bench/run_bench.py --hub --hub-planner-baseline bench-results/<a run before the fix>
+--ports-empty`, which prints each ball count's and layout's plan times before and after.
 
 ## Planning 4 balls without restarting the app at STOP
 
@@ -107,7 +109,8 @@ How it plans now (read from source):
   passed, so it overruns the slice by at most one `shape()` call or the final Pedro path build
   (`RouteOptimizer.java:143-154`). STOP then waits for one step, not a plan.
 - Budget: the longest step + the loop's tail + `stop()` under 900 ms. Ball Collection Auto's `stop()` also closes the
-  cell-tip webcam (up to 581 ms in [`hub-bench-findings.md`](hub-bench-findings.md)), which leaves about 300 ms.
+  cell-tip webcam (up to 581 ms in [`hub-bench-findings.md`](hub-bench-findings.md)), which leaves about 300 ms. Not
+  yet measured together; test: `scripts/bench/run_bench.py --planner-stop --ports-empty` with a webcam plugged in.
 - Vision Ball Collection checks for a changed request every `replanIntervalMs` (250 ms) and keeps showing the last
   finished plan meanwhile; a running search is replaced only when the settings change or the robot moves, not when
   the balls do, or churning vision would never let a 4-ball plan finish (`VisionBallCollectionTest.java:249-276`).
@@ -129,8 +132,9 @@ How it plans now (read from source):
 
 ## Testing the planner
 
-- There is no automated planner test: `TeamCode/src/test` holds only `TargetSelectorTest` and `ShotSolverTest`. Bench:
-  Hub and Bench: Planner Stop time plans and STOP on a hub but don't check a plan's geometry.
+- No automated test checks a plan's geometry. `PlannerWorkloadTest` (`TeamCode/src/test`) checks only how a search
+  slices its work and that slicing doesn't change the route. Bench: Hub and Bench: Planner Stop time plans and STOP on
+  a hub but don't check a plan's geometry either.
 - Before changing the planner, add a unit test (`./gradlew :TeamCode:testDebugUnitTest`) that walks every
   `Plan.steps` drive and turn over many layouts and checks, with its own footprint and distance maths rather than
   `RobotShape`'s: the footprint stays inside the area, more than `railGapIn` from each rail, and every ball in
@@ -158,4 +162,5 @@ How it plans now (read from source):
   the robot and check the manual before adding balls as obstacles.
 - **The sliced search on a hub:** its longest step, its plan time from request to done, the loop period while it
   runs, and STOP during it. Run Bench: Hub and Bench: Planner Stop (`scripts/bench/README.md`); a desktop replay
-  estimate is in [`hub-bench-findings.md`](hub-bench-findings.md).
+  estimate is in [`hub-bench-findings.md`](hub-bench-findings.md). Test: `scripts/bench/run_bench.py --hub
+  --planner-stop --ports-empty`, whose unsliced control shows whether that hub can show a slow STOP at all.

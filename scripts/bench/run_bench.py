@@ -471,6 +471,30 @@ PLANNER_SLICE_PENDING = (f"a RouteOptimizer.Search.step() ran {PLANNER_SLICE_MAX
                          "slice got slower, or VisibilityGraphPlanner.routeSearchSliceMs was raised. A STOP waits for "
                          f"that step, which then leaves stop() less of the SDK's {SDK_STOP_WINDOW_MS} ms than Ball "
                          "Collection Auto's webcam close can take (up to 581 ms)")
+PLANNER_UNSLICED_BALLS = 4
+PLANNER_UNSLICED_DELAYS_S = (0.05, 0.15, 0.3)
+PLANNER_CONTROL_WORDS = {"fired": "fired", "not fired": "didn't fire", "not finished": "didn't finish"}
+PLANNER_CAMERA_BALLS = 4
+PLANNER_CAMERA_FRAMES = 10
+PLANNER_CAMERA_REPEATS = 3
+PLANNER_CAMERA_INIT_DELAYS_S = (0.0, 0.3)
+PLANNER_CAMERA_WORST_TRIALS = 5
+PLANNER_CAMERA_WORST_START_S = 0.2
+PLANNER_CAMERA_WORST_STOP_S = 0.05
+PLANNER_CAMERA_CLOSE_MS = 500
+PLANNER_CAMERA_ESTIMATE_MS = (830, 855)
+PLANNER_CAMERA_PENDING = ("with Ball Collection Auto's webcam open, a STOP during planning ran past the SDK's "
+                          f"{SDK_STOP_WINDOW_MS} ms stop window or restarted the app: the planner slice running at STOP, "
+                          "the loop's tail and CellTipCamera.stop()'s webcam close no longer fit in it. Move the webcam "
+                          "close out of stop() (leave it to EasyOpenCV's close after stop(), or use "
+                          "closeCameraDeviceAsync), as docs/hub-bench-findings.md describes")
+PLANNER_WORST_PENDING = ("not reproduced: no worst-case trial had a STOP that waited for a planner slice and then a "
+                         f"webcam close of {PLANNER_CAMERA_CLOSE_MS} ms or more, so the STOP checks with the webcam "
+                         f"don't cover the {PLANNER_CAMERA_ESTIMATE_MS[0]}-{PLANNER_CAMERA_ESTIMATE_MS[1]} ms case; "
+                         "where a STOP lands is down to network timing, so run --planner-stop again")
+PLANNER_CONTROL_PENDING = ("the negative control didn't fire: with each plan made in one step, as before the search was "
+                           f"sliced, every STOP still reached idle within {SDK_STOP_WINDOW_MS} ms with no restart, so "
+                           "this hub and layout can't show a slow STOP and the sliced STOP checks are unproven on them")
 
 LLHUNG_OPMODE = "Bench: Limelight Hung"
 KEY_LIMELIGHT_STATE = "Bench limelight"
@@ -4599,6 +4623,321 @@ def octoquad_bank_checks(bank, error=""):
     return checks, lines
 
 
+def planner_overran(t):
+    """A STOP past the SDK's stop window: the app restarted, a stuck-in-stop marker, or the hub's own times say so."""
+    idle = t.get("hubStopToIdleMs")
+    return bool(t.get("restarted") or t.get("markers") or (idle is not None and idle >= SDK_STOP_WINDOW_MS))
+
+
+def planner_trial_outcome(t):
+    if "failed" in t:
+        return f"FAILED: {t['failed']}"
+    idle = t.get("hubStopToIdleMs")
+    out = f"hub STOP to idle {'not logged' if idle is None else f'{idle:.0f} ms'}"
+    if t.get("restarted"):
+        out += f", app restarted (pid {t.get('pidBefore')} to {t.get('pidAfter')})"
+    if t.get("markers"):
+        out += f", stuck markers {len(t['markers'])}"
+    return out
+
+
+
+def planner_control_verdict(unsliced):
+    """('fired' | 'not fired' | 'not finished', detail) for the unsliced trials: fired once one STOP overran."""
+    ran = [t for t in unsliced if "failed" not in t]
+    over = [t for t in ran if planner_overran(t)]
+    each = "; ".join(f"{t['delay']} s: {planner_trial_outcome(t)}" for t in unsliced)
+    if over:
+        return "fired", f"{len(over)} of {len(unsliced)} STOPs overran ({each})"
+    if len(ran) < len(PLANNER_UNSLICED_DELAYS_S):
+        return "not finished", (f"only {len(ran)} of {len(PLANNER_UNSLICED_DELAYS_S)} unsliced trials finished and "
+                                f"none overran ({each})")
+    return "not fired", f"none of {len(ran)} STOPs overran ({each})"
+
+
+def planner_baseline_arg(path):
+    """--hub-planner-baseline: an earlier run's Bench: Hub planner phase, from its results folder or its raw/hub.json."""
+    given = Path(path)
+    f = given / "raw" / "hub.json" if given.is_dir() else given
+    try:
+        planner = json.loads(f.read_text())["phases"]["planner"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise argparse.ArgumentTypeError(f"{f} has no Bench: Hub planner phase to compare with ({type(e).__name__}: "
+                                         f"{e})") from None
+    if not isinstance(planner, dict) or not (planner.get("byBallCount") or planner.get("byCase")):
+        raise argparse.ArgumentTypeError(f"{f}'s Bench: Hub planner phase has no plan times to compare with")
+    return {"label": str(path), "planner": planner}
+
+
+def planner_baseline_lines(now, before, label):
+    """Bench: Hub's plan times against an earlier run's: per ball count, per hand-built layout, and the cold plan."""
+    s = [f"- Plan times from request to done against {label}, p50 / p95 / max ms (now at p50 as a share of then), and "
+         "plans that dropped a ball:"]
+
+    def row(title, a, b):
+        x, y = (a or {}).get("planMs"), (b or {}).get("planMs")
+        share = f" ({y['p50'] / x['p50']:.2f}x)" if counted(x) and counted(y) and x["p50"] > 0 else ""
+        drops = "".join(f"; {when} {v.get('plansWithDroppedBalls')} of {v.get('plans')} dropped a ball"
+                        for when, v in (("then", a), ("now", b)) if v)
+        s.append(f"  - {title}: then {fmt_cell(x)}, now {fmt_cell(y)}{share}{drops}")
+
+    for group, title in (("byBallCount", "random, {}"), ("byCase", "{}")):
+        then, now_group = before.get(group) or {}, now.get(group) or {}
+        names = sorted(set(then) | set(now_group)) if group == "byBallCount" else list(dict.fromkeys(list(now_group)
+                                                                                                    + list(then)))
+        for name in names:
+            row(title.format(name), then.get(name), now_group.get(name))
+    a, b = before.get("coldFirstPlan") or {}, now.get("coldFirstPlan") or {}
+    s.append(f"  - first plan in the app process: then {a.get('planMs', float('nan')):.0f} ms ({a.get('balls')} balls), "
+             f"now {b.get('planMs', float('nan')):.0f} ms ({b.get('balls')} balls)")
+    return s
+
+
+def planner_stop_extras(res):
+    """A trial's result file's STOP timings beyond the sliced trials' table, and the webcam's frames and close."""
+    stop, camera, timeline = res.get("stop") or {}, res.get("camera") or {}, res.get("timeline") or {}
+    start, first = timeline.get("startMs"), timeline.get("firstPlanMs")
+    return {"sliceAfterStopMs": stop.get("sliceAfterStopMs"), "tailMs": stop.get("tailMs"),
+            "stopPassToOnEndMs": stop.get("stopPassToOnEndMs"), "cellTipStopMs": camera.get("cellTipStopMs"),
+            "framesAtFirstPlan": camera.get("framesAtFirstPlan"), "framesAtStart": camera.get("framesAtStart"),
+            "framesAtStop": camera.get("framesAtStop"), "firstFrameMs": timeline.get("firstFrameMs"),
+            "startToFirstSliceMs": round(first - start, 1) if start is not None and first is not None else None}
+
+
+def planner_camera_label(t):
+    if t["kind"] == "replan":
+        return f"{t['delay']} s into a plan, #{t['repeat']}"
+    if t["kind"] == "init":
+        return f"INIT + {t['delay']} s, #{t['repeat']}"
+    return (f"START at INIT + {PLANNER_CAMERA_WORST_START_S} s, STOP {PLANNER_CAMERA_WORST_STOP_S} s later, "
+            f"#{t['repeat']}")
+
+
+def planner_camera_expected():
+    return ((len(PLANNER_STOP_DELAYS_S) + len(PLANNER_CAMERA_INIT_DELAYS_S)) * PLANNER_CAMERA_REPEATS
+            + PLANNER_CAMERA_WORST_TRIALS)
+
+
+def planner_worst_reproduced(t):
+    """Whether a worst-case trial's STOP waited for a planner slice, then for a webcam close of 500 ms or more."""
+    close, waited = t.get("cellTipStopMs"), t.get("sliceAfterStopMs")
+    return ("failed" not in t and close is not None and close >= PLANNER_CAMERA_CLOSE_MS and waited is not None
+            and waited > 0)
+
+
+def planner_camera_checks(camera):
+    """(name, ok, detail, fail_means) for the trials with the webcam open."""
+    expected = planner_camera_expected()
+    ran = [t for t in camera if "failed" not in t]
+    unfinished = [planner_camera_label(t) for t in camera if "failed" in t]
+    restarted = [planner_camera_label(t) for t in ran if t.get("restarted") or t.get("markers")]
+    slow = [planner_camera_label(t) for t in ran
+            if not (t.get("hubStopToIdleMs") is not None and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
+    logged = [t["hubStopToIdleMs"] for t in ran if t.get("hubStopToIdleMs") is not None]
+    low, high = PLANNER_CAMERA_ESTIMATE_MS
+    margin = (f"slowest {max(logged):.0f} ms, {SDK_STOP_WINDOW_MS - max(logged):.0f} ms inside the "
+              f"{SDK_STOP_WINDOW_MS} ms window (the estimate: about {low} ms, up to about {high}, "
+              f"{SDK_STOP_WINDOW_MS - high}-{SDK_STOP_WINDOW_MS - low} ms inside it)" if logged
+              else "no STOP to idle logged")
+    gone = f"; didn't finish: {unfinished}" if unfinished else ""
+    complete = len(ran) == expected
+    worst = [t for t in camera if t.get("kind") == "worst"]
+    reproduced = [t for t in worst if planner_worst_reproduced(t)]
+    per_worst = [tuple(None if t.get(k) is None else round(t[k]) for k in ("sliceAfterStopMs", "cellTipStopMs",
+                                                                          "hubStopToIdleMs")) for t in worst]
+    return [
+        ("planner stop with the webcam: STOP never restarts the app", complete and not restarted,
+         f"{len(ran)} of {expected} trials ran; restarts or stuck markers after STOP at {restarted or 'none'}{gone}",
+         PLANNER_CAMERA_PENDING if complete else "a trial didn't finish (see the table), so not every STOP was tried"),
+        (f"planner stop with the webcam: the hub logs every STOP reaching idle within {SDK_STOP_WINDOW_MS} ms "
+         "('auto-stopping' to '***STOP - OPMODE***')", complete and not slow,
+         f"{margin}; at or over {SDK_STOP_WINDOW_MS} ms or missing at {slow or 'none'}{gone}",
+         PLANNER_CAMERA_PENDING if complete else "a trial didn't finish (see the table), so not every STOP was timed"),
+        (f"planner stop with the webcam: the worst case was reproduced (a STOP that waited for a planner slice, then a "
+         f"webcam close of {PLANNER_CAMERA_CLOSE_MS} ms or more)", bool(reproduced),
+         f"{len(reproduced)} of {len(worst)} worst-case trials; per trial, planner ms the STOP waited, webcam close ms "
+         f"and hub STOP to idle ms: {per_worst}", PLANNER_WORST_PENDING),
+    ]
+
+
+def planner_stop_checks(trials, unsliced=(), camera=()):
+    """(name, ok, detail, fail_means) for Bench: Planner Stop, from its trial records alone."""
+    out = []
+    control = planner_control_verdict(unsliced) if unsliced else None
+    unproven = (f"; unproven on this layout: the unsliced control {PLANNER_CONTROL_WORDS[control[0]]} "
+                f"({control[1]})" if control is not None and control[0] != "fired" else "")
+    for balls in PLANNER_STOP_BALLS:
+        note = unproven if balls == PLANNER_UNSLICED_BALLS else ""
+        ran = [t for t in trials if t["balls"] == balls and "failed" not in t]
+        plans = [ms for t in ran for ms in t["plans"]]
+        slices = [dig(t, "stepMs", "max") for t in ran if dig(t, "stepMs", "count")]
+        periods = [dig(t, "loopPeriodMs", "max") for t in ran if dig(t, "loopPeriodMs", "count")]
+        restarted = [f"{t['delay']} s" for t in ran if t["restarted"] or t["markers"]]
+        mid = [t for t in ran if t["planAtStop"]]
+        ok = len(ran) == len(PLANNER_STOP_DELAYS_S) and not restarted
+        out.append((f"planner stop {balls} balls: STOP during replanning never restarts the app", ok,
+                    f"{len(ran)} of {len(PLANNER_STOP_DELAYS_S)} trials ran, {len(mid)} with STOP mid-plan; plans "
+                    f"{fmt_plans(plans)}; restarts or stuck markers after STOP at {restarted or 'none'}"
+                    + "".join(f"; {t['delay']} s back to Robot Status: running {t['hubStopToRunningS']} s after STOP "
+                              "(hub clock)" for t in ran if t.get("hubStopToRunningS") is not None)
+                    + (note if ok else ""),
+                    PLANNER_STOP_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
+                    "a trial didn't finish (see the table), so not every STOP was tried"))
+        idle = [t.get("hubStopToIdleMs") for t in ran]
+        slow = [f"{t['delay']} s" for t in ran if not (t.get("hubStopToIdleMs") is not None
+                                                      and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
+        ok = len(ran) == len(PLANNER_STOP_DELAYS_S) and not slow
+        out.append((f"planner stop {balls} balls: the hub logs every STOP reaching idle within {SDK_STOP_WINDOW_MS} ms "
+                    "('auto-stopping' to '***STOP - OPMODE***')", ok,
+                    f"hub STOP to idle {idle} ms (None: no such line, as after a restart); at or over "
+                    f"{SDK_STOP_WINDOW_MS} ms or missing at {slow or 'none'}; the runner saw "
+                    f"{[t['stopSeconds'] for t in ran]} s through its status polling" + (note if ok else ""),
+                    PLANNER_STOP_IDLE_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
+                    "a trial didn't finish (see the table), so not every STOP was timed"))
+        if balls == PLANNER_JUDGED_BALLS:
+            out.append((f"planner stop {balls} balls: every planner slice returns within {PLANNER_SLICE_MAX_MS} ms",
+                        len(slices) == len(ran) and bool(ran) and max(slices) < PLANNER_SLICE_MAX_MS,
+                        f"longest slice per trial {[round(v, 1) for v in slices]} ms; loop period while planning "
+                        f"at most {[round(v, 1) for v in periods]} ms" if slices else "no trial recorded a slice",
+                        PLANNER_SLICE_PENDING if slices else "no trial ran far enough to plan"))
+    if unsliced:
+        out.append((f"planner stop unsliced control: a whole {PLANNER_UNSLICED_BALLS}-ball plan in one step overran the "
+                    f"{SDK_STOP_WINDOW_MS} ms stop window at least once", control[0] == "fired", control[1],
+                    PLANNER_CONTROL_PENDING if control[0] == "not fired" else
+                    "an unsliced trial didn't finish (see the table), so the control can't say whether this hub and "
+                    "layout show a slow STOP"))
+    if camera:
+        out += planner_camera_checks(camera)
+    return out
+
+
+def planner_ms(v):
+    return "" if v is None else f"{v:.0f}"
+
+
+def planner_stop_landed(t):
+    landed = "not seen"
+    if t["planAtStop"]:
+        landed = f"in plan {t['planAtStop']}" + (f", {t['msIntoPlan']:.0f} ms into it" if t["msIntoPlan"] is not None
+                                                 else "")
+        if t.get("inSlice") is not None:
+            landed += f", {t['msIntoSlice']:.0f} ms into a slice" if t["inSlice"] else ", between slices"
+    elif t["stopSeen"]:
+        landed = "between plans"
+    return landed
+
+
+def planner_stop_summary(trials, unsliced=(), camera=(), notes=()):
+    """summary.md's Bench: Planner Stop section, from its trial records alone."""
+    s = ["## Bench: Planner Stop (STOP while Vision Ball Collection-style replanning runs in INIT)\n",
+         "| balls | STOP sent after the next plan began | plans | STOP landed | slice left at STOP (ms) | STOP to "
+         "stop() (ms) | hub STOP to idle (ms) | runner STOP to idle (s) | app restarted | hub STOP to running again "
+         "(s) | stuck markers |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for trial in trials:
+        balls, delay = trial["balls"], trial["delay"]
+        if "failed" in trial:
+            s.append(f"| {balls} | {delay} s | FAILED: {trial['failed']} | | | | | | | | |")
+            continue
+        landed = planner_stop_landed(trial)
+        if trial.get("warmSeconds") is None:
+            landed += f" (never reached {PLANNER_STOP_WARM} plans; STOP came after the 10 s timeout)"
+        s.append(f"| {balls} | {delay} s | {len(trial['plans'])} | {landed} | {planner_ms(trial.get('sliceLeftMs'))} | "
+                 f"{planner_ms(trial.get('stopToStopPassMs'))} | {planner_ms(trial.get('hubStopToIdleMs'))} | "
+                 f"{trial['stopSeconds']} | {trial['restarted']} | {trial.get('hubStopToRunningS') or ''} | "
+                 f"{len(trial['markers'])} |")
+    s.append("")
+    for balls in PLANNER_STOP_BALLS:
+        ran = [t for t in trials if t["balls"] == balls and "failed" not in t]
+        plans = [ms for t in ran for ms in t["plans"]]
+        compute = [ms for t in ran for ms in t["planComputeMs"]]
+        loops = [n for t in ran for n in t["planLoops"]]
+        firsts = [round(t["plans"][0]) for t in ran if t["plans"]]
+        cold = [round(t["plans"][0]) for t in ran if t["firstPlanInProcess"] and t["plans"]]
+        s.append(f"- {balls} balls ({ran[0]['layout'] if ran else 'no trial ran'}), one "
+                 f"{ran[0]['sliceMs'] if ran else '?'} ms slice per loop: every plan {fmt_plans(plans)} from "
+                 f"request to done; in slices {fmt_plans(compute)}; loops per plan {sorted(set(loops))}; first plan "
+                 f"of each trial {firsts} ms; first plans in a fresh app process {cold} ms")
+        for t in ran:
+            s.append(f"  - {t['delay']} s: slices {fmt(t.get('stepMs'))}; past the slice {fmt(t.get('overrunMs'))}; "
+                     f"loop period while planning {fmt(t.get('loopPeriodMs'))}")
+    s.append("- The bench requests the crafted layout again at each 250 ms replan check once the last plan is done, "
+             "as Vision Ball Collection does while its balls keep moving, and steps it once per init_loop() as the "
+             "collection OpModes do; it records when the SDK's stopRequested flips. STOP is sent the set delay after "
+             "the runner sees a plan finish. Hub STOP to idle is 'auto-stopping' to '***STOP - OPMODE***' and STOP "
+             "to running again is 'auto-stopping' to 'Robot Status: running', both on the hub's logcat clock; the "
+             f"SDK gives STOP {SDK_STOP_WINDOW_MS} ms (+100) to finish the running init_loop() and stop() before it "
+             "restarts the app.\n")
+    if unsliced:
+        s += planner_control_summary(unsliced)
+    if camera:
+        s += planner_camera_summary(camera)
+    s += [f"_{n}_\n" for n in notes]
+    return s
+
+
+def planner_camera_summary(camera):
+    s = ["### With the webcam open (CellTipCamera, as Ball Collection Auto's robot opens it)\n",
+         "| trial | webcam frames at STOP | STOP landed | planner ms the STOP waited | loop tail (ms) | webcam close "
+         "(ms) | stop() pass (ms) | hub STOP to idle (ms) | left of the 900 ms (ms) | app restarted (pid before to "
+         "after) | stuck markers |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for t in camera:
+        if "failed" in t:
+            s.append(f"| {planner_camera_label(t)} | FAILED: {t['failed']} | | | | | | | | | |")
+            continue
+        idle = t.get("hubStopToIdleMs")
+        s.append(f"| {planner_camera_label(t)} | {t.get('framesAtStop')} | {planner_stop_landed(t)} | "
+                 f"{planner_ms(t.get('sliceAfterStopMs'))} | {planner_ms(t.get('tailMs'))} | "
+                 f"{planner_ms(t.get('cellTipStopMs'))} | {planner_ms(t.get('stopPassToOnEndMs'))} | {planner_ms(idle)} | "
+                 f"{'' if idle is None else planner_ms(SDK_STOP_WINDOW_MS - idle)} | {t['restarted']} "
+                 f"({t.get('pidBefore')} to {t.get('pidAfter')}) | {len(t['markers'])} |")
+    s.append("")
+    s.append(f"- Replanning trials wait for {PLANNER_CAMERA_FRAMES} fresh webcam frames, then plan the "
+             f"{PLANNER_CAMERA_BALLS}-ball layout back to back in INIT. INIT trials plan from the first init_loop() while "
+             "the webcam opens. Worst-case trials plan from START, sent while the webcam is still opening, as Ball "
+             "Collection Auto plans from START. Planner ms the STOP waited: the rest of the slice running at STOP, or "
+             "a whole slice begun after STOP in the same loop. Loop tail: from then to stop(). stop() pass: from the "
+             "first module's stop() to onEnd(), the webcam close included.")
+    worst = [t for t in camera if t.get("kind") == "worst"]
+    for t in worst:
+        if "failed" in t:
+            continue
+        s.append(f"  - {planner_camera_label(t)}: INIT seen {t.get('initSeenS')} s after it was sent, START sent at "
+                 f"{t.get('startSentS')} s, STOP at {t.get('stopSentS')} s; webcam frames at START "
+                 f"{t.get('framesAtStart')}; first slice {t.get('startToFirstSliceMs')} ms after START")
+    reproduced = [t for t in worst if planner_worst_reproduced(t)]
+    s.append(f"- The {PLANNER_CAMERA_ESTIMATE_MS[0]}-{PLANNER_CAMERA_ESTIMATE_MS[1]} ms case (a planner slice, the "
+             "loop's tail and a webcam close right after INIT, in one STOP): "
+             + (f"reproduced in {len(reproduced)} of {len(worst)} worst-case trials.\n" if reproduced
+                else "not reproduced, so the STOP checks with the webcam don't cover it.\n"))
+    return s
+
+
+def planner_control_summary(unsliced):
+    verdict, detail = planner_control_verdict(unsliced)
+    s = [f"### Unsliced control: {PLANNER_UNSLICED_BALLS} balls, each plan in one step\n",
+         "| STOP sent after the next plan began | plans | longest step (ms) | STOP landed | STOP to stop() (ms) | hub "
+         "STOP to idle (ms) | app restarted (pid before to after) | hub STOP to running again (s) | stuck markers |",
+         "|---|---|---|---|---|---|---|---|---|"]
+    for t in unsliced:
+        if "failed" in t:
+            s.append(f"| {t['delay']} s | FAILED: {t['failed']} | | | | | | | |")
+            continue
+        s.append(f"| {t['delay']} s | {len(t['plans'])} | {planner_ms(dig(t, 'stepMs', 'max'))} | "
+                 f"{planner_stop_landed(t)} | {planner_ms(t.get('stopToStopPassMs'))} | "
+                 f"{planner_ms(t.get('hubStopToIdleMs'))} | {t['restarted']} ({t.get('pidBefore')} to "
+                 f"{t.get('pidAfter')}) | {t.get('hubStopToRunningS') or ''} | {len(t['markers'])} |")
+    s.append("")
+    if verdict == "fired":
+        s.append(f"- The control fired: {detail}. With each plan in one step a STOP does overrun on this hub and "
+                 "layout, so the sliced STOP checks above can tell a slow STOP from a fast one.\n")
+    else:
+        s.append(f"- The control {PLANNER_CONTROL_WORDS[verdict]}: {detail}. The sliced STOP checks above are "
+                 "unproven on this layout: with each plan in one step, STOP still stopped in time.\n")
+    return s
+
+
 def write_recovery_checks(res, outcome):
     """(name, ok, detail, fail_means) for a Bench: Write Recovery result, with or without Photon."""
     channels, trials, info = res.get("channels") or {}, res.get("trials") or [], res.get("info") or {}
@@ -5539,13 +5878,18 @@ class Runner:
         by_count = planner.get("byBallCount", {})
         for n, v in sorted(by_count.items()):
             s.append(f"- Planner {n}: plan {fmt(v.get('planMs'))}; in slices {fmt(v.get('computeMs'))}; "
-                     f"{fmt(v.get('loopsPerPlan'), 'loops')}; longest slice per plan {fmt(v.get('longestStepMs'))}; "
-                     f"{v.get('plansWithDroppedBalls')} of {v.get('plans')} dropped a ball")
+                     f"{fmt(v.get('loopsPerPlan'), 'loops')}; every slice {fmt(v.get('stepMs'))}; longest slice per plan "
+                     f"{fmt(v.get('longestStepMs'))}; {v.get('plansWithDroppedBalls')} of {v.get('plans')} dropped a ball")
         cases = planner.get("byCase", {})
         for n, v in cases.items():
-            s.append(f"  - {n}: plan {fmt(v.get('planMs'))}; longest slice {fmt(v.get('longestStepMs'))}")
+            s.append(f"  - {n}: plan {fmt(v.get('planMs'))}; every slice {fmt(v.get('stepMs'))}; longest slice "
+                     f"{fmt(v.get('longestStepMs'))}; {v.get('plansWithDroppedBalls')} of {v.get('plans')} dropped a "
+                     "ball")
         s.append(f"- Planner slices {fmt(planner.get('stepMs'))}; past the slice {fmt(planner.get('overrunMs'))}; "
                  f"loop period while planning {fmt(planner.get('loopPeriodMs'))}")
+        baseline = self.args.hub_planner_baseline
+        if baseline is not None:
+            s += planner_baseline_lines(planner, baseline["planner"], baseline["label"])
         judged = {n: dig(v, "longestStepMs", "max") for n, v in by_count.items()
                   if int(n.split("=")[1]) <= PLANNER_JUDGED_BALLS}
         judged.update({n: dig(v, "longestStepMs", "max") for n, v in cases.items()
@@ -6350,95 +6694,94 @@ class Runner:
                          "- the runner restarted the app afterwards\n"]
 
     def run_planner_stop(self):
-        s = ["## Bench: Planner Stop (STOP while Vision Ball Collection-style replanning runs in INIT)\n",
-             "| balls | STOP sent after the next plan began | plans | STOP landed | slice left at STOP (ms) | STOP to "
-             "stop() (ms) | hub STOP to idle (ms) | runner STOP to idle (s) | app restarted | hub STOP to running again "
-             "(s) | stuck markers |",
-             "|---|---|---|---|---|---|---|---|---|---|---|"]
+        trials = [self._planner_stop(balls, delay) for balls in PLANNER_STOP_BALLS for delay in PLANNER_STOP_DELAYS_S]
+        unsliced, camera, notes = [], [], []
+        if self.args.planner_stop:
+            unsliced = [self._planner_stop(PLANNER_UNSLICED_BALLS, delay,
+                                           f"unsliced_b{PLANNER_UNSLICED_BALLS}_d{int(delay * 1000)}", {"unsliced": 1},
+                                           unsliced=True) for delay in PLANNER_UNSLICED_DELAYS_S]
+            if self.webcam is None:
+                notes.append("The webcam trials were skipped: no webcam plugged in. Plug a UVC webcam into a Control "
+                             "Hub USB port to run them.")
+            else:
+                camera = self._planner_camera_trials()
+        else:
+            notes.append("The unsliced control and, with a webcam plugged in, the webcam trials run only when "
+                         "--planner-stop is given.")
+        for check in planner_stop_checks(trials, unsliced, camera):
+            self.check(*check)
+        self.summary += planner_stop_summary(trials, unsliced, camera, notes)
 
-        def whole_ms(v):
-            return "" if v is None else f"{v:.0f}"
-
-        trials = []
-        for balls in PLANNER_STOP_BALLS:
+    def _planner_camera_trials(self):
+        """With CellTipCamera open, as Ball Collection Auto's robot opens it: STOP during replanning after
+        PLANNER_CAMERA_FRAMES fresh frames, STOP while the webcam is still opening, and the worst case, a START while
+        it opens and a STOP in the first plan."""
+        if self.active_config() != CONFIG_MAIN:
+            self.activate_config(CONFIG_MAIN, self.main_config())
+        out = []
+        for repeat in range(1, PLANNER_CAMERA_REPEATS + 1):
             for delay in PLANNER_STOP_DELAYS_S:
-                trial = self._planner_stop(balls, delay)
-                trials.append(trial)
-                if "failed" in trial:
-                    s.append(f"| {balls} | {delay} s | FAILED: {trial['failed']} | | | | | | | | |")
-                    continue
-                landed = "not seen"
-                if trial["planAtStop"]:
-                    landed = f"in plan {trial['planAtStop']}" + (f", {trial['msIntoPlan']:.0f} ms into it"
-                                                                 if trial["msIntoPlan"] is not None else "")
-                    if trial.get("inSlice") is not None:
-                        landed += (f", {trial['msIntoSlice']:.0f} ms into a slice" if trial["inSlice"]
-                                   else ", between slices")
-                elif trial["stopSeen"]:
-                    landed = "between plans"
-                if trial.get("warmSeconds") is None:
-                    landed += f" (never reached {PLANNER_STOP_WARM} plans; STOP came after the 10 s timeout)"
-                s.append(f"| {balls} | {delay} s | {len(trial['plans'])} | {landed} | {whole_ms(trial.get('sliceLeftMs'))} | "
-                         f"{whole_ms(trial.get('stopToStopPassMs'))} | {whole_ms(trial.get('hubStopToIdleMs'))} | "
-                         f"{trial['stopSeconds']} | {trial['restarted']} | {trial.get('hubStopToRunningS') or ''} | "
-                         f"{len(trial['markers'])} |")
-        s.append("")
-        for balls in PLANNER_STOP_BALLS:
-            ran = [t for t in trials if t["balls"] == balls and "failed" not in t]
-            plans = [ms for t in ran for ms in t["plans"]]
-            compute = [ms for t in ran for ms in t["planComputeMs"]]
-            loops = [n for t in ran for n in t["planLoops"]]
-            firsts = [round(t["plans"][0]) for t in ran if t["plans"]]
-            cold = [round(t["plans"][0]) for t in ran if t["firstPlanInProcess"] and t["plans"]]
-            slices = [dig(t, "stepMs", "max") for t in ran if dig(t, "stepMs", "count")]
-            periods = [dig(t, "loopPeriodMs", "max") for t in ran if dig(t, "loopPeriodMs", "count")]
-            s.append(f"- {balls} balls ({ran[0]['layout'] if ran else 'no trial ran'}), one "
-                     f"{ran[0]['sliceMs'] if ran else '?'} ms slice per loop: every plan {fmt_plans(plans)} from "
-                     f"request to done; in slices {fmt_plans(compute)}; loops per plan {sorted(set(loops))}; first plan "
-                     f"of each trial {firsts} ms; first plans in a fresh app process {cold} ms")
-            for t in ran:
-                s.append(f"  - {t['delay']} s: slices {fmt(t.get('stepMs'))}; past the slice {fmt(t.get('overrunMs'))}; "
-                         f"loop period while planning {fmt(t.get('loopPeriodMs'))}")
-            restarted = [f"{t['delay']} s" for t in ran if t["restarted"] or t["markers"]]
-            mid = [t for t in ran if t["planAtStop"]]
-            self.check(f"planner stop {balls} balls: STOP during replanning never restarts the app",
-                       len(ran) == len(PLANNER_STOP_DELAYS_S) and not restarted,
-                       f"{len(ran)} of {len(PLANNER_STOP_DELAYS_S)} trials ran, {len(mid)} with STOP mid-plan; plans "
-                       f"{fmt_plans(plans)}; restarts or stuck markers after STOP at {restarted or 'none'}"
-                       + "".join(f"; {t['delay']} s back to Robot Status: running {t['hubStopToRunningS']} s after STOP "
-                                 "(hub clock)" for t in ran if t.get("hubStopToRunningS") is not None),
-                       PLANNER_STOP_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
-                       "a trial didn't finish (see the table), so not every STOP was tried")
-            idle = [t.get("hubStopToIdleMs") for t in ran]
-            slow = [f"{t['delay']} s" for t in ran if not (t.get("hubStopToIdleMs") is not None
-                                                          and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
-            self.check(f"planner stop {balls} balls: the hub logs every STOP reaching idle within {SDK_STOP_WINDOW_MS} ms "
-                       "('auto-stopping' to '***STOP - OPMODE***')",
-                       len(ran) == len(PLANNER_STOP_DELAYS_S) and not slow,
-                       f"hub STOP to idle {idle} ms (None: no such line, as after a restart); at or over "
-                       f"{SDK_STOP_WINDOW_MS} ms or missing at {slow or 'none'}; the runner saw "
-                       f"{[t['stopSeconds'] for t in ran]} s through its status polling",
-                       PLANNER_STOP_IDLE_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
-                       "a trial didn't finish (see the table), so not every STOP was timed")
-            if balls == PLANNER_JUDGED_BALLS:
-                self.check(f"planner stop {balls} balls: every planner slice returns within {PLANNER_SLICE_MAX_MS} ms",
-                           len(slices) == len(ran) and bool(ran) and max(slices) < PLANNER_SLICE_MAX_MS,
-                           f"longest slice per trial {[round(v, 1) for v in slices]} ms; loop period while planning "
-                           f"at most {[round(v, 1) for v in periods]} ms" if slices else "no trial recorded a slice",
-                           PLANNER_SLICE_PENDING if slices else "no trial ran far enough to plan")
-        s.append("- The bench requests the crafted layout again at each 250 ms replan check once the last plan is done, "
-                 "as Vision Ball Collection does while its balls keep moving, and steps it once per init_loop() as the "
-                 "collection OpModes do; it records when the SDK's stopRequested flips. STOP is sent the set delay after "
-                 "the runner sees a plan finish. Hub STOP to idle is 'auto-stopping' to '***STOP - OPMODE***' and STOP "
-                 "to running again is 'auto-stopping' to 'Robot Status: running', both on the hub's logcat clock; the "
-                 f"SDK gives STOP {SDK_STOP_WINDOW_MS} ms (+100) to finish the running init_loop() and stop() before it "
-                 "restarts the app.\n")
-        self.summary += s
+                out.append(self._planner_stop(PLANNER_CAMERA_BALLS, delay, f"camera_plan_d{int(delay * 1000)}_{repeat}",
+                                              {"camera": 1, "framesBeforePlanning": PLANNER_CAMERA_FRAMES},
+                                              kind="replan", repeat=repeat))
+        for repeat in range(1, PLANNER_CAMERA_REPEATS + 1):
+            for delay in PLANNER_CAMERA_INIT_DELAYS_S:
+                out.append(self._planner_stop_timed(f"camera_init_d{int(delay * 1000)}_{repeat}", {"camera": 1},
+                                                    "init", delay, repeat))
+        for repeat in range(1, PLANNER_CAMERA_WORST_TRIALS + 1):
+            out.append(self._planner_stop_timed(f"camera_worst_{repeat}", {"camera": 1, "planFrom": "start"}, "worst",
+                                                PLANNER_CAMERA_WORST_STOP_S, repeat))
+        return out
 
-    def _planner_stop(self, balls, delay):
-        run_id = f"b{balls}_d{int(delay * 1000)}"
+    def _planner_stop_timed(self, run_id, extra, kind, delay, repeat):
+        """A webcam trial whose STOP is timed from INIT, or from a START sent while the webcam still opens, rather
+        than from a plan. Not run_opmode: it waits for a status reply between START and STOP, longer than 50 ms."""
+        opmode, step = "Bench: Planner Stop", f"planner_stop_{run_id}"
+        params = {"balls": PLANNER_CAMERA_BALLS, "runId": run_id, **extra}
+        rec = {"balls": PLANNER_CAMERA_BALLS, "delay": delay, "kind": kind, "repeat": repeat}
+        try:
+            self.wait_idle()
+            self.adb.bench_shell(f"rm -f {self.adb.bench_dir()}/{step}.json {self.adb.bench_dir()}/{step}.json.tmp")
+            self.adb.push_json(params, "params.json", self.out / "logs" / "params.json")
+            hub_t0 = self.adb.hub_time()
+            self.adb.mark(f"begin {step}")
+            outcome = {"step": step, "opmode": opmode, "params": params, "pidBefore": self.step_pid()}
+            self.begin_watch(opmode, hub_t0)
+            self.dash.reset_telemetry()
+            crashed = False
+            t_init = time.monotonic()
+            try:
+                self.dash.send({"type": "INIT_OP_MODE", "opModeName": opmode})
+                self.dash.wait_until(lambda: self._status_is(opmode) or self.crashed(), 30, f"{opmode} to INIT",
+                                     poll_status_every=0.1, tick=self.adb_crash_tick)
+                rec["initSeenS"] = round(time.monotonic() - t_init, 3)
+                crashed = self.crashed()
+                if not crashed:
+                    if kind == "worst":
+                        time.sleep(max(0.0, t_init + PLANNER_CAMERA_WORST_START_S - time.monotonic()))
+                        rec["startSentS"] = round(time.monotonic() - t_init, 3)
+                        self.dash.send({"type": "START_OP_MODE"})
+                    time.sleep(delay)
+                    rec["stopSentS"] = round(time.monotonic() - t_init, 3)
+            finally:
+                if self.dash.status and self.dash.status["activeOpMode"] == opmode:
+                    self._stop(opmode, outcome)
+            self._finish(outcome, step, hub_t0, crashed=crashed, expect_crash=False, stop=False)
+        except ProtocolError:
+            raise
+        except BenchError as e:
+            self.settle()
+            return dict(rec, failed=str(e))
+        outcome["runner"] = rec
+        if outcome["crashed"]:
+            return dict(rec, failed=f"crashed: {outcome['errorMessage']}")
+        self._planner_stop_record(rec, self.pull(step, required=False) or {}, outcome, step, run_id)
+        return rec
+
+    def _planner_stop(self, balls, delay, run_id=None, extra=None, **fields):
+        run_id = run_id or f"b{balls}_d{int(delay * 1000)}"
         step = f"planner_stop_{run_id}"
-        rec = {"balls": balls, "delay": delay}
+        rec = {"balls": balls, "delay": delay, **fields}
 
         def plans():
             return telemetry_float(self.dash.data.get(KEY_PLANS)) or 0
@@ -6453,8 +6796,8 @@ class Runner:
                 time.sleep(delay)
 
         try:
-            o = self.run_opmode("Bench: Planner Stop", step, {"balls": balls, "runId": run_id}, start=False,
-                                during_init=in_init, timeout=10, timeout_ok=True, result_files=[step])
+            o = self.run_opmode("Bench: Planner Stop", step, {"balls": balls, "runId": run_id, **(extra or {})},
+                                start=False, during_init=in_init, timeout=10, timeout_ok=True, result_files=[step])
         except ProtocolError:
             raise
         except BenchError as e:
@@ -6463,7 +6806,10 @@ class Runner:
         self.results[step]["runner"] = rec
         if o["crashed"]:
             return dict(rec, failed=f"crashed: {o['errorMessage']}")
-        res = self.pull(step, required=False) or {}
+        self._planner_stop_record(rec, self.pull(step, required=False) or {}, o, step, run_id)
+        return rec
+
+    def _planner_stop_record(self, rec, res, o, step, run_id):
         stop = res.get("stop") or {}
         rec.update(plans=res.get("planMs") or [], planComputeMs=res.get("planComputeMs") or [],
                    planLoops=res.get("planLoops") or [], stepMs=res.get("stepMs"), overrunMs=res.get("overrunMs"),
@@ -6475,7 +6821,8 @@ class Runner:
                    stopToStopPassMs=stop.get("stopToStopPassMs"),
                    stopSeconds=round(o.get("stopSecondsRunnerSide", float("nan")), 2),
                    restarted=bool(o.get("appRestarted") or o.get("restartedDuringStop")),
-                   markers=o.get("logMarkers") or [])
+                   markers=o.get("logMarkers") or [], pidBefore=o.get("pidBefore"), pidAfter=o.get("pidAfter"))
+        rec.update(planner_stop_extras(res))
         log_file = self.out / "logs" / f"{step}.log"
         log_text = log_file.read_text() if log_file.exists() else ""
         rec.update(self._planner_stop_hub_times(log_text, step, rec["restarted"]))
@@ -6484,7 +6831,6 @@ class Runner:
                 if m.group(1) == run_id:
                     rec.update(stopSeen=True, planAtStop=int(m.group(3)) if m.group(3) else None,
                                msIntoPlan=float(m.group(2)) if m.group(2) else None)
-        return rec
 
     @staticmethod
     def _planner_stop_hub_times(log_text, step, restarted):
@@ -10098,6 +10444,9 @@ def parse_args(argv):
     p = argparse.ArgumentParser(description="Control Hub bench runner (see scripts/bench/README.md)")
     p.add_argument("--baseline", action="store_true", help="whether slothboard reports a config baseline")
     p.add_argument("--hub", action="store_true", help="Bench: Hub (bare hub costs, planner, Limelight poller sim)")
+    p.add_argument("--hub-planner-baseline", type=planner_baseline_arg, default=None, metavar="DIR",
+                   help="an earlier run's results folder (or its raw/hub.json): Bench: Hub's planner lines also give that "
+                        "run's plan times and how this run's compare, as after a planner change")
     p.add_argument("--loop", action="store_true", help="Bench: Framework Loop and Bench: Raw Loop")
     p.add_argument("--failure", action="store_true", help="Bench: Failure Path (EnhancedOpMode's safe-state pass)")
     p.add_argument("--threads", action="store_true",

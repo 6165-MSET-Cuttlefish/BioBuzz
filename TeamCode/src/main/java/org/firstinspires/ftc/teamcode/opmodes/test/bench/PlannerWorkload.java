@@ -50,17 +50,19 @@ final class PlannerWorkload {
         final double computeMs;
         final int loops;
         final double maxStepMs;
+        final double[] slicesMs;
         final int visited;
         final int dropped;
         final String intakeReroute;
         final String returnReroute;
 
-        Timing(double planMs, double computeMs, int loops, double maxStepMs, int visited, int dropped,
+        Timing(double planMs, double computeMs, int loops, double maxStepMs, double[] slicesMs, int visited, int dropped,
                String intakeReroute, String returnReroute) {
             this.planMs = planMs;
             this.computeMs = computeMs;
             this.loops = loops;
             this.maxStepMs = maxStepMs;
+            this.slicesMs = slicesMs;
             this.visited = visited;
             this.dropped = dropped;
             this.intakeReroute = intakeReroute;
@@ -73,6 +75,7 @@ final class PlannerWorkload {
         final Layout layout;
         private final RouteOptimizer.Search search;
         private final long requestNs;
+        private final List<Double> slicesMs = new ArrayList<>();
         private double computeMs;
         private double maxStepMs;
         private int loops;
@@ -98,13 +101,16 @@ final class PlannerWorkload {
             stepMs.add(ms);
             overrunMs.add(Math.max(0, ms - sliceMs));
             computeMs += ms;
+            slicesMs.add(ms);
             maxStepMs = Math.max(maxStepMs, ms);
             loops++;
             if (!done) return null;
             RouteOptimizer.Route route = search.route();
             RoutePathBuilder.Plan plan = search.plan();
-            return new Timing((t1 - requestNs) / 1e6, computeMs, loops, maxStepMs, route.order.length, route.dropped.size(),
-                    String.valueOf(plan.intakeReroute), String.valueOf(plan.returnReroute));
+            double[] slices = new double[slicesMs.size()];
+            for (int i = 0; i < slices.length; i++) slices[i] = slicesMs.get(i);
+            return new Timing((t1 - requestNs) / 1e6, computeMs, loops, maxStepMs, slices, route.order.length,
+                    route.dropped.size(), String.valueOf(plan.intakeReroute), String.valueOf(plan.returnReroute));
         }
     }
 
@@ -178,6 +184,7 @@ final class PlannerWorkload {
         Samples compute = new Samples();
         Samples loops = new Samples();
         Samples maxStep = new Samples();
+        Samples slices = new Samples();
         int fewerVisited = 0;
         Map<String, Integer> reroutes = new LinkedHashMap<>();
         for (Timing t : timings) {
@@ -185,6 +192,7 @@ final class PlannerWorkload {
             compute.add(t.computeMs);
             loops.add(t.loops);
             maxStep.add(t.maxStepMs);
+            for (double ms : t.slicesMs) slices.add(ms);
             if (t.dropped > 0) fewerVisited++;
             String key = t.intakeReroute + "/" + t.returnReroute;
             Integer c = reroutes.get(key);
@@ -196,6 +204,7 @@ final class PlannerWorkload {
         m.put("computeMs", compute.summary());
         m.put("loopsPerPlan", loops.summary());
         m.put("longestStepMs", maxStep.summary());
+        m.put("stepMs", slices.summary());
         m.put("plansWithDroppedBalls", fewerVisited);
         m.put("intakeSlashReturnReroutes", reroutes);
         return m;

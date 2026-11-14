@@ -147,7 +147,7 @@ Missing hardware skips its benches, and the summary says so.
 
 | plug in | where | runs |
 |---|---|---|
-| a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam, Webcam Stop, Webcam Thread Failure |
+| a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam, Webcam Stop, Webcam Thread Failure; with `--planner-stop`, Bench: Planner Stop's webcam trials |
 | the Limelight 3A, booted | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery |
 | a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent) |
 | an OctoQuad MK2, pods on encoder ports 3 and 4, still (on the robot they sit on 0 and 1) | Control Hub I2C bus 2 | Bench: OctoQuad, its bank phase included |
@@ -174,6 +174,8 @@ once, count to three and plug it back in, about 15 s after the dashboard is swit
 | `--original-entry JSON` | the app's active-config setting from before a reinstall (`bare_hub.sh` passes it): restored at the end instead of the one read after the install |
 | `--photon` | only the Photon block (below), with or without `--all`; a run without bench flags, or with `--all` alone, leaves it out |
 | `--dashboard-off` | Bench: Dashboard Off ([below](#dashboard-off)), last; a run without bench flags, `--all` and `bare_hub.sh` leave it out unless given it |
+| `--hub-planner-baseline DIR` | with Bench: Hub, its planner lines also give an earlier run's plan times (`DIR` is that run's results folder) and this run's as a share of them, per ball count, per hand-built layout and for the first plan, with the plans that dropped a ball; for a planner change, such as the ball-radius reach: `--hub --hub-planner-baseline bench-results/<the run before it>` |
+| `--planner-stop` | only Bench: Planner Stop ([below](#bench-planner-stop)), with its unsliced control and, with a webcam plugged in, its webcam trials; a run without bench flags, or with `--all` alone, runs only its six sliced trials |
 | `--list-configs` | only lists the hub's saved hardware configs and their webcam and Ethernet device names, flagging stale ones; changes nothing on the hub, so it is fine on a robot's hub. About 10 s |
 | `--usb-expansion` / `--photon-rs485` | the Photon block with the Expansion Hub on USB / on RS485 (implies `--photon`); on USB, Bench: Photon also times writes to the two hubs apart and together (below) |
 | `--photon-soak` | the Photon block's long soak, 200 STOP trials per condition and more lost-write trials (implies `--photon`) |
@@ -404,6 +406,56 @@ while the dashboard was on; while off, every window must have no telemetry packe
 that stayed open, the bench's camera source must have served no frame, the INIT must be ignored, and each proxy port
 that listened before the switch must be closed (one that didn't listen before isn't judged).
 
+## Bench: Planner Stop
+
+Whether a STOP pressed while the route planner plans stops the OpMode inside the SDK's 900 ms stop window. Past it
+the SDK restarts the Robot Controller app. In INIT the OpMode plans the 4- or 5-ball layout on both sides of the HIVE
+rail again and again, one `RouteOptimizer.Search.step()` per loop with its 20 ms slice, as the collection OpModes plan.
+The runner sends STOP 0.05, 0.3 or 0.6 s after it sees a plan finish, which is when the next plan starts.
+
+**Plug in:** nothing; with `--planner-stop`, a UVC webcam on the Control Hub's USB adds the webcam trials. It plans
+only. Once STARTed (the webcam worst cases), its drivetrain sends 0 power to motor ports 0-3 each loop, as the other
+bench OpModes on `bench_main` do, which `--ports-empty` already covers.
+
+**Command:** its six sliced trials run in every run without bench flags. Named, it adds its unsliced control and,
+with a webcam plugged in, its webcam trials: `python3 scripts/bench/run_bench.py --planner-stop --ports-empty`. A
+person does nothing.
+
+The unsliced control is three more 4-ball trials with each plan in one step, as before the search was sliced (that
+layout took 1452-1728 ms in one call on 2026-10-24). The OpMode sets `VisibilityGraphPlanner.routeSearchSliceMs` to
+infinity for the trial and puts it back in its `stop()`. STOP goes 0.05, 0.15 or 0.3 s after a plan starts, so more
+than a second of planning is left. These STOPs are meant to overrun, so expect app restarts, about 45 s each.
+
+| judged | FAIL when |
+|---|---|
+| per ball count: no app restart | a STOP restarted the app or the hub logged a stuck-in-stop marker, or a trial didn't finish |
+| per ball count: STOP to idle within 900 ms | 'auto-stopping' to '***STOP - OPMODE***' in the hub's logcat took 900 ms or more, or one is missing |
+| 4 balls: every slice under 300 ms | a step took 300 ms or more, or a trial recorded none |
+| the unsliced control (named only) | none of its three STOPs took 900 ms or more or restarted the app: the bench can't show a slow STOP on this hub, so the 4-ball STOP checks say "unproven on this layout" |
+| with the webcam (named only): no app restart | a STOP restarted the app or the hub logged a stuck-in-stop marker, or a trial didn't finish |
+| with the webcam: STOP to idle within 900 ms | one took 900 ms or more by the hub's clock, or one is missing. Then move the webcam close out of `CellTipCamera.stop()`. The detail gives the slowest and its margin against the estimate of about 830 ms (up to about 855) |
+| with the webcam: the worst case reproduced | no worst-case trial had a STOP that waited for a planner slice and then a webcam close of 500 ms or more. The 830-855 ms case is then "not reproduced", and the two webcam checks above don't cover it |
+
+The webcam trials open `CellTipCamera` as Ball Collection Auto's robot does, on `bench_main` (which names the plugged
+webcam `aprilTagDetector`), and plan the 4-ball layout. Twenty trials:
+
+- nine replanning: after 10 fresh webcam frames, plans back to back in INIT, STOP 0.05, 0.3 or 0.6 s after a plan
+  starts, three times each;
+- six while the webcam opens: plans from the first `init_loop()`, STOP 0 or 0.3 s after INIT shows, three times each;
+- five worst cases: no planning in INIT, START 0.2 s after INIT is sent (or once INIT shows, if later) with the
+  webcam still opening, plans from START as Ball Collection Auto does, STOP 0.05 s after START, in the first plan.
+
+The tables in `summary.md` give, per trial, where STOP landed (plan, slice and ms into it), the planner time the STOP
+waited for, the loop's tail, `CellTipCamera.stop()` (the webcam close), the whole `stop()` pass, the hub's STOP to
+idle and its margin, the pid before and after, and how long a restarted app took to run again.
+
+Only a hub shows: the real slice lengths and plan times, where a STOP lands, the hub's STOP-to-idle times, whether
+a whole plan in one step still overruns STOP on that hub, how long the real webcam takes to close while it opens and
+while it streams, and whether a STOP 50 ms after START lands inside a slice (network timing decides). Offline:
+`python3 -I scripts/bench/offline/benches/planner_stop.py`, and `PlannerWorkloadTest` in
+`./gradlew :TeamCode:testDebugUnitTest` (with no slice limit a plan takes one step; with a 0 ms slice each step does
+one piece of the search; with 20 ms each step ends once its 20 ms are up).
+
 ## Bench: Config Check
 
 Whether each robot OpMode gets past every hardware lookup on the config it ships for. It INITs each one on its own
@@ -538,6 +590,9 @@ reboot. It never deletes the active config, and a run that stops before writing 
 configs untouched. With `bare_hub.sh` the hub runs the bench build from its install on; only `REINSTALL.sh` puts the
 old app back.
 With `--interactive`, opening the RC web page during Bench: Clock sets the hub's clock until it powers off.
+With `--planner-stop`, Bench: Planner Stop's unsliced control is meant to overrun STOP, so the SDK may restart the app
+three times; for those trials it sets `VisibilityGraphPlanner.routeSearchSliceMs` (a dashboard setting) to infinity
+and back in its `stop()`, and a restart resets it too.
 `--dashboard-off` switches the dashboard off, restarts the app, reboots the hub (the runner sets the 8 MB log buffer
 again after the reboot, so it stays until the hub's next one), reinstalls the installed APK (which drops a hot-loaded
 Sloth jar, now older than the install) and turns the dashboard back on over adb. `--list-configs` only reads.
@@ -580,7 +635,7 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Webcam Stop | a webcam | STOP at several points with the webcam open |
 | Bench: Webcam Thread Failure | a webcam | a camera-thread exception reaches the Error line within 2 s |
 | Bench: Limelight | the Limelight | slothboard's proxy, `LimelightSync` time, INIT to first frame, POST costs, frame rate and latency |
-| Bench: Planner Stop | nothing | STOP during 4- and 5-ball sliced plans: no app restart, hub-side STOP to idle within 900 ms, every 4-ball slice under 300 ms |
+| Bench: Planner Stop | nothing | STOP during 4- and 5-ball sliced plans: no app restart, hub-side STOP to idle within 900 ms, every 4-ball slice under 300 ms; with `--planner-stop`, an unsliced control that must overrun the stop window at least once in three STOPs and, with a webcam, the same STOP limits with CellTipCamera open (20 trials, the worst case reproduced) |
 | Bench: Overlay NaN | nothing | a NaN in a field overlay doesn't kill dashboard telemetry |
 | (config by name, Bench: Probe) | run-as | a shipped config saved with another shipped config's resource id loads its own XML; a name the build doesn't ship loads no config (both FAIL on a build without re-resolving by name at robot setup) |
 | Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; SET (3 runs), WRITE and DELETE from idle each restart the robot in the same process: no SDK `deadline expired ... EventLoop`, no Control Hub `Relaunching the RC`; thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT and ART's dump of the frozen pid (runs last) |

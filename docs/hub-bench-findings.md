@@ -355,12 +355,18 @@ Not run on either date (they need `--interactive`):
 - **Whether a rangefinder in SHORT mode keeps its accuracy at a 10 ms timing budget:** log a fixed target's distance
   at 20 and 10 ms budgets and compare the spread and the mean.
 - **The sliced route search on a hub:** its longest step, plan time from request to done, the loop period while it
-  plans, and STOP during it: run Bench: Hub and Bench: Planner Stop. The estimate above is from a desktop replay.
+  plans, and STOP during it: run Bench: Hub and Bench: Planner Stop. The estimate above is from a desktop replay. Test:
+  `scripts/bench/run_bench.py --hub --planner-stop --ports-empty`; `--planner-stop` adds an unsliced control, plans
+  made in one step, which must overrun STOP at least once on that hub, or the Planner Stop checks are unproven there.
 - **How long `EnhancedMotor` and `EnhancedServo` stay off after a fail-safe that lands just after a write:** both
   dates' single trial landed just before a re-send. Bench: Write Recovery fails safe seven times, 0–235 ms after a
   write, and judges each against `WriteCache`'s re-send period plus 2 loops; run it, and Bench: Write Recovery Photon
   with `--photon`.
 - **`GuardedOctoQuadLocalizer` with an OctoQuad plugged in:** read cost, valid reads after the first RUNNING, the
   start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`.
+- **Whether Ball Collection Auto's STOP fits the stop window with the webcam open:** the about 830 ms (up to about 855)
+  above is an estimate. Test: `scripts/bench/run_bench.py --planner-stop --ports-empty` with a UVC webcam on the
+  Control Hub's USB (Bench: Planner Stop's webcam trials: a planner slice, the loop's tail and `CellTipCamera.stop()`
+  in one STOP, the worst case included).
 - **Whether closing the webcam after the stop window works on a hub:** move the close out of `CellTipCamera.stop()`,
   run Bench: Webcam Stop, and check `stop()`'s time and that the next INIT opens the webcam.
