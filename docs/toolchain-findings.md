@@ -152,6 +152,12 @@ FtcRobotController tags end at v12.0.
   "SDK location not found" (seen 2026-11-12 in a worktree; the file is gitignored, so only the folder Android Studio
   opened has one). Open the folder in Android Studio once, copy `local.properties` from another checkout on the same
   laptop, or set `ANDROID_HOME` to the SDK folder. `bare_hub.sh --build` hits this too.
+- **Cable a Control Hub to a Mac through USB-A, not USB-C to USB-C.** On 2026-11-14 a Control Hub v1.0 on a USB-C to
+  USB-C cable gave the Mac no USB device at all (`ioreg -p IOUSB` listed only the Mac's own controllers, and
+  `adb devices` nothing). The same hub showed up within seconds as `Control Hub v1.0`, and in `adb devices`, through
+  a USB-C to USB-A cable into a USB-A to USB-C adapter on the Mac. Only one USB-C to USB-C cable was tried, so a
+  charge-only cable isn't ruled out; a port that lacks the resistors a USB-C host looks for would behave the same
+  way (not checked). REV ships the hub with a USB-A to USB-C cable (REV-11-1232).
 - **After an Xcode update, a Mac's `git` and `/usr/bin/python3` refuse to run until its licence is accepted.** Both
   print "You have not agreed to the Xcode license agreements" and exit 69 (seen 2026-11-12). Run
   `sudo xcodebuild -license` in Terminal. Until then `bare_hub.sh` stops and says so; before 2026-11-12 its `--build`

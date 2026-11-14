@@ -221,7 +221,9 @@ cable from the Mac to the Control Hub's **USB-C port**, so the Mac stays on its 
 and unused. REV's guide uses the USB-A to USB-C cable the hub ships with (REV-11-1232) and says a USB-C to USB-C cable
 works too if it carries data and not only power
 ([Updating](https://docs.revrobotics.com/rev-professional-development-technical-path/gs/setup/updating), read
-2026-11-12); a USB-C to USB-C cable hasn't been tried with the bench yet. With a charge-only cable adb lists no device.
+2026-11-12). On 2026-11-14 a USB-C to USB-C cable from a Mac showed no USB device at all, and the same hub appeared at
+once through a USB-C to USB-A cable with a USB-A to USB-C adapter on the Mac's end: go through USB-A
+([`docs/toolchain-findings.md`](../../docs/toolchain-findings.md)). With a charge-only cable adb lists no device either.
 The runner takes the one USB device `adb devices` lists (pass `--serial` when there are several; it stops
 before any device command otherwise), never runs `adb connect`, and checks it is a Control Hub with the RC app. Each
 hub port it uses (8000, 8080 and 8081, 5801, 5807) goes through an `adb forward` from a free port on the Mac that adb
