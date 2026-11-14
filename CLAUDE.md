@@ -4,7 +4,7 @@
 
 - Game code goes in `biobuzz/` (its modules in `biobuzz/modules/`) and `opmodes/`; `architecture/` stays game-agnostic; new Java files go in an existing package. Field constants come from the BIOBUZZ game manual, never guesses.
 - Nothing new at the top level beyond Gradle and repo files: tools go in `scripts/`, documents in `docs/`.
-- No BioBuzz robot yet: BioBuzz code runs on the Betta bot (`betta_decode.xml`, `pedro/BettaConstants`, `biobuzz/RobotGeometry`).
+- No BioBuzz robot yet: BioBuzz code runs on the Betta bot (`betta_decode.xml`, `pedro/BioBuzzConstants`, `biobuzz/RobotGeometry`).
 - `cuttle_decode.xml` is the retired Cuttle bot's config, kept only because deleting a `res/xml` file shifts the other configs' resource IDs (Build & deploy): run nothing on it.
 - In competition OpModes, automated ball detection and pathing are Autonomous-only and stay on our alliance's half.
 - When an auto's poses change, re-export its `docs/paths/<OpMode>.pp` (visualizer.pedropathing.com).
@@ -116,13 +116,13 @@ In INIT the follower and Ivy scheduler run but module writes don't (unless `shou
 
 Dashboard edits are lost on deploySloth or an app restart: copy kept values into the source.
 
-- **Pedro** (`BettaConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later (`docs/pedro-findings.md`). The pod offsets are the OctoQuad's: don't overwrite them with AutoTune's Pinpoint results.
+- **Pedro** (`BioBuzzConstants`): building the follower recalibrates the Pinpoint's IMU, so keep the robot still for the first second of INIT, even if you'll reset the pose later (`docs/pedro-findings.md`). The pod offsets are the OctoQuad's: don't overwrite them with AutoTune's Pinpoint results.
 - A missing or faulting Pinpoint raises nothing: the pose reads (0, 0, 0) or holds its last value while Pedro drives on it. Check the pose shows the start pose after INIT before any Pedro-driven run (`docs/hub-bench-findings.md`).
 - **Ball detection**: `docs/hsv-tuning-prompt.md` derives starting HSV ranges from photos. Exposure, gain and resolution live in `limelight/ball_pipeline.vpr`: save the web UI's pipeline download over it, or the next synced INIT reverts them.
 - **Homography** (`eocvsim/homography`): a new one moves the (0,0) crosshair, so redo `Mount` in the same change.
 - **Camera Mount** (`BallFieldTransform.Mount`, measured from the Pinpoint offsets' origin): check it in Camera Module Test, robot still, a ball on the centreline at two distances: constant X or Y error is `xIn`/`yIn`, Y error growing with distance `headingDeg`, a left ball reading negative Y `mirrorY`, X error growing with distance the homography. Then, turning in place, a still ball whose field position moves means `xIn`/`yIn` is off.
 
-**AutoTune**: `http://192.168.43.1:10158` on the robot wifi (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, copying each result into the matching `BettaConstants.*Settings` field (the printed code block is Quickstart-shaped: don't paste it). deploySloth doesn't reach a running procedure: close it first. Tests drives up to Distance ahead and to the left: clear that square.
+**AutoTune**: `http://192.168.43.1:10158` on the robot wifi (websocket 12649; over USB, forward both to `localhost`). Run Mecanum, Pinpoint, Foresight, then Tests, copying each result into the matching `BioBuzzConstants.*Settings` field (the printed code block is Quickstart-shaped: don't paste it). deploySloth doesn't reach a running procedure: close it first. Tests drives up to Distance ahead and to the left: clear that square.
 
 ## Testing
 
@@ -159,7 +159,7 @@ Dashboard edits are lost on deploySloth or an app restart: copy kept values into
 
 - An SDK bump sets `versionCode`/`versionName` to that SDK's FtcRobotController manifest values, then rechecks `docs/sdk-hub-findings.md` and the dashboard-gamepad check in `docs/dashboard-findings.md` (What the team build fixes over stock).
 - Comments: none by default, in any language; only a one-line WHY a competent reader would otherwise get wrong. Usage notes go in this file.
-- Vendored, never hand-edited, never holding tuned values (those go in `BettaConstants`/`OctoQuadLocalizerTest`): `vendor/<source>/` (its `*_REV` names upstream and the only edits), `pedro/procedures/`, `robotcontroller/` and every `res/` file but the hardware configs. Refresh Prism and the procedures with `scripts/update-*.sh`, one commit each; the procedures' commit also carries any Pedro version bump the Quickstart made, in `TeamCode/build.gradle` (the script doesn't touch it); `robotcontroller/` and `res/` from the SDK's FtcRobotController at its tag; the rest by recopying upstream and reapplying its `*_REV` edits.
+- Vendored, never hand-edited, never holding tuned values (those go in `BioBuzzConstants`/`OctoQuadLocalizerTest`): `vendor/<source>/` (its `*_REV` names upstream and the only edits), `pedro/procedures/`, `robotcontroller/` and every `res/` file but the hardware configs. Refresh Prism and the procedures with `scripts/update-*.sh`, one commit each; the procedures' commit also carries any Pedro version bump the Quickstart made, in `TeamCode/build.gradle` (the script doesn't touch it); `robotcontroller/` and `res/` from the SDK's FtcRobotController at its tag; the rest by recopying upstream and reapplying its `*_REV` edits.
 - Fail fast: no catch to keep a loop alive, no silent fallback, no optional devices (`hardwareMap.get`, never `tryGet`); numeric guards and try/finally are fine. Only exceptions: a webcam setting the camera rejects raises the `Webcam` fault and a Limelight problem the `Limelight` fault instead of throwing, with Limelight-dependent actions falling back; `GuardedOctoQuadLocalizer` raises the `OctoQuad` fault in INIT (START still throws); a Photon swap failure at INIT (then `PhotonCore.enable()` throws) or a dead Photon sweeper raises a global warning and leaves writes on the SDK's path.
 - `Limelight3A` (`docs/limelight-findings.md`):
   - Every `boolean` call but `isRunning`/`isConnected` is an HTTP POST or DELETE that blocks up to 15 s and fails as a bare `false`: make them only from `LimelightSync`'s one background thread (newest request wins), and only when what's wanted changes.

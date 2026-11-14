@@ -20,7 +20,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,7 +55,7 @@ public class PinpointBench extends EnhancedOpMode {
 
         @Override
         protected Follower createFollower(HardwareMap hardwareMap) {
-            return BettaConstants.create(hardwareMap);
+            return BioBuzzConstants.create(hardwareMap);
         }
 
         @Override
@@ -69,8 +69,8 @@ public class PinpointBench extends EnhancedOpMode {
 
         @Override
         protected Follower createFollower(HardwareMap hardwareMap) {
-            return new Follower(new TimedLocalizer(BettaConstants.localizer(hardwareMap)),
-                    BettaConstants.drivetrain(hardwareMap), BettaConstants.foresight());
+            return new Follower(new TimedLocalizer(BioBuzzConstants.localizer(hardwareMap)),
+                    BioBuzzConstants.drivetrain(hardwareMap), BioBuzzConstants.foresight());
         }
 
         @Override
@@ -213,13 +213,13 @@ public class PinpointBench extends EnhancedOpMode {
             throw new IllegalArgumentException("bench param mode must be one of " + MODES + ", was " + mode);
         }
         report = new BenchReport("Pinpoint", resultFile(mode));
-        driver = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, BettaConstants.pinpoint.name, BenchIO.RUNNER_HINT);
+        driver = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, BioBuzzConstants.pinpoint.name, BenchIO.RUNNER_HINT);
         int version = driver.getDeviceVersion();
         present = version != 0;
         report.put("deviceVersion", version);
         report.put("present", present);
         if (!present) {
-            report.done("no Pinpoint answered on " + BettaConstants.pinpoint.name + "'s I2C port");
+            report.done("no Pinpoint answered on " + BioBuzzConstants.pinpoint.name + "'s I2C port");
             return new BenchRobot(this);
         }
         if (mode.equals("soak") || mode.equals("recal")) {

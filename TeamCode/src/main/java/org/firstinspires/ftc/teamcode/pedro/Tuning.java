@@ -22,11 +22,11 @@ public class Tuning {
 
     @Tuner(name = "Foresight Tuner")
     public static Procedure foresight() {
-        return new ForesightTuner(BettaConstants::localizer, BettaConstants::drivetrain);
+        return new ForesightTuner(BioBuzzConstants::localizer, BioBuzzConstants::drivetrain);
     }
 
     @Tuner(name = "Tests")
     public static Procedure tests() {
-        return new Tests(BettaConstants::drivetrain, BettaConstants::localizer, BettaConstants::foresight);
+        return new Tests(BioBuzzConstants::drivetrain, BioBuzzConstants::localizer, BioBuzzConstants::foresight);
     }
 }

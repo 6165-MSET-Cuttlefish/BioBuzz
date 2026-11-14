@@ -549,7 +549,7 @@ config back at the end.
 
 The runs, on `bench_octoquad`:
 
-1. **Soak**: INIT held 2 s, then RUN for the time asked, Pedro's `PinpointLocalizer` built as `BettaConstants` builds it,
+1. **Soak**: INIT held 2 s, then RUN for the time asked, Pedro's `PinpointLocalizer` built as `BioBuzzConstants` builds it,
    so the follower reads the Pinpoint every loop with no guard. Each loop times the Pinpoint read alone (its `update()`),
    and `follower.update()`, and reads the status; every read over 20 ms is kept with its loop and ART's blocking-GC
    and GC counts across it; every status other than READY after the first READY is kept as a streak (status, reads,

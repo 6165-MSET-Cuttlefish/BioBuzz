@@ -52,7 +52,7 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     OpMode could run until 44.9 s after it (`Robot Status: running` in logcat).
 - **A missing or faulting Pinpoint raises nothing.** Before any Pedro-driven run, check that the status telemetry's
   `Robot Position` line reads the start pose after INIT: (0, 0, 0) means the Pinpoint isn't answering.
-  - Missing (2026-10-24, nothing on I2C bus 1): `BettaConstants.create` built the follower in 571 ms with no error,
+  - Missing (2026-10-24, nothing on I2C bus 1): `BioBuzzConstants.create` built the follower in 571 ms with no error,
     `follower.update()` ran 4.25 / 5.01 / 19.64 (n=200) with no error, and after `follower.setPose(56, 8, 90°)` every
     sampled pose read (0, 0, 0) (`opmodes/test/bench/PinpointAbsentBench.java`). `hardwareMap.get` only needs the
     config to name the device. With no device version read, SDK 12's `GoBildaPinpointDriver.update()` reads nothing
@@ -63,7 +63,7 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     robot OpMode shows the Pinpoint's status; Bench: Pinpoint does.
   - A guard, like `GuardedOctoQuadLocalizer` for the OctoQuad (below), must check at INIT that the Pinpoint answers
     and stop with an error naming it and its port, then check the status on every read, counting non-READY only after
-    the first READY. The Pinpoint reported `FAULT_BAD_READ` right after `BettaConstants.create`, then READY 71 ms
+    the first READY. The Pinpoint reported `FAULT_BAD_READ` right after `BioBuzzConstants.create`, then READY 71 ms
     later.
 - **Every app start takes about 37 s; budget 40–45 s for a config switch or a STOP-time app restart at a match.**
   On 14 config switches on a bare hub (2026-10-24), process start to `INIT FINISH` in logcat took 37.1–38.1 s.

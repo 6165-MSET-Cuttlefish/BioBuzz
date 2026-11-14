@@ -20,7 +20,7 @@ import org.firstinspires.ftc.teamcode.biobuzz.TargetSelector;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Shooter;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Turret;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 @TeleOp(name = "SOTM Test", group = "Test")
 @Config("SOTM Test")
@@ -119,8 +119,8 @@ public class SotmTest extends BioBuzzOpMode {
         Pose pose = robot.follower.pose();
         Velocity velocity = robot.follower.velocity();
         double h = pose.heading();
-        double forwardInPerS = forward * BettaConstants.foresight.maxAchievableForwardVelocity;
-        double leftInPerS = -right * BettaConstants.foresight.maxAchievableStrafeVelocity;
+        double forwardInPerS = forward * BioBuzzConstants.foresight.maxAchievableForwardVelocity;
+        double leftInPerS = -right * BioBuzzConstants.foresight.maxAchievableStrafeVelocity;
         motion.xIn = pose.x();
         motion.yIn = pose.y();
         motion.headingRad = h;

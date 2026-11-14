@@ -55,7 +55,7 @@ several curves (pieces). [`CLAUDE.md`](../CLAUDE.md) (Ball routing) says `pathSk
 the robot would start braking. After that move, `Foresight.calculatePath` (Foresight is Pedro's path-following
 algorithm) runs again within the same update, so several short pieces can go by in a single loop. It applies only to
 the pieces of one compound path, never across separate `follow` calls, which is why `RouteRun` is safe.
-`BettaConstants` keeps Pedro's defaults: `pathSkip` and `brakeAtEnd` on, `parametricTConstraint` 0.025,
+`BioBuzzConstants` keeps Pedro's defaults: `pathSkip` and `brakeAtEnd` on, `parametricTConstraint` 0.025,
 `timeoutConstraint` 100 ms. (Read from source: `core` `Foresight.calculatePath`, `PathTracker`, `ForesightConfig`
 constructor.)
 
@@ -163,7 +163,7 @@ way back at 12 in or 6 in from the start, but the guard is symmetric. With the d
 | forward braking | about 46 in ahead (36 + about 9.5 in overshoot at 0.7 power) | 60 in ahead or behind, 48 in either side |
 | strafe braking | about 48 in left (36 + about 12.5 in at full power) | 60 in left or right, 48 in ahead or behind |
 
-Overshoots are calculated as braking distance = linear × v + quadratic × v², with `BettaConstants`' brake
+Overshoots are calculated as braking distance = linear × v + quadratic × v², with `BioBuzzConstants`' brake
 coefficients and v at 0.7 of `maxAchievableForwardVelocity` (forward) or all of `maxAchievableStrafeVelocity`
 (strafe) at the brake point. The on-screen prompts ask for Distance ahead (or to each side) plus unmeasured "tile
 space" or "space" around the robot, but a runaway backwards (forward braking) or to the right (strafe braking) goes

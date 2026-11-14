@@ -14,7 +14,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
@@ -76,8 +76,8 @@ final class OctoQuadSetup {
         Localizer localizer = guarded(params) ? new GuardedOctoQuadLocalizer(hardwareMap, config)
                 : new OctoQuadLocalizer(hardwareMap, config);
         return new Follower(localizer,
-                new Mecanum(hardwareMap, BettaConstants.drivetrainConfig()),
-                new Foresight(BettaConstants.foresightConfig()));
+                new Mecanum(hardwareMap, BioBuzzConstants.drivetrainConfig()),
+                new Foresight(BioBuzzConstants.foresightConfig()));
     }
 
     static Map<String, Object> params() {

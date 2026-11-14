@@ -6,7 +6,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 public class BallCollectionRobot extends Robot {
     public BallCollectionRobot(EnhancedOpMode opMode) {
@@ -16,7 +16,7 @@ public class BallCollectionRobot extends Robot {
 
     @Override
     protected Follower createFollower(HardwareMap hardwareMap) {
-        return BettaConstants.create(hardwareMap);
+        return BioBuzzConstants.create(hardwareMap);
     }
 
     @Override

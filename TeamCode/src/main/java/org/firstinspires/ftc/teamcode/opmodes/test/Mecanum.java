@@ -5,7 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 @TeleOp(name = "Mecanum", group = "Test")
 public class Mecanum extends LinearOpMode {
@@ -16,7 +16,7 @@ public class Mecanum extends LinearOpMode {
         DcMotor frontRightMotor = hardwareMap.dcMotor.get(Drivetrain.FRONT_RIGHT);
         DcMotor backRightMotor = hardwareMap.dcMotor.get(Drivetrain.BACK_RIGHT);
 
-        BettaConstants.MecanumSettings m = BettaConstants.mecanum;
+        BioBuzzConstants.MecanumSettings m = BioBuzzConstants.mecanum;
         frontLeftMotor.setDirection(m.frontLeftDirection);
         backLeftMotor.setDirection(m.backLeftDirection);
         frontRightMotor.setDirection(m.frontRightDirection);

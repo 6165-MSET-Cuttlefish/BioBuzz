@@ -18,8 +18,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 
-@Config("Betta Constants")
-public class BettaConstants {
+@Config("BioBuzz Constants")
+public class BioBuzzConstants {
 
     public static class MecanumSettings {
         public DcMotorSimple.Direction frontLeftDirection = DcMotorSimple.Direction.REVERSE;

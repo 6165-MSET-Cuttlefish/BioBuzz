@@ -47,7 +47,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
   ignore every write. Check the robot's Arducam serial too: `UC852` is the bench Arducam's (it may be the same on
   every unit, unverified), and a webcam with another serial fails to open, which stops everything built on
   `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s `ruler`, `sensorLeft` and `sensorRight` (no port), and the Pinpoint
-  `BettaConstants` asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to
+  `BioBuzzConstants` asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to
   the OctoQuad. BioBuzz Basic Tele (`opmodes/tele/BioBuzzBasicTele.java`) is the TeleOp that runs on it today: drive,
   intake, transfer and both flywheels from gamepad 1, with no odometry, cameras or turret.
 - **`biobuzz` kept its config ID through the rewrite** ([`toolchain-findings.md`](toolchain-findings.md#deploying)),

@@ -12,7 +12,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 public class BenchRobot extends Robot {
     static final double DRIVE_CAP = 0.2;
@@ -29,8 +29,8 @@ public class BenchRobot extends Robot {
             BenchIO.require(hardwareMap, DcMotorEx.class, motor, BenchIO.RUNNER_HINT);
         }
         return new Follower(new SoftwareLocalizer(),
-                new CappedMecanum(new Mecanum(hardwareMap, BettaConstants.drivetrainConfig()), DRIVE_CAP),
-                new Foresight(BettaConstants.foresightConfig()));
+                new CappedMecanum(new Mecanum(hardwareMap, BioBuzzConstants.drivetrainConfig()), DRIVE_CAP),
+                new Foresight(BioBuzzConstants.foresightConfig()));
     }
 
     @Override

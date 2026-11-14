@@ -10,7 +10,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 @Config("OctoQuad Localizer Test")
 @TeleOp(name = "OctoQuad Localizer Test", group = "Test")
@@ -49,7 +49,7 @@ public class OctoQuadLocalizerTest extends LinearOpMode {
         firmware = octoquad.getFirmwareVersionString();
         octoquad.setI2cRecoveryMode(OctoQuad.I2cRecoveryMode.MODE_1_PERIPH_RST_ON_FRAME_ERR);
 
-        BettaConstants.MecanumSettings m = BettaConstants.mecanum;
+        BioBuzzConstants.MecanumSettings m = BioBuzzConstants.mecanum;
         fl = motor(Drivetrain.FRONT_LEFT, m.frontLeftDirection);
         bl = motor(Drivetrain.BACK_LEFT, m.backLeftDirection);
         fr = motor(Drivetrain.FRONT_RIGHT, m.frontRightDirection);

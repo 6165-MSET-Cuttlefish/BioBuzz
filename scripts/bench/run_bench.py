@@ -352,7 +352,7 @@ PINPOINT_SEED_PENDING = ("a start pose set in initialize() didn't survive the Pi
                          "auto sets the pose only in INIT, so they'd all start their first path from a pose the robot isn't "
                          "at. A PASS means only that the INIT sequence the autos use keeps the pose; a pose set at other "
                          "delays after the recalibration isn't tried. No fix is in flight")
-PINPOINT_CRASHED = ("Bench: Pinpoint crashed (see the error): with a Pinpoint status check in BettaConstants or the "
+PINPOINT_CRASHED = ("Bench: Pinpoint crashed (see the error): with a Pinpoint status check in BioBuzzConstants or the "
                     "framework, a status other than READY at INIT (CALIBRATING right after create, FAULT_NO_PODS_DETECTED "
                     "without both pods) stops every OpMode, which the check must allow for")
 PINPOINT_DROPOUT_PENDING = ("expected until the Pinpoint status fix: on a failed I2C read the SDK driver keeps the last pose "
@@ -361,7 +361,7 @@ PINPOINT_DROPOUT_PENDING = ("expected until the Pinpoint status fix: on a failed
                             "frozen or (0, 0, 0) pose with no fault and no error")
 PINPOINT_ABSENT_POSE_IN = 0.5
 PINPOINT_ABSENT_TURN_DEG = 1.0
-PINPOINT_ABSENT_MEANS = ("with nothing on the Pinpoint's I2C port, the follower built from BettaConstants neither raised a "
+PINPOINT_ABSENT_MEANS = ("with nothing on the Pinpoint's I2C port, the follower built from BioBuzzConstants neither raised a "
                          "fault nor kept the pose setPose set (the detail has the poses it read; on 2026-10-24 every one "
                          "was (0, 0, 0)): an auto on a robot whose Pinpoint is unplugged or dead follows every path from "
                          "the field origin with no warning. Nothing on this branch checks for a missing Pinpoint")
@@ -9954,9 +9954,9 @@ class Runner:
 
     def _pinpoint_seed(self, o, res):
         info, seed = res.get("info") or {}, res.get("seed") or {}
-        s = ["## Bench: Pinpoint (a Pinpoint on I2C bus 1 through BettaConstants.create, the follower left idle)\n",
+        s = ["## Bench: Pinpoint (a Pinpoint on I2C bus 1 through BioBuzzConstants.create, the follower left idle)\n",
              f"- firmware (device version) {res.get('deviceVersion')}, device id {info.get('deviceId')}; status right "
-             f"after BettaConstants.create {info.get('statusAfterCreate')} ({info.get('createMs')} ms to create); "
+             f"after BioBuzzConstants.create {info.get('statusAfterCreate')} ({info.get('createMs')} ms to create); "
              f"Pinpoint loop {fmt(res.get('frequencyHz'), 'Hz')}",
              f"- pod offsets x {info.get('xOffsetIn')} in, y {info.get('yOffsetIn')} in; yaw scalar {info.get('yawScalar')}",
              f"- status changes [ms since create, status, phase]: {res.get('statusChanges')}; loops per status "

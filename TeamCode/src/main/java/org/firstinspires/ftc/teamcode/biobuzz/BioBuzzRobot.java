@@ -8,7 +8,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 public class BioBuzzRobot extends Robot {
     public Drivetrain drivetrain;
@@ -23,7 +23,7 @@ public class BioBuzzRobot extends Robot {
 
     @Override
     protected Follower createFollower(HardwareMap hardwareMap) {
-        return BettaConstants.create(hardwareMap);
+        return BioBuzzConstants.create(hardwareMap);
     }
 
     @Override
