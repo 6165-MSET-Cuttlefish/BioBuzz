@@ -29,6 +29,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 - Decline Android Studio's AGP upgrade: AGP 9 breaks `assembleSloth`, so deploySloth, and Gradle 9.6 or later won't load AGP 8 (`docs/toolchain-findings.md`).
 - After a full install that adds, renames or deletes a `res/xml` file, re-activate the hub's hardware config on the DS: the hub stores it by resource ID, which shifts, so it can load another config's devices under the old name (`docs/toolchain-findings.md`).
 - Switch, save and delete hardware configs on the DS (Configure Robot), never in the dashboard's Hardware Config View, which freezes the app until the hub relaunches it (`docs/dashboard-findings.md`).
+- A hub's logcat has its Wi-Fi name and password from every app start, and its ports and adb take no credential: strip those lines before quoting a log in `docs/` or anywhere public. Run force-stops the app after the build, just before the install: stop the robot first. The dashboard can start OpModes with no DS (`docs/sdk-hub-findings.md`).
 
 ## Dependencies
 

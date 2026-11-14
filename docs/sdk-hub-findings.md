@@ -6,7 +6,8 @@ encoder velocity read from a hub.
 
 "Source" below means the SDK 12.0.0 `Hardware` and `RobotCore` sources jars (`org.firstinspires.ftc` on Maven Central,
 the version `TeamCode/build.gradle` pins), cited by class and method because SDK line numbers move between releases.
-Recheck these after an SDK bump. Our code is cited by path under
+[Control Hub network, adb and app restarts](#control-hub-network-adb-and-app-restarts) also cites the `RobotServer`
+and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK bump. Our code is cited by path under
 `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`.
 
 ## Act on these
@@ -28,6 +29,10 @@ Recheck these after an SDK bump. Our code is cited by path under
   again only after 500 ms, whatever a wrapper's re-send period.
 - **Every motor in our hardware configs is the SDK's 99.5:1 motor type.** On any other motor, angle-unit velocities
   and RUN_USING_ENCODER `setPower()` are scaled wrong; tick counts and `getVelocity()` in ticks/s are right.
+- **A hub's logcat holds its Wi-Fi name and password, and its ports and adb take no credential**: strip those lines
+  before quoting a log anywhere public.
+  [Control Hub network, adb and app restarts](#control-hub-network-adb-and-app-restarts) has these, the dashboard
+  starting OpModes with no Driver Station, and Run killing a running OpMode.
 
 ## Encoder velocity
 
@@ -247,6 +252,102 @@ every other device (source: `OpModeManagerImpl.resetHardwareForOpMode`):
   isn't edited (CLAUDE.md, Conventions), and report it to Brushland.
 - `write()` sleeps 10 ms after every register write (lines 198–205): configure the sensor in INIT, never in a loop.
 
+## Control Hub network, adb and app restarts
+
+What to do:
+
+- **Never paste a hub's logcat anywhere public without removing its Wi-Fi name and password.** The RC app writes both
+  in clear at every app start (below). `bench-results/`, where the hub bench saves logcat, is gitignored: keep it so.
+- **Treat every hub port as open to anyone who can reach it.** No web server or websocket on the hub checks Origin,
+  Host or a password, and adb asks no authorisation. Anyone on the robot's Wi-Fi, any process on a laptop that
+  forwards a hub port, and possibly a web page in that laptop's browser can run OpModes, reboot the hub, change its
+  Wi-Fi and read its password.
+- **The dashboard can INIT and START an OpMode with no Driver Station, and with no Driver Station connected there is
+  no DS-loss stop.** Put the robot on blocks when running it from the dashboard; the dashboard's STOP or the power
+  switch are the only stops.
+- **Android Studio's Run force-stops the app after the build, just before the install.** Stop the robot first. Its
+  outputs likely hold until the hub's 2.5 s keep-alive timeout, then fail-safe (inferred).
+- **One laptop on Wi-Fi adb at a time** (from AOSP source, untested on a hub; below).
+
+How each is known (measured logs are the team's hub bench runs of 2026-10-05 to 2026-10-29, SDK 12.0.0, Control Hub
+OS 1.1.3 on the hub whose properties were read; source lines are the SDK 12.0.0 sources jars unless marked):
+
+- **Access point address 192.168.43.1.** The SDK hard-codes it (`AccessPointAssistant.java:47`
+  `DEFAULT_TETHERING_IP_ADDR`) and a Control Hub always uses that access-point mode
+  (`NetworkConnectionHandler.java:151-152`, `RCWIRELESSAP`). The four bench runs that list the hub's interfaces read
+  `wlan0` 192.168.43.1, on two hubs.
+- **adb listens on TCP 5555 with no setup step.** FIRST: "The Control Hub is configured so that it automatically will
+  support an adb wireless connection request on port 5555"
+  ([Managing a Control Hub](https://ftc-docs.firstinspires.org/en/latest/programming_resources/shared/managing_control_hub/Managing-a-Control-Hub.html),
+  read 2026-11-13). The 2026-10-24 hub's properties: `persist.adb.tcp.port` 5555, `init.svc.adbd` running.
+- **No RSA authorisation on this build, so no "unauthorized" prompt.** The same hub reads `ro.build.type` userdebug,
+  build NHG47K (android-7.1.2_r6 by Android's
+  [build table](https://source.android.com/docs/setup/reference/build-numbers), read 2026-11-13) and `ro.adb.secure`
+  0. In that AOSP version adbd is built with `ALLOW_ADBD_NO_AUTH` on userdebug and eng builds (`adb/Android.mk`)
+  and skips authentication when it is set and `ro.adb.secure` is 0 (`adb/daemon/main.cpp`), both on
+  android.googlesource.com at tag android-7.1.2_r6, read 2026-11-13. No bench log contains "unauthorized".
+  Only one hub's properties were read; REV builds the shipped adbd.
+- **One TCP adb host at a time** (source, untested on a hub). In android-7.1.2_r6 adbd registers every accepted TCP
+  connection under the one serial `"host"` (`adb/transport_local.cpp`, `server_socket_thread`) and refuses a second
+  registration with a serial already in use (`adb/transport.cpp`, `register_socket_transport`), ignoring the result
+  and never closing that socket. So a second laptop's `adb connect` should hang and show offline while the first
+  holds the connection, and a laptop that vanished without closing it may hold it (inferred).
+- **Ports the RC app listens on:** the RC web server (Program & Manage, Blocks, OnBot Java, the dashboard's `/dash`)
+  on TCP 8080 (`CoreRobotWebServer.java:68`, RobotServer) and its websocket on 8081, "the HTTP port + 1" (`:96`);
+  the dashboard's websocket on 8000 (slothboard 0.3.2+0.6.0-6165.7 `FtcDashboard.java:244-250`, `new NanoWSD(8000)`);
+  the Driver Station link on UDP 20884 (`RobocolConfig.java:73`), bound to 192.168.43.1 only. All three start lines
+  (`started port=8080`, `Started WebSocket server on port 8081`, `RobocolDatagramSocket listening
+  addr=/192.168.43.1:20884`) appear at all 59 app starts logged through to `INIT FINISH`; no bench log has a start
+  line for 8000, which is known from the slothboard source only. AutoTune's 10158 and 12649, and the Limelight
+  forwards, are in [`game-findings.md`](game-findings.md).
+- **App start to INIT-ready: 36.0 to 40.8 s** from process start to `INIT FINISH` in logcat, over all 59 app starts
+  logged through to it, on at least two hubs (parsed 2026-11-13). The logs hold 63 app starts: the other 4
+  (`sloth_atpush.log` and `sloth_d0ms.log` of 2026-10-09 and of 2026-10-24) end about 23 s after the start, before
+  the network lines or INIT. The config-switch and dashboard-ready timings are in
+  [`hub-bench-findings.md`](hub-bench-findings.md).
+- **An app restart drops neither Wi-Fi nor adb.** Through every force-stop and relaunch in a run, `hostapd` and `adbd`
+  kept one pid each: 2026-10-09 (21 log files with an app start), 2026-10-24 (18), 2026-10-28 (6) and 2026-10-29
+  (14). Only the app's own ports (8080, 8081, 8000) should go away until it is back (inferred).
+- **No web server checks Origin, Host or a credential.** In the SDK's RobotServer, FtcCommon, OnBotJava, Blocks,
+  RobotCore, Inspection and Hardware 12.0.0 sources no handler reads an Origin, Host or Referer header or sends an
+  Access-Control header (grep, 2026-11-13; the only `"origin"` is an OnBot Java form field). The RC server passes any
+  GET, PUT or POST to its handler and answers other methods 404 (`CoreRobotWebServer.java:239-243`).
+  `/changeNetworkSettings` (`RobotControllerWebHandlers.java:109`, `ChangeNetworkSettings`) applies a new Wi-Fi
+  name, password and channel and `/reboot` (`:116`) reboots the hub after 1 s, neither checking the method. The
+  dashboard's websocket server opens a socket for any handshake (`FtcDashboard.java:244-250`); its only gate is the
+  enabled flag (slothboard `DashboardCore.java:141-142`), on by default (`FtcDashboard.java:1230`). Manual control
+  over 8081 is the one SDK command limited to loopback (`ManualControlWebSocketHandler.java:208`, FtcCommon).
+- **The dashboard runs OpModes with no Driver Station.** Its INIT, START and STOP messages call
+  `opModeManager.initOpMode` and `startActiveOpMode`, and `eventLoop.requestOpModeStop`
+  (`FtcDashboard.java:1048-1064`), and the SDK checks no Driver Station there (`OpModeManagerImpl.java:280-330`: "We *insist* on becoming the new state").
+  The SDK's stop on losing the Driver Station is in `EventLoopManager.onPeerDisconnected` (`:753-764`,
+  `initOpMode(DEFAULT_OP_MODE_NAME)` at `:764`): it stops whatever OpMode runs, dashboard-started too, when a
+  connected Driver Station drops, so with no Driver Station ever connected nothing calls it (inferred). The hub
+  bench runs this way: on 2026-10-29 the dashboard reported `'enabled': True` and 164 OpMode INITs were sent from it
+  with no Driver Station.
+- **The Wi-Fi name and password are in logcat at every app start.** Lines starting `Robot controller name:`
+  (`ControlHubDeviceNameManager.java:211`), `Robot controller password:` (`ControlHubPasswordManager.java:137`),
+  `Network Connection Passphrase:` (FtcCommon `FtcRobotControllerService.java:542`) and the debug line
+  `setNetworkProperties(deviceName=..., password=...` (`RobotControllerAccessPointAssistant.java:333`) each appear at
+  all 59 app starts logged through to `INIT FINISH`. The RC page's `/js/rcInfo.json` serves the passphrase too
+  (`CoreRobotWebServer.java:209`). With no adb authorisation, anyone on the robot's Wi-Fi can read them.
+- **Android Studio's Run force-stops the app before it installs.** In JetBrains' Android plugin source
+  ([github.com/JetBrains/android](https://github.com/JetBrains/android), master, read 2026-11-13),
+  `AndroidRunConfigurationExecutor.run()` calls `waitPreviousProcessTermination` ("Terminating the app") before
+  `applicationDeployer.fullDeploy` and `launch`, and `ApplicationTerminator.killApp()` force-stops twice on API 25 or
+  below ("the first call to 'force-stop' does not terminate the app") and waits up to 10 s for the process to die.
+  `run()` builds nothing: the Gradle build is the run configuration's before-launch task (`MakeBeforeRunTaskProvider`,
+  project-system-gradle), already done when `run()` starts, so the robot keeps running through the build (inferred
+  from that order; no bench log shows a Studio Run). The hub is API 25 (`ro.build.version.sdk`). A shell force-stop
+  on the hub killed the app's process in the same millisecond (2026-10-24 log), so no `stop()` runs. Teammates'
+  Studio versions were not checked.
+- **Lynx keep-alive timeout: 2500 ms**, `msKeepAliveTimeout = 2500;   // per the Lynx spec`
+  (`LynxModule.java:154`, Hardware), with the SDK pinging every 2500 − 550 = 1950 ms (`:1365`). REV: a Control Hub
+  blinking blue means "Keep alive has timed out"
+  ([LED blink codes](https://docs.revrobotics.com/duo-control/troubleshooting-the-control-system/led-blink-codes),
+  read 2026-11-13; no value given). In three 2026-10-09 app restarts, the first hub status logged read
+  `KeepAliveTimeout|FailSafe` (the line names no module). The timeout itself is not measured on a hub.
+
 ## Still unknown
 
 - **Hub velocity above 32,767 counts/s, and its multiples of 20:** spin a Through Bore on port 0 or 3 past 240 rpm and
@@ -262,3 +363,10 @@ every other device (source: `OpModeManagerImpl.resetHardwareForOpMode`):
   no follower.
 - **What the hub's fail-safe leaves motors and servos in** (brake or float, servo PWM off or held): press STOP with a
   servo under load and a motor spinning, and watch both.
+- **How long outputs really hold after the app dies:** with a motor spinning, force-stop the app
+  (`adb shell am force-stop com.qualcomm.ftcrobotcontroller`) and time from the kill line in logcat to the motor
+  stopping on video. 2.5 s means the keep-alive timeout above.
+- **Whether a second Wi-Fi adb host is refused while one is attached:** with one laptop showing the hub as `device`,
+  run `adb connect 192.168.43.1:5555` from a second laptop on the robot's Wi-Fi. A hang, then `offline`, with the first
+  still `device`, confirms one host at a time. Also whether any other hub or Control Hub OS version
+  reads `ro.adb.secure` 1: `adb shell getprop ro.adb.secure`.
