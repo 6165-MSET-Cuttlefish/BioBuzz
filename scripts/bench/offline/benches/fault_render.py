@@ -317,8 +317,10 @@ def on_the_fake_hub():
     names = [s["name"] for s in hub.switched]
     expect("the eight questions in order, the one not answered y or n asked again",
            prompts(out) == ["llfault"] + list(ASKED) and not stdin.answers)
-    expect("Bench: Limelight Fault first, on bench_llfault naming the Limelight at the bench's address, absent mode",
+    expect("Bench: Limelight Fault first, on bench_llfault naming the Limelight at the bench's address, absent mode, "
+           "without its drive creep",
            inits[1][0] == "Bench: Limelight Fault" and inits[1][1].get("mode") == "absent"
+           and inits[1][1].get("creep") == 0
            and names[names.index(rb.CONFIG_LLFAULT) + 1] == rb.CONFIG_MAIN
            and rb.LIMELIGHT_CONFIG_IP in (out / "logs" / "bench_llfault.xml").read_text())
     expect("then Bench: Fault Render's phases on bench_main, then its first-frame INIT, never STARTed",
@@ -373,8 +375,8 @@ def on_the_fake_hub():
 
 
 def declaration():
-    expect("declared: flag-only, needs a person with --interactive, Control Hub motor ports 0-3 under --ports-empty",
-           not BENCH.default and BENCH.person is not None and BENCH.statement == "--ports-empty"
+    expect("declared: flag-only, needs a person with --interactive, drives no port",
+           not BENCH.default and BENCH.person is not None and not BENCH.drives and BENCH.statement is None
            and BENCH.person_flags == ("--fault-render", "--interactive")
            and BENCH.opmodes == ("Bench: Limelight Fault", fr.OPMODE) and BENCH.configs == (rb.CONFIG_LLFAULT,))
     command = next(e for e in rb.needs_a_person() if e[0] == "fault_render")[2]

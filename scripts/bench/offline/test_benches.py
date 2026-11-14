@@ -136,6 +136,18 @@ def options_block(text):
     return text.split("\noptions:\n", 1)[1].split("\n\n", 1)[0].rstrip("\n")
 
 
+ALL_ENTRY = re.compile(r"\n  --all .*?(?=\n  -)", re.S)
+
+
+def without_all(block):
+    """The options block without --all's entry, whose help names the folder's flag-only benches."""
+    return ALL_ENTRY.sub("", block)
+
+
+def all_help(text):
+    return " ".join(ALL_ENTRY.search(options_block(text)).group(0).split())
+
+
 def selection(argv, everything=False):
     r = object.__new__(rb.Runner)
     r.args = rb.parse_args(list(argv))
@@ -156,6 +168,8 @@ def the_real_folder():
     expect("every bench in the folder runs just before Bench: Turret Zero, in order.txt's order",
            rb.bench_order() == IN_PLACE_ORDER[:-3] + tuple(names) + IN_PLACE_ORDER[-3:])
     expect("every bench's flag is in --help", all(b.flag in help_text() for b in rb.MODULE_BENCHES))
+    expect("--all's help names every bench in the folder that isn't in the default suite",
+           all(b.title in all_help(help_text()) for b in rb.MODULE_BENCHES if not b.default))
     expect("the session reads each bench that waits for a person from its declaration, after the hand-kept ones",
            [p[0] for p in load("session", WORKTREE / "scripts/bench/session.py").PROMPTED][-len(rb.needs_a_person()):]
            == [p[0] for p in rb.needs_a_person()] or not rb.needs_a_person())
@@ -165,6 +179,23 @@ def the_real_folder():
         if b.default:
             expect(f"{b.name}: in the default suite, it drives at most what --ports-empty covers",
                    b.statement in (None, "--ports-empty"))
+
+
+def missing_folder():
+    OUT.mkdir(parents=True, exist_ok=True)
+    gone = pathlib.Path(tempfile.mkdtemp(prefix="gone-", dir=OUT)) / "benches"
+    expect("a missing benches folder stops the load, naming order.txt",
+           "order.txt is missing" in (layout_error(gone) or ""))
+    f = folder(("a_bench", stub("a_bench")))
+    (f / "order.txt").unlink()
+    expect("a folder without order.txt stops the load", "order.txt is missing" in (layout_error(f) or ""))
+    root = pathlib.Path(tempfile.mkdtemp(prefix="nobenches-", dir=OUT))
+    shutil.copy(WORKTREE / "scripts/bench/run_bench.py", root / "run_bench.py")
+    r = subprocess.run([sys.executable, "-I", str(root / "run_bench.py"), "--help"], capture_output=True, text=True,
+                       timeout=60)
+    expect("run_bench.py without its benches folder stops at import with BenchLayoutError, before --help",
+           r.returncode != 0 and "BenchLayoutError" in r.stderr and "order.txt is missing" in r.stderr
+           and "--config-check" not in r.stdout)
 
 
 def rules():
@@ -194,8 +225,22 @@ def rules():
     f = folder(("a_bench", stub("a_bench", drives="eh_motors=(0,)", powers="x")))
     expect("a bench whose statement is typed at the terminal but that declares no person stops the load",
            "--s3-ports is typed at the terminal, so it needs a person" in (layout_error(f) or ""))
-    f = folder(("a_bench", stub("a_bench", configs=("no_such_config",))))
-    expect("a config that is neither bench_* nor shipped stops the load", "no_such_config" in (layout_error(f) or ""))
+    f = folder(("a_bench", stub("a_bench", configs=("",))))
+    expect("an empty config name stops the load", "isn't a config's name" in (layout_error(f) or ""))
+    f = folder(("a_bench", stub("a_bench", configs=("no_such_config",))),
+               ("b_bench", stub("b_bench", default=True, configs=("no_such_config",))))
+    expect("a robot config this checkout doesn't ship doesn't stop the load (a renamed config stops no other run)",
+           layout_error(f) is None)
+    with using(f):
+        expect("--help still works with that config gone", "--a-bench" in help_text())
+        chosen, _ = selection(["--a-bench"])
+        expect("a run that names the bench stops, naming the config and the bench's file",
+               chosen == "error: Bench: Stub a_bench activates no_such_config, which this checkout's res/xml doesn't "
+                         "ship: put its name right in a_bench.py, or drop --a-bench")
+        chosen, summary = selection([])
+        expect("a default run skips a default bench whose config isn't shipped, saying so, and runs the rest",
+               "b_bench" not in chosen and "hub" in chosen
+               and "_Bench: Stub b_bench skipped: res/xml doesn't ship no_such_config._\n" in summary)
     f = folder(("a_bench", stub("a_bench", configs=("bench_a_bench", "betta_decode"),
                                 drives="ch_motors=(0, 1, 2, 3), ch_servos=(0, 1)", powers="0.1 on motor ports 0-3")))
     expect("a bench within --ports-empty's ports, writing a bench_* config and using a shipped one, loads",
@@ -221,7 +266,7 @@ def wiring():
                and rb.BENCH_CONFIGS[:len(rb.IN_PLACE_BENCH_CONFIGS)] == rb.IN_PLACE_BENCH_CONFIGS)
         after = help_text()
         expect("--help: the existing options are listed exactly as before; the benches' flags and options come after "
-               "them in their own group", options_block(after) == options_block(before)
+               "them in their own group", without_all(options_block(after)) == without_all(options_block(before))
                and "benches in scripts/bench/benches/" in after and "--asks-times" in after
                and after.index("--zeta") < after.index("--alpha"))
         expect("a bench's own option parses", rb.parse_args(["--asks", "--asks-times", "3"]).asks_times == 3)
@@ -231,6 +276,9 @@ def wiring():
         chosen, _ = selection(["--all"], everything=True)
         expect("--all leaves the flag-only benches out too", isinstance(chosen, set) and {"dflt", "cam"} <= chosen
                and not {"zeta", "alpha", "asks"} & chosen)
+        expect("--all's help names the flag-only benches it leaves out, and not the default-suite ones",
+               all(f"Bench: Stub {n}" in all_help(after) for n in ("zeta", "alpha", "asks"))
+               and not any(f"Bench: Stub {n}" in all_help(after) for n in ("dflt", "cam")))
         chosen, summary = selection([])
         expect("missing hardware in a default run: skipped, with the bench's own words in summary.md",
                "cam" not in chosen and "_Bench: Stub cam skipped: no webcam plugged in._\n" in summary)
@@ -394,7 +442,7 @@ def own_tests():
 
 
 def main():
-    for section in (the_real_folder, rules, wiring, on_the_fake_hub, typed_statement, own_tests):
+    for section in (the_real_folder, missing_folder, rules, wiring, on_the_fake_hub, typed_statement, own_tests):
         try:
             section()
         except Exception as e:

@@ -42,6 +42,8 @@ def bare_hub(lsof_out, lsof_code=None, **env):
     (root / "scripts/bench").mkdir(parents=True)
     for name in ("bare_hub.sh", "run_bench.py"):
         shutil.copy(WORKTREE / "scripts/bench" / name, root / "scripts/bench" / name)
+    shutil.copytree(WORKTREE / "scripts/bench/benches", root / "scripts/bench/benches",
+                    ignore=shutil.ignore_patterns("__pycache__"))
     stubs = root / "stubs"
     stubs.mkdir()
     (stubs / "lsof").write_text('#!/bin/sh\necho "$@" >> "$LSOF_LOG"\nprintf "$LSOF_OUT"\nexit "$LSOF_CODE"\n')

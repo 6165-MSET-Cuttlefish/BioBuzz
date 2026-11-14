@@ -1,11 +1,14 @@
 """Bench: Rangefinders offline: its verdicts on synthetic records (each check fails when weakened), the part a fault
 follows through the swaps, the statics it saves for Configure Laser Rangefinder, and the bench end to end on
 fake_hub.py with a person who moves the cables at each prompt: the prompts in order, sensor A woken on I2C while Bench:
-Rangefinder Read polls, the 20 ms control and the as-found settings written back, sensor A back at its as-found
-settings even when the control's timing phase crashes, a sensor that never answers on I2C (nothing written), a dead
-sensor, a slow swing, a bad cable named, and Ctrl-C at a prompt putting the config back. No hub, no adb, no network.
+Rangefinder Read polls, the 20 ms control and the as-found settings written back (A, silent on I2C once its pins are
+written, woken again to read them back), sensor A back at its as-found settings even when the control's timing phase
+crashes or meets Ctrl-C, a second Ctrl-C leaving the log line that says how to put A back, a sensor that never answers
+on I2C (nothing written), a dead sensor, a slow swing, a bad cable named, and Ctrl-C at a prompt putting the config
+back. No hub, no adb, no network.
 Run with: python3 -I scripts/bench/offline/benches/rangefinders.py
 """
+import _thread
 import contextlib
 import copy
 import importlib.util
@@ -180,20 +183,30 @@ def verdict_cases():
     expect("the statics for the control: 20 ms, the as-found period, SHORT, a 4x4 ROI and the as-found range",
            s["values"] == {"analogLowMm": 0, "analogHighMm": 1300, "distanceMode": "SHORT", "timingBudgetMs": 20,
                            "measurementPeriodMs": 0, "roiSize": 4} and not s["notes"])
-    odd = dict(AS_FOUND, roi=[0, 15, 3, 12], pin0=[0, 0, 0], pin1=[0, 0, 0])
-    s = rf.settings_for({"settings": odd})
-    expect("an off-centre ROI and pins not in analog mode are written as Configure Laser Rangefinder can, and noted",
-           s["values"]["roiSize"] == 4 and s["values"]["analogHighMm"] == 1300 and len(s["notes"]) == 2)
+    s = rf.settings_for({"settings": dict(AS_FOUND, pin0=[1, 40, 900], pin1=[1, 40, 900], timing=[33, 40],
+                                          roi=[4, 11, 11, 4], distanceModeRaw=3)})
+    expect("as-found settings Configure Laser Rangefinder can write are written back exactly",
+           s["values"] == {"analogLowMm": 40, "analogHighMm": 900, "distanceMode": "LONG", "timingBudgetMs": 33,
+                           "measurementPeriodMs": 40, "roiSize": 8} and not s["notes"])
+    for label, odd in (("an off-centre ROI", dict(roi=[0, 15, 3, 12])),
+                       ("a ROI under 4x4", dict(roi=[7, 8, 9, 6])),
+                       ("a ROI that isn't square", dict(roi=[6, 9, 9, 4])),
+                       ("a centred ROI off the 0-15 grid", dict(roi=[-2, 17, 17, -2], opticalCenter=[8, 8])),
+                       ("pin 0 not in analog mode", dict(pin0=[0, 0, 0], pin1=[0, 0, 0])),
+                       ("pin 1 unlike pin 0", dict(pin1=[1, 0, 1000])),
+                       ("a period too short for the as-found budget", dict(timing=[10, 12])),
+                       ("a budget over 1000 ms", dict(timing=[1200, 0])),
+                       ("a distance mode Configure Laser Rangefinder can't write", dict(distanceModeRaw=0))):
+        try:
+            rf.settings_for({"settings": dict(AS_FOUND, **odd)}, budget=20)
+            refused = False
+        except rb.BenchError as e:
+            refused = "nothing was written" in str(e)
+        expect(f"{label}: refused, so nothing is written", refused)
     s = rf.settings_for({"settings": dict(AS_FOUND, timing=[10, 13])}, budget=20)
     expect("a measurement period too short for the 20 ms control is written as 0, and noted; as found it is kept",
            s["values"]["measurementPeriodMs"] == 0 and len(s["notes"]) == 1
            and rf.settings_for({"settings": dict(AS_FOUND, timing=[10, 13])})["values"]["measurementPeriodMs"] == 13)
-    try:
-        rf.settings_for({"settings": dict(AS_FOUND, distanceModeRaw=0)})
-        refused = False
-    except rb.BenchError:
-        refused = True
-    expect("a distance mode Configure Laser Rangefinder can't write: refused, nothing written", refused)
     diff = rf.config_diff({"timingBudgetMs": 20, "distanceMode": "SHORT"})["configDiff"]["__value"][rf.CONFIGURE]
     expect("SAVE_CONFIG: ints as int, the distance mode as an enum by name",
            diff["__value"] == {"timingBudgetMs": {"__type": "int", "__value": 20},
@@ -240,9 +253,9 @@ class Person:
         ("Unplug the Prism from", lambda s: setattr(s, "prism", False)),
         ("Plug the Prism back", lambda s: setattr(s, "prism", True)),
         ("Unplug rangefinder A's cable from Control Hub analog port 1", lambda s: setattr(s, "a_on", "hand")),
+        ("Unplug rangefinder A's cable from Control Hub I2C port 3", lambda s: setattr(s, "a_on", "hand")),
         ("Plug rangefinder A's cable into Control Hub I2C port 3 now", lambda s: s.plug_i2c()),
         ("Rangefinder A didn't answer on I2C. Unplug", lambda s: setattr(s, "a_on", "hand")),
-        ("Plug rangefinder A's cable back into Control Hub analog port 1", lambda s: s.to_analog()),
         ("Move rangefinder A's cable from Control Hub I2C port 3 to analog port 1", lambda s: s.to_analog()),
         ("Swap the two sensors at the sensor end", lambda s: setattr(s, "sensors_swapped", True)),
         ("Put each sensor back on its own cable", lambda s: setattr(s, "sensors_swapped", False)),
@@ -251,8 +264,10 @@ class Person:
     )
 
     def __init__(self, station, log, interrupt_on=None, close_on=None):
+        """interrupt_on: a prompt to press Ctrl-C at, or {prompt: which times it is seen (1 = the first)}."""
         self.station, self.log, self.prompts = station, log, []
-        self.interrupt_on, self.close_on = interrupt_on, close_on
+        self.interrupt_on = {interrupt_on: (1,)} if isinstance(interrupt_on, str) else dict(interrupt_on or {})
+        self.close_on = close_on
 
     def isatty(self):
         return True
@@ -261,8 +276,9 @@ class Person:
         prompt = next((l.split(">>> ", 1)[1] for l in reversed(self.log.read_text().splitlines()) if ">>> " in l
                        and "GO:" not in l), "")
         self.prompts.append(prompt)
-        if self.interrupt_on and self.interrupt_on in prompt:
-            raise KeyboardInterrupt
+        for needle, times in self.interrupt_on.items():
+            if needle in prompt and sum(needle in p for p in self.prompts) in times:
+                raise KeyboardInterrupt
         if self.close_on and self.close_on in prompt:
             return ""
         with self.station.lock:
@@ -276,10 +292,11 @@ class Station(fake_hub.Hub):
     """fake_hub's Control Hub with rangefinder A and B on its analog ports, a person moving them, and the OpModes the
     bench runs answering from what is plugged where."""
 
-    def __init__(self, faulty=(), dead_b=False, slow=False, crash_label=None, never_wakes=False, **kw):
+    def __init__(self, faulty=(), dead_b=False, slow=False, crash_label=None, never_wakes=False, interrupt_label=None,
+                 **kw):
         super().__init__(**kw)
         self.faulty, self.dead_b, self.slow = set(faulty), dead_b, slow
-        self.crash_label, self.never_wakes = crash_label, never_wakes
+        self.crash_label, self.never_wakes, self.interrupt_label = crash_label, never_wakes, interrupt_label
         self.a_on, self.a_mode, self.prism = "analog", "analog", True
         self.sensors_swapped = self.cables_swapped = False
         self.a = copy.deepcopy(AS_FOUND)
@@ -347,6 +364,7 @@ class Station(fake_hub.Hub):
                       distanceModeRaw={"SHORT": 1, "MEDIUM": 2, "LONG": 3}[s["distanceMode"]],
                       roi=[tlx, tly, tlx + size - 1, tly - size + 1],
                       pin0=[1, s["analogLowMm"], s["analogHighMm"]], pin1=[1, s["analogLowMm"], s["analogHighMm"]])
+        self.a_mode = "analog"
         self.dash.broadcast({"type": "RECEIVE_TELEMETRY", "telemetry": [{"data": {
             "Answering on I2C": "true", "Timing [Budget, Period]": str(self.a["timing"])}, "timestamp": self.clock,
             "fieldOverlay": {"ops": []}}]})
@@ -379,6 +397,9 @@ class Station(fake_hub.Hub):
                     self.set_active(rb.IDLE_OPMODE, "STOPPED")
                     return
                 self.poll_result(params)
+                if params.get("label") == self.interrupt_label:
+                    self.interrupt_label = None
+                    _thread.interrupt_main()
             if kind == "STOP_OP_MODE":
                 self.reader = None
         super().on_message(session, msg)
@@ -432,6 +453,7 @@ ORDER = ["Aim rangefinder A", "swing the fast target through rangefinder A's bea
          "Move rangefinder A's cable from Control Hub I2C port 3 to analog port 1",
          "swing the fast target through rangefinder A's beam",
          "Unplug rangefinder A's cable from Control Hub analog port 1", "Plug rangefinder A's cable into Control Hub I2C",
+         "Unplug rangefinder A's cable from Control Hub I2C port 3", "Plug rangefinder A's cable into Control Hub I2C",
          "Move rangefinder A's cable from Control Hub I2C port 3 to analog port 1", "Plug the Prism back",
          "flex rangefinder A's cable", "flex rangefinder B's cable", "Swap the two sensors", "Aim both rangefinders",
          "flex both cables", "Put each sensor back", "Swap the two cables at the hub", "Aim both rangefinders",
@@ -494,11 +516,25 @@ def on_the_fake_hub():
     hub = Station(never_wakes=True)
     code, out, person = station_run(ARGV, hub)
     summary = (out / "summary.md").read_text()
-    expect("A never answers on I2C: asked to replug once, nothing written, A plugged back, the bench goes on",
+    i2c = [i for i, p in enumerate(person.prompts) if "into Control Hub I2C port 3 now" in p]
+    expect("A never answers on I2C: asked to replug once, nothing written, A moved from I2C port 3 to analog port 1, "
+           "the bench goes on",
            not starts(hub, rf.CONFIGURE) and hub.a == AS_FOUND and hub.a_on == "analog"
-           and sum("didn't answer on I2C" in p for p in person.prompts) == 1
+           and sum("didn't answer on I2C" in p for p in person.prompts) == 1 and len(i2c) == 2
+           and person.prompts[i2c[-1] + 1].startswith("Move rangefinder A's cable from Control Hub I2C port 3 to analog "
+                                                     "port 1.")
            and "not run: rangefinder A didn't answer on I2C twice" in check_line(summary, "control: at a 20 ms")
            and back_home(hub) and restored(hub))
+
+    hub = Station()
+    hub.a["roi"] = [0, 15, 3, 12]
+    code, out, person = station_run(ARGV, hub)
+    summary = (out / "summary.md").read_text()
+    expect("an as-found ROI the bench can't write back: nothing saved or written, A moved back, the bench goes on",
+           not starts(hub, rf.CONFIGURE) and not hub.saves and hub.a == dict(AS_FOUND, roi=[0, 15, 3, 12])
+           and hub.a_on == "analog" and hub.prism
+           and "can't be written back as found" in check_line(summary, "control: at a 20 ms")
+           and check_line(summary, "reads back").startswith("- FAIL") and restored(hub))
 
     hub = Station(dead_b=True)
     code, out, person = station_run(ARGV, hub)
@@ -515,11 +551,38 @@ def on_the_fake_hub():
            and "not enough motion" in check_line(summary, "control: at a 20 ms")
            and "the fault follows sensor B" in check_line(summary, "swaps:") and back_home(hub))
 
+    move = "Move rangefinder A's cable from Control Hub I2C port 3"
     hub = Station()
-    code, out, person = station_run(ARGV, hub, interrupt_on="Move rangefinder A's cable from Control Hub I2C port 3")
+    code, out, person = station_run(ARGV, hub, interrupt_on=move)
     log = (out / "run.log").read_text()
-    expect("Ctrl-C at the move back to analog after the 20 ms write: the run stops, says how to put A back, config put "
-           "back", code == "interrupted" and rf.LEFT_WRITTEN in log and hub.a["timing"] == [20, 0] and restored(hub))
+    after = person.prompts[person.prompts.index(next(p for p in person.prompts if move in p)) + 1:]
+    expect("Ctrl-C at the move back to analog after the 20 ms write: A woken, written back, woken and read back at its "
+           "as-found settings, moved to analog port 1, then the run stops with the config put back",
+           code == "interrupted" and in_order(after, ["Unplug rangefinder A's cable from Control Hub I2C port 3",
+                                                      "Plug rangefinder A's cable into Control Hub I2C",
+                                                      "Unplug rangefinder A's cable from Control Hub I2C port 3",
+                                                      "Plug rangefinder A's cable into Control Hub I2C", move])
+           and hub.a == AS_FOUND and hub.a_on == "analog" and hub.a_mode == "analog"
+           and [m[4]["timingBudgetMs"] for m in starts(hub, rf.CONFIGURE)] == [20, 10]
+           and rf.LEFT_WRITTEN not in log and restored(hub))
+    expect("and the run's log says what is left to put back by hand: only the Prism",
+           "!! Put back by hand: the Prism into Control Hub I2C port 3" in log)
+
+    hub = Station(interrupt_label="rate_control_A")
+    code, out, person = station_run(ARGV, hub)
+    log = (out / "run.log").read_text()
+    expect("Ctrl-C during the control's timing run: A ends read back at its as-found settings, on analog port 1",
+           code == "interrupted" and "KeyboardInterrupt" in log and hub.a == AS_FOUND and hub.a_on == "analog"
+           and hub.a_mode == "analog" and [m[4]["timingBudgetMs"] for m in starts(hub, rf.CONFIGURE)] == [20, 10]
+           and person.prompts[-1].startswith(move) and rf.LEFT_WRITTEN not in log and restored(hub))
+
+    hub = Station()
+    code, out, person = station_run(ARGV, hub, interrupt_on={
+        move: (1,), "Unplug rangefinder A's cable from Control Hub I2C port 3": (1,)})
+    log = (out / "run.log").read_text()
+    expect("Ctrl-C again at the write back's first prompt: the run stops, the log says how to put A back by hand",
+           code == "interrupted" and rf.LEFT_WRITTEN in log and hub.a["timing"] == [20, 0]
+           and len(starts(hub, rf.CONFIGURE)) == 1 and restored(hub))
 
     hub = Station()
     code, out, person = station_run(ARGV, hub, close_on="Swap the two sensors")

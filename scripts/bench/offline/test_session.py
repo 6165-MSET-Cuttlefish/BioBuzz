@@ -213,7 +213,7 @@ def plans():
            and "Expansion Hub's motor ports" not in console.split("=== Plan")[0])
     expect("bare hub: the plan is the default suite, Bench: Planner Stop with its control, then Bench: Dashboard Off, "
            "with durations", "1. Default suite: about 45-90 min" in plan
-           and "2. Bench: Planner Stop with its control: about 10-15 min" in plan
+           and "2. Bench: Planner Stop with its control: about 15-20 min" in plan
            and "3. Bench: Dashboard Off: about 10 min" in plan
            and "4." not in plan.split("In all")[0] and "In all about" in plan)
     expect("bare hub: the plan says why the Photon block, Bench: Limelight Reload, the Pinpoint soak and Bench: Planner "
@@ -228,9 +228,9 @@ def plans():
            "Control Hub's bench ports, which the statement named",
            rb.parse_args(planner[2:]).planner_stop and "--ports-empty" in planner
            and not set(planner) & set(S.PROMPTED_FLAGS)
-           and "2. Bench: Planner Stop with its control: about 10-15 min: its six sliced trials again, then the "
-               "unsliced control, which is meant to overrun STOP, so the app may restart three times; drives Control "
-               "Hub motor ports 0-3 and servo ports 0-1" in plan)
+           and "2. Bench: Planner Stop with its control: about 15-20 min: its sliced trials three times each (18), "
+               "then the unsliced control, which is meant to overrun STOP, so the app may restart three times; drives "
+               "Control Hub motor ports 0-3 and servo ports 0-1" in plan)
     default = stub.argv("default")
     expect("bare hub: the default suite's runner gets no bench flag, --ports-empty, the cable's serial and its own "
            "folder", "--ports-empty" in default and default[default.index("--serial") + 1] == fake_hub.USB_SERIAL
@@ -285,7 +285,7 @@ def plans():
     expect("every optional device: the plan is default, Planner Stop with its webcam trials, Limelight Reload, Photon "
            "with I2C, Dashboard Off, and says why no go run",
            "1. Default suite: about 60-80 min" in plan
-           and "2. Bench: Planner Stop with its control: about 20-30 min" in plan
+           and "2. Bench: Planner Stop with its control: about 25-35 min" in plan
            and ", then 20 trials with the webcam open" in plan
            and "3. Bench: Limelight Reload: about 20 min: about 15 Gradle runs, deploySloth between INITs; drives no "
                "port" in plan
@@ -293,6 +293,11 @@ def plans():
            and "5. Bench: Dashboard Off" in plan and "needs its cable pulls (--interactive)" in plan
            and "webcam trials" not in plan.split("In all")[1]
            and stub.keys() == ["probe", "default", "planner_stop", "limelight_reload", "photon", "dashboard_off"])
+    expect("every optional device: the plan says the default suite's Limelight ball checks need the 4 balls on their "
+           "marks", "Bench: Limelight's ball checks. They FAIL unless 4 Pollen balls sit on taped marks 24, 48, 72 and "
+           "96 in" in plan)
+    expect("a bare hub: no word about the Limelight's balls",
+           "Pollen" not in run_session(["n", "empty"], BARE)[4])
     reload = stub.argv("limelight_reload")
     expect("every optional device: Bench: Limelight Reload's runner gets --limelight-reload, which run_bench.py parses, "
            "and no prompt flag", rb.parse_args(reload[2:]).limelight_reload and "--ports-empty" in reload
@@ -360,6 +365,11 @@ def new_stages():
     expect("--pinpoint-soak with the Pinpoint answered as on the Expansion Hub: no soak, and the plan says why",
            "pinpoint_soak" not in stub.keys() and "not run: Bench: Pinpoint soak: the Pinpoint is Expansion Hub I2C "
            "port 1 (your answer), not in Control Hub I2C port 1" in console.split("=== Plan", 1)[-1])
+    s, stub, hub, code, console, stdin = run_session(["c", "n", "empty"], dict(BARE, usbRevHubs=[USB_EH]),
+                                                     argv=("--usb", "--pinpoint-soak"), setup=usb_eh)
+    expect("--pinpoint-soak with the OctoQuad answered as not in Control Hub I2C port 2: no soak, and the plan says why",
+           "pinpoint_soak" not in stub.keys() and "not run: Bench: Pinpoint soak: the OctoQuad isn't in Control Hub "
+           "I2C port 2 (your answer)" in console.split("=== Plan", 1)[-1] and no_reads_after_start(stdin))
     hw = dict(BARE, limelight={"ipAddress": "172.29.0.1"})
     s, stub, hub, code, console, stdin = run_session(["n", "empty"], hw, gradle=(1, 1))
     expect("a Limelight but no Gradle build: no Bench: Limelight Reload, and the plan says why",
@@ -915,6 +925,27 @@ def needs_a_person():
     expect("a stage with --interactive is refused before it starts", refused)
 
 
+def pinned_addresses():
+    s = S.Session(S.parse_args(["--expansion-address", "3"]))
+    pinned = [b for b in rb.MODULE_BENCHES if b.person is not None and b.person.address is not None]
+    expect("Bench: Config Check and Bench: Camera Power Loss run only with the Expansion Hub at address 2",
+           {b.name: b.person.address for b in pinned} == {"config_check": 2, "camera_power": 2})
+    for b in pinned:
+        command = s.later_flags(b.person_flags, b.name)
+        args = rb.parse_args(command)
+        r = type("R", (), dict(args=args, expansion=2, webcam="UC1", limelight={"ipAddress": "172.29.0.1"}))()
+        expect(f"{b.name}: with --expansion-address 3, its Needs a person command carries no --expansion-address "
+               f"and passes the bench's own needs() ({b.needs(r)})",
+               "--expansion-address" not in command and b.needs(r) is None)
+        expect(f"{b.name}: its line says to set the Expansion Hub to address 2 first",
+               "is at address 3: set it to 2 first" in s.address_note(b.name))
+    expect("a hand-kept prompted bench still gets the session's --expansion-address, with no note",
+           s.later_flags(["--octoquad", "--interactive"], "octoquad")[-2:] == ["--expansion-address", "3"]
+           and s.address_note("octoquad") == "")
+    s = S.Session(S.parse_args([]))
+    expect("at address 2, no note", s.address_note("config_check") == "")
+
+
 def questions():
     stdin = FakeStdin([], tty=False)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -988,6 +1019,19 @@ def runner_flags():
     expect("run_bench.py --probe-only puts the config back and leaves no bench config or forward",
            hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")]
            and not hub.forwards)
+    module = [c for c in rb.BENCH_CONFIGS if c not in rb.IN_PLACE_BENCH_CONFIGS]
+    hub = fake_hub.Hub()
+    for name in module:
+        hub.configs[name] = '<Robot type="FirstInspires-FTC"/>'
+    out = pathlib.Path(tempfile.mkdtemp(prefix="probe-", dir=OUT)) / "run"
+    with hub.installed(rb), contextlib.redirect_stdout(io.StringIO()):
+        code = rb.Runner(rb.parse_args(["--probe-only", "--ports-empty", "--out", str(out)])).run()
+    signal.signal(signal.SIGINT, handlers[0])
+    signal.signal(signal.SIGHUP, handlers[1])
+    expect("session.py's restore (run_bench.py --probe-only) deletes a module bench's config left on the hub, so the "
+           "session's put-back check agrees with it",
+           bool(module) and code == 0 and hub.active["name"] == "betta_decode"
+           and not [n for n in rb.BENCH_CONFIGS if n in hub.configs])
     for argv in (["--probe-only", "--hub"], ["--probe-only", "--all"], ["--photon-soak-hours", "2"],
                  ["--photon-soak", "--photon-soak-hours", "5"], ["--photon-soak", "--photon-soak-hours", "0"]):
         try:
@@ -1005,7 +1049,7 @@ def runner_flags():
 
 def main():
     for section in (plans, new_stages, questions, chain, unsafe, ctrl_c, spawn_cases, install_checks, put_back_cases, needs_a_person,
-                    install_only, runner_flags):
+                    pinned_addresses, install_only, runner_flags):
         try:
             section()
         except Exception as e:

@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import signal
 import sys
 import tempfile
@@ -84,7 +85,8 @@ def good_chain():
                                                "restored": {"bank": QUAD, "interval7Ms": 50}, "faultsAtEnd": "None"}}},
         "guarded": {"outcome": dict(DONE, crashed=True, errorMessage=GUARD_ERROR), "runner": {"stoppedS": 0.6},
                     "result": {"dropout": {"firstInvalidMs": 3000.0, "finishedMs": 3262.0, "badLoops": 12,
-                                           "silentBadLoops": 12}}},
+                                           "silentBadLoops": 12},
+                               "loopPeriodInvalidMs": {"count": 24, "p50": 10.5, "p95": 12.0, "max": 14.0}}},
         "latejoin": {"outcome": dict(DONE), "runner": {"faultSeenS": 3.1, "clearSeenS": 0.4, "validSeenS": 1.8},
                      "result": {"latejoin": {"answeredAtInit": False, "faultMs": 3010.0, "answerMs": 9000.0,
                                              "answerStatus": "NOT_INITIALIZED", "clearMs": 9000.0,
@@ -166,8 +168,25 @@ CASES = [
      lambda v, t: only_fails(v, "seed")),
     ("a start pose 0.5 deg off fails", change(("latejoin", "result", "seed", "maxTurnDeg"), 0.5),
      lambda v, t: only_fails(v, "seed")),
+    ("a late join that crashed fails the start-pose check, though its INIT loops held the pose",
+     change(("latejoin", "outcome"), dict(DONE, crashed=True, errorMessage="java.lang.IllegalStateException: boom")),
+     lambda v, t: only_fails(v, "seed")),
+    ("a late join whose seed phase never ran (never STARTed) fails the start-pose check",
+     change(("latejoin", "result", "seed", "ran"), False), lambda v, t: only_fails(v, "seed")),
     ("the guard stopping after one read (50 ms) fails", change(("guarded", "result", "dropout", "finishedMs"), 3050.0),
      lambda v, t: only_fails(v, "guarded")),
+    ("the guard stopping at 240 ms, under its own 250 ms less 5, fails",
+     change(("guarded", "result", "dropout", "finishedMs"), 3240.0), lambda v, t: only_fails(v, "guarded")),
+    ("the guard stopping at 245 ms passes", change(("guarded", "result", "dropout", "finishedMs"), 3245.0),
+     lambda v, t: only_fails(v)),
+    ("the guard stopping at 274 ms, 2 x the 12 ms loop p95 past 250, passes",
+     change(("guarded", "result", "dropout", "finishedMs"), 3274.0), lambda v, t: only_fails(v)),
+    ("the guard stopping at 275 ms fails", change(("guarded", "result", "dropout", "finishedMs"), 3275.0),
+     lambda v, t: only_fails(v, "guarded")),
+    ("a guard four times slower than its 250 ms (1000 ms) fails",
+     change(("guarded", "result", "dropout", "finishedMs"), 4000.0), lambda v, t: only_fails(v, "guarded")),
+    ("no loop period while invalid: no window, so it fails",
+     change(("guarded", "result", "loopPeriodInvalidMs"), {"count": 0}), lambda v, t: only_fails(v, "guarded")),
     ("the guard taking 1.5 s to stop fails", change(("guarded", "result", "dropout", "finishedMs"), 4500.0),
      lambda v, t: only_fails(v, "guarded")),
     ("the guarded OpMode not stopping by itself fails", change(("guarded", "outcome"), dict(RUNNING)),
@@ -233,8 +252,8 @@ MUTATIONS = [
     ("the control's frozen-pose test is dropped", 'and d.get("poseDuringDropout") == "frozen"', "", {}),
     ("the control's no-fault test is dropped", "bad > 0 and silent == bad and", "bad > 0 and", {}),
     ("the late join's 5 s limit is out of reach", "", "", {"OCTOQUAD_LATE_MS": 10 ** 9}),
-    ("the guard's streak floor is gone", "", "", {"OCTOQUAD_STREAK_MS": (0, 1000)}),
-    ("the guard's ceiling is gone", "", "", {"OCTOQUAD_STREAK_MS": (200, 10 ** 9)}),
+    ("the guard's streak floor is gone", "", "", {"OCTOQUAD_GUARD_LIMIT_MS": 50}),
+    ("the guard's ceiling is gone", "hi = OCTOQUAD_GUARD_LIMIT_MS + 2 * p95", "hi = 10 ** 9 + p95", {}),
     ("the guard's error needn't name the OctoQuad", "OCTOQUAD_GUARD_PREFIX in error.lower() and ", "", {}),
     ("the guard needn't stop by itself", 'bool(o.get("endedItself")) and OCTOQUAD_GUARD', "OCTOQUAD_GUARD", {}),
     ("the early START's 3 s limit is out of reach", "", "", {"OCTOQUAD_EARLY_WAIT_MS": 10 ** 9}),
@@ -242,6 +261,9 @@ MUTATIONS = [
     ("markers read failures are ignored", "and failures == []", "", {}),
     ("the directions needn't match", 'lj.get("directionsMatch") is True', "True", {}),
     ("the late join's seed offset is ignored", "and offset <= PINPOINT_SEED_OFFSET_IN", "", {}),
+    ("a crashed late join's seed passes", 'not o.get("crashed") and seed.get("ran") is True and finite(offset)',
+     'seed.get("ran") is True and finite(offset)', {}),
+    ("a late join's seed needn't have run", 'seed.get("ran") is True and finite(offset)', "finite(offset)", {}),
     ("the replug answer is ignored", "bool(after), f\"answered again", "True, f\"answered again", {}),
 ]
 
@@ -257,6 +279,13 @@ def verdict_cases():
            "pods zeroed False" in text and "pods zeroed True" in text and "rebooted True" in text)
     names = [c[0] for c in checks]
     expect("checks: eight on a good chain, all different", len(names) == 8 and len(set(names)) == 8)
+    guard = (WORKTREE / "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/architecture/hardware/"
+             "GuardedOctoQuadLocalizer.java").read_text()
+    limit = re.search(r"INVALID_LIMIT_NANOS = ([\d_]+)L;", guard)
+    expect("the runner's guard limit is GuardedOctoQuadLocalizer's INVALID_LIMIT_NANOS",
+           limit is not None and int(limit.group(1).replace("_", "")) == rb.OCTOQUAD_GUARD_LIMIT_MS * 1_000_000)
+    expect("the guarded check names its window and where it comes from",
+           "window 245-274 ms: the guard's 250 ms" in next(c[2] for c in checks if c[0].startswith("octoquad guarded")))
 
 
 def mutation_cases():
@@ -302,9 +331,10 @@ class Terminal:
 
 
 class Station(fake_hub.Hub):
-    def __init__(self, present=True, **kw):
+    def __init__(self, present=True, late_fault=True, **kw):
         super().__init__(**kw)
         self.present_octoquad = present
+        self.late_fault = late_fault
         self.inits = []
         self.mode = None
 
@@ -352,7 +382,7 @@ class Station(fake_hub.Hub):
                 self.bench[f"files/bench/octoquad_{self.mode}.json"] = json.dumps(self.result(self.mode))
         super().on_message(session, msg)
         with self.lock:
-            if kind == "INIT_OP_MODE" and name == "Bench: OctoQuad" and self.mode == "latejoin":
+            if kind == "INIT_OP_MODE" and name == "Bench: OctoQuad" and self.mode == "latejoin" and self.late_fault:
                 self.telemetry({rb.KEY_OCTOQUAD_FAULT: "up", rb.KEY_OCTOQUAD_VALID: "false"})
             if kind == "START_OP_MODE" and name == "Bench: OctoQuad":
                 self.telemetry({rb.KEY_OCTOQUAD_VALID: "true", rb.KEY_LOOP: "50"})
@@ -417,6 +447,34 @@ def on_the_fake_hub():
            {"earlystart", "markers", "unguarded", "guarded", "latejoin"} <= set(results.get("octoquad_chain") or {}))
     expect("chain: one config switch to bench_octoquad for the whole chain, and the original config back at the end",
            hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+
+    hub = Station(late_fault=False)
+    code, out, terminal, _ = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
+                                         [None, hub.pull, hub.plug, hub.pull, None])
+    log = (out / "run.log").read_text()
+    expect("no OctoQuad fault at the late join: the plug-in is asked for after the run, and nothing says the cable was in",
+           prompts(out)[-2:] == [rb.OCTOQUAD_PULL_LEAVE[4:], rb.OCTOQUAD_PLUG[4:]] and len(terminal.reads) == 5
+           and "late plug-in skipped" in log and "was in Control Hub" not in log
+           and rb.OCTOQUAD_LEFT_OUT not in log)
+
+    hub = Station()
+    code, out, terminal, interrupted = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
+                                                   [None, hub.pull, hub.plug, hub.pull, KeyboardInterrupt])
+    expect("Ctrl-C at the late plug-in: the log says to plug the OctoQuad back in, and the config is put back",
+           interrupted and rb.OCTOQUAD_LEFT_OUT in (out / "run.log").read_text()
+           and hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+
+    hub = Station()
+    code, out, terminal, interrupted = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
+                                                   [None, hub.pull, KeyboardInterrupt])
+    expect("Ctrl-C at the control's replug: the log says to plug the OctoQuad back in",
+           interrupted and rb.OCTOQUAD_LEFT_OUT in (out / "run.log").read_text())
+
+    hub = Station()
+    code, out, terminal, interrupted = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
+                                                   [KeyboardInterrupt])
+    expect("Ctrl-C at the roll prompt, before any pull: no OctoQuad left-out line",
+           interrupted and rb.OCTOQUAD_LEFT_OUT not in (out / "run.log").read_text())
 
     hub = Station()
     code, out, terminal, _ = station_run(["--octoquad", "--interactive"], hub, [hub.pull, hub.plug])

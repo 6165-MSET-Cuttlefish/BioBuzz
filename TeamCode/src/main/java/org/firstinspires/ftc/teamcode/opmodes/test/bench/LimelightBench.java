@@ -37,6 +37,8 @@ public class LimelightBench extends LinearOpMode {
     private static final double STILL_RADIUS_IN = 6;
     private static final double IN_FLIGHT_S = 0.1;
     private static final double LAST_CHANGE_S = 5;
+    // Limelight3A's POST read timeout is 15 s, so a sync POST in flight at the restore ends within this.
+    private static final double RESTORE_WAIT_S = 20;
     private static final String SENDER_THREAD = "LimelightSync";
 
     private BenchReport report;
@@ -91,11 +93,24 @@ public class LimelightBench extends LinearOpMode {
             ll.setPollRateHz(SDK_DEFAULT_POLL_HZ);
             LimelightBallSource.Tuning.pipeline = savedTuningPipeline;
             LimelightBallSource.Tuning.syncOnInit = savedSyncOnInit;
+            LimelightSync.Request restore = restorePipeline(ll, originalPipeline);
+            long restoreStart = System.nanoTime();
+            // After STOP the SDK restarts the app if this thread outlives its stop window, so the switch lands on its own.
+            while (!restore.isDone() && !isStopRequested() && (System.nanoTime() - restoreStart) / 1e9 < RESTORE_WAIT_S) {
+                report.sendIfDue();
+                sleep(10);
+            }
             report.put("restoredPipeline", originalPipeline);
-            report.put("restoreAccepted", ll.pipelineSwitch(originalPipeline));
+            report.put("restoreDone", restore.isDone());
+            report.put("restoreProblem", restore.problem());
             report.save();
         }
         report.holdUntilStop(this);
+    }
+
+    /** Queued behind any sync POST already sent, which a direct switch could land before. */
+    static LimelightSync.Request restorePipeline(Limelight3A ll, int pipeline) {
+        return LimelightSync.request(ll, pipeline, false);
     }
 
     private LLStatus waitForStatus() {
@@ -658,9 +673,9 @@ public class LimelightBench extends LinearOpMode {
     private void stillBalls(LimelightBallSource source) {
         report.phase("stillBalls");
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("what", "the source and its BallTracker for " + STILL_S + " s with the balls standing still; per ball (a "
-                + "place, radiusIn wide): the visible tracks' position spread around their mean, the speed the tracker "
-                + "reports, the track ids it had and the new frames it was missing from");
+        m.put("what", "the source and its BallTracker for " + STILL_S + " s with the balls standing still; per place "
+                + "(the visible tracked positions within radiusIn of its mean): their spread around that mean, the speed "
+                + "the tracker reports, the track ids it had and the new frames it was missing from");
         m.put("radiusIn", STILL_RADIUS_IN);
         TrackStats stats = new TrackStats(STILL_RADIUS_IN);
         Set<String> problems = new LinkedHashSet<>();

@@ -353,12 +353,14 @@ BENCH = rb.Bench(
     summary=summary,
     needs=needs,
     person=rb.Person(
-        "Bench: Camera Power Loss: you pull and replug the camera hub's power bank three times",
+        "Bench: Camera Power Loss: you pull and replug the camera hub's power bank twice: before an INIT (only if "
+        "the first INIT holds) and mid-run",
         "the webcam and the Limelight 3A on the powered USB hub, its power bank plugged in, on the Control Hub's USB "
         "3.0 port; an Expansion Hub on RS485 at address 2, powered from the Control Hub's second XT30 port; nothing on "
         "either hub's motor ports 0-3 or servo ports 0-5; at the start you type that the ports are empty; about 10 "
         "min",
-        flags=["--camera-power", "--interactive", "--s3-ports"]),
+        flags=["--camera-power", "--interactive", "--s3-ports"],
+        address=EXPANSION_ADDRESS),
     drives=rb.S3_PORTS,
     powers="whatever BioBuzz Tele writes to biobuzz.xml's motors during two INITs (each held 6 s, never STARTed); "
            "Bench: Full Load Soak sets no power (its follower's drive motors on Control Hub motor ports 0-3 stay at 0)",

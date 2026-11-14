@@ -69,6 +69,16 @@ def good_trials():
     return [trial(b, d) for b in rb.PLANNER_STOP_BALLS for d in rb.PLANNER_STOP_DELAYS_S]
 
 
+def named_trials():
+    """--planner-stop's sliced trials: the default run's round, then rounds 2 and 3."""
+    return good_trials() + [trial(b, d, repeat=r) for r in range(2, rb.PLANNER_STOP_REPEATS + 1)
+                            for b in rb.PLANNER_STOP_BALLS for d in rb.PLANNER_STOP_DELAYS_S]
+
+
+NAMED_SLICED = len(rb.PLANNER_STOP_BALLS) * len(rb.PLANNER_STOP_DELAYS_S) * rb.PLANNER_STOP_REPEATS
+NAMED_BEFORE_CAMERA = NAMED_SLICED + len(rb.PLANNER_UNSLICED_DELAYS_S)
+
+
 def changed(trials, balls, delay, **kw):
     for t in trials:
         if t["balls"] == balls and t["delay"] == delay:
@@ -116,6 +126,14 @@ def unsliced(*idles, **kw):
 
 SLICED_CASES = [
     ("every sliced STOP idle in 300 ms with slices under 300 ms: all pass", good_trials, lambda v: only_fails(v)),
+    ("three rounds of them (--planner-stop): all pass", named_trials, lambda v: only_fails(v)),
+    ("three rounds with one round-3 trial lost: that ball count's two checks fail",
+     lambda: [t for t in named_trials() if (t["balls"], t["delay"], t.get("repeat")) != (5, 0.3, 3)],
+     lambda v: only_fails(v, ("restart", 5), ("idle", 5))),
+    ("a round-2 STOP at 950 ms fails the idle check, naming it",
+     lambda: [dict(t, hubStopToIdleMs=950.0) if (t["balls"], t["delay"], t.get("repeat")) == (4, 0.6, 2) else t
+              for t in named_trials()],
+     lambda v: only_fails(v, ("idle", 4))),
     ("an app restart fails that ball count's restart check alone",
      lambda: changed(good_trials(), 4, 0.3, restarted=True), lambda v: only_fails(v, ("restart", 4))),
     ("a stuck-in-stop marker without a restart fails it too",
@@ -327,17 +345,17 @@ def verdict_cases():
 
 
 SLICED_MUTATIONS = [
-    ("restarts aren't looked at", 'restarted = [f"{t[\'delay\']} s" for t in ran if t["restarted"] or t["markers"]]',
+    ("restarts aren't looked at", 'restarted = [planner_trial(t) for t in ran if t["restarted"] or t["markers"]]',
      'restarted = []'),
-    ("the stop window is raised out of reach", "\n" + " " * 54 + "and t[\"hubStopToIdleMs\"] < SDK_STOP_WINDOW_MS)]",
-     "\n" + " " * 54 + "and t[\"hubStopToIdleMs\"] < 1e9)]"),
-    ("a missing idle line passes", "slow = [f\"{t['delay']} s\" for t in ran if not (t.get(\"hubStopToIdleMs\") is not None",
-     "slow = [f\"{t['delay']} s\" for t in ran if not (t.get(\"hubStopToIdleMs\") is None or True"),
+    ("the stop window is raised out of reach", "\n" + " " * 53 + "and t[\"hubStopToIdleMs\"] < SDK_STOP_WINDOW_MS)]",
+     "\n" + " " * 53 + "and t[\"hubStopToIdleMs\"] < 1e9)]"),
+    ("a missing idle line passes", "slow = [planner_trial(t) for t in ran if not (t.get(\"hubStopToIdleMs\") is not None",
+     "slow = [planner_trial(t) for t in ran if not (t.get(\"hubStopToIdleMs\") is None or True"),
     ("the slice limit is raised out of reach", "max(slices) < PLANNER_SLICE_MAX_MS", "max(slices) < 1e9"),
     ("a trial with no slice isn't missed", "len(slices) == len(ran) and bool(ran) and max(slices)",
      "bool(ran) and max(slices)"),
-    ("unfinished trials aren't counted", "ok = len(ran) == len(PLANNER_STOP_DELAYS_S) and not restarted\n",
-     "ok = not restarted\n"),
+    ("unfinished trials aren't counted", "ok = len(ran) == expected and not restarted\n", "ok = not restarted\n"),
+    ("a run's rounds aren't counted", "* max([t.get(\"repeat\") or 1 for t in trials] or [1])", "* 1"),
 ]
 
 
@@ -401,9 +419,9 @@ class PlannerHub(fake_hub.Hub):
     Probe finds a webcam, and a camera=1 trial closes it in close_ms(run_id)."""
 
     def __init__(self, idle_ms=lambda run_id: 300.0, restarts=lambda run_id: False, close_ms=lambda run_id: 560.0,
-                 webcam=False, **kw):
+                 webcam=False, no_frames=False, **kw):
         super().__init__(**kw)
-        self.idle_ms, self.restarts, self.close_ms = idle_ms, restarts, close_ms
+        self.idle_ms, self.restarts, self.close_ms, self.no_frames = idle_ms, restarts, close_ms, no_frames
         if webcam:
             self.probe["webcams"] = [{"attached": True, "serial": "UC762"}]
         self.runs, self.messages, self.init_configs = [], [], []
@@ -418,13 +436,20 @@ class PlannerHub(fake_hub.Hub):
                                         f"{tag}: {text}"))
 
     def _report(self, stop_event, plans, params):
-        n = 0
+        n = frames = 0
         while not stop_event.wait(0.02):
+            frames += 1 if params.get("camera") and not self.no_frames else 0
+            camera = {rb.KEY_FRAMES: str(frames)} if params.get("camera") else {}
             if params.get("planFrom") == "start" and self.status["activeOpModeStatus"] != "RUNNING":
+                if camera:
+                    self.dash.broadcast({"type": "RECEIVE_TELEMETRY", "telemetry": [
+                        {"data": camera, "timestamp": self.clock, "fieldOverlay": {"ops": []}}]})
+                continue
+            if frames < params.get("framesBeforePlanning", 0):
                 continue
             n += 1
             plans[0] = n
-            data = {rb.KEY_PLANS: str(n), rb.KEY_PHASE: "planning", rb.KEY_STATUS: f"{n} plans"}
+            data = {rb.KEY_PLANS: str(n), rb.KEY_PHASE: "planning", rb.KEY_STATUS: f"{n} plans", **camera}
             if n >= 3:
                 data[rb.KEY_DONE] = "warm; the runner presses STOP mid-plan"
             self.dash.broadcast({"type": "RECEIVE_TELEMETRY", "telemetry": [
@@ -447,9 +472,9 @@ class PlannerHub(fake_hub.Hub):
         if params.get("camera"):
             close = self.close_ms(run_id)
             start = params.get("planFrom") == "start"
-            out["camera"] = {"framesAtStart": 0 if start else None, "framesAtStop": 0 if start else 31,
-                             "framesAtFirstPlan": 0 if start else params.get("framesBeforePlanning", 0),
-                             "cellTipStopMs": close}
+            frames = params.get("framesBeforePlanning", 0)
+            out["camera"] = {"framesAtStart": frames if start else None, "framesAtStop": frames + 31 if start else 31,
+                             "framesAtFirstPlan": frames, "cellTipStopMs": close}
             out["stop"].update(stopPassToOnEndMs=close + 6.0)
             if start:
                 out["timeline"].update(startMs=230.0, firstPlanMs=234.0)
@@ -527,13 +552,15 @@ def sliced_on_the_fake_hub():
     inits = [p for k, o, p in hub.messages if k == "INIT_OP_MODE" and o == OPMODE]
     sliced = [{"balls": b, "runId": f"b{b}_d{int(d * 1000)}"} for b in rb.PLANNER_STOP_BALLS
               for d in rb.PLANNER_STOP_DELAYS_S]
-    expect("--planner-stop: the six sliced trials ran first, in order, with only balls and runId as params",
-           inits[:len(sliced)] == sliced)
+    sliced += [{"balls": b, "runId": f"b{b}_d{int(d * 1000)}_{r}"} for r in range(2, rb.PLANNER_STOP_REPEATS + 1)
+               for b in rb.PLANNER_STOP_BALLS for d in rb.PLANNER_STOP_DELAYS_S]
+    expect("--planner-stop: the 18 sliced trials (each ball count and delay, three rounds) ran first, in order, with "
+           "only balls and runId as params", inits[:NAMED_SLICED] == sliced and len(sliced) == 18)
     expect("--planner-stop: Bench: Planner Stop was never STARTed",
            not [m for m in hub.messages if m[0] == "START_OP_MODE" and m[1] == OPMODE])
     expect("--planner-stop: every sliced check passes on 300 ms STOPs",
            all(check_line(text, f"planner stop {b} balls").startswith("- PASS") for b in rb.PLANNER_STOP_BALLS)
-           and "hub STOP to idle [300.0, 300.0, 300.0] ms" in text)
+           and "9 of 9 trials ran" in text and "hub STOP to idle [" + ", ".join(["300.0"] * 9) + "] ms" in text)
     rec = (results.get("planner_stop_b4_d50") or {}).get("runner") or {}
     expect("record: the hub's STOP to idle, where STOP landed and the pid before and after, per trial",
            rec.get("hubStopToIdleMs") == 300.0 and rec.get("planAtStop") and rec.get("sliceLeftMs") == 12.0
@@ -572,8 +599,8 @@ def control_on_the_fake_hub():
     text = (out / "summary.md").read_text()
     results = json.loads((out / "runner_results.json").read_text())
     inits = [p for k, o, p in hub.messages if k == "INIT_OP_MODE" and o == OPMODE]
-    expect("--planner-stop: after the six sliced trials, three unsliced ones on 4 balls with unsliced=1",
-           inits[6:] == [{"balls": 4, "runId": f"unsliced_b4_d{int(d * 1000)}", "unsliced": 1}
+    expect("--planner-stop: after the 18 sliced trials, three unsliced ones on 4 balls with unsliced=1",
+           inits[NAMED_SLICED:] == [{"balls": 4, "runId": f"unsliced_b4_d{int(d * 1000)}", "unsliced": 1}
                          for d in rb.PLANNER_UNSLICED_DELAYS_S])
     expect("--planner-stop: the control fired on 1200 ms STOPs and a restart, and its check passes",
            check_line(text, "planner stop unsliced control").startswith("- PASS")
@@ -605,8 +632,8 @@ def control_on_the_fake_hub():
 
 
 def camera_params():
-    replan = [{"balls": 4, "runId": f"camera_plan_d{int(d * 1000)}_{r}", "camera": 1, "framesBeforePlanning": 10}
-              for r in range(1, 4) for d in rb.PLANNER_STOP_DELAYS_S]
+    replan = [{"balls": 4, "runId": f"camera_plan_d{int(d * 1000)}_{r}", "camera": 1, "framesBeforePlanning": 10,
+               "planFrom": "start"} for r in range(1, 4) for d in rb.PLANNER_STOP_DELAYS_S]
     init = [{"balls": 4, "runId": f"camera_init_d{int(d * 1000)}_{r}", "camera": 1} for r in range(1, 4)
             for d in rb.PLANNER_CAMERA_INIT_DELAYS_S]
     return replan + init + [{"balls": 4, "runId": f"camera_worst_{r}", "camera": 1, "planFrom": "start"}
@@ -621,14 +648,21 @@ def camera_on_the_fake_hub():
     own = [(k, p.get("runId")) for k, o, p in hub.messages if o == OPMODE]
     inits = [p for k, o, p in hub.messages if k == "INIT_OP_MODE" and o == OPMODE]
     expect("with a webcam: after the sliced and unsliced trials, 9 replanning, 6 INIT and 5 worst-case webcam trials, "
-           "in that order, with the plan's params", inits[9:] == camera_params())
+           "in that order, with the plan's params", inits[NAMED_BEFORE_CAMERA:] == camera_params())
     starts = [run_id for k, run_id in own if k == "START_OP_MODE"]
     order_ok = all(own.index(("INIT_OP_MODE", r)) < own.index(("START_OP_MODE", r)) < own.index(("STOP_OP_MODE", r))
                    for r in starts)
-    expect("with a webcam: only the worst-case trials are STARTed, each between its INIT and its STOP",
-           starts == [f"camera_worst_{r}" for r in range(1, 6)] and order_ok)
+    replans = [f"camera_plan_d{int(d * 1000)}_{r}" for r in range(1, 4) for d in rb.PLANNER_STOP_DELAYS_S]
+    expect("with a webcam: the replanning trials (they plan in RUN, as Ball Collection Auto does) and the worst cases "
+           "are STARTed, each between its INIT and its STOP; the INIT trials never are",
+           starts == replans + [f"camera_worst_{r}" for r in range(1, 6)] and order_ok)
+    replan = (results.get("planner_stop_camera_plan_d300_1") or {}).get("runner") or {}
+    expect("record, replanning: 10 frames in INIT before START, then 3 warm plans in RUN, STOP 0.3 s after the next",
+           replan.get("framesSeconds") is not None and replan.get("warmSeconds") is not None
+           and replan.get("nextPlanSeconds") is not None and replan.get("framesAtStart") == 10
+           and "failed" not in replan)
     expect("with a webcam: every webcam trial ran on bench_main, which names the probe's webcam aprilTagDetector",
-           set(hub.init_configs[9:]) == {rb.CONFIG_MAIN}
+           set(hub.init_configs[NAMED_BEFORE_CAMERA:]) == {rb.CONFIG_MAIN}
            and 'Webcam name="aprilTagDetector" serialNumber="UC762"' in (out / "logs" / "bench_main.xml").read_text())
     expect("with a webcam: its three checks pass, the worst case reproduced by 560 ms closes",
            all(check_line(text, f"planner stop with the webcam: {w}").startswith("- PASS")
@@ -647,10 +681,22 @@ def camera_on_the_fake_hub():
            and init.get("hubStopToIdleMs") == 700.0 and "startSentS" not in init)
     expect("with a webcam: the run ends with the config put back", put_back(hub))
 
+    hub = PlannerHub(webcam=True, no_frames=True, idle_ms=lambda run_id: 1200.0 if run_id.startswith("unsliced") else
+                     700.0)
+    code, out = dry_run(["--planner-stop"], hub)
+    results = json.loads((out / "runner_results.json").read_text())
+    starts = [p.get("runId") for k, o, p in hub.messages if k == "START_OP_MODE" and o == OPMODE]
+    expect("a webcam that gives no frames: no replanning trial is STARTed, each fails saying so, the run goes on",
+           not [r for r in starts if r.startswith("camera_plan")] and len(starts) == 5
+           and "didn't give 10 fresh frames in INIT" in results["planner_stop_camera_plan_d50_1"].get("failed", "")
+           and check_line((out / "summary.md").read_text(), "STOP never restarts").startswith("- FAIL")
+           and put_back(hub))
+
     hub = PlannerHub(webcam=True, idle_ms=lambda run_id: 1200.0 if run_id.startswith("unsliced") else 300.0)
     code, out = dry_run(["--absent", "--planner-stop"], hub)
     expect("after Bench: Webcam Stop (absent) left bench_nowebcam active, the webcam trials switch back to bench_main",
-           hub.init_configs[:9] == [rb.CONFIG_NO_WEBCAM] * 9 and set(hub.init_configs[9:]) == {rb.CONFIG_MAIN}
+           hub.init_configs[:NAMED_BEFORE_CAMERA] == [rb.CONFIG_NO_WEBCAM] * NAMED_BEFORE_CAMERA
+           and set(hub.init_configs[NAMED_BEFORE_CAMERA:]) == {rb.CONFIG_MAIN}
            and put_back(hub))
 
     hub = PlannerHub(webcam=True, close_ms=lambda run_id: 300.0,
@@ -701,10 +747,12 @@ def default_on_the_fake_hub():
         r.link.close()
     inits = [p for k, o, p in hub.messages if k == "INIT_OP_MODE" and o == OPMODE]
     text = "\n".join(r.summary)
-    expect("no bench flags, a webcam plugged in: only the six sliced trials, and a line saying how to run the rest",
-           len(inits) == 6 and not [p for p in inits if "unsliced" in p or "camera" in p]
-           and "_The unsliced control and, with a webcam plugged in, the webcam trials run only when --planner-stop "
-               "is given._" in text and not [c for c in r.checks if "unsliced control" in c[0] or "webcam" in c[0]])
+    expect("no bench flags, a webcam plugged in: only the six sliced trials, once each, and a line saying how to run "
+           "the rest", [p["runId"] for p in inits] == [f"b{b}_d{int(d * 1000)}" for b in rb.PLANNER_STOP_BALLS
+                                                       for d in rb.PLANNER_STOP_DELAYS_S]
+           and "_Each sliced trial ran once. The other 2 rounds, the unsliced control and, with a webcam plugged in, "
+               "the webcam trials run only when --planner-stop is given._" in text
+           and all("3 of 3 trials ran" in c[2] for c in r.checks if "never restarts" in c[0]) and not [c for c in r.checks if "unsliced control" in c[0] or "webcam" in c[0]])
 
 
 def main():

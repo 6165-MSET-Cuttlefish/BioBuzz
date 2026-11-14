@@ -256,6 +256,11 @@ def verdict_cases():
     text = "\n".join(rb.pinpoint_soak_checks(*soak_args(res))[1])
     expect("summary: a streak's start, status, reads and time to READY, and the held guard's stop",
            "[187000.0, 'FAULT_BAD_READ', 1, 11.0]" in text and "have stopped 187.0 s" in text)
+    res = edit(lambda s: s["status"].update(notReadyAfterFirstReady=500, streakCount=5))
+    text = "\n".join(rb.pinpoint_soak_checks(*soak_args(res))[1])
+    expect("summary: non-READY reads give the streak rate seen, never the rule of three's none-in-N bound",
+           "rule of three: with none" not in text and "500 non-READY reads in 26170" in text
+           and "a streak starts 1.91e-04 per read" in text and "about 61.2% chance" in text)
     text = "\n".join(rb.pinpoint_soak_checks(*soak_args(edit(lambda s: s["drift"].update(octoQuad=None))))[1])
     expect("summary: a missing control says the Pinpoint's drift isn't judged", "isn't judged" in text)
 

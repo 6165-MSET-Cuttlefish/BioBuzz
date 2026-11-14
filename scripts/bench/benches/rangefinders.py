@@ -32,12 +32,14 @@ BUDGET_MS = 10
 CONTROL_MS = 20
 DWELL_RANGE = {BUDGET_MS: (9.0, 12.0), CONTROL_MS: (18.0, 22.0)}
 CARD_MM = 150
-ANALOG_RANGE_MM = (0, 1300)
 DISTANCE_MODES = {1: "SHORT", 2: "MEDIUM", 3: "LONG"}
 ANALOG_PIN = 1
 MIN_ROI = 4
-# LaserRangefinder.setTiming refuses a nonzero period under the budget + 3 ms.
+# LaserRangefinder.setTiming refuses a budget outside 5-1000 ms and a nonzero period under the budget + 3 ms.
+BUDGET_LIMITS_MS = (5, 1000)
 MIN_PERIOD_MARGIN_MS = 3
+# LaserRangefinder.setROI refuses a corner outside 0-15.
+ROI_MAX = 15
 READ_FIELDS = ("pin0", "pin1", "distanceModeRaw", "timing", "roi", "opticalCenter")
 ARRANGEMENTS = (
     ("base", "each sensor on its own cable, A in Control Hub analog port 1, B in port 3",
@@ -170,33 +172,39 @@ def save_statics(r, values):
 
 
 def settings_for(found, budget=None):
-    """Configure Laser Rangefinder's statics that write `found` back, with the timing budget changed if given."""
+    """Configure Laser Rangefinder's statics that write `found` back exactly, with the timing budget changed if given
+    (a measurement period too short for that budget is then written as 0, and noted). The sensor saves whatever it is
+    given, so settings it can't write back exactly are refused before anything is written."""
     s = found.get("settings") or {}
-    notes = []
+    refused = []
     mode = DISTANCE_MODES.get(s.get("distanceModeRaw"))
     if mode is None:
-        raise rb.BenchError(f"rangefinder A's distance mode reads {s.get('distanceModeRaw')}, which {CONFIGURE} can't "
-                            "write back, so the bench writes nothing to it")
+        refused.append(f"its distance mode reads {s.get('distanceModeRaw')}")
     tlx, tly, brx, bry = s["roi"]
     size = brx - tlx + 1
     cx, cy = s["opticalCenter"]
     if size < MIN_ROI or tly - bry + 1 != size or (tlx, tly) != (cx - size // 2, cy + size // 2 - 1):
-        notes.append(f"its ROI {s['roi']} isn't the centred {size}x{size} square {CONFIGURE} writes")
-    size = max(MIN_ROI, size)
+        refused.append(f"its ROI {s['roi']} isn't a square of 4x4 or more centred on its optical centre {[cx, cy]}")
+    elif not all(0 <= v <= ROI_MAX for v in s["roi"]):
+        refused.append(f"its ROI {s['roi']} doesn't fit the sensor's 0-{ROI_MAX} grid")
     pin0, pin1 = s["pin0"], s["pin1"]
-    if pin0[0] == ANALOG_PIN and pin0[1] < pin0[2]:
-        low, high = pin0[1], pin0[2]
-    else:
-        low, high = ANALOG_RANGE_MM
-        notes.append(f"pin 0 isn't in analog mode ({pin0}), so {CONFIGURE}'s default range {low}-{high} mm is written")
+    if pin0[0] != ANALOG_PIN:
+        refused.append(f"pin 0 isn't in analog mode ({pin0})")
     if pin1 != pin0:
-        notes.append(f"pin 1 {pin1} differs from pin 0 {pin0}; {CONFIGURE} writes both the same")
-    budget = s["timing"][0] if budget is None else budget
-    period = s["timing"][1]
+        refused.append(f"pin 1 {pin1} differs from pin 0 {pin0}, and {CONFIGURE} writes both the same")
+    found_budget, period = s["timing"]
+    low_budget, high_budget = BUDGET_LIMITS_MS
+    if not low_budget <= found_budget <= high_budget or (period != 0 and period < found_budget + MIN_PERIOD_MARGIN_MS):
+        refused.append(f"its timing {s['timing']} (budget, period in ms) isn't one {CONFIGURE} can write")
+    if refused:
+        raise rb.BenchError(f"rangefinder A's settings can't be written back as found, so nothing was written to it: "
+                            f"{'; '.join(refused)}")
+    notes = []
+    budget = found_budget if budget is None else budget
     if period != 0 and period < budget + MIN_PERIOD_MARGIN_MS:
         notes.append(f"its measurement period {period} ms is too short for a {budget} ms budget, so 0 is written")
         period = 0
-    return {"values": {"analogLowMm": low, "analogHighMm": high, "distanceMode": mode, "timingBudgetMs": budget,
+    return {"values": {"analogLowMm": pin0[1], "analogHighMm": pin0[2], "distanceMode": mode, "timingBudgetMs": budget,
                        "measurementPeriodMs": period, "roiSize": size},
             "notes": notes}
 
@@ -246,22 +254,27 @@ def configure(r, c, key, settings):
         raise rb.BenchError(f"{CONFIGURE} crashed writing rangefinder A: {c[key]['error']!r}")
 
 
+def unplug_a(r, c):
+    where = "analog port 1" if c["aOn"] == "analog" else "I2C port 3"
+    do(r, f"Unplug rangefinder A's cable from Control Hub {where} and keep it in your hand.")
+    c["aOn"] = "hand"
+
+
 def restore(r, record, c, found):
-    """Writes A's as-found settings back and reads them back. A is on I2C port 3 still, or back on analog port 1."""
-    if c["aOn"] == "analog":
-        do(r, "Unplug rangefinder A's cable from Control Hub analog port 1 and keep it in your hand.")
-        put_back(record, "A", "rangefinder A's cable into Control Hub analog port 1")
+    """Writes A's as-found settings back and reads them back, waking A on I2C port 3 before each read: once Configure
+    Laser Rangefinder has written its pins, A stops answering on I2C until it is replugged."""
+    unplug_a(r, c)
+    put_back(record, "A", "rangefinder A's cable into Control Hub analog port 1")
+    if r.active_config() != CONFIG_I2C:
         r.activate_config(CONFIG_I2C, rb.hub_config([I2C_LINE]))
-        before = wake_and_read(r, c, "before_restore")
-        c["aOn"] = "i2c"
-    else:
-        if r.active_config() != CONFIG_I2C:
-            r.activate_config(CONFIG_I2C, rb.hub_config([I2C_LINE]))
-        before = read_settings(r, c, "before_restore", plug=False)
+    before = wake_and_read(r, c, "before_restore")
+    c["aOn"] = "i2c"
     if before is None:
         raise rb.BenchError("rangefinder A didn't answer on I2C for the write back, so it may keep the 20 ms control")
     configure(r, c, "restore", settings_for(found))
-    c["readBack"] = read_settings(r, c, "read_back", plug=False)
+    unplug_a(r, c)
+    c["readBack"] = wake_and_read(r, c, "read_back")
+    c["aOn"] = "i2c"
     do(r, "Move rangefinder A's cable from Control Hub I2C port 3 to analog port 1.")
     c["aOn"] = "analog"
     put_back(record, "A")
@@ -270,36 +283,38 @@ def restore(r, record, c, found):
 
 def control(r, record, still_a):
     """The 20 ms control on A: read its settings over I2C, write a 20 ms budget, time it on analog port 1, then write
-    the settings it had back, whatever happened in between (Ctrl-C aside, which only logs how to do it by hand)."""
+    the settings it had back, whatever happened in between (Ctrl-C included; only a lost hub, or a second Ctrl-C during
+    the write back, leaves it to be done by hand, and the log says how)."""
     c = record["control"] = {"aOn": "analog"}
     if CONFIGURE not in {name for name, _ in r.dash.opmodes or []}:
         c["notRun"] = f"the hub has no OpMode {CONFIGURE!r}"
         return
     do(r, "Unplug the Prism from Control Hub I2C port 3.")
     put_back(record, "Prism", "the Prism into Control Hub I2C port 3")
-    do(r, "Unplug rangefinder A's cable from Control Hub analog port 1 and keep it in your hand.")
-    c["aOn"] = "hand"
+    unplug_a(r, c)
     put_back(record, "A", "rangefinder A's cable into Control Hub analog port 1")
     r.activate_config(CONFIG_I2C, rb.hub_config([I2C_LINE]))
     found = wake_and_read(r, c, "as_found")
     if found is None:
-        c["notRun"] = "rangefinder A didn't answer on I2C twice, so nothing was written to it"
-        do(r, "Plug rangefinder A's cable back into Control Hub analog port 1.")
-        c["aOn"] = "analog"
-        put_back(record, "A")
-        prism_back(r, record)
+        skip_control(r, record, c, "rangefinder A didn't answer on I2C twice, so nothing was written to it")
         return
     c["aOn"] = "i2c"
     c["asFound"] = found["settings"]
     (r.out / "raw" / "rangefinder_asfound.json").write_text(json.dumps({"A": found["settings"]}, indent=1))
     try:
-        configure(r, c, "write_20", settings_for(found, budget=CONTROL_MS))
+        settings_for(found)
+        write_20 = settings_for(found, budget=CONTROL_MS)
+    except rb.BenchError as e:
+        skip_control(r, record, c, str(e))
+        return
+    try:
+        configure(r, c, "write_20", write_20)
         do(r, "Move rangefinder A's cable from Control Hub I2C port 3 to analog port 1.")
         c["aOn"] = "analog"
         put_back(record, "A")
         r.activate_config(CONFIG_ANALOG, rb.hub_config(analog_lines()))
         record["rate"]["control_A"] = rate(r, "control_A", A, "A", still_a, CONTROL_MS)
-    except (KeyboardInterrupt, rb.ProtocolError, rb.OtherHub):
+    except (rb.ProtocolError, rb.OtherHub):
         if c.get("touched"):
             r.log(LEFT_WRITTEN)
         raise
@@ -307,8 +322,11 @@ def control(r, record, still_a):
         if not c.get("touched"):
             raise
         c["failedBeforeRestore"] = f"{type(e).__name__}: {e}"
-        r.log(f"!! the control stopped ({e}); writing rangefinder A's as-found settings back first")
+        r.log(f"!! the control stopped ({type(e).__name__}: {e}); writing rangefinder A's as-found settings back first "
+              "(Ctrl-C again to skip that)")
         try:
+            # A Ctrl-C just after an INIT is sent can leave that OpMode in INIT, unseen by run_opmode's STOP.
+            r.settle()
             restore(r, record, c, found)
         except BaseException:
             r.log(LEFT_WRITTEN)
@@ -319,6 +337,14 @@ def control(r, record, still_a):
     except BaseException:
         r.log(LEFT_WRITTEN)
         raise
+    prism_back(r, record)
+
+
+def skip_control(r, record, c, why):
+    c["notRun"] = why
+    do(r, "Move rangefinder A's cable from Control Hub I2C port 3 to analog port 1.")
+    c["aOn"] = "analog"
+    put_back(record, "A")
     prism_back(r, record)
 
 

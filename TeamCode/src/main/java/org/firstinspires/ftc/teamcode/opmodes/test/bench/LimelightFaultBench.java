@@ -63,6 +63,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
     private String mode;
     private String faultKey;
     private double runSeconds;
+    private boolean creep;
     private int restorePipeline;
 
     private long initStartNs;
@@ -105,6 +106,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
         report = new BenchReport("Limelight Fault", "limelight_fault_" + mode);
         faultKey = BenchIO.param(report.params, "faultKey", "Limelight");
         runSeconds = BenchIO.param(report.params, "runSeconds", 15);
+        creep = BenchIO.param(report.params, "creep", 1) != 0;
         restorePipeline = (int) BenchIO.param(report.params, "restorePipeline", -1);
         ll = BenchIO.require(hardwareMap, Limelight3A.class, LimelightBallSource.LIMELIGHT_NAME, BenchIO.RUNNER_HINT);
         bench = new FaultRobot(this);
@@ -116,6 +118,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("mode", mode);
         info.put("faultKey", faultKey);
+        info.put("creep", creep);
         info.put("devices", BenchIO.deviceNames(hardwareMap));
         info.put("ballPipeline", LimelightBallSource.Tuning.pipeline);
         info.put("staleFrameSeconds", LimelightBallSource.Tuning.staleFrameSeconds);
@@ -169,7 +172,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
         if (finished) return;
         runLoops++;
         if (Faults.has(faultKey)) runLoopsFaulted++;
-        bench.drivetrain.setMecanumTargets(0.2, 0.1, 0.05, false);
+        if (creep) bench.drivetrain.setMecanumTargets(0.2, 0.1, 0.05, false);
         tick("running");
         recordCollection(false);
         double elapsed = (System.nanoTime() - runStartNs) / 1e9;
@@ -293,7 +296,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
     private void finish() {
         Map<String, Object> m = new LinkedHashMap<>();
         double seconds = (System.nanoTime() - runStartNs) / 1e9;
-        m.put("what", "after START: loop period split by fault state, Drivetrain writing mecanum targets every loop");
+        m.put("what", "after START: loop period split by fault state" + (creep ? ", Drivetrain writing mecanum targets every loop" : ""));
         m.put("seconds", seconds);
         m.put("loops", runLoops);
         m.put("loopsFaulted", runLoopsFaulted);

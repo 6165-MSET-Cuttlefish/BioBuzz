@@ -153,12 +153,17 @@ CASES = [
     ("a switch-only sync over 1 s fails its check alone", edit((P + ("sync", "switchOnly", "ms"), 1100.0)), {"switch"}),
     ("a switch-only sync with a problem fails it",
      edit((P + ("sync", "switchOnly", "problem"), "pipeline 4 is a pipe_fiducial pipeline, not Python")), {"switch"}),
+    ("a switch-only sync not done, though quick and with no problem, fails it",
+     edit((P + ("sync", "switchOnly", "done"), False), (P + ("sync", "switchOnly", "ms"), 300.0)), {"switch"}),
     ("syncOnInit off without a frame fails its check alone",
      edit((P + ("sync", "syncOnInitOff", "gotFrame"), False),
           (P + ("sync", "syncOnInitOff", "problem"), "unknown SCRIPT_ID 7 on pipeline 4, want 1")), {"off"}),
     ("no sync phase fails all three sync checks", edit((P + ("sync",), DROP)), {"upload", "switch", "off"}),
     ("INIT to the first frame over 2.5 s fails that check alone",
      edit((P + ("staleness", "firstFrame", "ms"), 2600.0)), {"first"}),
+    ("no first frame, though timed at 100 ms with no problem, fails that check alone",
+     edit((P + ("staleness", "firstFrame", "gotFrame"), False), (P + ("staleness", "firstFrame", "ms"), 100.0)),
+     {"first"}),
     ("98.5% of loops publishing balls fails the staleness check alone",
      edit((P + ("staleness", "loopsWithBalls"), 19503)), {"stale"}),
     ("exactly 99% passes", edit((P + ("staleness", "loopsWithBalls"), 19602)), set()),
@@ -176,6 +181,15 @@ CASES = [
     ("a ball seen in under half the frames is a flicker, leaving 3 balls: the count fails alone",
      edit((P + ("stillBalls", "balls", 2, "framesSeen"), 69),
           (P + ("stillBalls", "balls", 2, "maxDeviationIn"), 5.0)), {"count"}),
+    ("a ball read 7 in off on 20% of its frames, same id: that place is it jumping, so its deviation fails",
+     lambda: at(good_record(), P + ("stillBalls", "balls"), [ball(x) for x in (-5.6, 18.4, 42.4, 66.4)]
+                + [ball(73.4, framesSeen=28, samples=28, maxDeviationIn=0.2)]), {"deviation"}),
+    ("the same jump under a new track id fails the id check too",
+     lambda: at(good_record(), P + ("stillBalls", "balls"), [ball(x) for x in (-5.6, 18.4, 42.4, 66.4)]
+                + [ball(66.4, meanYIn=11.9, framesSeen=28, samples=28, ids=[11])]), {"deviation", "ids"}),
+    ("a flicker over 12 in from every ball is no ball's jump: nothing fails",
+     lambda: at(good_record(), P + ("stillBalls", "balls"), [ball(x) for x in (-5.6, 18.4, 42.4, 66.4)]
+                + [ball(30.4, meanYIn=6.0, framesSeen=10, samples=10, ids=[12])]), set()),
     ("five balls fail the count alone", lambda: at(good_record(), P + ("stillBalls", "balls"),
                                                    [ball(x) for x in (-5.6, 18.4, 30.0, 42.4, 66.4)]), {"count"}),
     ("no ball at all fails the count and every per-ball check",
@@ -233,6 +247,11 @@ def verdict_cases():
            text.count("| -5.6, 0.2 |") == 1 and text.count("| 66.4, 0.2 |") == 1
            and all(f"pipeline change {k}:" in text for k in ("toOther", "back", "otherInFlight", "last"))
            and "'problem': 'cancelled'" in text)
+    jumping = at(good_record(), P + ("stillBalls", "balls"), [ball(x) for x in (-5.6, 18.4, 42.4, 66.4)]
+                 + [ball(73.4, framesSeen=28, samples=28)])
+    text = "\n".join(rb.limelight_ball_summary(jumping))
+    expect("summary: a jump's row names the ball it belongs to, and the grouping is said",
+           "| 73.4, 0.2 (ball at x 66.4 jumping, 7.0 in) |" in text and "within 6 in of its mean" in text)
     dirty = edit((P + ("staleness", "replayEpisodes"), {"0.4": 3, "0.5": 1, "0.6": 1, "0.7": 1}),
                  (P + ("staleness", "smallestCleanThresholdS"), None))()
     expect("summary: no clean threshold is said so",
@@ -245,6 +264,10 @@ MUTATIONS = [
     ("an upload sync's problem is ignored",
      'all(r.get("done") is True and r.get("problem") is None and', 'all(r.get("done") is True and'),
     ("the switch-only time limit is lifted", "LIMELIGHT_SWITCH_SYNC_MS = 1000", "LIMELIGHT_SWITCH_SYNC_MS = 1e9"),
+    ("a switch-only sync needn't be done", 'switch.get("done") is True and switch.get("problem")',
+     'switch.get("problem")'),
+    ("the first frame needn't have come", 'first.get("gotFrame") is True and first.get("problem")',
+     'first.get("problem")'),
     ("syncOnInit off needn't get a frame", 'off.get("gotFrame") is True and off.get("problem") is None,', "True,"),
     ("the first-frame limit is lifted", "LIMELIGHT_FIRST_FRAME_MS = 2500", "LIMELIGHT_FIRST_FRAME_MS = 1e9"),
     ("90% publishing is enough", "LIMELIGHT_PUBLISHED_SHARE = 0.99", "LIMELIGHT_PUBLISHED_SHARE = 0.9"),
@@ -256,8 +279,13 @@ MUTATIONS = [
     ("exactly 2 in passes", 'b["maxDeviationIn"] < LIMELIGHT_STILL_DEVIATION_IN',
      'b["maxDeviationIn"] <= LIMELIGHT_STILL_DEVIATION_IN'),
     ("4 in/s passes", "LIMELIGHT_STILL_SPEED_IPS = 3.0", "LIMELIGHT_STILL_SPEED_IPS = 4.0"),
-    ("one id change passes", 'lambda b: b.get("idChanges") == 0', 'lambda b: b.get("idChanges") <= 1'),
-    ("no ball passes the per-ball checks", "bool(real) and all(ok(b) for b in real)", "all(ok(b) for b in real)"),
+    ("one id change passes", 'lambda b, j: b.get("idChanges") == 0', 'lambda b, j: b.get("idChanges") <= 1'),
+    ("no ball passes the per-ball checks", "bool(real) and all(ok(b, j) for b, j in zip(real, jumps))",
+     "all(ok(b, j) for b, j in zip(real, jumps))"),
+    ("a jump passes the deviation check", "lambda b, j: (not j and finite", "lambda b, j: (finite"),
+    ("only a place within the place radius is a jump", "LIMELIGHT_STILL_CAPTURE_IN = 12.0",
+     "LIMELIGHT_STILL_CAPTURE_IN = 6.0"),
+    ("a jump's new id isn't an id change", 'b.get("idChanges") == 0 and not jump_ids(b, j)', 'b.get("idChanges") == 0'),
     ("two senders pass", 'pc["sendersMax"] <= 1', 'pc["sendersMax"] <= 2'),
     ("the comeback limit is lifted", "LIMELIGHT_CHANGE_FRESH_MS = 3000", "LIMELIGHT_CHANGE_FRESH_MS = 1e9"),
     ("the final pipeline isn't looked at", 'pc.get("finalPipelineIndex") == ball_pipeline,', "True,"),

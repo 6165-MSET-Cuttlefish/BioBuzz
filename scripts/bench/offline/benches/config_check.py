@@ -13,6 +13,7 @@ import signal
 import sys
 import tempfile
 import traceback
+from xml.etree import ElementTree
 
 sys.dont_write_bytecode = True
 HERE = pathlib.Path(__file__).resolve().parent
@@ -77,16 +78,25 @@ def crash(record, opmode, error, **kw):
     return record
 
 
+class Verdicts(dict):
+    """{(OpMode or 'probe', 'lookups' or 'clean'): PASS/FAIL}, with each check's detail in .detail."""
+
+
 def verdicts(checks_fn, record):
-    """{(OpMode or 'probe', 'lookups' or 'clean'): PASS/FAIL} from a checks function."""
-    out = {}
+    out = Verdicts()
+    out.detail = {}
     for name, ok, detail, means in checks_fn(record):
         if "port probe" in name:
-            out[("probe", "")] = ok
-            continue
-        opmode = next(o for o in ROBOT_OPMODES if f": {o} on " in name)
-        out[(opmode, "lookups" if "every hardware lookup" in name else "clean")] = ok
+            key = ("probe", "")
+        else:
+            opmode = next(o for o in ROBOT_OPMODES if f": {o} on " in name)
+            key = (opmode, "lookups" if "every hardware lookup" in name else "clean")
+        out[key], out.detail[key] = ok, detail
     return out
+
+
+def not_judged(v, opmode):
+    return v.detail[(opmode, "lookups")].startswith("not judged")
 
 
 def on_one_hub(record):
@@ -128,19 +138,25 @@ CASES = [
     ("an OpMode not run fails both",
      lambda: (pair(r := good_record(), "Decode Tele").update(notRun="this install doesn't ship cuttle_decode"), r)[1],
      lambda v: only_fails(v, ("Decode Tele", "lookups"), ("Decode Tele", "clean"))),
-    ("the webcam failing to open with another serial attached is allowed",
-     lambda: crash(good_record(), "Cell Tip Test", WEBCAM), lambda v: only_fails(v)),
-    ("the webcam failing to open with the config's own serial attached fails",
+    ("the webcam failing to open with another serial attached is explained, but its lookups after it didn't run: "
+     "not judged, so not a PASS",
+     lambda: crash(good_record(), "Cell Tip Test", WEBCAM),
+     lambda v: only_fails(v, ("Cell Tip Test", "lookups")) and not_judged(v, "Cell Tip Test")),
+    ("the webcam failing to open with the config's own serial attached fails, as unexplained",
      lambda: (lambda r: (r.update(webcams=["UC852"]), r)[1])(crash(good_record(), "Cell Tip Test", WEBCAM)),
-     lambda v: only_fails(v, ("Cell Tip Test", "lookups"))),
-    ("Decode Tele's Pinpoint fault (its config has it on the Expansion Hub) is allowed",
-     lambda: crash(good_record(), "Decode Tele", PINPOINT), lambda v: only_fails(v)),
-    ("the same Pinpoint error from a BioBuzz OpMode fails: the allowance is Decode Tele's",
-     lambda: crash(good_record(), "BioBuzz Tele", PINPOINT), lambda v: only_fails(v, ("BioBuzz Tele", "lookups"))),
+     lambda v: only_fails(v, ("Cell Tip Test", "lookups")) and not not_judged(v, "Cell Tip Test")),
+    ("Decode Tele stopping at its Pinpoint (its config has it on the Expansion Hub): no lookup after it ran, so not "
+     "judged, not a PASS",
+     lambda: crash(good_record(), "Decode Tele", PINPOINT),
+     lambda v: only_fails(v, ("Decode Tele", "lookups")) and not_judged(v, "Decode Tele")),
+    ("the same Pinpoint error from a BioBuzz OpMode fails as unexplained: the allowance is Decode Tele's",
+     lambda: crash(good_record(), "BioBuzz Tele", PINPOINT),
+     lambda v: only_fails(v, ("BioBuzz Tele", "lookups")) and not not_judged(v, "BioBuzz Tele")),
     ("a missing device is never allowed, even one Decode Tele's allowance names",
      lambda: crash(good_record(), "Decode Tele", 'Unable to find a hardware device with name "pinpoint" and type '
                                                  'SparkFunOTOS'),
-     lambda v: only_fails(v, ("Decode Tele", "lookups"))),
+     lambda v: only_fails(v, ("Decode Tele", "lookups"))
+     and v.detail[("Decode Tele", "lookups")].startswith("INIT stopped at a missing device")),
     ("a NullPointerException naming an allowed device still fails",
      lambda: crash(good_record(), "Decode Tele", NPE + " in prism"),
      lambda v: only_fails(v, ("Decode Tele", "lookups"), ("Decode Tele", "clean"))),
@@ -161,6 +177,13 @@ CASES = [
      lambda v: only_fails(v, ("probe", ""))),
     ("no probe result fails",
      lambda: (lambda r: (r.pop("portProbe"), r)[1])(good_record()), lambda v: only_fails(v, ("probe", ""))),
+    ("a probe that says a port drew current, with no busy row, fails",
+     lambda: (lambda r: (r["portProbe"].update(empty=False), r)[1])(good_record()),
+     lambda v: only_fails(v, ("probe", ""))),
+    ("a probe of five motor ports over both hubs fails",
+     lambda: (lambda r: (r["portProbe"].update(ports=r["portProbe"]["ports"][:3] + r["portProbe"]["ports"][4:6]),
+                         r)[1])(good_record()),
+     lambda v: only_fails(v, ("probe", ""))),
 ]
 
 
@@ -198,9 +221,14 @@ MUTATIONS = [
      "if False:"),
     ("any webcam open failure is allowed", "and config_cameras[m.group(1)] not in webcams_attached:", ":"),
     ("the probe needn't cover both hubs", "and len(hubs) == PROBE_HUBS", ""),
+    ("the probe's own verdict is ignored", "(probe or {}).get(\"empty\") is True and ", ""),
+    ("the probe needn't cover all eight motor ports",
+     "\n          and len(rows) == PROBE_HUBS * PROBE_MOTORS_PER_HUB)", ")"),
     ("any crash passes the lookup check", "    elif pair.get(\"crashed\"):\n        lookups = (False,",
      "    elif False:\n        lookups = (False,"),
     ("a lost run passes", "    if pair.get(\"failed\"):", "    if False:"),
+    ("a crash at an allowed device passes the lookup check", 'lookups = (False, f"not judged:',
+     'lookups = (True, f"not judged:'),
 ]
 
 
@@ -351,6 +379,11 @@ def on_the_fake_hub():
            names[names.index("bench_photon") + 1:names.index("bench_photon") + 5] == list(cc.CONFIGS)
            and probe.get("probeOnly") == 1 and probe.get("expansion") == 2 and "Bench: Photon Stock" in starts
            and 'name="efl" port="0"' in (out / "logs" / "bench_photon.xml").read_text())
+    photon = ElementTree.fromstring((out / "logs" / "bench_photon.xml").read_text())
+    servo_ports = sorted({(module.get("port"), e.get("port")) for module in photon.iter() for e in module
+                          if "servo" in e.tag.lower()})
+    expect("bench_photon names servos on ports 0 and 1 of each hub only, as the probe's servos=2 would",
+           servo_ports == [("173", "0"), ("173", "1"), ("2", "0"), ("2", "1")])
     shipped = [s for s in hub.switched if s["name"] in cc.CONFIGS]
     expect("four shipped configs, each activated by name with this install's resource id",
            [s["name"] for s in shipped] == list(cc.CONFIGS)
@@ -362,9 +395,12 @@ def on_the_fake_hub():
     expect("summary: Turret Aim Test's missing NectarTurret fails its lookup check",
            check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup").startswith("- FAIL")
            and "'NectarTurret' as Servo" in check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup"))
-    expect("summary: the webcam with another serial and Decode Tele's Pinpoint pass as allowed faults",
-           check_line(summary, "Cell Tip Test on camera: every hardware lookup").startswith("- PASS")
-           and check_line(summary, "Decode Tele on cuttle_decode: every hardware lookup").startswith("- PASS"))
+    expect("summary: the webcam with another serial and Decode Tele's Pinpoint stop INIT where this station explains "
+           "it, so their lookups FAIL as not judged",
+           check_line(summary, "Cell Tip Test on camera: every hardware lookup").startswith("- FAIL")
+           and "not judged" in check_line(summary, "Cell Tip Test on camera: every hardware lookup")
+           and check_line(summary, "Decode Tele on cuttle_decode: every hardware lookup").startswith("- FAIL")
+           and "not judged" in check_line(summary, "Decode Tele on cuttle_decode: every hardware lookup"))
     expect("summary: the OpModes that held INIT pass, and the probe passes",
            check_line(summary, "BioBuzz Tele on biobuzz: every hardware lookup").startswith("- PASS")
            and check_line(summary, "port probe").startswith("- PASS"))

@@ -70,10 +70,14 @@ PROMPTED = (
      "follower)", ["--pinpoint", "--interactive"],
      "the goBILDA Pinpoint in Control Hub I2C port 1, both pods plugged in and still"),
     ("octoquad", "the OctoQuad's I2C cable pulled and replugged in Bench: OctoQuad", ["--octoquad", "--interactive"],
-     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 3 and 4, still"),
+     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 3 and 4, still, and nothing else on it: no "
+     "split cable from a hub's encoder port, since the pull cuts the OctoQuad's power while the hub still powers that "
+     "encoder"),
     ("octoquad_chain", "Bench: OctoQuad's chain: a pod rolled by hand, the cable pulled under Pedro's localizer and "
      "replugged, pulled under the guard, and plugged in during INIT", ["--octoquad", "--octoquad-chain", "--interactive"],
-     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 0 and 1, still; about 12 min at the hub"),
+     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 0 and 1, still, and nothing else on it: no "
+     "split cable from a hub's encoder port, since the bench cuts the OctoQuad's power while the hub still powers that "
+     "encoder; about 12 min at the hub"),
     ("expansion", "Bench: Expansion Hub again with the Pinpoint and OctoQuad moved to the Expansion Hub",
      ["--expansion", "--interactive"],
      "an Expansion Hub on RS485 on its own 12 V, the Pinpoint in Control Hub I2C port 1 and the OctoQuad in port 2"),
@@ -89,6 +93,12 @@ PROMPTED = (
      "the OctoQuad in Control Hub I2C port 2 with nothing on its channel 4, a REV Through Bore V1 on a stand with a "
      "12-mark dial, the REV-31-1815 cable, the split cable, a multimeter; about 25 min at the hub"),
 ) + rb.needs_a_person()
+
+
+def pinned_address(key):
+    """The Expansion Hub address a bench in scripts/bench/benches/ must run at, or None."""
+    bench = rb.module_bench(key) if key else None
+    return bench.person.address if bench is not None and bench.person is not None else None
 
 
 class Stop(Exception):
@@ -724,6 +734,9 @@ class Session:
                                  limit_s=4 * 3600, minutes=minutes))
         self.plan_planner_stop(hw.get("webcam"))
         self.plan_limelight_reload(hw.get("limelight"))
+        if hw.get("limelight"):
+            self.notes.append(f"The Limelight answers, so the default suite runs Bench: Limelight's ball checks. They "
+                              f"FAIL unless {rb.LIMELIGHT_BALL_LAYOUT}.")
         if self.pinpoint == "expansion-hub":
             self.notes.append("The Pinpoint is in Expansion Hub I2C port 1, so the default suite's Bench: Pinpoint finds "
                               "none in Control Hub I2C port 1 and runs Bench: Pinpoint Absent in its place"
@@ -766,9 +779,9 @@ class Session:
         self.print_plan(devices)
 
     def plan_planner_stop(self, webcam):
-        minutes = (20, 30) if webcam else (10, 15)
-        about = (f"about {minutes[0]}-{minutes[1]} min: its six sliced trials again, then the unsliced control, which is "
-                 "meant to overrun STOP, so the app may restart three times"
+        minutes = (25, 35) if webcam else (15, 20)
+        about = (f"about {minutes[0]}-{minutes[1]} min: its sliced trials three times each (18), then the unsliced "
+                 "control, which is meant to overrun STOP, so the app may restart three times"
                  + (", then 20 trials with the webcam open" if webcam else ""))
         self.stages.append(Stage("planner_stop", "Bench: Planner Stop with its control", ["--planner-stop"], about,
                                  drives={CH}, limit_s=2 * 3600, minutes=minutes))
@@ -794,6 +807,9 @@ class Session:
         elif self.pinpoint in ("expansion-hub", "none"):
             self.skipped.append((title, f"the Pinpoint is {PINPOINT_PLACES[self.pinpoint]} (your answer), not in "
                                         "Control Hub I2C port 1"))
+        elif self.octoquad is False:
+            self.skipped.append((title, "the OctoQuad isn't in Control Hub I2C port 2 (your answer): the soak judges the "
+                                        "Pinpoint's drift against the OctoQuad's heading"))
         else:
             self.stages.append(Stage("pinpoint_soak", title, ["--pinpoint-soak"],
                                      "about 70 min: Bench: Pinpoint, then an hour with the Pinpoint and the OctoQuad "
@@ -1034,7 +1050,8 @@ class Session:
             lines.append("Each runs on its own, from the repo root, once its hardware is on the table and the bench "
                          "ports are empty:\n")
             for key, what, flags, have in self.needs:
-                lines.append(f"- **{what}** ({key}). Have: {have}.\n  `{command(self.later_flags(flags))}`")
+                lines.append(f"- **{what}** ({key}). Have: {have}{self.address_note(key)}.\n  "
+                             f"`{command(self.later_flags(flags, key))}`")
             lines.append("")
         lines.append("## By hand afterwards\n")
         lines += [f"- {t}" for t in self.by_hand()]
@@ -1043,11 +1060,18 @@ class Session:
                      "and logs/.")
         (self.folder / "summary.md").write_text("\n".join(lines) + "\n")
 
-    def later_flags(self, flags):
+    def later_flags(self, flags, key=None):
         link = []
         if self.args.usb:
             link = ["--usb"] + (["--serial", self.adb.serial] if self.adb is not None and self.adb.serial else [])
-        return list(flags) + ["--ports-empty"] + link + self.address_flags()
+        return list(flags) + ["--ports-empty"] + link + ([] if pinned_address(key) else self.address_flags())
+
+    def address_note(self, key):
+        pinned = pinned_address(key)
+        if pinned is None or pinned == self.args.expansion_address:
+            return ""
+        return (f" (this session's Expansion Hub is at address {self.args.expansion_address}: set it to {pinned} "
+                "first)")
 
     def by_hand(self):
         out = []

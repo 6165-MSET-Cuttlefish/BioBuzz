@@ -26,7 +26,9 @@ LOOKUP_LITERALS = (re.compile(r'\.get\(\s*[\w.]+\.class\s*,\s*"([^"]+)"\s*\)'),
 
 LOOKUP_MEANS = ("this OpMode can't INIT on the config it ships for: its code asks for a device the config doesn't "
                 "name (or names with another type), or INIT stopped on an error this station doesn't explain before "
-                "every lookup ran; fix the config (res/xml) or the code's device name")
+                "every lookup ran; fix the config (res/xml) or the code's device name. 'Not judged': INIT stopped at a "
+                "device that is elsewhere at this station, and the code throws there instead of reporting a fault and "
+                "going on, so the lookups after it are unchecked (step 1's source list covers some)")
 CLEAN_MEANS = ("INIT on its own config threw a NullPointerException, took over 10 s to show or to stop, or restarted "
                "the Robot Controller app: a driver would see the app hang or restart at INIT")
 PROBE_MEANS = ("a motor port on the Control Hub or the Expansion Hub drew current, or the probe didn't cover both hubs' "
@@ -68,7 +70,7 @@ def missing_device(error):
 
 
 def allowed_fault(pair, webcams_attached, config_cameras, elsewhere):
-    """Why this INIT error is a fault of a device that is elsewhere or absent at this station, or None."""
+    """Why this INIT error is about a device that is elsewhere or absent at this station, or None."""
     error = (pair.get("error") or "") if pair.get("crashed") else ""
     if not error or missing_device(error) or NULL_POINTER in error:
         return None
@@ -97,7 +99,8 @@ def pair_checks(pair, webcams_attached, config_cameras, elsewhere):
         lookups = (False, f"INIT stopped at a missing device: {missing['name']!r}"
                           + (f" as {missing['type']}" if missing["type"] else "") + f" ({error[:240]!r})")
     elif pair.get("crashed") and allowed is not None:
-        lookups = (True, f"INIT stopped at an allowed fault: {allowed}; lookups after it didn't run ({error[:200]!r})")
+        lookups = (False, f"not judged: INIT stopped at {allowed}, so the lookups after it didn't run and this station "
+                          f"can't check them ({error[:200]!r})")
     elif pair.get("crashed"):
         lookups = (False, f"INIT threw {error[:240]!r}, which isn't a fault this station explains, so the lookups "
                           "after it didn't run")
@@ -319,7 +322,8 @@ BENCH = rb.Bench(
         "an Expansion Hub on RS485 at address 2, powered from the Control Hub's second XT30 port; nothing on either "
         "hub's motor ports 0-3 or servo ports 0-5; the Pinpoint in Control Hub I2C port 1, the OctoQuad in port 2, the "
         "Prism in port 3, the webcam and the Limelight on the Control Hub's USB; at the start you type that the ports "
-        "are empty; about 8 min"),
+        "are empty; about 8 min",
+        address=EXPANSION_ADDRESS),
     drives=rb.S3_PORTS,
     powers="Bench: Photon Stock's port probe at 0.1 power for 0.2 s on each motor port 0-3 of both hubs, one at a "
            "time; then whatever each robot OpMode writes to its config's motors and servos during INIT (held 4 s, "

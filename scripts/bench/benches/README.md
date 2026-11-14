@@ -34,10 +34,10 @@ The file gets `rb`, `run_bench.py`'s own globals, before it runs: `rb.Bench`, `r
 | `options` | its own flags, as `(("--name-thing", {argparse keywords}),)`; start each with the bench's flag |
 | `default` | `True`: in a run without bench flags and in `--all`. `False` (the usual): only with its flag |
 | `needs` | `needs(r)` returns `None`, or one plain sentence, no final period, saying what is missing and where to plug it in. A default run skips the bench with that sentence; a run that names the bench stops, adding ", or drop --flag" |
-| `person` | `rb.Person(what, have, flags=None)` if it waits for someone: `session.py` then lists it under Needs a person with the command and what to have on the table, and never runs it |
+| `person` | `rb.Person(what, have, flags=None, address=None)` if it waits for someone: `session.py` then lists it under Needs a person with the command and what to have on the table, and never runs it. `address`: the Expansion Hub address the bench must run at; its command then never carries the session's `--expansion-address`, and the line says to set the hub to that address when the session's differs |
 | `drives` | `rb.Ports(ch_motors=..., ch_servos=..., eh_motors=..., eh_servos=...)`: every port it drives |
 | `powers` | what it commands on those ports, in plain words (logged when it runs) |
-| `configs` | the configs it activates: `bench_*` ones it writes (deleted at the end) and shipped `res/xml` names |
+| `configs` | the configs it activates: `bench_*` ones it writes (deleted at the end of a run that ran it, and by every `--probe-only` run) and shipped `res/xml` names (checked when the bench is chosen: a run that names it stops if this checkout doesn't ship one, a default run skips it) |
 | `opmodes` | the bench OpModes it runs; the runner refuses a hub that lacks one |
 | `run` | `run(r, record)`: the hub steps; fills `record`, a dict that must turn into JSON |
 | `checks` | `checks(record)`: a list of `(name, ok, detail, what a FAIL means)`. It reads the record only |

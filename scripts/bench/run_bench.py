@@ -449,8 +449,10 @@ CLOCK_PENDING = ("regression: PathCommands.timeout ended early or late while the
                  "System.currentTimeMillis() again, as Ivy's Commands.waitMs does")
 
 KEY_PLANS = "Bench plans"
+KEY_FRAMES = "Bench frames"
 PLANNER_STOP_BALLS = (4, 5)
 PLANNER_STOP_DELAYS_S = (0.05, 0.3, 0.6)
+PLANNER_STOP_REPEATS = 3
 PLANNER_STOP_WARM = 3
 PLANNER_STOP_WARM_WAIT_S = 180
 PLANNER_STOP_SEEN = re.compile(r"planner_stop (\S+) STOP seen (?:between plans|([\d.]+) ms into plan (\d+))")
@@ -476,6 +478,7 @@ PLANNER_UNSLICED_DELAYS_S = (0.05, 0.15, 0.3)
 PLANNER_CONTROL_WORDS = {"fired": "fired", "not fired": "didn't fire", "not finished": "didn't finish"}
 PLANNER_CAMERA_BALLS = 4
 PLANNER_CAMERA_FRAMES = 10
+PLANNER_CAMERA_FRAMES_WAIT_S = 30
 PLANNER_CAMERA_REPEATS = 3
 PLANNER_CAMERA_INIT_DELAYS_S = (0.0, 0.3)
 PLANNER_CAMERA_WORST_TRIALS = 5
@@ -2418,11 +2421,14 @@ LIMELIGHT_STILL_BALLS = 4
 LIMELIGHT_STILL_SEEN_SHARE = 0.5
 LIMELIGHT_STILL_DEVIATION_IN = 2.0
 LIMELIGHT_STILL_SPEED_IPS = 3.0
+# Half the 24 in between the S2 marks: a flicker nearer a ball than this is that ball's reading jumping.
+LIMELIGHT_STILL_CAPTURE_IN = 12.0
 LIMELIGHT_CHANGE_FRESH_MS = 3000
 LIMELIGHT_CHANGE_LOOP_MS = 50
 LIMELIGHT_WRONG_PIPELINE = re.compile(r"on pipeline (-?\d+), want (-?\d+)")
-LIMELIGHT_NO_BALLS = ("no Pollen ball was in the Limelight's view: the S2 setup puts 4 balls on taped marks at 24, 48, "
-                      "72 and 96 in on the camera's centreline, with the Limelight about 15.5 in up and 15.9 deg down")
+LIMELIGHT_BALL_LAYOUT = ("4 Pollen balls sit on taped marks 24, 48, 72 and 96 in from the lens on the camera's "
+                         "centreline, with the Limelight about 15.5 in up and tilted about 15.9 deg down")
+LIMELIGHT_NO_BALLS = f"no Pollen ball was in the Limelight's view: the S2 setup has {LIMELIGHT_BALL_LAYOUT}"
 
 
 def still_balls(phase):
@@ -2431,6 +2437,23 @@ def still_balls(phase):
     balls = [b for b in phase.get("balls") or [] if isinstance(b, dict)]
     real = [b for b in balls if frames and (b.get("framesSeen") or 0) >= LIMELIGHT_STILL_SEEN_SHARE * frames]
     return real, [b for b in balls if b not in real]
+
+
+def still_jumps(real, flickers):
+    """Per real ball, [(flicker, distance in)] for each flicker within LIMELIGHT_STILL_CAPTURE_IN of it (given to the
+    nearest ball): a place the tracked position jumped to, beyond the radius that makes one place."""
+    jumps = [[] for _ in real]
+    for f in flickers:
+        near = [(math.hypot(f["meanXIn"] - b["meanXIn"], f["meanYIn"] - b["meanYIn"]), i) for i, b in enumerate(real)
+                if all(finite(p.get(k)) for p in (f, b) for k in ("meanXIn", "meanYIn"))]
+        if near and min(near)[0] <= LIMELIGHT_STILL_CAPTURE_IN:
+            distance, i = min(near)
+            jumps[i].append((f, distance))
+    return jumps
+
+
+def jump_ids(ball, jumps):
+    return [i for f, _ in jumps for i in f.get("ids") or [] if i not in (ball.get("ids") or [])]
 
 
 def limelight_ball_checks(ll, ball_pipeline=BALL_PIPELINE):
@@ -2496,24 +2519,32 @@ def limelight_ball_checks(ll, ball_pipeline=BALL_PIPELINE):
                 "fewer: a ball out of view or not detected at its distance (the summary lists what was seen); more: a "
                 "false detection or one ball split into two places"))
 
+    jumps = still_jumps(real, flickers)
+
     def per_ball(name, ok, value, means):
-        out.append((f"limelight still balls: {name}", bool(real) and all(ok(b) for b in real),
-                    "; ".join(f"ball at x {b.get('meanXIn', 0):.1f} in: {value(b)}" for b in real) or "no ball seen",
-                    LIMELIGHT_NO_BALLS if not real else means))
+        out.append((f"limelight still balls: {name}", bool(real) and all(ok(b, j) for b, j in zip(real, jumps)),
+                    "; ".join(f"ball at x {b.get('meanXIn', 0):.1f} in: {value(b, j)}" for b, j in zip(real, jumps))
+                    or "no ball seen", LIMELIGHT_NO_BALLS if not real else means))
+
+    def jumped(j):
+        return "".join(f"; jumped {d:.1f} in away in {f.get('framesSeen')} frames (ids {f.get('ids')})" for f, d in j)
 
     per_ball(f"max deviation under {LIMELIGHT_STILL_DEVIATION_IN:g} in at every distance",
-             lambda b: finite(b.get("maxDeviationIn")) and b["maxDeviationIn"] < LIMELIGHT_STILL_DEVIATION_IN,
-             lambda b: f"max {b.get('maxDeviationIn')} in, SD {b.get('sdIn')} in",
+             lambda b, j: (not j and finite(b.get("maxDeviationIn"))
+                           and b["maxDeviationIn"] < LIMELIGHT_STILL_DEVIATION_IN),
+             lambda b, j: f"max {b.get('maxDeviationIn')} in, SD {b.get('sdIn')} in{jumped(j)}",
              "a still ball's tracked position wanders past the planner's 2 in replan distance "
-             "(VisionBallCollectionTest's replanMoveIn), so it would replan with nothing moving")
+             "(VisionBallCollectionTest's replanMoveIn), so it would replan with nothing moving; a jump is a reading "
+             f"of it more than {still.get('radiusIn')} in from where it sits")
     per_ball(f"reported speed p95 under {LIMELIGHT_STILL_SPEED_IPS:g} in/s",
-             lambda b: finite(b.get("speedP95Ips")) and b["speedP95Ips"] < LIMELIGHT_STILL_SPEED_IPS,
-             lambda b: f"p50 {b.get('speedP50Ips')} / p95 {b.get('speedP95Ips')} in/s",
+             lambda b, j: finite(b.get("speedP95Ips")) and b["speedP95Ips"] < LIMELIGHT_STILL_SPEED_IPS,
+             lambda b, j: f"p50 {b.get('speedP50Ips')} / p95 {b.get('speedP95Ips')} in/s",
              "the tracker reports still balls as moving (its isMoving() threshold is 3 in/s)")
-    per_ball("no track id changes", lambda b: b.get("idChanges") == 0,
-             lambda b: f"ids {b.get('ids')}, missing from {b.get('framesMissing')} frames",
-             "a still ball got a new track id: the tracker lost it (missed frames past maxMisses) or forked a "
-             "duplicate, which a plan following ids sees as a new ball")
+    per_ball("no track id changes", lambda b, j: b.get("idChanges") == 0 and not jump_ids(b, j),
+             lambda b, j: (f"ids {b.get('ids')}, missing from {b.get('framesMissing')} frames"
+                           + (f"; ids {jump_ids(b, j)} where it jumped to" if jump_ids(b, j) else "")),
+             "a still ball got a new track id: the tracker lost it (missed frames past maxMisses), forked a "
+             "duplicate or followed a jump under a new id, which a plan following ids sees as a new ball")
     pc = ph.get("pipelineChange") or {}
     last = pc.get("last") or {}
     out.append(("limelight pipeline change: never more than one LimelightSync thread",
@@ -2573,12 +2604,17 @@ def limelight_ball_summary(ll):
     still = ph.get("stillBalls") or {}
     if still:
         real, flickers = still_balls(still)
-        s += [f"- still balls, {still.get('seconds')} s, {still.get('frames')} new frames, a ball being a place "
-              f"{still.get('radiusIn')} in wide (tracked positions in the camera's frame):", "",
+        near = {id(f): (b, d) for b, j in zip(real, still_jumps(real, flickers)) for f, d in j}
+        s += [f"- still balls, {still.get('seconds')} s, {still.get('frames')} new frames (tracked positions in the "
+              f"camera's frame). A place is the samples within {still.get('radiusIn')} in of its mean; a ball is a "
+              f"place seen in at least half the frames; any other place is a flicker, and a flicker within "
+              f"{LIMELIGHT_STILL_CAPTURE_IN:g} in of a ball is that ball jumping:", "",
               "| ball at x, y (in) | frames seen / missing | SD / max deviation / spread (in) | speed p50 / p95 / max "
               "(in/s) | track ids |", "|---|---|---|---|---|"]
         for b in real + flickers:
-            s.append(f"| {b.get('meanXIn', 0):.1f}, {b.get('meanYIn', 0):.1f}{'' if b in real else ' (flicker)'} | "
+            tag = ("" if b in real else f" (ball at x {near[id(b)][0].get('meanXIn', 0):.1f} jumping, "
+                   f"{near[id(b)][1]:.1f} in)" if id(b) in near else " (flicker)")
+            s.append(f"| {b.get('meanXIn', 0):.1f}, {b.get('meanYIn', 0):.1f}{tag} | "
                      f"{b.get('framesSeen')} / {b.get('framesMissing')} | {b.get('sdIn', 0):.2f} / "
                      f"{b.get('maxDeviationIn', 0):.2f} / {b.get('maxSpreadIn', 0):.2f} | {b.get('speedP50Ips', 0):.2f} / "
                      f"{b.get('speedP95Ips', 0):.2f} / {b.get('speedMaxIps', 0):.2f} | {b.get('ids')} |")
@@ -5078,9 +5114,15 @@ def planner_camera_checks(camera):
     ]
 
 
+def planner_trial(t):
+    return f"{t['delay']} s" + (f" #{t['repeat']}" if t.get("repeat") else "")
+
+
 def planner_stop_checks(trials, unsliced=(), camera=()):
-    """(name, ok, detail, fail_means) for Bench: Planner Stop, from its trial records alone."""
+    """(name, ok, detail, fail_means) for Bench: Planner Stop, from its trial records alone. A run that named
+    --planner-stop has each ball count and delay PLANNER_STOP_REPEATS times; a run without bench flags, once."""
     out = []
+    expected = len(PLANNER_STOP_DELAYS_S) * max([t.get("repeat") or 1 for t in trials] or [1])
     control = planner_control_verdict(unsliced) if unsliced else None
     unproven = (f"; unproven on this layout: the unsliced control {PLANNER_CONTROL_WORDS[control[0]]} "
                 f"({control[1]})" if control is not None and control[0] != "fired" else "")
@@ -5090,27 +5132,27 @@ def planner_stop_checks(trials, unsliced=(), camera=()):
         plans = [ms for t in ran for ms in t["plans"]]
         slices = [dig(t, "stepMs", "max") for t in ran if dig(t, "stepMs", "count")]
         periods = [dig(t, "loopPeriodMs", "max") for t in ran if dig(t, "loopPeriodMs", "count")]
-        restarted = [f"{t['delay']} s" for t in ran if t["restarted"] or t["markers"]]
+        restarted = [planner_trial(t) for t in ran if t["restarted"] or t["markers"]]
         mid = [t for t in ran if t["planAtStop"]]
-        ok = len(ran) == len(PLANNER_STOP_DELAYS_S) and not restarted
+        ok = len(ran) == expected and not restarted
         out.append((f"planner stop {balls} balls: STOP during replanning never restarts the app", ok,
-                    f"{len(ran)} of {len(PLANNER_STOP_DELAYS_S)} trials ran, {len(mid)} with STOP mid-plan; plans "
+                    f"{len(ran)} of {expected} trials ran, {len(mid)} with STOP mid-plan; plans "
                     f"{fmt_plans(plans)}; restarts or stuck markers after STOP at {restarted or 'none'}"
-                    + "".join(f"; {t['delay']} s back to Robot Status: running {t['hubStopToRunningS']} s after STOP "
-                              "(hub clock)" for t in ran if t.get("hubStopToRunningS") is not None)
+                    + "".join(f"; {planner_trial(t)} back to Robot Status: running {t['hubStopToRunningS']} s after "
+                              "STOP (hub clock)" for t in ran if t.get("hubStopToRunningS") is not None)
                     + (note if ok else ""),
-                    PLANNER_STOP_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
+                    PLANNER_STOP_PENDING if len(ran) == expected else
                     "a trial didn't finish (see the table), so not every STOP was tried"))
         idle = [t.get("hubStopToIdleMs") for t in ran]
-        slow = [f"{t['delay']} s" for t in ran if not (t.get("hubStopToIdleMs") is not None
-                                                      and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
-        ok = len(ran) == len(PLANNER_STOP_DELAYS_S) and not slow
+        slow = [planner_trial(t) for t in ran if not (t.get("hubStopToIdleMs") is not None
+                                                     and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
+        ok = len(ran) == expected and not slow
         out.append((f"planner stop {balls} balls: the hub logs every STOP reaching idle within {SDK_STOP_WINDOW_MS} ms "
                     "('auto-stopping' to '***STOP - OPMODE***')", ok,
                     f"hub STOP to idle {idle} ms (None: no such line, as after a restart); at or over "
                     f"{SDK_STOP_WINDOW_MS} ms or missing at {slow or 'none'}; the runner saw "
                     f"{[t['stopSeconds'] for t in ran]} s through its status polling" + (note if ok else ""),
-                    PLANNER_STOP_IDLE_PENDING if len(ran) == len(PLANNER_STOP_DELAYS_S) else
+                    PLANNER_STOP_IDLE_PENDING if len(ran) == expected else
                     "a trial didn't finish (see the table), so not every STOP was timed"))
         if balls == PLANNER_JUDGED_BALLS:
             out.append((f"planner stop {balls} balls: every planner slice returns within {PLANNER_SLICE_MAX_MS} ms",
@@ -5153,14 +5195,14 @@ def planner_stop_summary(trials, unsliced=(), camera=(), notes=()):
          "(s) | stuck markers |",
          "|---|---|---|---|---|---|---|---|---|---|---|"]
     for trial in trials:
-        balls, delay = trial["balls"], trial["delay"]
+        balls, delay = trial["balls"], planner_trial(trial)
         if "failed" in trial:
-            s.append(f"| {balls} | {delay} s | FAILED: {trial['failed']} | | | | | | | | |")
+            s.append(f"| {balls} | {delay} | FAILED: {trial['failed']} | | | | | | | | |")
             continue
         landed = planner_stop_landed(trial)
         if trial.get("warmSeconds") is None:
             landed += f" (never reached {PLANNER_STOP_WARM} plans; STOP came after the 10 s timeout)"
-        s.append(f"| {balls} | {delay} s | {len(trial['plans'])} | {landed} | {planner_ms(trial.get('sliceLeftMs'))} | "
+        s.append(f"| {balls} | {delay} | {len(trial['plans'])} | {landed} | {planner_ms(trial.get('sliceLeftMs'))} | "
                  f"{planner_ms(trial.get('stopToStopPassMs'))} | {planner_ms(trial.get('hubStopToIdleMs'))} | "
                  f"{trial['stopSeconds']} | {trial['restarted']} | {trial.get('hubStopToRunningS') or ''} | "
                  f"{len(trial['markers'])} |")
@@ -5177,8 +5219,8 @@ def planner_stop_summary(trials, unsliced=(), camera=(), notes=()):
                  f"request to done; in slices {fmt_plans(compute)}; loops per plan {sorted(set(loops))}; first plan "
                  f"of each trial {firsts} ms; first plans in a fresh app process {cold} ms")
         for t in ran:
-            s.append(f"  - {t['delay']} s: slices {fmt(t.get('stepMs'))}; past the slice {fmt(t.get('overrunMs'))}; "
-                     f"loop period while planning {fmt(t.get('loopPeriodMs'))}")
+            s.append(f"  - {planner_trial(t)}: slices {fmt(t.get('stepMs'))}; past the slice "
+                     f"{fmt(t.get('overrunMs'))}; loop period while planning {fmt(t.get('loopPeriodMs'))}")
     s.append("- The bench requests the crafted layout again at each 250 ms replan check once the last plan is done, "
              "as Vision Ball Collection does while its balls keep moving, and steps it once per init_loop() as the "
              "collection OpModes do; it records when the SDK's stopRequested flips. STOP is sent the set delay after "
@@ -5323,9 +5365,23 @@ def pinpoint_soak_checks(res, outcome, recal_res, recal_outcome, asked_s):
     bad = status.get("notReadyAfterFirstReady")
     streaks = status.get("streaks") or []
     guard_ms = status.get("guardWouldStopMs")
-    bound, per_match = 3 / after if after else None, None
-    if bound is not None:
-        per_match = 1 - (1 - min(1.0, bound)) ** (PINPOINT_MATCH_S * PINPOINT_ROBOT_HZ)
+    match_reads = PINPOINT_MATCH_S * PINPOINT_ROBOT_HZ
+    match = f"a {PINPOINT_MATCH_S} s match at {PINPOINT_ROBOT_HZ} Hz ({match_reads} reads)"
+    streak_count = status.get("streakCount")
+    if not after:
+        rate_line = "- rule of three: no reads after a READY, so nothing is bounded"
+    elif bad == 0:
+        bound = 3 / after
+        rate_line = (f"- rule of three: with none in {after} reads the 95% bound is {bound:.2e} per read, so at most "
+                     f"{1 - (1 - min(1.0, bound)) ** match_reads:.1%} chance of one in {match}")
+    elif finite(bad) and finite(streak_count) and streak_count > 0:
+        rate = streak_count / after
+        rate_line = (f"- seen, not a rule-of-three bound (the count isn't zero): {bad} non-READY reads in {after} after "
+                     f"the first READY, in {streak_count} streaks: a streak starts {rate:.2e} per read, so about "
+                     f"{1 - (1 - min(1.0, rate)) ** match_reads:.1%} chance of one in {match}")
+    else:
+        rate_line = (f"- {bad} non-READY reads in {after} after the first READY, streaks {streak_count}: no rate or bound "
+                     "from that")
     lines = [f"## Bench: Pinpoint soak (Pedro's PinpointLocalizer, untouched for {asked_s} s, OctoQuad beside it)\n",
              f"- ran {ran_s if ran_s is None else round(ran_s)} s of {asked_s}; {soak.get('runLoops')} loops; yaw scalar "
              f"{info.get('yawScalar')}; OctoQuad present {res.get('octoQuadPresent')}; GC counters readable "
@@ -5347,10 +5403,7 @@ def pinpoint_soak_checks(res, outcome, recal_res, recal_outcome, asked_s):
              + (f"; streaks [start ms, status, reads, ms to READY]: "
                 f"{[[s.get('startMs'), s.get('status'), s.get('reads'), s.get('readyAgainAfterMs')] for s in streaks[:8]]}"
                 if streaks else ""),
-             f"- rule of three: with none in {after} reads the 95% bound is {bound:.2e} per read, so at most "
-             f"{per_match:.1%} chance of one in a {PINPOINT_MATCH_S} s match at {PINPOINT_ROBOT_HZ} Hz "
-             f"({PINPOINT_MATCH_S * PINPOINT_ROBOT_HZ} reads)" if bound is not None else
-             "- rule of three: no reads after a READY, so nothing is bounded",
+             rate_line,
              heading_drift_line("Pinpoint heading", pin),
              heading_drift_line("OctoQuad heading (control)", octo) if octo is not None else
              "- OctoQuad heading (control): no OctoQuad answered on Control Hub I2C port 2"]
@@ -5434,12 +5487,16 @@ OCTOQUAD_EARLY_WAIT_MS = 3050
 OCTOQUAD_OUT_S = 10
 OCTOQUAD_LATE_MS = 5000
 OCTOQUAD_LATE_FAULT_WAIT_S = 8
-OCTOQUAD_STREAK_MS = (200, 1000)
+# GuardedOctoQuadLocalizer.INVALID_LIMIT_NANOS: it throws at its first read more than this past the first invalid one.
+OCTOQUAD_GUARD_LIMIT_MS = 250
+# The bench sees the first invalid read in the same loop, just after the guard's own read.
+OCTOQUAD_SEEN_AFTER_MS = 5
 OCTOQUAD_PULL = (">>> PULL the OctoQuad's I2C cable out of Control Hub I2C port 2 (leave both pods in), then press "
                  "Enter.")
 OCTOQUAD_PULL_LEAVE = (">>> PULL the OctoQuad's I2C cable out of Control Hub I2C port 2 (leave both pods in) and leave "
                        "it out, then press Enter.")
 OCTOQUAD_PLUG = ">>> PLUG the OctoQuad's I2C cable back into Control Hub I2C port 2, then press Enter."
+OCTOQUAD_LEFT_OUT = "!! PLUG the OctoQuad's I2C cable back into Control Hub I2C port 2: the bench stopped with it out."
 OCTOQUAD_ROLL = ">>> ROLL the odometry pod on OctoQuad channel 0 about 10 cm by hand, then press Enter."
 OCTOQUAD_NOT_RUN = "this step of the chain didn't run (see the error above it), so it wasn't judged"
 OCTOQUAD_EARLY_MEANS = ("START 0.3 s after INIT, before the OctoQuad's first RUNNING, didn't wait for RUNNING and then "
@@ -5587,13 +5644,19 @@ def octoquad_chain_checks(chain):
             lines.append("- the guarded verdict is void: Pedro's localizer, the control, didn't keep running through its "
                          "own pull (or didn't run), so a stop here can't be told from any stop")
         else:
-            lo, hi = OCTOQUAD_STREAK_MS
-            checks.append((f"octoquad guarded: an invalid read stops the OpMode after a streak ({lo}-{hi} ms) with an "
-                           "error naming the OctoQuad, the control having kept running",
+            p95 = dig(g, "result", "loopPeriodInvalidMs", "p95")
+            lo = OCTOQUAD_GUARD_LIMIT_MS - OCTOQUAD_SEEN_AFTER_MS
+            hi = OCTOQUAD_GUARD_LIMIT_MS + 2 * p95 if finite(p95) else None
+            window = (f"{lo}-{hi:.0f} ms: the guard's {OCTOQUAD_GUARD_LIMIT_MS} ms, then up to one loop to its next read "
+                      f"and one for the stop pass, 2 x the {p95:.1f} ms p95 loop while invalid" if hi is not None else
+                      "no loop period while invalid was recorded, so no window")
+            checks.append((f"octoquad guarded: an invalid read stops the OpMode {OCTOQUAD_GUARD_LIMIT_MS} ms into the "
+                           "streak, give or take a loop, with an error naming the OctoQuad, the control having kept "
+                           "running",
                            bool(o.get("endedItself")) and OCTOQUAD_GUARD_PREFIX in error.lower() and stop_ms is not None
-                           and lo <= stop_ms <= hi,
-                           f"stopped by itself {o.get('endedItself')} {ms_or_never(stop_ms)} after the first invalid read: "
-                           f"{error!r}", OCTOQUAD_GUARDED_MEANS))
+                           and hi is not None and lo <= stop_ms <= hi,
+                           f"stopped by itself {o.get('endedItself')} {ms_or_never(stop_ms)} after the first invalid read "
+                           f"(window {window}): {error!r}", OCTOQUAD_GUARDED_MEANS))
 
     j = chain_part(chain, "latejoin")
     if j is None:
@@ -7393,6 +7456,9 @@ class Runner:
         trials = [self._planner_stop(balls, delay) for balls in PLANNER_STOP_BALLS for delay in PLANNER_STOP_DELAYS_S]
         unsliced, camera, notes = [], [], []
         if self.args.planner_stop:
+            trials += [self._planner_stop(balls, delay, f"b{balls}_d{int(delay * 1000)}_{repeat}", repeat=repeat)
+                       for repeat in range(2, PLANNER_STOP_REPEATS + 1) for balls in PLANNER_STOP_BALLS
+                       for delay in PLANNER_STOP_DELAYS_S]
             unsliced = [self._planner_stop(PLANNER_UNSLICED_BALLS, delay,
                                            f"unsliced_b{PLANNER_UNSLICED_BALLS}_d{int(delay * 1000)}", {"unsliced": 1},
                                            unsliced=True) for delay in PLANNER_UNSLICED_DELAYS_S]
@@ -7402,8 +7468,9 @@ class Runner:
             else:
                 camera = self._planner_camera_trials()
         else:
-            notes.append("The unsliced control and, with a webcam plugged in, the webcam trials run only when "
-                         "--planner-stop is given.")
+            notes.append(f"Each sliced trial ran once. The other {PLANNER_STOP_REPEATS - 1} rounds, the unsliced "
+                         "control and, with a webcam plugged in, the webcam trials run only when --planner-stop is "
+                         "given.")
         for check in planner_stop_checks(trials, unsliced, camera):
             self.check(*check)
         self.summary += planner_stop_summary(trials, unsliced, camera, notes)
@@ -7418,8 +7485,8 @@ class Runner:
         for repeat in range(1, PLANNER_CAMERA_REPEATS + 1):
             for delay in PLANNER_STOP_DELAYS_S:
                 out.append(self._planner_stop(PLANNER_CAMERA_BALLS, delay, f"camera_plan_d{int(delay * 1000)}_{repeat}",
-                                              {"camera": 1, "framesBeforePlanning": PLANNER_CAMERA_FRAMES},
-                                              kind="replan", repeat=repeat))
+                                              {"camera": 1, "framesBeforePlanning": PLANNER_CAMERA_FRAMES,
+                                               "planFrom": "start"}, kind="replan", repeat=repeat))
         for repeat in range(1, PLANNER_CAMERA_REPEATS + 1):
             for delay in PLANNER_CAMERA_INIT_DELAYS_S:
                 out.append(self._planner_stop_timed(f"camera_init_d{int(delay * 1000)}_{repeat}", {"camera": 1},
@@ -7479,10 +7546,21 @@ class Runner:
         step = f"planner_stop_{run_id}"
         rec = {"balls": balls, "delay": delay, **fields}
 
+        params = {"balls": balls, "runId": run_id, **(extra or {})}
+        from_start = params.get("planFrom") == "start"
+
         def plans():
             return telemetry_float(self.dash.data.get(KEY_PLANS)) or 0
 
-        def in_init():
+        def frames_in_init():
+            frames = params.get("framesBeforePlanning", 0)
+            rec["framesSeconds"] = self.wait_or_crash(
+                lambda: (telemetry_float(self.dash.data.get(KEY_FRAMES)) or 0) >= frames, PLANNER_CAMERA_FRAMES_WAIT_S)
+            if rec["framesSeconds"] is None and not self.crashed():
+                raise BenchError(f"the webcam didn't give {frames} fresh frames in INIT within "
+                                 f"{PLANNER_CAMERA_FRAMES_WAIT_S} s, so the trial wasn't STARTed")
+
+        def stop_into_plan():
             rec["warmSeconds"] = self.wait_or_crash(lambda: plans() >= PLANNER_STOP_WARM, PLANNER_STOP_WARM_WAIT_S)
             if rec["warmSeconds"] is None:
                 return
@@ -7492,8 +7570,10 @@ class Runner:
                 time.sleep(delay)
 
         try:
-            o = self.run_opmode("Bench: Planner Stop", step, {"balls": balls, "runId": run_id, **(extra or {})},
-                                start=False, during_init=in_init, timeout=10, timeout_ok=True, result_files=[step])
+            o = self.run_opmode("Bench: Planner Stop", step, params, start=from_start,
+                                during_init=frames_in_init if from_start else stop_into_plan,
+                                during=stop_into_plan if from_start else None, timeout=10, timeout_ok=True,
+                                result_files=[step])
         except ProtocolError:
             raise
         except BenchError as e:
@@ -10074,8 +10154,12 @@ class Runner:
             self._octoquad_earlystart(chain)
             self._octoquad_markers(chain)
             self._octoquad_unguarded(chain)
-            chain["guarded"] = self._octoquad_dropout(chain=True)
+            chain["guarded"] = self._octoquad_dropout(chain)
             self._octoquad_latejoin(chain)
+        except BaseException:
+            if chain.get("cableOut"):
+                self.log(OCTOQUAD_LEFT_OUT)
+            raise
         finally:
             checks, lines = octoquad_chain_checks(chain)
             self.summary += lines + [""]
@@ -10124,11 +10208,13 @@ class Runner:
                 self.log(f"OctoQuad unguarded control skipped: {rec['skipped']}")
                 return
             self.ask(OCTOQUAD_PULL)
+            chain["cableOut"] = True
             rec["invalidSeenS"] = self.wait_or_crash(lambda: valid() == "false", 10)
             self.log(f"keeping the OctoQuad's cable out {OCTOQUAD_OUT_S} s with Pedro's localizer running")
             self.wait_or_crash(keep_watching, OCTOQUAD_OUT_S)
             rec["runningAfterOutS"] = not self.crashed()
             self.ask(OCTOQUAD_PLUG)
+            chain["cableOut"] = False
             rec["replugReadS"] = self.wait_or_crash(lambda: self.dash.data.get(KEY_OCTOQUAD_REPLUG) == "read", 30)
             rec["validAgainS"] = self.wait_or_crash(lambda: valid() == "true", 10)
             self.wait_or_crash(keep_watching, 2)
@@ -10150,11 +10236,12 @@ class Runner:
             rec["faultSeenS"] = self.wait_or_crash(lambda: self.dash.data.get(KEY_OCTOQUAD_FAULT) == "up",
                                                    OCTOQUAD_LATE_FAULT_WAIT_S)
             if rec["faultSeenS"] is None:
-                rec["skipped"] = ("no OctoQuad fault in INIT: the OctoQuad's cable was in Control Hub I2C port 2 at "
-                                  "INIT (or the OpMode crashed), so the late plug-in wasn't tried")
+                rec["skipped"] = (f"no OctoQuad fault within {OCTOQUAD_LATE_FAULT_WAIT_S} s of INIT (or the OpMode "
+                                  "crashed), so the late plug-in wasn't tried")
                 self.log(f"OctoQuad late plug-in skipped: {rec['skipped']}")
                 return
             self.ask(OCTOQUAD_PLUG)
+            chain["cableOut"] = False
             rec["clearSeenS"] = self.wait_or_crash(lambda: self.dash.data.get(KEY_OCTOQUAD_FAULT) == "cleared", 15)
             rec["validSeenS"] = self.wait_or_crash(lambda: str(self.dash.data.get(KEY_OCTOQUAD_VALID)) == "true", 15)
 
@@ -10162,6 +10249,9 @@ class Runner:
                             during_init=script, timeout=60, timeout_ok=True, result_files=["octoquad_latejoin"])
         chain["latejoin"] = {"outcome": chain_outcome(o), "runner": rec,
                              "result": self.pull("octoquad_latejoin", required=False) or {}}
+        if chain.get("cableOut"):
+            self.ask(OCTOQUAD_PLUG)
+            chain["cableOut"] = False
 
     def _octoquad_seed(self, o, res):
         info, seed, cost = res.get("info") or {}, res.get("seed") or {}, res.get("readCostMs") or {}
@@ -10208,7 +10298,7 @@ class Runner:
         for check in checks:
             self.check(*check)
 
-    def _octoquad_dropout(self, chain=False):
+    def _octoquad_dropout(self, chain=None):
         rec = {"warnings": []}
 
         def valid():
@@ -10226,8 +10316,9 @@ class Runner:
                                   f"{self.dash.data.get(KEY_OCTOQUAD_STATUS)!r}), or the OpMode crashed")
                 self.log(f"OctoQuad dropout skipped: {rec['skipped']}")
                 return
-            if chain:
+            if chain is not None:
                 self.ask(OCTOQUAD_PULL_LEAVE)
+                chain["cableOut"] = True
                 t0 = time.monotonic()
                 self.wait_or_crash(lambda: False, 10)
                 rec["stoppedS"] = round(time.monotonic() - t0, 2) if self.crashed() else None
@@ -10245,12 +10336,12 @@ class Runner:
             valid()
             return False
 
-        o = self.run_opmode("Bench: OctoQuad", "octoquad_dropout", dict({"mode": "dropout"},
-                                                                         **(OCTOQUAD_CHAIN_PORTS if chain else {})),
+        ports = OCTOQUAD_CHAIN_PORTS if chain is not None else {}
+        o = self.run_opmode("Bench: OctoQuad", "octoquad_dropout", dict({"mode": "dropout"}, **ports),
                             timeout=60, during=script, result_files=["octoquad_dropout"], quiet_after=10.0)
         self.results["octoquad_dropout"]["runner"] = rec
         res = self.pull("octoquad_dropout", required=False) or {}
-        if chain:
+        if chain is not None:
             return {"outcome": chain_outcome(o), "runner": rec, "result": res}
         d = res.get("dropout") or {}
         bad, silent = d.get("badLoops") or 0, d.get("silentBadLoops") or 0
@@ -11053,7 +11144,10 @@ class Runner:
 
     def configs_to_delete(self):
         """The bench_* configs the end of a run deletes: the in-place benches', and those of the benches from
-        scripts/bench/benches/ this run ran. Looking for every bench's would add an adb call per config to every run."""
+        scripts/bench/benches/ this run ran. Looking for every bench's would add an adb call per config to every run,
+        so only a --probe-only run, which is how session.py puts a hub back, looks for them all."""
+        if self.args.probe_only:
+            return tuple(BENCH_CONFIGS)
         return tuple(dict.fromkeys(IN_PLACE_BENCH_CONFIGS + tuple(self.module_configs)))
 
     def selection(self):
@@ -11083,6 +11177,11 @@ class Runner:
                           "No Limelight answers on an Ethernet-over-USB interface: plug the Limelight 3A into a "
                           "Control Hub USB port and wait for it to boot, or drop --limelight")
         for bench in MODULE_BENCHES:
+            missing = unshipped_configs(bench) if bench.name in chosen else []
+            self._skip_unless(chosen, explicit, bench.name, not missing,
+                              f"res/xml doesn't ship {', '.join(missing)}", bench.title,
+                              f"{bench.title} activates {', '.join(missing)}, which this checkout's res/xml doesn't "
+                              f"ship: put its name right in {bench.flag[2:].replace('-', '_')}.py, or drop {bench.flag}")
             if bench.name in chosen and bench.needs is not None:
                 missing = bench.needs(self)
                 self._skip_unless(chosen, explicit, bench.name, missing is None, missing, bench.title,
@@ -11165,10 +11264,12 @@ TYPED_STATEMENTS = ("--s3-ports",)
 
 class Person:
     """What session.py's Needs a person says about a bench that waits for someone: what it is, what to have on the
-    table, and the run_bench.py flags that run it (the bench's flag, and its typed statement's, by default)."""
+    table, and the run_bench.py flags that run it (the bench's flag, and its typed statement's, by default). With
+    address, the bench runs only with the Expansion Hub at that address, so its command never carries the session's
+    --expansion-address."""
 
-    def __init__(self, what, have, flags=None):
-        self.what, self.have, self.flags = what, have, flags
+    def __init__(self, what, have, flags=None, address=None):
+        self.what, self.have, self.flags, self.address = what, have, flags, address
 
 
 class Bench:
@@ -11234,21 +11335,32 @@ def bench_layout_problems(bench, name, taken):
     if bench.person is not None and not isinstance(bench.person, Person):
         problems.append("its person isn't rb.Person(...)")
     for config in bench.configs:
-        if not config.startswith("bench_") and not (REPO_ROOT / SHIPPED_CONFIG_DIR / f"{config}.xml").exists():
-            problems.append(f"config {config} is neither a bench_* config it writes nor shipped in res/xml")
+        if not isinstance(config, str) or not config:
+            problems.append(f"config {config!r} isn't a config's name")
     if isinstance(bench.person, Person):
         bench.person_flags = tuple(bench.person.flags or [bench.flag] + (
             [bench.statement] if bench.statement in TYPED_STATEMENTS else []))
     return problems
 
 
+def unshipped_configs(bench):
+    """The shipped configs a bench names that this checkout's res/xml doesn't have. Checked when the bench is chosen,
+    not at load, so a renamed robot config stops only a run of a bench that uses it."""
+    return [c for c in bench.configs
+            if not c.startswith("bench_") and not (REPO_ROOT / SHIPPED_CONFIG_DIR / f"{c}.xml").exists()]
+
+
 def load_benches(folder=None):
-    """The benches in scripts/bench/benches/, in order.txt's order. A file it doesn't list, a name it lists twice
-    or without a file, or a declaration that breaks a rule stops run_bench.py before it does anything."""
+    """The benches in scripts/bench/benches/, in order.txt's order. A missing folder or order.txt, a file it doesn't
+    list, a name it lists twice or without a file, or a declaration that breaks a rule stops run_bench.py before it
+    does anything."""
     folder = Path(folder or BENCH_FOLDER)
     order = folder / BENCH_ORDER_FILE
-    names = [line.strip() for line in order.read_text().splitlines() if line.strip()] if order.exists() else []
-    files = {p.stem for p in folder.glob("*.py")} if folder.is_dir() else set()
+    if not order.is_file():
+        raise BenchLayoutError(f"{order} is missing, so the benches in {folder} can't be loaded: check out "
+                               "scripts/bench/benches/ with run_bench.py")
+    names = [line.strip() for line in order.read_text().splitlines() if line.strip()]
+    files = {p.stem for p in folder.glob("*.py")}
     problems = [f"{n} is listed twice in {order}" for n in sorted({n for n in names if names.count(n) > 1})]
     problems += [f"{order} lists {n}, but {folder / (n + '.py')} doesn't exist" for n in names if n not in files]
     problems += [f"{folder / (n + '.py')} isn't listed in {order}" for n in sorted(files - set(names))]
@@ -11383,7 +11495,10 @@ def parse_args(argv):
     p.add_argument("--hardware-view", action="store_true",
                    help="the Hardware OpMode, then a Hardware view Power edit under Bench: Power Readback")
     p.add_argument("--planner-stop", action="store_true",
-                   help="Bench: Planner Stop (STOP pressed while the route planner replans on the OpMode thread)")
+                   help="Bench: Planner Stop (STOP pressed while the route planner replans on the OpMode thread). "
+                        "Named, each sliced trial runs three times, then the unsliced control, which is meant to "
+                        "overrun STOP and may restart the app three times, and, with a webcam, 20 webcam trials; a "
+                        "run without bench flags runs each sliced trial once")
     p.add_argument("--overlay-nan", action="store_true",
                    help="Bench: Overlay NaN (restarts the app afterwards)")
     p.add_argument("--config-by-name", action="store_true",
@@ -11392,7 +11507,10 @@ def parse_args(argv):
     p.add_argument("--webcam", action="store_true", help="Bench: Webcam and the Webcam Stop runs (needs a UVC webcam)")
     p.add_argument("--webcam-failure", action="store_true",
                    help="Bench: Webcam Thread Failure (a pipeline that throws on the camera thread; needs a UVC webcam)")
-    p.add_argument("--limelight", action="store_true", help="Bench: Limelight (needs a Limelight 3A)")
+    p.add_argument("--limelight", action="store_true",
+                   help="Bench: Limelight (needs a Limelight 3A; its ball checks FAIL unless 4 Pollen balls sit on "
+                        "taped marks 24, 48, 72 and 96 in from the lens, the Limelight about 15.5 in up and 15.9 deg "
+                        "down; a run without bench flags runs it too whenever a Limelight answers)")
     p.add_argument("--llfault", action="store_true",
                    help="Bench: Limelight Fault: the fault fallback with a limelight configured and nothing answering; "
                         "then Bench: Limelight Hung: INIT, STOP and the next INIT while a Limelight POST hangs")
@@ -11427,9 +11545,11 @@ def parse_args(argv):
     p.add_argument("--sloth", action="store_true", help="the deploySloth/INIT race (runs gradle six times)")
     p.add_argument("--clock", action="store_true",
                    help="Bench: Clock (PathCommands.timeout against wall-clock jumps on the hub)")
+    left_out = ["the Photon block", "Bench: Turret Zero", "Dashboard Off"] + [b.title for b in MODULE_BENCHES
+                                                                              if not b.default]
     p.add_argument("--all", action="store_true",
-                   help="every bench but the Photon block, Bench: Turret Zero and Dashboard Off, and fail if the "
-                        "webcam, Limelight or Expansion Hub is missing")
+                   help=f"every bench but {', '.join(left_out[:-1])} and {left_out[-1]}, and fail if the webcam, "
+                        "Limelight or Expansion Hub is missing")
     p.add_argument("--no-sloth", action="store_true",
                    help="skip the Sloth race, Thread Lifecycle's hot reload and the Photon block's deploySloth step (no "
                         "Gradle builds)")
@@ -11442,11 +11562,13 @@ def parse_args(argv):
     p.add_argument("--interactive", action="store_true",
                    help="in the gamepad bench, has you drive the dashboard's Gamepad view (keyboard, on-screen stick, "
                         "USB pad); after the Limelight bench, prompts you to unplug and replug it and times the fault; "
-                        "after Bench: Pinpoint and Bench: OctoQuad, to unplug and replug each; after Bench: Expansion "
-                        "Hub, to move the Pinpoint and OctoQuad to the Expansion Hub and back; in Bench: Clock, to "
-                        "open the RC's web page; in the Photon block (USB wiring), to pull the Expansion Hub's USB and "
-                        "power cables, each once with Photon off and once on; in Bench: Dashboard Off, to pull the "
-                        "Control Hub's battery lead once")
+                        "in Bench: Pinpoint, to unplug and replug its cable twice (under the raw driver, then the "
+                        "follower); after Bench: OctoQuad, to unplug and replug its cable once, or with "
+                        "--octoquad-chain to roll a pod, pull the cable twice and plug it in during INIT; after Bench: "
+                        "Expansion Hub, to move the Pinpoint and OctoQuad to the Expansion Hub and back; in Bench: "
+                        "Clock, to open the RC's web page; in the Photon block (USB wiring), to pull the Expansion "
+                        "Hub's USB and power cables, each once with Photon off and once on; in Bench: Dashboard Off, to "
+                        "pull the Control Hub's battery lead once")
     p.add_argument("--quick", action="store_true", help="shorter phases (numbers are noisier)")
     p.add_argument("--keep-configs", action="store_true", help="leave the bench_* hardware configs on the hub")
     p.add_argument("--ports-empty", action="store_true",

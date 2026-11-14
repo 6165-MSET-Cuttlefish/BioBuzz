@@ -167,7 +167,7 @@ def run_llfault(r, record, ds):
         yes_no(r, record, "llfault")
 
     o = r.run_opmode("Bench: Limelight Fault", "fault_render_llfault",
-                     {"mode": "absent", "runSeconds": rb.LLFAULT_RUN_S}, init_hold=rb.LLFAULT_INIT_HOLD_S,
+                     {"mode": "absent", "runSeconds": rb.LLFAULT_RUN_S, "creep": 0}, init_hold=rb.LLFAULT_INIT_HOLD_S,
                      timeout=rb.LLFAULT_RUN_S + 60, result_files=["limelight_fault_absent"], during=ask,
                      quiet_after=5.0)
     record["llfault"] = outcome(o)
@@ -316,11 +316,8 @@ BENCH = rb.Bench(
     person=rb.Person(
         "Bench: Fault Render: you read the Driver Station and answer y or n eight times",
         "a Driver Hub paired with the Control Hub and showing its telemetry (on this Mac's USB if you can, for "
-        "screenshots); nothing on Control Hub motor ports 0-3 or servo ports 0-1; about 8 min",
+        "screenshots); about 8 min",
         flags=["--fault-render", "--interactive"]),
-    drives=rb.Ports(ch_motors=rb.BENCH_MOTOR_PORTS),
-    powers="Bench: Limelight Fault's Drivetrain creep (0.2 forward, 0.1 strafe, 0.05 turn) on Control Hub motor ports "
-           "0-3 for about 15 s and until its question is answered; Bench: Fault Render sets no power",
     configs=(rb.CONFIG_LLFAULT,),
     opmodes=("Bench: Limelight Fault", OPMODE),
 )

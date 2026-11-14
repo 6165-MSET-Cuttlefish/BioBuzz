@@ -143,6 +143,8 @@ def bare_hub(devices, args=("--usb",), dashboard_address="00000000", gradle_onli
         text = text.replace("START_WAIT_S=180", f"START_WAIT_S={start_wait}")
     (root / "scripts/bench/bare_hub.sh").write_text(text)
     shutil.copy(WORKTREE / "scripts/bench/run_bench.py", root / "scripts/bench/run_bench.py")
+    shutil.copytree(WORKTREE / "scripts/bench/benches", root / "scripts/bench/benches",
+                    ignore=shutil.ignore_patterns("__pycache__"))
     apk = root / "TeamCode/build/outputs/apk/debug/TeamCode-debug.apk"
     apk.parent.mkdir(parents=True)
     apk.write_bytes(b"apk")
