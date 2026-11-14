@@ -24,7 +24,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - **TeamCode** (Run button, full install): on a fresh hub, after any change outside `org.firstinspires.ftc.teamcode` (dependencies, manifest, `res/`, `assets/`, `robotcontroller/`), and after any change to a `@Pinned` class (`architecture/hardware/photon/`): deploySloth never reloads those, and says nothing.
 - **deploySloth** (hot reload): everything else. It returns before the load lands: wait for the `Processed Sloth Load` toast (DS, RC screen or logcat; it took 9-9.5 s on 2026-11-14, so without one wait 12) before redeploying or pressing INIT, or the app restarts or the INIT never runs (`docs/hub-bench-findings.md`).
-- The hub's clock may read about 1970 after boot (unchecked) until a DS connects or a browser opens `http://192.168.43.1:8080`. A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth (`docs/toolchain-findings.md`).
+- The hub's clock reads 31 Dec 1969 after boot (seen 2026-11-14) until a DS connects or a browser opens `http://192.168.43.1:8080` (that part unchecked). A load pushed while it reads earlier than the APK's install time is deleted at the next app restart (logcat `removing outdated sloth load`) and the installed APK's code runs: connect the DS before deploySloth (`docs/toolchain-findings.md`).
 - Verify with `./gradlew :TeamCode:compileDebugJavaWithJavac` (`:TeamCode:assembleDebug` for the APK); after an AGP or Gradle bump, also `:TeamCode:assembleSloth`, which hooks AGP's dex task by name. Unit tests (no hardware): `./gradlew :TeamCode:testDebugUnitTest`.
 - Bench OpModes (`opmodes/test/bench/`, and their unit tests) are left out of every build unless Gradle gets the `bench` property, so a normal install lists only robot OpModes. The bench scripts set it themselves; by hand, add `-Pbench` to the commands above, or put `bench=true` in `~/.gradle/gradle.properties` for the Run button. A robot OpMode never goes in that folder.
 - Decline Android Studio's AGP upgrade: AGP 9 breaks `assembleSloth`, so deploySloth, and Gradle 9.6 or later won't load AGP 8 (`docs/toolchain-findings.md`).
@@ -36,7 +36,7 @@ Claude updates this file unasked, in the same commit as any change it describes.
 
 - Bump Sloth and the `dev.frozenmilk.sinister.sloth.load` plugin (root `build.gradle`) together.
 - slothboard (`TeamCode/libs/m2/`) is built from the same-named tag on `6165-MSET-Cuttlefish/slothboard`: bump by tagging a new build there.
-- slothboard 6165.7's restart after a dashboard hardware-config switch, save or delete at idle hasn't run on a hub (Bench: Freeze Dump checks it); if it still deadlocks, the app freezes 10 s and is relaunched, ready about 53 s later. Its tag isn't published on the fork yet (`docs/dashboard-findings.md`).
+- slothboard 6165.7's restart after a dashboard hardware-config switch, save or delete at idle passed Bench: Freeze Dump once on a hub (2026-11-14, five changes, no freeze); if it ever deadlocks again, the app freezes 10 s and is relaunched, ready about 53 s later. Its tag isn't published on the fork yet (`docs/dashboard-findings.md`).
 - Close the dashboard tab when timing loops: it reads every hub's voltage each second (`docs/dashboard-findings.md`).
 - A loop spike every ~500 ms while motors are written is the SDK re-reading each motor's mode and re-sending its enable, not our code (`docs/loop-time-findings.md`).
 

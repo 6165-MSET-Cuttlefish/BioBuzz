@@ -16,8 +16,8 @@ fork commit unless noted. Java paths are under `TeamCode/src/main/java/org/first
 - **Switch, save and delete hardware configs on the Driver Station** (Configure Robot), never in the dashboard's
   Hardware Config View: there each of the three freezes the app until the hub kills and relaunches it. The Hardware
   View (single devices) is fine.
-- **Run Enable/Disable Dashboard only on purpose.** It sits in the DS TeleOp list, and the off setting survives
-  restarts, reinstalls and power cycles until it is run again.
+- **Run Enable/Disable Dashboard only on purpose.** It sits in the DS TeleOp list, and the off setting survives app
+  restarts and an `adb reboot` (measured on a hub) until it is run again. A reinstall and a battery pull are untested.
 - **Keep the team build.** Stock slothboard can't save an enum `@Config` (so not the alliance), sends dashboard
   gamepads only to LinearOpModes, and its Limelight proxy drops query strings.
 - **Never use stock FTC Dashboard where Sloth is on the classpath**, as it is wherever Pedro's AutoTune is: its edits
@@ -73,22 +73,43 @@ prints `Wrote stack traces`: the relaunched app's startup ANR overwrites it abou
 Read from source (`FtcDashboard.java`, `DashboardCore.java`, the client's `Dashboard.tsx`):
 
 - slothboard adds a TeleOp named `Enable/Disable Dashboard` (group `dash`) to the DS list. INIT shows whether the
-  dashboard is on; START flips it. The team build hides it from the dashboard's own list and refuses to INIT it from
-  there; stock shows it, so the dashboard can switch itself off.
+  dashboard is on; START flips it, calling `FtcDashboard`'s private `disable()` or `enable()` (javap of the 6165.7
+  AAR, 2026-11-14). The team build hides it from the dashboard's own list and refuses to INIT it from there; stock
+  shows it, so the dashboard can switch itself off.
 - The setting is saved in the app's SharedPreferences (`shared_prefs/FtcDashboard.xml`, key `autoEnable`, default on)
-  and read only when the dashboard starts with the app. Off stays off through Restart Robot, app restarts and power
-  cycles, until the OpMode is run again from the DS; the hub bench's own message says it also survives the Run
-  button's reinstall (`scripts/bench/run_bench.py`), which Bench: Dashboard Off checks on a hub
-  ([Still unknown](#still-unknown)). The RC app's own menu also has an Enable Dashboard item.
+  and read only when the dashboard starts with the app, so off stays off until the OpMode is run again from the DS.
+  The RC app's own menu also has an Enable Dashboard item.
 - While off: no telemetry, camera stream, dashboard gamepads, logcat capture (so no Error line) or Limelight proxy, and
   the server ignores every message except status requests. `http://192.168.43.1:8080/dash` still loads and says
   "FTC Dashboard is Disabled".
 - Back on without a DS (needs the Run button's debuggable APK for `run-as`; the hub bench prints this command,
-  `dashboard_recovery` in `scripts/bench/run_bench.py`; unverified on a hub):
+  `dashboard_recovery` in `scripts/bench/run_bench.py`; it worked on a hub, below):
 
   ```
   adb shell 'am force-stop com.qualcomm.ftcrobotcontroller && run-as com.qualcomm.ftcrobotcontroller rm -f shared_prefs/FtcDashboard.xml; am start -n com.qualcomm.ftcrobotcontroller/org.firstinspires.ftc.robotcontroller.internal.PermissionValidatorWrapper'
   ```
+
+Measured by Bench: Dashboard Off's first hub run (2026-11-14, the 2026-10-24 bare hub over a USB cable, the bench
+build with slothboard 6165.7, no Limelight, no DS). Its OpMode calls the same `disable()` by reflection; the runner
+then counts what reaches a second websocket in 10 s windows and reads the hub's socket table:
+
+- **Off stops the streaming.** Before the switch, 65 telemetry packets and 31 camera images reached the runner in
+  3.61 s. After it, nothing at all in 10.07 s on a socket open throughout (no telemetry, image or logcat message),
+  while the OpMode went on sending 198 telemetry packets and started a camera stream whose source served no frame.
+  `disable()` returned in 12 ms.
+- **The Limelight proxy closes.** Ports 5800, 5801, 5805 and 5807 stopped listening; the dashboard's 8000, the RC
+  page's 8080 and AutoTune's 10158 and 12649 kept listening.
+- **Off survives an app restart and an `adb reboot`.** After each, the status and the saved `autoEnable` both read
+  off; the runner had the dashboard and a ready robot again 46.1 s after the restart began (a config switch over adb)
+  and 62.3 s after the `adb reboot`. After each, nothing streamed for 10 s, an INIT of Bench: Probe sent from the
+  dashboard was ignored (the robot stayed idle), the proxy ports stayed closed and `/dash` answered 200. The window's
+  new websocket got one each of the config, the config baseline, the OpMode list and the hardware config list, and
+  nothing else.
+- **The adb recovery turns it back on.** The status read enabled and the OpMode list arrived 42.58 s after the
+  command, Bench: Probe's first telemetry packet 45.51 s after it, all four proxy ports listened again and
+  `autoEnable` was saved on. No Limelight was plugged in, so its web UI wasn't checked.
+- **Not measured: a reinstall.** The run's reinstall step hung in `adb install` before it could check, so its three
+  checks read FAIL as not run ([`toolchain-findings.md`](toolchain-findings.md#laptop-and-adb)).
 
 ## Limelight proxy
 
@@ -203,12 +224,10 @@ Sloth, including one that only adds Pedro's AutoTune: the POMs of `com.pedropath
   main's build and on another hub: each SET, WRITE and DELETE from idle should restart the robot in the same process,
   with no `has not reported itself as alive` or `deadline expired waiting for service termination: EventLoop` line in
   logcat.
-- **Whether the adb recovery brings the dashboard back, and whether off really stops everything and survives an app
-  restart, a reboot and a reinstall.** Test: Bench: Dashboard Off on a bare hub, `python3 scripts/bench/run_bench.py
-  --dashboard-off --ports-empty` ([how](../scripts/bench/README.md#dashboard-off)). It switches the dashboard off
-  from an OpMode, counts what still reaches a websocket and which Limelight proxy ports listen through all three, then
-  runs the command above and checks telemetry, the OpMode list and ports 5801 and 5807 come back (with a Limelight
-  plugged in, that its web UI answers).
+- **Whether off survives a reinstall, and whether the Limelight's web UI answers after the adb recovery.** On
+  2026-11-14 the reinstall step hung in adb and no Limelight was plugged in (above). Test: Bench: Dashboard Off on a
+  bare hub with a Limelight booted, `python3 scripts/bench/run_bench.py --dashboard-off --ports-empty` (add `--usb`
+  over a cable; [how](../scripts/bench/README.md#dashboard-off)), which repeats the app restart and the reboot first.
 - **Whether off survives a power cut soon after the switch:** slothboard saves it with `SharedPreferences.apply()`,
   which writes in the background (`setAutoEnable`, `FtcDashboard.java`), and an `adb reboot` shuts down in order.
   Test: add `--interactive` to the command above, which asks for a battery pull about 15 s after the switch.

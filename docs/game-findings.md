@@ -10,7 +10,8 @@ before changing HIVE numbers in `BioBuzzField` or planning routes under the HIVE
   streaming, and the FTC Q&A bans Wi-Fi streaming anywhere in the venue, pit and practice field included (quotes
   below).
   - On the Driver Station (DS), INIT `Enable/Disable Dashboard` (TeleOp list, group `dash`). If it says the dashboard
-    is enabled, press START; INIT it again to see "disabled", then STOP. Off survives app restarts and power cycles
+    is enabled, press START; INIT it again to see "disabled", then STOP. Off survived an app restart and an
+    `adb reboot` on a hub (2026-11-14); a battery pull and a reinstall are untested
     ([dashboard-findings.md](dashboard-findings.md#enabledisable-dashboard)).
   - Check it again at load-in: INIT it, read the line, press STOP without START.
   - `OptimizationToggles.dashboardTelemetry = false` is not an off switch: `EnhancedOpMode` still queues a dashboard
