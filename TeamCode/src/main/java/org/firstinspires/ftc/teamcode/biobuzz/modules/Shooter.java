@@ -107,7 +107,6 @@ public class Shooter extends Module {
     public enum PollenState implements State {
         OFF(Drive.OFF),
         ON(Drive.RPM),
-        /** Follows {@link #setSotmTargets}. */
         SOTM(Drive.RPM),
         OPEN_LOOP(Drive.POWER);
 
@@ -122,7 +121,6 @@ public class Shooter extends Module {
     public enum NectarState implements State {
         OFF(Drive.OFF),
         ON(Drive.RPM),
-        /** Follows {@link #setSotmTargets}. */
         SOTM(Drive.RPM),
         OPEN_LOOP(Drive.POWER);
 

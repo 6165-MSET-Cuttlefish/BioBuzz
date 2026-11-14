@@ -17,16 +17,11 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.BallFieldTransform;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBallTracker;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.RobotStateHistory;
-import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Deliberately framework-free; "field" positions are relative to the robot's pose at init. Motors
- * and Pinpoint come from {@link BettaConstants} at INIT, the same robot frame the follower uses. A Limelight
- * fault shows as EnhancedOpMode shows one (big red DS line, dashboard row and overlay text) and driving goes on.
- */
+/** Deliberately framework-free; "field" positions are relative to the robot's pose at INIT. */
 @TeleOp(name = "Ball Field Drive", group = "Test")
 public class BallFieldDriveTest extends LinearOpMode {
 

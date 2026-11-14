@@ -16,7 +16,7 @@ just before the ball touches (the speed the table sets; the f in
 [`flywheel-control-findings.md`](flywheel-control-findings.md) divides by the speed as the ball leaves instead); a
 ball rolling between the wheel and a fixed hood leaves at no more than half. The **minimum-speed shot** is the
 slowest exit speed that reaches the aim point at a distance. **Droop points** are extra table points at the same
-distance and a lower RPM, giving the hood to use when the flywheel has sagged (`biobuzz/ShotTuning.java:12-15`).
+distance and a lower RPM, giving the hood to use when the flywheel has sagged (`biobuzz/ShotTuning.java:12`).
 **Points** are percentage points, of a window's width or of the simulated chance that a shot scores.
 
 ## What to do
@@ -57,7 +57,7 @@ bases at 36 to 60 in. **The Nectar hood was reshaped after these CAD numbers; it
 
 Both shooters score at every distance from 36 to 132 in inside their hood travel, in every drag case, on both bases,
 for spin lift −0.3 to +0.15 and `rimClearanceIn` 0 to 2 in. That is under the solver's entry rule (falling, centre
-inside the outline less radius and `rimClearanceIn`, `biobuzz/ShotSolver.java:369-374`), ignoring flywheel limits.
+inside the outline less radius and `rimClearanceIn`, `biobuzz/ShotSolver.java:379-384`), ignoring flywheel limits.
 
 | distance (in) | 36 | 48 | 60 | 72 to 132 |
 |---|---|---|---|---|
@@ -104,7 +104,7 @@ Speed windows are relative to the RPM row; flight time is to the aim point.
   a ±2° hood window.
 - **Distance**: the near side (target closer than believed) binds at 36 to 60 in (Pollen) and 36 to 48 in (Nectar),
   set by the descending-entry rule; the far side beyond. The binding tolerance is 3.3 to 7.0 in.
-- **Every absolute window scales about ±25% with `rimClearanceIn`** (`biobuzz/ShotTuning.java:100`, a placeholder;
+- **Every absolute window scales about ±25% with `rimClearanceIn`** (`biobuzz/ShotTuning.java:93`, a placeholder;
   rim 0 just touches the edge). Other inputs move widths at most 0.32 points (drag), 0.69 (no drag), 0.55 (bases).
 
   | speed window width | rim 0 in | rim 1 in | rim 2 in |
@@ -115,7 +115,7 @@ Speed windows are relative to the RPM row; flight time is to the aim point.
 ### The short-range limit is the solver's rule, not a proven miss
 
 Below a certain hood offset the ball is still rising at the opening, and `requireDescendingEntry`
-(`biobuzz/ShotTuning.java:101`, checked at `biobuzz/ShotSolver.java:369`) refuses the shot as `RISING`. The lowest
+(`biobuzz/ShotTuning.java:94`, checked at `biobuzz/ShotSolver.java:379`) refuses the shot as `RISING`. The lowest
 offset that passes is 13° (Pollen) and 9.5° (Nectar) at 36 in, 6° and 3° at 48 in (second base: Pollen 14.5° and 8°,
 Nectar 13° and 6°). At that limit the hood's low side has only about 0.5°, so the schedule sits 1.5 to 2° above it.
 Without the rule the outline test passes 1.5 to 3.5° lower (Pollen 10.5° and 2.5°, Nectar 8° and 0.5°). Whether a
@@ -147,7 +147,7 @@ rising ball scores is untested. The rule also sets the near-side distance limit 
 
 ### Calibration distances
 
-`ShotSolver.lookup` interpolates RPM and hood linearly in distance (`biobuzz/ShotSolver.java:456-476`). On the
+`ShotSolver.lookup` interpolates RPM and hood linearly in distance (`biobuzz/ShotSolver.java:464-479`). On the
 schedule RPM is within 1.2% (Pollen) and 2.0% (Nectar) of a straight line in distance; 3 to 4% on a schedule 5°
 steeper, 5 to 7% at 8°. As interpolation error over a quarter of the speed window, 2 calibration distances fail (1.02,
 1.53) and 3 or more pass on every schedule (worst 0.84). But 3 that miss the knee put the Pollen hood at 7.5° instead
@@ -197,8 +197,8 @@ have it only in history or on another branch; none published results. 13 slow th
 - Tuned steeper, covering sag shortens the flight by 17 to 46 ms per 1% of sag (more at 5° than 8°); full cover by
   112 to 159 ms at 5° (1.6 to 3.9% of sag, Pollen) and 190 to 291 ms at 8° (4.1 to 10.2%). On the schedule itself
   (Pollen, CAD base, nominal drag) the hood covers at most 1%, moving the flight −56 to +72 ms.
-- The solver leads with the full-speed point's `tofS` and ignores the droop points' (`biobuzz/ShotSolver.java:244`,
-  `:487`). The lead error is 0.5 to 1.4 in per 1% of sag at 30 in/s, 1.0 to 2.8 in at 60 in/s; full cover at 8° gives
+- The solver leads with the full-speed point's `tofS` and ignores the droop points' (`biobuzz/ShotSolver.java:258`,
+  `:490`). The lead error is 0.5 to 1.4 in per 1% of sag at 30 in/s, 1.0 to 2.8 in at 60 in/s; full cover at 8° gives
   11 to 17 in at 60 in/s, against a distance tolerance of 3.3 to 7.0 in. That is for driving along the shot line;
   sideways driving gives a sideways error this vertical-plane study did not compute.
 - **Don't shoot on the move with hood cover until the solver uses the droop points' `tofS`.**
@@ -222,7 +222,7 @@ Read from the code as of 2026-11-10 (commit `366596c`).
 ## Which input: distance is enough
 
 The solver aims at one fixed point (the opening's centroid, 3 in inside it, `aimDepthIn`) from a fixed exit height, so
-speed and angle depend only on horizontal distance (`biobuzz/ShotSolver.java:233-238`). Computed in 3-D without drag
+speed and angle depend only on horizontal distance (`biobuzz/ShotSolver.java:247-252`). Computed in 3-D without drag
 at 0°, 20°, 40° and 60° off the opening's normal, a distance-only table stays inside the window at every one. The
 angle of approach changes the turret instead (computed):
 
@@ -230,7 +230,7 @@ angle of approach changes the turret instead (computed):
   `angleToleranceDeg`; at 40° it drops under 2° from about 9 ft.
 - The ball crosses the face off-centre, toward the sloping roof: `aimDepthIn` = 3 leaves about 1 in of room at 60°,
   1.5 would leave about 2.4 in.
-- The `BEHIND_OPENING` rule (`biobuzz/ShotSolver.java:331-336`), not the trajectory, refuses close shots from far to
+- The `BEHIND_OPENING` rule (`biobuzz/ShotSolver.java:341-346`), not the trajectory, refuses close shots from far to
   the side: at 3 ft, anything over 38.5° off the normal. Whether the CELL's structure really blocks them is unknown.
 
 Two of the 23 teams key their tables on field position (x, y). Refit against distance alone, their tables fit to 22
@@ -295,8 +295,8 @@ Generic simulation, six ball models, a tuner who keeps the hood on a schedule un
 
 ## Leading a moving shot
 
-Off by default (`sotmEnabled`, `biobuzz/ShotTuning.java:77`): the solver then treats the robot as still
-(`biobuzz/ShotSolver.java:187-191`). Y toggles it in SOTM Test.
+Off by default (`sotmEnabled`, `biobuzz/ShotTuning.java:70`): the solver then treats the robot as still
+(`biobuzz/ShotSolver.java:201-205`). Y toggles it in SOTM Test.
 
 - **`kDragPerS` = 0 over-leads**: the robot gives the ball sideways speed that drag then eats. Simulated, by 19, 44
   and 125 ms for 45, 25 and 10 g balls of 2.8 in. Both our balls have about the 25 g case's drag per unit mass
@@ -308,7 +308,7 @@ Off by default (`sotmEnabled`, `biobuzz/ShotTuning.java:77`): the solver then tr
   `tofS` as the time to the aim point 3 in deeper: about 15 ms more at 11 ft and 45 ms at 3 ft (computed, no drag).
 - One team first measured flight times of 0.26 to 0.54 s and scaled them by 1.6, then 1.8; later it re-measured 0.53
   to 1.00 s and dropped the multiplier (its commit history). Four of the 23 lead by one fixed time (0.4 s in two). The
-  lead that works can exceed a quick flight-time measurement; `transferTimeS` (`biobuzz/ShotTuning.java:54-58`) is
+  lead that works can exceed a quick flight-time measurement; `transferTimeS` (`biobuzz/ShotTuning.java:51`) is
   for the extra.
 
 ## The simulations

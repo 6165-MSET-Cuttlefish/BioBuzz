@@ -17,7 +17,7 @@ before changing HIVE numbers in `BioBuzzField` or planning routes under the HIVE
     packet every loop.
   - No dashboard tuning at the event: bring tuned values in the source ([CLAUDE.md](../CLAUDE.md), Tuning).
 - **Choose the alliance some other way before the first event.** `Context.allianceColor` is set only on the dashboard
-  (CLAUDE.md) and defaults to RED (`architecture/core/Context.java:10`), so with the dashboard off everything runs as
+  (CLAUDE.md) and defaults to RED (`architecture/core/Context.java:9`), so with the dashboard off everything runs as
   RED: in a blue match, BioBuzz Tele's cell-tip camera watches RED's HIVE (`biobuzz/modules/CellTipCamera.java:62`).
   CLAUDE.md's "on the dashboard, never from an OpMode" rule has to change with it.
 - **Keep laptops off the robot's Wi-Fi during matches** (R704(C)). At events, deploy over a USB cable: R704(B) lets no
@@ -28,9 +28,7 @@ before changing HIVE numbers in `BioBuzzField` or planning routes under the HIVE
 - **The A-frame legs lean in over the lane between the HIVE rails**, and `BioBuzzField.hiveRails()`, the planner's
   only obstacles on the field, leaves them out. Before routing a robot under the frame, add the legs for its height
   ([HIVE geometry](#hive-geometry-field-cad)). Clear of the legs, any legal robot fits under a HIVE at rest.
-- **`BioBuzzField`'s HIVE numbers stand:** they match the CAD and the manual within 0.13 in. Close the TODO at
-  `biobuzz/BioBuzzField.java:65` (keep 21.455 or use the CAD's 21.39) and the opening-position item in
-  [sotm-tuning.md](sotm-tuning.md#not-done-yet).
+- **`BioBuzzField`'s HIVE numbers stand:** they match the CAD and the manual within 0.13 in.
 
 ## Sources
 
@@ -77,7 +75,7 @@ What our code serves on the robot's Wi-Fi today (read from source):
 | Limelight proxy: the Limelight's MJPEG video (port 5800), web UI (5801) and APIs (5805, 5807), forwarded from 172.29.0.1 (slothboard `LimelightProxyManager`) | while slothboard is on | slothboard off |
 | slothboard's web server (port 8000) | always; while off it answers a client only with status, plus the config, OpMode and hardware config lists when the client connects | nothing ([Still unknown](#still-unknown)) |
 | AutoTune's web server (10158) and websocket (12649), started at every app start (`com.pedropathing.tuning.autotune.Hooks`) | always; sends only to a connected client | nothing ([Still unknown](#still-unknown)) |
-| DS camera preview (`WebcamSession.java:54`, SDK 12.0.0 `CameraStreamServer.handleRequestFrame`) | one JPEG per request from the DS app | nothing needed: it goes through the DS app, which (D) allows (our reading) |
+| DS camera preview (`WebcamSession.java:50`, SDK 12.0.0 `CameraStreamServer.handleRequestFrame`) | one JPEG per request from the DS app | nothing needed: it goes through the DS app, which (D) allows (our reading) |
 
 The slothboard and AutoTune rows send nothing without a connected client, so in a match, with laptops off the Wi-Fi as
 (C) requires, nothing goes out. The Q&A ruling extends the ban to the pit and practice field, where a laptop would
@@ -114,10 +112,10 @@ measured from the STEP file above; `am-...` are its part names.
 
 | | CAD | manual | `biobuzz/BioBuzzField.java` |
 |---|---|---|---|
-| rails: foot bars (`am-5878`) | x ±22.75 to ±24.733, y ±19.4723, top 2.15 in up | frame base 49.46 in wide, 38.95 in deep (Fig 9-8) | same x and y (`:152`-`154`) |
+| rails: foot bars (`am-5878`) | x ±22.75 to ±24.733, y ±19.4723, top 2.15 in up | frame base 49.46 in wide, 38.95 in deep (Fig 9-8) | same x and y (`:148`-`150`) |
 | HIVE pivots | x ±12.75, 43.95 in up | 25.5 in centre to centre (Fig 9-10), 43.95 in up (§9.6.1) | 12.75 (`:31`) |
 | CELL tilt when up | 30° | 30° (Fig 9-10) | 30° (`:64`) |
-| CELL opening from the pivot, along the bar | 21.39 in (the CELL's far end) | half the 42.91 in bar (Fig 9-9): 21.455 | 42.91 / 2 (`:65`, with the TODO) |
+| CELL opening from the pivot, along the bar | 21.39 in (the CELL's far end) | half the 42.91 in bar (Fig 9-9): 21.455 | 42.91 / 2 (`:65`) |
 | CELL opening height | 53.38 to 65.50 in | 53.5 to 65.6 in (Fig 9-10) | bottom 53.5 (`:66`) |
 | lowest part at rest, legs aside | 30.65 in (a goal rib, `am-5866`); a down CELL's floor 31.98 in | bottom of HIVE 30.6 in (Fig 9-10) | not used |
 

@@ -47,10 +47,7 @@ public final class LoopProfiler {
         return out;
     }
 
-    /**
-     * {@code unprofiled} = loop time minus top-level marks: the SDK's between-loop work (1 ms sleep + telemetry.update()).
-     * {@code *} marks nested read./write./tele. sections already counted inside a stage.
-     */
+    /** {@code unprofiled} is loop time minus the top-level marks (the SDK's between-loop work); {@code *=} marks a nested section already counted in a stage. */
     public String report(long loops, double loopAvgMs, double loopMaxMs) {
         List<Map.Entry<String, Bucket>> entries = new ArrayList<>(sections.entrySet());
         double sumMarks = 0;
@@ -74,7 +71,6 @@ public final class LoopProfiler {
         return sb.toString();
     }
 
-    /** Appends {@code name=microseconds;} for each section's latest sample. */
     public void appendLastMicros(StringBuilder sb) {
         for (Map.Entry<String, Bucket> e : sections.entrySet()) {
             sb.append(e.getKey()).append('=').append(Math.round(e.getValue().last * 1000)).append(';');

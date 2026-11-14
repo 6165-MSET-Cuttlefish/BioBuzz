@@ -9,11 +9,6 @@ import com.pedropathing.utils.Angle;
 
 import java.util.List;
 
-/**
- * A Bezier by its control points (two for a line) with the robot's heading along it, either the tangent or a turn
- * spread evenly over its length. Sampled closely enough in position and heading that the robot's footprint can be
- * checked and its length measured before any Pedro path is built.
- */
 final class Segment {
     static final double SAMPLE_SPACING_IN = 1.0;
     // A turn between samples swings the footprint's corners, so the heading changes at most this much per sample too.
@@ -42,7 +37,6 @@ final class Segment {
         this.turn = Angle.normalizeSigned(toHeading - fromHeading);
     }
 
-    /** Facing along the curve. */
     static Segment tangent(Pose... controls) {
         return new Segment(true, 0, 0, controls);
     }
@@ -76,7 +70,6 @@ final class Segment {
         return hs[hs.length - 1];
     }
 
-    /** The footprint inside {@code area} and more than {@code gap} from every obstacle at every sample. */
     boolean fits(RobotShape robot, Region area, List<Obstacle> obstacles, double gap) {
         sample();
         if (tooLong) return false;
@@ -116,8 +109,7 @@ final class Segment {
         return tangent ? path.tangent() : path.linear(fromHeading, fromHeading + turn);
     }
 
-    // Speed along a degree-n Bezier never exceeds n times its longest control-polygon edge, so this many
-    // uniform steps in t are at most SAMPLE_SPACING_IN apart along the curve.
+    // Bezier speed <= degree x longest control-polygon edge, so these t steps are at most SAMPLE_SPACING_IN apart.
     private void sample() {
         if (xs != null) return;
         int degree = controls.length - 1;

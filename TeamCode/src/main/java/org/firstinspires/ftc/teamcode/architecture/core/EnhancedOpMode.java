@@ -86,7 +86,6 @@ public abstract class EnhancedOpMode extends OpMode {
 
     protected abstract Robot createRobot();
 
-    /** Called at the top of every init_loop and loop, before module reads. */
     protected void onLoopStart() {}
 
     protected void dashboardOverlay(Canvas overlay) {}
@@ -249,7 +248,6 @@ public abstract class EnhancedOpMode extends OpMode {
         }
     }
 
-    /** Every step runs even if an earlier one throws; returns the first failure, later ones attached to it as suppressed. */
     private Throwable safeStatePass(Throwable failure) {
         // reset() drops every command without running its end() hook, so hardware safe-state must live in Module.stop().
         failure = attempt(failure, Scheduler::reset);
@@ -358,8 +356,7 @@ public abstract class EnhancedOpMode extends OpMode {
         }
     }
 
-    // Whitelist, not blacklist: every Module lives in our package, and descending into library objects
-    // (slothboard's DashboardCore, Pedro's Follower) walks lock-guarded lists without the lock.
+    // Whitelist: every Module is in our package, and walking library objects (slothboard's DashboardCore, Pedro's Follower) reads lock-guarded lists unlocked.
     private boolean shouldRecurse(Class<?> c) {
         return c.getName().startsWith("org.firstinspires.ftc.teamcode.");
     }
@@ -604,7 +601,6 @@ public abstract class EnhancedOpMode extends OpMode {
 
     private double getTotalCurrent() {
         int every = Math.max(1, currentReadEveryNLoops);
-        // Throttle on loop count; this is only called on render loops.
         if (lastCurrentReadLoop == Long.MIN_VALUE || profiledLoopCount - lastCurrentReadLoop >= every) {
             double total = 0;
             for (LynxModule hub : lynxHubs) total += hub.getCurrent(CurrentUnit.AMPS);

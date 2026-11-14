@@ -47,8 +47,8 @@ A half turn has no short way, and rounding decides it. At exactly 180° apart bo
 `Interpolator.piecewise().until(...)`. (Read from source: `core` `Interpolator.linear`, `longLinear`, `Angle.error`,
 `Angle.turnDirection`, `PiecewiseInterpolator.until`; the whole-degree count simulated with the same arithmetic.)
 
-`PathHeadings` (`architecture/auto/PathHeadings.java:49, 65`) and the planner's `Segment`
-(`architecture/planner/Segment.java:42, 116`) also turn the short way, so they agree with Pedro.
+`PathHeadings` (`architecture/auto/PathHeadings.java:40, 55`) and the planner's `Segment`
+(`architecture/planner/Segment.java:37, 109`) also turn the short way, so they agree with Pedro.
 
 **Compound paths can skip several short pieces in one update.** A compound path is one `Paths.path(a, b, ...)` of
 several curves (pieces). [`CLAUDE.md`](../CLAUDE.md) (Ball routing) says `pathSkip` moves on to the next piece once
@@ -65,7 +65,7 @@ once heading, position and velocity are all within tolerance, whichever comes fi
 that flag. So `PathCommands.follow`, which ends on `atParametricEnd() && !isBusy()`
 (`architecture/command/PathCommands.java:32`), can end with a long end turn still going. When the next step needs the
 heading, wait for it as `RouteRun` does: heading within 2° and turn rate under 15°/s
-(`architecture/planner/RouteRun.java:28-30`). (Read from source: `core` `Foresight.calculateHold`, `timeoutCondition`,
+(`architecture/planner/RouteRun.java:21-23`). (Read from source: `core` `Foresight.calculateHold`, `timeoutCondition`,
 `reset`, `Follower.isBusy`, `Follower.hold`.)
 
 **Ivy's `PedroCommands.hold(f)` holds the pose read when the command is built.** It returns `hold(f, f.pose())`, so

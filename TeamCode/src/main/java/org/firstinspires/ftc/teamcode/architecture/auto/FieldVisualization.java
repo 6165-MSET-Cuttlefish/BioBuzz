@@ -19,7 +19,6 @@ public class FieldVisualization {
 
     private FieldVisualization() {}
 
-    /** Pedro coordinates to the dashboard's FTC-standard field frame: translate by (-72,-72), rotate -90°. */
     public static Pose toField(Pose pedroPose) {
         return new Pose(
                 pedroPose.y() - CANVAS_IN / 2,
@@ -61,7 +60,6 @@ public class FieldVisualization {
         canvas.strokePolyline(fx, fy);
     }
 
-    /** Field-frame polyline of every segment of {@code path}, for {@code Canvas.strokePolyline}. */
     public static double[][] pathPolyline(Path path) {
         List<PathSegment> segments = path.getSegments();
         double[] xs = new double[segments.size() * PATH_SAMPLES + 1];

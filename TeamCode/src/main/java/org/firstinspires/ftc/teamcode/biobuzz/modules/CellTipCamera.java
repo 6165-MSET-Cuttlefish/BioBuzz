@@ -93,7 +93,6 @@ public class CellTipCamera extends Module {
         }
     }
 
-    /** Fixed at init from {@link Context#allianceColor}. */
     public AllianceColor getAlliance() {
         return alliance;
     }

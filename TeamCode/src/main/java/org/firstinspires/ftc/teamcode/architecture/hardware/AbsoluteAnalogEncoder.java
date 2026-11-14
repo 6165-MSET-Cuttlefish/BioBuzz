@@ -16,7 +16,6 @@ public class AbsoluteAnalogEncoder implements HardwareDevice {
     private double position;
     private double delta;
 
-    // POSITIVE_INFINITY disables the noise-rejection filter in getRelativePosition().
     private double maxDeltaDegrees = Double.POSITIVE_INFINITY;
 
     public AbsoluteAnalogEncoder(AnalogInput analogInput) {

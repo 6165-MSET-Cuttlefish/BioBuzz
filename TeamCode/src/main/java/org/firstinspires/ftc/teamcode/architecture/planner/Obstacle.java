@@ -18,7 +18,6 @@ public final class Obstacle {
         return (bounds.minY + bounds.maxY) / 2;
     }
 
-    /** Whether a robot centre at the point is within {@code clearance} of this obstacle's edge. */
     public boolean blocks(double x, double y, double clearance) {
         return gapSquared(x, x, y, y) <= clearance * clearance;
     }
@@ -27,10 +26,6 @@ public final class Obstacle {
         return gapSquared(minX, maxX, minY, maxY) <= clearance * clearance;
     }
 
-    /**
-     * Whether the segment passes within {@code clearance} of this obstacle's edge. With clearance at half the
-     * robot's width, this checks the robot's body while tracing only its centreline.
-     */
     public boolean intersectsSegment(double x1, double y1, double x2, double y2, double clearance) {
         if (crosses(x1, y1, x2, y2)) return true;
         // Apart, a segment and a rectangle are nearest at an end of the segment or a corner of the rectangle.

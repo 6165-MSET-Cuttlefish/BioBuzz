@@ -404,9 +404,9 @@ For this wiring to work:
 
 Worth doing with it:
 
-- Send each flywheel power when it is computed. Today it is computed in `read()` (`Shooter.java:205`) and sent in
-  `write()` (`:345`), with the drive writes in between.
-- Loosen the hood write tolerance from 0.001 to 0.002-0.005 (`Shooter.java:174-175`): at one hood write per loop
+- Send each flywheel power when it is computed. Today it is computed in `read()` (`Shooter.java:203`) and sent in
+  `write()` (`:343`), with the drive writes in between.
+- Loosen the hood write tolerance from 0.001 to 0.002-0.005 (`Shooter.java:172-173`): at one hood write per loop
   that is about 1.8 ms off the driving loop.
 - Remove or gate `Drivetrain.encoderTelemetry`'s lines (`Drivetrain.java:256-262`): the back-right velocity would be
   the turret's, and the Expansion Hub lines would start its bulk read.

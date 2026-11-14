@@ -16,21 +16,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Locks a chessboard homography from full-resolution image pixels to camera-frame ground inches
- * (+X away from the camera, +Y left, origin at the centre of the board's near edge) and prints it
- * for limelight/ball_contour_snapscript.py. The board is the 10x7-square one in
- * {@code docs/calibration-chessboard-3in-letter.pdf}, laid with its long side pointing away.
- */
+/** Prints H_ARRAY for limelight/ball_contour_snapscript.py: image pixels to ground inches, +X away from the camera, +Y left, origin at the centre of the board's near edge. */
 public class HomographyCalculationPipeline extends OpenCvPipeline {
 
     private static final int    GRID_COLS          = 9;
     private static final int    GRID_ROWS          = 6;
     private static final int    EXPECTED_CORNERS   = GRID_COLS * GRID_ROWS;
-    private static final double SQUARE_SIZE_INCHES = 3.0; // measure the print: printers rescale
+    private static final double SQUARE_SIZE_INCHES = 3.0;
 
-    // SB matches corners independently, so foreshortened far squares don't fail the whole board the
-    // way classic findChessboardCorners does. It needs a white border about one square wide.
+    // SB survives foreshortened far squares that fail classic findChessboardCorners; it needs a one-square white border.
     private static final int CHESSBOARD_FLAGS =
             Calib3d.CALIB_CB_NORMALIZE_IMAGE
                     | Calib3d.CALIB_CB_EXHAUSTIVE
@@ -39,13 +33,11 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
     // px. Loose because steep or distant boards localize corners more noisily than a close-up one.
     private static final double RANSAC_REPROJ_THRESHOLD_PX = 8.0;
 
-    // The printed H_ARRAY is for frames of this size, whatever the input's. Only a rescale: the input
-    // must show the same view at the same aspect ratio, not a crop of it.
+    // H_ARRAY is printed for this size; the input must be the same view rescaled, not cropped.
     private static final int OUTPUT_WIDTH_PX  = 640;
     private static final int OUTPUT_HEIGHT_PX = 480;
 
-    // The Limelight 3A's lens calibration (latest.cal). False for a camera without one: the
-    // printed H_ARRAY then maps raw pixels.
+    // Limelight 3A lens calibration (latest.cal); UNDISTORT false, for a camera without one, makes H_ARRAY map raw pixels.
     private static final boolean  UNDISTORT                  = true;
     private static final double   LENS_CALIBRATION_WIDTH_PX  = 1280;
     private static final double   LENS_CALIBRATION_HEIGHT_PX = 960;
@@ -229,10 +221,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
                 >= Math.abs(shortSide.y) / Math.hypot(shortSide.x, shortSide.y);
     }
 
-    /**
-     * Ground inches for each detected corner, whichever corner OpenCV numbered first: the long side
-     * is +X, pointing up the image, and the short side is +Y, pointing left.
-     */
+    /** Ground inches per corner, whichever corner OpenCV numbered first: +X along the long side up the image, +Y along the short side to the left. */
     private static Point[] groundCorners(Point[] px) {
         double forwardSign = alongLongSide(px).y < 0 ? 1 : -1;
         double leftSign = alongShortSide(px).x < 0 ? 1 : -1;
@@ -324,10 +313,7 @@ public class HomographyCalculationPipeline extends OpenCvPipeline {
         return m.get(2, 0)[0] * x + m.get(2, 1)[0] * y + m.get(2, 2)[0];
     }
 
-    /**
-     * Raw-image pixel for a ground point. Null behind the horizon or off-screen, where the projection
-     * and the distortion polynomial are both meaningless.
-     */
+    /** Raw-image pixel for a ground point; null behind the horizon or off-screen, where projection and distortion are meaningless. */
     private static Point toPixel(Mat inverse, double x, double y, double refSign, int width, int height) {
         double w = homogeneousW(inverse, x, y);
         if (Math.signum(w) != refSign || Math.abs(w) < 1e-9) return null;

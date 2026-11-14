@@ -40,7 +40,7 @@ Prices and stock change, so each one carries the date it was seen.
 
 Some resellers list 120 fps or "without IR filter". The datasheet and manual say 100 fps with an IR filter, so trust
 those. 640×480 exists only as MJPEG, which is why `WebcamSession` asks for MJPEG
-(`biobuzz/modules/vision/WebcamSession.java:30-31, 64-66`).
+(`biobuzz/modules/vision/WebcamSession.java:26-27, 60-62`).
 
 ## The cell-tip check
 
@@ -51,13 +51,13 @@ Read from source on 2026-11-10:
 - `CellTipPipeline` (`biobuzz/modules/vision/CellTipPipeline.java`) runs OpenFTC's AprilTag detector
   (`org.openftc.apriltag.AprilTagDetectorJNI`; tag36h11, decimation 2) on the grayscale frame. It uses only each
   tag's corners, never its pose.
-- It drops tags under `minTagAreaPx` = 120 px², about 11 px square (`:123`).
+- It drops tags under `minTagAreaPx` = 120 px², about 11 px square (`:119`).
 - Each CELL carries a cluster of 4 tags (see [below](#the-verdict-is-unproven-on-a-real-hive)). For each of our
   alliance's two clusters, it averages the roll of the tags' bottom edges. A cluster with at least `minVisibleTags`
   (1) tags and |roll| < `scorableMaxRollDeg` (90°) counts as upright, and any upright cluster makes the alliance
-  scorable (`:126-131`, `:176-178`).
+  scorable (`:122-127`, `:172-174`).
 - Anything else (tags upside-down, or no tags at all) is TIPPED. The verdict starts TIPPED and changes only after
-  the new reading has held for `holdSeconds` (0.25 s) (`:79`, `:133-141`).
+  the new reading has held for `holdSeconds` (0.25 s) (`:75`, `:129-137`).
 - `CellTipCamera.isTipped()` returns that verdict if it is at most `maxStalenessMs` (250 ms) old, and false
   otherwise: a camera that stops delivering frames reads neither TIPPED nor scorable
   (`biobuzz/modules/CellTipCamera.java:77-81`). `RobotActions.checkTip()` ends on the first TIPPED reading, or after
@@ -71,7 +71,7 @@ What follows from that:
 - **Anything that makes tags vanish gives a false TIPPED**: tags shrinking under 120 px² with distance, motion blur,
   or the HIVE leaving the frame. A global shutter removes rolling-shutter skew, but it doesn't remove blur.
 - **Blur** (computed; the turn rate is an assumption, so scale it to the robot): at the default 8 ms exposure
-  (`biobuzz/modules/vision/WebcamControls.java:25`) and a 180°/s turn, the image moves 1.44° during each exposure.
+  (`biobuzz/modules/vision/WebcamControls.java:21`) and a 180°/s turn, the image moves 1.44° during each exposure.
   At 640×480 (9.5 px/° at the image centre, 10.5 averaged across the width) that is about 14–15 px, more than the
   width of an 11 px tag. Lower `exposureMs` toward 3–4 ms with more `gain`, and check in Cell Tip Test while
   turning. Change them in INIT: each change blocks the OpMode loop while it is written
@@ -116,7 +116,7 @@ pixels, HFOV = 2·atan(width / 2 / fx), and VFOV is the vertical equivalent.
   exactly 0.600; scaling the full width would give 0.500. The unchanged 47.5° VFOV agrees.
 - 640×400 (full width) isn't in the datasheet's mode list. Treat it as unavailable until someone tries it.
 - Ignore the file's 480×320 entry (fx 270.26, about 83°). It doesn't fit the rest.
-- `CellTipPipeline`'s FX 578, CX 320, CY 240 (`:60`) only feed the detector's pose solve, which nothing uses. They
+- `CellTipPipeline`'s FX 578, CX 320, CY 240 (`:56`) only feed the detector's pose solve, which nothing uses. They
   are not a calibration.
 - These numbers come from goBILDA's unit. Whether the bare B0385 reports the same vid/pid and crops the same way is
   unverified.

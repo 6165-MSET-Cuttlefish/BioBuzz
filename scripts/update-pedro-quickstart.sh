@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Refreshes the vendored Pedro Pathing tuning procedures from the upstream Quickstart.
-# Copies only TeamCode/.../pedro/procedures/ and records the upstream commit; never touches
-# anything else under pedro/, which is ours.
+# Never touches pedro/ outside procedures/: the rest of pedro/ is ours.
 set -euo pipefail
 
 REF="${1:-master}"

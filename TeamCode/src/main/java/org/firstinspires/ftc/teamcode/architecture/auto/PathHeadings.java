@@ -6,12 +6,7 @@ import com.pedropathing.paths.curves.Curve;
 import com.pedropathing.paths.interpolator.Interpolator;
 import com.pedropathing.utils.Angle;
 
-/**
- * Tangent headings of Pedro paths, for a heading that stays continuous where two segments, or the two parts of one
- * path's heading, meet: a jump there makes the follower turn before it drives on. Positions are fractions of the
- * path's length, the unit {@code Interpolator.piecewise().until(...)} takes. Headings are radians in [0, 2π), taken
- * from the built curve, so they are already right for either alliance: don't map them through {@link FieldPose}.
- */
+/** Positions are fractions of path length; headings come from the built curve, so they are right for either alliance: never map them through {@link FieldPose}. */
 public final class PathHeadings {
     private PathHeadings() {}
 
@@ -25,14 +20,10 @@ public final class PathHeadings {
         return directionAt(path.curve, 1, 0, 1);
     }
 
-    /**
-     * Turns from {@code startHeading} onto the tangent by {@code switchAt}, then follows the tangent to the end.
-     */
     public static Path linearThenTangent(Path path, double startHeading, double switchAt) {
         return turnOntoTangent(path, startHeading, 0, 0, switchAt, switchParameter(path, switchAt));
     }
 
-    /** Holds {@code startHeading} until {@code turnFrom}, then turns onto the tangent by {@code switchAt}. */
     public static Path holdThenTangent(Path path, double startHeading, double turnFrom, double switchAt) {
         double holdT = switchParameter(path, turnFrom);
         double switchT = switchParameter(path, switchAt);
@@ -57,7 +48,6 @@ public final class PathHeadings {
         return Math.max(0, Math.min(1, (curve.pathCompletion(t) - from) / (to - from)));
     }
 
-    /** Follows the tangent until {@code switchAt}, then turns from it to {@code endHeading} by the end. */
     public static Path tangentThenLinear(Path path, double switchAt, double endHeading) {
         double switchT = switchParameter(path, switchAt);
         double tangentTo = Math.max(0, switchT - JOIN_INSET);
@@ -68,12 +58,10 @@ public final class PathHeadings {
                 : Angle.normalize(start + turn * turned(curve, t, switchAt, 1))));
     }
 
-    /** Faces against the direction of travel the whole way, for driving a curve backwards. */
     public static Path backwardTangent(Path path) {
         return path.heading(Interpolator.geometric((curve, t) -> Angle.normalize(directionAt(curve, t, 0, 1) + Math.PI)));
     }
 
-    /** The direction at {@code t} held inside {@code from..to}, looking further inside that range where the curve stalls. */
     private static double directionAt(Curve curve, double t, double from, double to) {
         double at = Math.max(from, Math.min(to, t));
         boolean roomAhead = at - from <= to - at;

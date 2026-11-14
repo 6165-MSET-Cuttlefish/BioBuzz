@@ -68,11 +68,11 @@ What to do:
 
 - Keep `bindTunable` for dashboard values (`Tuning.x`), where a loop of delay doesn't matter.
 - For a setpoint computed every loop, store it in a field and use it in `write()`, as `Turret.setSotmAngles` does
-  (`biobuzz/modules/Turret.java:87-91`, `:124-129`).
+  (`biobuzz/modules/Turret.java:86-90`, `:123-128`).
 - Switching which State is active (`setState`) already lands in the same loop's `write()`; only the bound value lags.
 - A value used in `read()` is a loop late however it arrives, because `read()` runs before `gameLoop()`. So is
   `follower.pose()` read there: `follower.update()` runs after the reads.
-- `Shooter.setSotmTargets` goes through `bindTunable` (`biobuzz/modules/Shooter.java:190-193`, `:197-202`), so SOTM
+- `Shooter.setSotmTargets` goes through `bindTunable` (`biobuzz/modules/Shooter.java:188-191`, `:195-200`), so SOTM
   Test's RPM and hood targets are a loop late. What that and the read-to-write delay do to the flywheels:
   [flywheel-control-findings.md](flywheel-control-findings.md#where-our-loop-loses-accuracy).
 
@@ -91,7 +91,7 @@ Reads, writes, module telemetry and `stop()` all follow that list (`EnhancedOpMo
 
 - **Guaranteed:** Modules reachable in pass 1 come before Modules created in `initialize()`. In a `BioBuzzOpMode`, the
   robot's `Drivetrain`, `CellTipCamera` and `Camera` (`biobuzz/BioBuzzRobot.java:14-16`, `:31-33`) come before SOTM
-  Test's `Turret` and `Shooter` (`opmodes/test/SotmTest.java:68-69`).
+  Test's `Turret` and `Shooter` (`opmodes/test/SotmTest.java:64-65`).
 - **Not guaranteed:** the order within one class's fields. It is `Class.getDeclaredFields()` order, whose elements
   "are not sorted and are not in any particular order"
   ([Android reference](https://developer.android.com/reference/java/lang/Class#getDeclaredFields()), fetched
@@ -133,10 +133,10 @@ What the order decides:
 | reader | guard against a failed read | source |
 |---|---|---|
 | `EnhancedMotor.withVoltageCompensation(ref)`: power × ref / V, then clamped to ±1 | skips scaling below 6 V | `architecture/hardware/WriteCache.java:15-16`, `:32-37`; `architecture/hardware/EnhancedMotor.java:35` |
-| `Shooter`'s flywheel headroom, min(1, V / 13) | none | `biobuzz/modules/Shooter.java:319` |
+| `Shooter`'s flywheel headroom, min(1, V / 13) | none | `biobuzz/modules/Shooter.java:317` |
 
 `withVoltageCompensation` is on both BioBuzz flywheels and both `decode/` flywheels, at 13 V
-(`biobuzz/modules/Shooter.java:296`, `decode/modules/Shooter.java:87-88`). What the stale value and the missing guard
+(`biobuzz/modules/Shooter.java:294`, `decode/modules/Shooter.java:87-88`). What the stale value and the missing guard
 do to the flywheels: [flywheel-control-findings.md](flywheel-control-findings.md#where-our-loop-loses-accuracy).
 
 ## Kept on purpose
@@ -148,10 +148,10 @@ and "unused" is judged against last season's DECODE code, not only this repo. Be
 | piece | what it is |
 |---|---|
 | `architecture/hardware/AbsoluteAnalogEncoder.java` | an absolute encoder on an analog port: angle, multi-turn position, an optional filter that drops jumps over a set size |
-| `Module.logDS` (`architecture/core/Module.java:142-148`) | a Driver Station-only line, formatted only in a DS frame |
+| `Module.logDS` (`architecture/core/Module.java:141-147`) | a Driver Station-only line, formatted only in a DS frame |
 | `Drivetrain.isBonk()` (`biobuzz/modules/Drivetrain.java:159-168`) | when called every loop: true once Pedro has been on a path, short of its end, at a speed under 2 (Pedro's velocity units) for 2 s; last season's autos, not in this repo, used it to skip a segment the robot was stuck on |
 | `Camera.getPredictedBallPosition` and `getPredictedFieldPosition` (`biobuzz/modules/Camera.java:118-124`, `:130-136`), with the `predict()` they call on `TrackedBall` and `FieldBall` | where a tracked ball will be after a lookahead, extrapolated at constant velocity |
-| `RobotShape.turnRadius()`, `centreFor`, `intakeAt` and `canTurnAt` (`architecture/planner/RobotShape.java:42-56`, `:132-139`) | footprint geometry for the ball planner |
+| `RobotShape.turnRadius()`, `centreFor`, `intakeAt` and `canTurnAt` (`architecture/planner/RobotShape.java:34-48`, `:121-128`) | footprint geometry for the ball planner |
 
 `decode/` (last season's code) also stays while the Cuttle bot is still driven, decided the same day.
 

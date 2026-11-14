@@ -2,7 +2,6 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField.Cell;
 
-/** Which of this alliance's two CELLS both turrets aim at. */
 public final class TargetSelector {
 
     private Cell up = Cell.STARTS_UP;
@@ -16,7 +15,6 @@ public final class TargetSelector {
         up = cell;
     }
 
-    /** The driver's override. */
     public void toggle() {
         up = up.other();
     }
@@ -27,10 +25,7 @@ public final class TargetSelector {
         lastTipped = tipped;
     }
 
-    /**
-     * Picks the CELL that faces the half of the field the robot is in, the only one it can shoot into from there.
-     * Within {@code bandIn} of the midline it keeps its choice, or pose noise there swings the turrets between the two.
-     */
+    // Within bandIn of the midline it keeps its choice, or pose noise there swings the turrets between the CELLs.
     public void followHalf(double robotYIn, double fieldWidthIn, boolean blue, double bandIn) {
         double fromMidline = robotYIn - fieldWidthIn / 2;
         if (Math.abs(fromMidline) > bandIn) up = BioBuzzField.cellFacing(fromMidline < 0, blue);

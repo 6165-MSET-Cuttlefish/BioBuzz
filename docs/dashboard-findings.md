@@ -109,8 +109,8 @@ ports (read from source, `LimelightProxyManager`):
 Before replacing it with stock, port these (read from source; stock = Dairy `0.3.2+0.6.0`, same in acmerobotics
 master a876f09):
 
-- **Enum `@Config` fields** (`Context.allianceColor`, `architecture/core/Context.java:10`; SOTM Test's `aim`,
-  `opmodes/test/SotmTest.java:36`). Stock's `ConfigVariableDeserializer` finds the enum with one-argument
+- **Enum `@Config` fields** (`Context.allianceColor`, `architecture/core/Context.java:9`; SOTM Test's `aim`,
+  `opmodes/test/SotmTest.java:34`). Stock's `ConfigVariableDeserializer` finds the enum with one-argument
   `Class.forName`, which returns the dashboard class loader's copy rather than the one Sloth loaded, so saving the edit
   fails at `Field.set`. The team build's `BasicVariable.update` matches the constant by name in the field's own enum
   class.
@@ -143,7 +143,7 @@ Reference: `opmodes/test/IntakeTransferShooterTest.java:23-72`.
   object that was there when the class was scanned.
 - Read the fields every loop, so edits apply live.
 - A table is an object array that is an instance field of a group (`biobuzz/modules/Shooter.java:32`'s
-  `feedforward`, `biobuzz/ShotTuning.java:37`'s `table`), not a top-level static array of objects.
+  `feedforward`, `biobuzz/ShotTuning.java:34`'s `table`), not a top-level static array of objects.
 - Use doubles, not Pedro's `Pose`: its `x`, `y` and `heading` are `private final` (Pedro 3.0.2,
   `com.pedropathing.math.Pose`, javap on 2026-11-10), so it shows as an empty group.
 
@@ -164,7 +164,7 @@ Read from source (`FtcDashboardScanner.java`, `ReflectionConfig.java`, `Variable
     shows, though `FieldProvider` sets it with a plain `Field.set`; a `final` object field in a group is empty.
   - Array elements are filtered by the array field itself, so a top-level `public static` array of objects shows every
     element as an empty group. An object array that is an instance field of a group works.
-  - `ShotTuning.keepOuts` (`biobuzz/ShotTuning.java:193`) is such a top-level array, so by this reading its keep-out
+  - `ShotTuning.keepOuts` (`biobuzz/ShotTuning.java:183`) is such a top-level array, so by this reading its keep-out
     angles can't be entered on the dashboard, which [`sotm-tuning.md`](sotm-tuning.md) (Step 8) expects. Until the
     Config View shows otherwise, set them in the source or move the array into a group.
 

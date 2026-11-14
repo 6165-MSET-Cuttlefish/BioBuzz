@@ -7,10 +7,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Single-threaded. Tight pass against predicted positions, then a looser pass against last-known
- * positions so a jittery detection reacquires its track instead of forking a duplicate.
- */
+/** A looser second pass against last-known positions lets a jittery detection reacquire its track instead of forking a duplicate. */
 public final class BallTracker {
 
     @Config("Ball Tracking")

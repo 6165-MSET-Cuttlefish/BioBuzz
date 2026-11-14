@@ -17,13 +17,6 @@ import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Drives a {@link RoutePathBuilder.Plan} step by step, then stops: each drive to a settled stop, each turn in place
- * until the heading settles. A drive gets {@code length / minAvgSpeedIps} seconds, clamped to [minLegSec,
- * maxLegSec], and a turn minLegSec; a step that runs out of time ends the whole route with the follower stopped,
- * since the next step was planned from where this one should have ended. {@link #abort} does the same from user
- * code. Run it once, either with {@link #start()} or as {@link #command()} inside a group.
- */
 public final class RouteRun {
     // Pedro's own hold reports settled 100 ms in, before a long turn is done.
     private static final double TURN_SETTLED_RAD = Math.toRadians(2);
@@ -114,7 +107,6 @@ public final class RouteRun {
         return true;
     }
 
-    /** Schedules the route on its own. */
     public void start() {
         Scheduler.schedule(command);
         if (!Scheduler.isScheduled(command)) {
@@ -127,10 +119,7 @@ public final class RouteRun {
         return command;
     }
 
-    /**
-     * Ends the route and stops the follower. Call from OpMode code, not from inside a command; inside a group
-     * the route ends on the group's next tick.
-     */
+    /** Call from OpMode code, not from inside a command; inside a group the route ends on the group's next tick. */
     public void abort(String reason) {
         if (!running) return;
         abortReason = reason;

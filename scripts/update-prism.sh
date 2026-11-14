@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Refreshes the vendored goBILDA Prism driver from goBILDA's official Add-Prism branch.
-# Copies the four driver files verbatim except for the package name, and records the upstream commit.
 set -euo pipefail
 
 REF="${1:-Add-Prism}"

@@ -12,7 +12,6 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 @TeleOp(name = "BioBuzz Tele", group = "A")
 public class BioBuzzTele extends BioBuzzOpMode {
 
-    /** Live, INIT included: off skips all AprilTag work on the webcam. */
     public static boolean cellTip = true;
 
     private static final double SLOW_MULTIPLIER = 0.75;

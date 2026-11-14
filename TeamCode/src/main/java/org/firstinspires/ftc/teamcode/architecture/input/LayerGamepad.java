@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
-/** SDK {@link Gamepad} wrapped with per-control edge/cached suppliers. */
 public final class LayerGamepad {
     private final List<EdgeBooleanSupplier> boolSuppliers = new ArrayList<>();
 

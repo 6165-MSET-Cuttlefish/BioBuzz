@@ -39,8 +39,7 @@ public class DualTelemetry implements Telemetry {
         ensureDisplayFormats();
     }
 
-    // HTML mode is a one-shot setDisplayFormat(), so re-apply it on every off→on toggle or raw tags show.
-    // The dashboard adapter resets to CLASSIC at onOpModePreInit, before the Robot constructor builds this.
+    // setDisplayFormat(HTML) is one-shot and the dashboard adapter resets to CLASSIC at onOpModePreInit: re-apply on every off→on toggle or raw tags show.
     private void ensureDisplayFormats() {
         if (enableDSTelemetry && !dsFormatApplied) {
             dsTelemetry.setDisplayFormat(DisplayFormat.HTML);
@@ -61,10 +60,7 @@ public class DualTelemetry implements Telemetry {
         enableDashboardTelemetry = dash;
     }
 
-    /**
-     * Applies OptimizationToggles.dsTransmissionIntervalMs to the Driver Station when it changed since the last call,
-     * so a direct {@link #setMsTransmissionInterval} holds until the toggle is edited.
-     */
+    /** Applies dsTransmissionIntervalMs only when the toggle changed, so a direct {@link #setMsTransmissionInterval} holds until it is edited. */
     public void syncDsTransmissionInterval() {
         int interval = dsTransmissionIntervalMs;
         if (interval == appliedDsIntervalMs) return;
@@ -75,11 +71,7 @@ public class DualTelemetry implements Telemetry {
         appliedDsIntervalMs = interval;
     }
 
-    /**
-     * Opens a DS frame when the SDK will transmit: TelemetryImpl sends an update() only once more than
-     * getMsTransmissionInterval() ms have passed since its last send. Timed from our confirmed send, which follows
-     * the SDK's timer reset, so ours never elapses first.
-     */
+    /** Opens a DS frame only when TelemetryImpl will send; timed from our confirmed send, which follows its timer reset, so ours never elapses first. */
     public void beginLoop() {
         dsFrameOpen = enableDSTelemetry
                 && (!dsEverSent || (System.nanoTime() - lastDSSendNs) / 1e6 > dsTelemetry.getMsTransmissionInterval());
@@ -154,7 +146,6 @@ public class DualTelemetry implements Telemetry {
         emit(moduleName, stateString, false, true);
     }
 
-    /** Driver Station: one big red line. Dashboard: plain keyed row {@code FAULT <key>}. */
     public void addFault(String key, String message) {
         if (isDSFrame()) dsTelemetry.addLine(faultLine(key, message));
         emit("FAULT " + key, message, false, true);
@@ -170,8 +161,7 @@ public class DualTelemetry implements Telemetry {
         return this;
     }
 
-    // DS only: the dashboard's HTML sanitizer has no <pre>, so the braille field map would render
-    // unwrapped as one run-together line.
+    // DS only: the dashboard's HTML sanitizer has no <pre>, so the braille field map would run together on one line.
     public DualTelemetry addDSLine(String value) {
         if (isDSFrame()) dsTelemetry.addLine(value);
         return this;
@@ -204,8 +194,7 @@ public class DualTelemetry implements Telemetry {
         return emit(caption, value, true, true);
     }
 
-    // The two producer overloads keep the producer live on each backend rather than resolving it
-    // through emit(), which would turn a retained item into a one-shot value.
+    // Not via emit(): it resolves the producer once, turning a retained item into a one-shot value.
     @Override
     public <T> Item addData(String caption, Func<T> valueProducer) {
         if (noSinkEnabled()) return EMPTY_ITEM;
@@ -565,7 +554,6 @@ public class DualTelemetry implements Telemetry {
         }
     }
 
-    /** One packet row, rendered like the adapter's lines: the caption, then each item as caption: value. */
     private final class PacketLine implements Line {
         private final TelemetryPacket owner;
         private final TelemetryPacket.Item row;

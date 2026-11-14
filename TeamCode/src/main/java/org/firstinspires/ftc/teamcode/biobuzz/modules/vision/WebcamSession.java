@@ -22,10 +22,6 @@ import org.openftc.easyopencv.TimestampedOpenCvPipeline;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Opens a webcam, streams the pipeline to FtcDashboard and the DS preview, and pumps
- * {@link WebcamControls} once open. {@link #update()} throws if the camera failed to open.
- */
 public final class WebcamSession {
     private static final int WIDTH = 640;
     private static final int HEIGHT = 480;
@@ -176,10 +172,7 @@ public final class WebcamSession {
         }
     }
 
-    /**
-     * EasyOpenCV holds one pending frame request, so the DS preview and the dashboard stream would
-     * each overwrite the other's and leave it waiting forever; this fans one request out to both.
-     */
+    // EasyOpenCV holds one pending frame request, so the DS preview and dashboard stream would starve each other: fan one out to both.
     private static final class SharedFrameSource implements CameraStreamSource {
         private final CameraStreamSource camera;
         private final List<Continuation<? extends Consumer<Bitmap>>> pending = new ArrayList<>();

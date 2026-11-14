@@ -9,10 +9,7 @@ public final class ShotTuning {
 
     public enum RateMethod { ANALYTIC, NUMERICAL }
 
-    /**
-     * One distance's settings; a point at distance 0 is unused. Extra points at the same distance with a lower rpm
-     * are droop points: the hood to use there when the flywheel has sagged to that rpm (their tofS is ignored).
-     */
+    /** Lower-rpm points at the same distance are droop points (their tofS is ignored); distance 0 is unused. */
     public static class ShotPoint {
         public double distanceIn = 0;
         public double rpm = 0;
@@ -30,7 +27,7 @@ public final class ShotTuning {
     }
 
     public static class ElementTuning {
-        /** Linear drag rate (1/s); 0 is no drag. TODO: tune. */
+        /** Linear drag rate (1/s); 0 is no drag. */
         public double kDragPerS = 0;
         public double minDistanceIn = 0;
         public double maxDistanceIn = 1000;
@@ -42,29 +39,25 @@ public final class ShotTuning {
     }
 
     public static class ShooterTuning {
-        /** Turret pivot from the robot's centre: forward and left. TODO: tune. */
+        /** Turret pivot from the robot's centre: forward and left. */
         public double pivotForwardIn = 0;
         public double pivotLeftIn = 0;
-        /** Launch point's sideways offset from the turret's centre line, left positive. TODO: tune. */
+        /** Launch point's sideways offset from the turret's centre line, left positive. */
         public double exitLeftIn = 0;
-        /** Launch point's height above the TILES. TODO: tune. */
+        /** Launch point's height above the TILES. */
         public double exitHeightIn = 14;
         public double minAngleDeg = -90;
         public double maxAngleDeg = 90;
-        /**
-         * Extra lead added to the flight time. A turret that keeps tracking until the ball leaves needs none, so
-         * raise it only if moving shots still land ahead of travel after phaseDelayS and servoLagS are tuned.
-         */
         public double transferTimeS = 0;
-        /** Servo lead time: command leads the solved angle by rateFF times this. TODO: tune. */
+        /** Servo lead time: command leads the solved angle by rateFF times this. */
         public double servoLagS = 0.05;
-        /** Fastest the turret can turn; a shot needing more is invalid. TODO: tune. */
+        /** Fastest the turret can turn; a shot needing more is invalid. */
         public double maxTurretRateDegPerS = 300;
-        /** Flywheel target leads the table by its rate of change times this while the target rpm rises. TODO: tune. */
+        /** Flywheel target leads the table by its rate of change times this while the target rpm rises. */
         public double flywheelSpinUpLeadS = 0;
-        /** The same while the target rpm falls; a flywheel that only coasts down needs more. TODO: tune. */
+        /** The same while the target rpm falls; a flywheel that only coasts down needs more. */
         public double flywheelSpinDownLeadS = 0;
-        /** Hood target leads the table by its rate of change times this. TODO: tune. */
+        /** Hood target leads the table by its rate of change times this. */
         public double hoodLeadS = 0;
         public double rpmTrim = 0;
         public double hoodTrim = 0;
@@ -139,8 +132,8 @@ public final class ShotTuning {
 
     // TODO: tune.
     static {
-        pollenShooter.pivotForwardIn = 0; // X and Y of the turret position, positive is left and up
-        pollenShooter.pivotLeftIn = 0; // ^^^
+        pollenShooter.pivotForwardIn = 0;
+        pollenShooter.pivotLeftIn = 0;
         pollenShooter.exitLeftIn = 0;
         pollenShooter.exitHeightIn = 14;
         pollenShooter.minAngleDeg = -90;
@@ -179,10 +172,7 @@ public final class ShotTuning {
         nectarShooter.rpmTolerance = 75;
     }
 
-    /**
-     * Turret angle pairs that collide: while the pollen turret is in [pollenMin, pollenMax] and the nectar turret in
-     * [nectarMin, nectarMax], the nectar shooter is marked invalid. All zeros is unused. TODO: fill once mounted.
-     */
+    /** Pollen in [pollenMin, pollenMax] with nectar in [nectarMin, nectarMax] invalidates the nectar shot; all zeros is unused. TODO: fill once mounted. */
     public static class KeepOut {
         public double pollenMinDeg = 0;
         public double pollenMaxDeg = 0;

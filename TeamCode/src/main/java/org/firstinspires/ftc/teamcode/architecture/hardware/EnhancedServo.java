@@ -6,14 +6,13 @@ import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.hardware.ServoController;
 import com.qualcomm.robotcore.hardware.ServoImplEx;
 
-/** Servo wrapper with position caching. No voltage comp — PWM, not power-scaled. */
+/** No voltage compensation: servo PWM isn't power-scaled. */
 public class EnhancedServo implements Servo, PwmControl {
     private final ServoImplEx servo;
     private final WriteCache cache = new WriteCache();
 
     public EnhancedServo(HardwareMap hardwareMap, String name) {
         this.servo = hardwareMap.get(ServoImplEx.class, name);
-        // Servo position range is 0..1, not the WriteCache default of -1..1.
         cache.min = 0.0;
         cache.max = 1.0;
     }

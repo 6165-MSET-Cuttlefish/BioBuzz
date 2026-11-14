@@ -120,7 +120,7 @@ Recheck these after an SDK bump. Our code is cited by path under
   (`LynxServoController.internalSetPulseWidth`), and `setPwmDisable()` makes the SDK forget the last position, so the
   next `setPosition()` goes out even if unchanged (source: `LynxServoController.internalSetPwmEnable`). A wrapper's
   own write cache must forget its value too, as `EnhancedServo.setPwmDisable()` does
-  (`architecture/hardware/EnhancedServo.java:63-67`).
+  (`architecture/hardware/EnhancedServo.java:62-66`).
 
 ## Battery voltage and other ADC reads
 

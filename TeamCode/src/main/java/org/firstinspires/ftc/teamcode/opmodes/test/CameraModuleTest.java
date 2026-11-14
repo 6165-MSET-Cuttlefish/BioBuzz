@@ -10,10 +10,6 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.TrackedBall;
 import org.firstinspires.ftc.teamcode.opmodes.test.auto.CameraRobot;
 
-/**
- * Starts at (0, 0, 0), so while the robot hasn't moved a field ball reads robot-relative (+X forward,
- * +Y left of the pose reference); the "robot" column stays robot-relative after it moves.
- */
 @TeleOp(name = "Camera Module Test", group = "Test")
 public class CameraModuleTest extends EnhancedOpMode {
 

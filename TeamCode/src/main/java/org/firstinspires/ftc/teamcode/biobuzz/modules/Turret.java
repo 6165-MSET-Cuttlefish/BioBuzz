@@ -24,7 +24,7 @@ public class Turret extends Module {
 
         // TODO: tune.
         static {
-            nectar.x = 0; //
+            nectar.x = 0;
             nectar.y = 0;
             nectar.leftPosition = 0;
             nectar.backPosition = 0.5;
@@ -57,7 +57,6 @@ public class Turret extends Module {
         LEFT(-90),
         RIGHT(90),
         AUTOAIM(0),
-        /** Follows {@link #setSotmAngles}. */
         SOTM(0),
         HOLD(0);
 

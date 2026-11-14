@@ -38,7 +38,6 @@ public interface State {
         MODULES.put(this, module);
     }
 
-    /** Transition this state's owning module to this state. Throws if unbound. */
     default boolean activate() {
         return requireModule().setState(this);
     }

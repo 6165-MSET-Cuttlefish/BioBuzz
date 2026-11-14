@@ -1,7 +1,24 @@
 // Portions (drag-corrected time of flight, phase-delay projection, look-ahead iteration) adapted from
 // Mechanical-Advantage/RobotCode2026Public LaunchCalculator:
 // Copyright (c) 2025-2026 Littleton Robotics, http://github.com/Mechanical-Advantage
-// Use of that code is governed by an MIT-style license.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
 package org.firstinspires.ftc.teamcode.biobuzz;
 
@@ -10,10 +27,7 @@ import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzField.CellOpening;
 
 import java.util.ArrayDeque;
 
-/**
- * Shooting on the move for any number of turrets, holding no hardware. Field frame: Pedro inches, heading and
- * omega counter-clockwise. Call {@link #solve} once per loop.
- */
+/** Field frame: Pedro inches, heading and omega counter-clockwise. */
 public final class ShotSolver {
 
     public static final double GRAVITY_IN_PER_S2 = 386.09;
@@ -27,7 +41,7 @@ public final class ShotSolver {
 
         public Motion() {}
 
-            public Motion(double xIn, double yIn, double headingRad, double vxInPerS, double vyInPerS, double omegaRadPerS) {
+        public Motion(double xIn, double yIn, double headingRad, double vxInPerS, double vyInPerS, double omegaRadPerS) {
             this.xIn = xIn;
             this.yIn = yIn;
             this.headingRad = headingRad;
@@ -306,10 +320,6 @@ public final class ShotSolver {
         }
     }
 
-    /**
-     * Flies the ball under linear drag and checks it crosses the opening's plane inward, inside the outline less the
-     * ball's radius and the rim clearance, and (if required) falling.
-     */
     private static void checkEntry(ShooterGeometry g, ShotTuning.ElementTuning e, CellOpening opening, Result r,
                                    double px, double py, double ux, double uy, double[] aim) {
         double k = e.kDragPerS;
@@ -379,7 +389,6 @@ public final class ShotSolver {
         return (vx * ry - vy * rx) / (rx * rx + ry * ry);
     }
 
-    /** Ball position {@code t} seconds after launch under linear drag {@code k}. */
     public static double[] flight(double x, double y, double z, double vx, double vy, double vz, double k, double t) {
         double reach = dragTime(t, k);
         double g0 = GRAVITY_IN_PER_S2;
@@ -391,7 +400,6 @@ public final class ShotSolver {
         return (x - o[0]) * opening.n[0] + (y - o[1]) * opening.n[1] + (z - o[2]) * opening.n[2];
     }
 
-    /** How far a unit initial velocity carries in {@code t} under linear drag {@code k}: (1 - e^-kt) / k. */
     public static double dragTime(double t, double k) {
         return k > 0 ? (1 - Math.exp(-k * t)) / k : t;
     }
@@ -453,11 +461,6 @@ public final class ShotSolver {
         }
     }
 
-    /**
-     * Linear interpolation between the distances with points (distance > 0), clamped to the ends. Each distance's
-     * value comes from its highest-rpm point; its hood, with the flywheel {@code droopRpm} below that, from
-     * interpolating by rpm among the points at that distance.
-     */
     static double lookup(ShotTuning.ShotPoint[] table, double distanceIn, Column c, double droopRpm) {
         double lo = Double.NEGATIVE_INFINITY;
         double hi = Double.POSITIVE_INFINITY;

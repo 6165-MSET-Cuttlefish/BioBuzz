@@ -84,7 +84,6 @@ public abstract class Module {
         throw new IllegalArgumentException("No state of type: " + stateClass.getSimpleName());
     }
 
-    /** Transition to {@code newState}. True on success/no-op; false when the state class isn't registered. */
     public final boolean setState(State newState) {
         for (int i = 0; i < states.size(); i++) {
             State current = states.get(i);

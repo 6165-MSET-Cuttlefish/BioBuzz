@@ -7,7 +7,6 @@ public class EdgeBooleanSupplier {
 
     private boolean previous;
     private boolean current;
-    // Last InputClock frame refreshed on; -1 forces a refresh on first query.
     private long lastUpdatedFrame = -1L;
 
     public EdgeBooleanSupplier(BooleanSupplier booleanSupplier) {

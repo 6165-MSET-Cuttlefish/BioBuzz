@@ -7,11 +7,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Keeps ball identity by field position so it survives the camera turning away. OpMode thread only.
- * Unseen balls hold their last seen position, deliberately not coasted, until forgotten; that
- * includes balls the camera tracker is still coasting.
- */
+/** Unseen balls keep their last seen position, deliberately not coasted, until forgotten. */
 public final class FieldBallTracker {
 
     @Config("Field Ball Tracking")

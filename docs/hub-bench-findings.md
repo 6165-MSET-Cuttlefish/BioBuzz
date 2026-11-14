@@ -95,11 +95,11 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     calls the post-stop listeners with no watchdog. EasyOpenCV 1.7.3 (SDK 12 Vision's dependency) registers every
     camera when it's built and closes it from that post-stop call (`OpenCvCameraBase`). `CellTipCamera.stop()`
     (`biobuzz/modules/CellTipCamera.java:88-94`) closes it inside the window instead, through
-    `WebcamSession.close()` (`biobuzz/modules/vision/WebcamSession.java:108-116`). To win the time back, leave the
+    `WebcamSession.close()` (`biobuzz/modules/vision/WebcamSession.java:104-112`). To win the time back, leave the
     close to EasyOpenCV or use `closeCameraDeviceAsync`, keeping the dashboard `stopCameraStream()`. The
     `CellTipPipeline.release()` call can stay in `stop()`: it frees only the native AprilTag detector, under the lock
     `processFrame` holds, so a frame that arrives after it skips detection
-    (`biobuzz/modules/vision/CellTipPipeline.java:94-95` and `:161-167`).
+    (`biobuzz/modules/vision/CellTipPipeline.java:90-91` and `:157-163`).
 - **deploySloth: wait for the `Processed Sloth Load` toast before INIT ([`CLAUDE.md`](../CLAUDE.md), Build &
   deploy).** A fixed 5 s wait is marginal; without the toast, allow 6 s.
   - The jar loaded 4.3–4.8 s (2026-10-09) and 4.7–5.2 s (2026-10-24) after the push, which comes about 0.1–0.2 s

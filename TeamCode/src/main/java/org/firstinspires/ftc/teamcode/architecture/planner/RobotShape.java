@@ -4,13 +4,6 @@ import com.pedropathing.math.Pose;
 
 import java.util.List;
 
-/**
- * The robot as the ball planner sees it, in inches: a {@code lengthIn} by {@code widthIn} frame centred on the
- * centre of rotation, length along the heading, and an intake {@code intakeWidthIn} wide across the heading whose
- * middle is {@code intakeOffsetIn} ahead of that centre. The footprint the planner keeps clear is the rectangle
- * around both, so an intake may stick out past the frame. A ball is collected when the intake passes over it
- * driving forward.
- */
 public final class RobotShape {
     public final double lengthIn;
     public final double widthIn;
@@ -38,7 +31,6 @@ public final class RobotShape {
         turnRadius = Math.sqrt(front * front + halfWidth * halfWidth);
     }
 
-    /** The farthest the footprint reaches from its centre: the circle a turn in place sweeps. */
     public double turnRadius() {
         return turnRadius;
     }
@@ -55,7 +47,6 @@ public final class RobotShape {
         return new Pose(centre.x() + intakeOffsetIn * Math.cos(h), centre.y() + intakeOffsetIn * Math.sin(h), h);
     }
 
-    /** Whether (x, y) lies under the footprint of a robot at {@code centre}. */
     public boolean covers(Pose centre, double x, double y) {
         return under(centre.x(), centre.y(), Math.cos(centre.heading()), Math.sin(centre.heading()), x, y);
     }
@@ -80,7 +71,6 @@ public final class RobotShape {
         return out;
     }
 
-    /** Whether the footprint at (x, y) facing {@code heading} is inside {@code area} and more than {@code gap} from every obstacle. */
     public boolean fits(double x, double y, double heading, Region area, List<Obstacle> obstacles, double gap) {
         return clash(x, y, heading, area, obstacles, gap) == NONE;
     }
@@ -128,7 +118,6 @@ public final class RobotShape {
         return NONE;
     }
 
-    /** Whether the robot can turn in place at (x, y): the {@link #turnRadius} circle is inside {@code area} and more than {@code gap} from every obstacle. */
     public boolean canTurnAt(double x, double y, Region area, List<Obstacle> obstacles, double gap) {
         double r = turnRadius;
         if (x - r < area.minX || x + r > area.maxX || y - r < area.minY || y + r > area.maxY) return false;

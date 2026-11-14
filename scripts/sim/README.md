@@ -259,7 +259,7 @@ Controllers, as the tables name them:
 
 Gains are grid-searched per plant, controller and measurement at 84 in and f 0.45 (`GRID` and `tune_cost` in
 `run_cad.py`). Measurement is `hub` (8192-count positions in a 50 ms window with ±0.5 ms timestamp error, the
-`Shooter.measure()` rule at `biobuzz/modules/Shooter.java:333`) or `oq` (OctoQuad counts per 10, 20 or 50 ms latch,
+`Shooter.measure()` rule at `biobuzz/modules/Shooter.java:331`) or `oq` (OctoQuad counts per 10, 20 or 50 ms latch,
 read 6.6 ms after the latch; the units and int16 overflow are unverified).
 
 A burst of 10 balls (3 and 5 are prefixes) passes at a feed interval when every ball of all 8 seeds stays inside
@@ -465,7 +465,7 @@ the headings `report.py` prints into `out/tables.txt`; rows of other drag and sp
 | the CAD exit point's effect on the needed speed | `checks/exit_sched.py`, `checks/exp_checks2.py` part 1 |
 | the engine against the closed form and an independent solver | `validate.py`, `checks/closedform_check.py`, `checks/indep.py` |
 
-The comparisons with `rpmTolerance = 75` and `exitHeightIn = 14` (`ShotTuning.java:73` and `:51`) and the hood servo
+The comparisons with `rpmTolerance = 75` and `exitHeightIn = 14` (`ShotTuning.java:66` and `:48`) and the hood servo
 arithmetic are worked out by hand from these tables.
 
 ### The shot-pick fix on 2026-11-10
@@ -489,7 +489,7 @@ What moved:
 
 ### What it models
 
-A 2.8 in ball from a 14 in exit at the turret axis (`exitHeightIn = 14`, `ShotTuning.java:51`) into the CELL opening
+A 2.8 in ball from a 14 in exit at the turret axis (`exitHeightIn = 14`, `ShotTuning.java:48`) into the CELL opening
 as `BioBuzzField.java` defines it, aimed at the solver's aim point, scored by the `ShotSolver.checkEntry` rule with
 1 in rim clearance; the constants are in `geom.py`. Drag-free and exact, except `run_drag.py`, which repeats the key
 results with quadratic drag (air 1.204 kg/m³; 40 g with Cd 0.45, 25 g with 0.47, 15 g with 0.50; all assumed) by RK4

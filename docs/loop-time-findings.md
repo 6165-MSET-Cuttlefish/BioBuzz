@@ -72,7 +72,7 @@ about 1.2 ms; not tried.
 
 - The `LinearOpMode` loop does real work and is still ≈1.2 ms faster: about 8% of the Ivy log's 15.3 ms mean loop.
   `LoopProfiler` reports the SDK's share as `unprofiled`: loop time minus the top-level sections
-  (`architecture/telemetry/LoopProfiler.java:51`).
+  (`architecture/telemetry/LoopProfiler.java:50`).
 
 ## Per-command costs
 

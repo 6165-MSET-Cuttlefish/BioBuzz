@@ -33,7 +33,7 @@ From straight in front of the HIVE the opening is edge-on and nothing will go in
 | X | Switch the target CELL (`STARTS_UP` ↔ `STARTS_DOWN`); only with `cellByFieldHalf` off |
 | Y | SOTM on / off (off = aim as if standing still) |
 
-Dashboard group **SOTM Test**: `startX`, `startY`, `startHeadingDeg` (RED coordinates; put the robot there before INIT), `pollenEnabled`, `nectarEnabled`, `aim` (`LEGACY` = the old `Turret` auto-aim), `cellByFieldHalf`, `flipOnCameraTip`.
+Dashboard group **SOTM Test**: `startX`, `startY`, `startHeadingDeg` (RED coordinates; put the robot there before INIT), `pollenEnabled`, `nectarEnabled`, `aim` (`LEGACY` = the old `Turret` auto-aim, the shot solved as if standing still), `cellByFieldHalf`, `flipOnCameraTip`.
 
 **Which CELL it aims at.** With `cellByFieldHalf` on (the default), the turrets aim at the CELL facing the half of the field the robot is in: the audience-side CELL from the audience half, the rear one from the rear half. Within `cellSwitchBandIn` (3 in) of the midline it keeps its last choice. It does not know which CELL is up: if the one on your side is tipped down, drive to the other side. With it off, X chooses, and `flipOnCameraTip` flips the choice on each TIP the webcam sees.
 
@@ -169,4 +169,3 @@ Copy into `ShotTuning.java`: both tables, `kDragPerS`, every `pollenShooter` / `
 - **Feeding.** SOTM Test only opens the hardstop; the intake and transfer (`Intran`) are not driven.
 - **Competition TeleOp and autos.** SOTM lives only in SOTM Test.
 - **Automatic CELL switching in auto.** `TargetSelector.onTipVerdict()` exists and `flipOnCameraTip` exercises it, but no auto calls it.
-- **Opening position.** Its distance from the HIVE pivot is from the manual's figures and still needs checking against the field CAD (`TODO: verify` in `BioBuzzField`).

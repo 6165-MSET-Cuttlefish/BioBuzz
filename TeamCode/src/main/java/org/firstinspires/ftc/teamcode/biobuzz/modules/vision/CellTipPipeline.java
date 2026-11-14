@@ -16,11 +16,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * HIVE-cell tip verdict from the webcam: a cluster of this alliance's tags reading right-side up
- * ({@code |roll| < 90}) is scorable; upside-down or absent is tipped. The verdict starts tipped and
- * flips either way only after the new reading holds for {@link Tuning#holdSeconds}.
- */
+/** Starts TIPPED and flips either way only after a new reading holds for {@link Tuning#holdSeconds}. */
 public class CellTipPipeline extends TimestampedOpenCvPipeline {
 
     @Config("Cell Tip Detection")

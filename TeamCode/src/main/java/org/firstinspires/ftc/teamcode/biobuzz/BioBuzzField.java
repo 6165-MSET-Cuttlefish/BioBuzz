@@ -62,18 +62,14 @@ public final class BioBuzzField {
 
     // Fig 9-9: a 42.91 in bar, CELL opening at its end, square to it; Fig 9-10: the scorable CELL tilts 30° up, its opening 53.5 to 65.6 in above the TILES.
     private static final double CELL_TILT_RAD = Math.toRadians(30);
-    private static final double OPENING_FROM_PIVOT_ALONG_BAR_IN = 42.91 / 2; // TODO: verify against the field CAD
+    private static final double OPENING_FROM_PIVOT_ALONG_BAR_IN = 42.91 / 2;
     public static final double OPENING_BOTTOM_HEIGHT_IN = 53.5;
     // Fig 9-11: a pentagon 20 in wide, 14 in tall, its straight sides 7.61 in.
     public static final double OPENING_WIDTH_IN = 20;
     public static final double OPENING_SHOULDER_IN = 7.61;
     public static final double OPENING_HEIGHT_IN = 14;
 
-    /**
-     * A scorable CELL's opening in Pedro coordinates: {@code u} runs across it along the field's x, {@code w} up its face
-     * from the bottom edge, {@code n} out of it. Its outline in (u, w) runs from (-10, 0) to (10, 0), the shoulders at
-     * 7.61 in, the apex at (0, 14).
-     */
+    /** u runs across the opening along the field's x, w up its face from the bottom edge, n out of it. */
     public static final class CellOpening {
         public final double bottomCentreXIn, bottomCentreYIn, bottomCentreZIn;
         public final double[] u, w, n;
@@ -153,10 +149,7 @@ public final class BioBuzzField {
     private static final double HIVE_RAIL_FAR_IN = 24.733;
     private static final double HIVE_RAIL_HALF_LENGTH_IN = 19.4723;
 
-    /**
-     * The HIVE frame's two ground rails, one on each side of the centre line and parallel to it: the only parts of
-     * the HIVE a robot can't drive under. Centred on the field, so they are the same for both alliances.
-     */
+    /** The HIVE's two ground rails: the only parts of it a robot can't drive under. */
     public static List<Obstacle> hiveRails() {
         double centre = FieldConfig.fieldWidthInches / 2;
         double minY = centre - HIVE_RAIL_HALF_LENGTH_IN;
@@ -166,10 +159,7 @@ public final class BioBuzzField {
                 new Obstacle(centre + HIVE_RAIL_NEAR_IN, centre + HIVE_RAIL_FAR_IN, minY, maxY));
     }
 
-    /**
-     * This alliance's half (G402: columns A-C are RED's during AUTO), {@code marginIn} in from the walls and the
-     * centre line; the ball planner keeps the robot's whole footprint inside it. RED's is x in [m, W/2 - m], BLUE's x in [W/2 + m, W - m].
-     */
+    /** This alliance's half (G402: columns A-C are RED's in AUTO), marginIn in from the walls and the centre line. */
     public static Region ownHalf(double marginIn) {
         double width = FieldConfig.fieldWidthInches;
         if (!(marginIn >= 0 && 4 * marginIn < width)) {

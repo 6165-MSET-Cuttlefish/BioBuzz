@@ -26,19 +26,15 @@ import org.firstinspires.ftc.teamcode.pedro.BettaConstants;
 @Config("SOTM Test")
 public class SotmTest extends BioBuzzOpMode {
 
-    /** LEGACY: the turrets run Turret's own AUTOAIM and the shot is solved as if standing still. */
     public enum Aim { SOTM, LEGACY }
 
-    /** RED coordinates; mapped for BLUE. */
     public static double startX = 30;
     public static double startY = 30;
     public static double startHeadingDeg = 90;
     public static Aim aim = Aim.SOTM;
     public static boolean pollenEnabled = true;
     public static boolean nectarEnabled = true;
-    /** On: aim at the CELL facing the robot's half of the field. Off: X and the webcam choose. */
     public static boolean cellByFieldHalf = true;
-    /** With cellByFieldHalf off, flip the target on each TIP the webcam sees. */
     public static boolean flipOnCameraTip = false;
 
     private static final int POLLEN = 0;

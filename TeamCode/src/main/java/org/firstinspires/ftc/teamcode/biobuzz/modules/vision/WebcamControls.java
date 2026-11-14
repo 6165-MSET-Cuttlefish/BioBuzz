@@ -14,10 +14,6 @@ import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.GainCon
 import org.firstinspires.ftc.robotcore.external.hardware.camera.controls.WhiteBalanceControl;
 import org.openftc.easyopencv.OpenCvWebcam;
 
-/**
- * Live, dashboard-tunable webcam exposure/gain/white balance. Robot-only: EOCV-Sim never opens an
- * OpenCvWebcam.
- */
 @Config("Webcam Controls")
 public class WebcamControls {
 

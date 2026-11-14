@@ -1,9 +1,6 @@
 package org.firstinspires.ftc.teamcode.biobuzz;
 
-/**
- * One shooter as {@link ShotSolver} sees it. Robot frame: forward and left of the robot's centre. A turret angle is
- * {@code sign * (robot-relative bearing - zeroBearingDeg)}, with robot-relative bearings counter-clockwise from forward.
- */
+/** Robot frame: forward and left of centre; turret angle = sign * (bearing CCW from forward - zeroBearingDeg). */
 public final class ShooterGeometry {
 
     /** §9.8: POLLEN is a 2.8 in ball, NECTAR 3.6 in. */

@@ -7,18 +7,9 @@ import com.pedropathing.paths.curves.bezier.BezierCurve;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The intake leg's curve: Pedro's spline from the start through only the balls the intake doesn't already sweep up
- * in passing, so a wide intake turns a bent curve into a straighter one.
- */
 public final class IntakeCurvePlanner {
     private IntakeCurvePlanner() {}
 
-    /**
-     * The indices into {@code order} of the balls the curve must pass through, from (x0, y0). From each kept ball it
-     * runs straight to the furthest ball it can reach while passing every ball in between within half the intake
-     * width; those are swept up and dropped. The last ball always stays.
-     */
     public static int[] essentialStops(double x0, double y0, Ball[] order, double intakeWidthIn) {
         int[] stops = new int[order.length];
         int count = 0;
@@ -41,10 +32,6 @@ public final class IntakeCurvePlanner {
         return kept;
     }
 
-    /**
-     * Control points of Pedro's spline from {@code start} through every stop in turn: a line for one stop, otherwise
-     * {@link BezierCurve#through}, one Bezier passing each point at evenly spaced t.
-     */
     public static Pose[] throughCurve(Pose start, List<Pose> stops) {
         List<Pose> points = new ArrayList<>(stops.size() + 1);
         points.add(start);

@@ -45,7 +45,7 @@ gap. With `RobotGeometry` (16 in long, 15 in wide, intake 15 in wide and 8 in ah
 | on RED's half, level with the rail (Pedro y 51.3 to 90.2) | x from 8.5 to 37.5, or from 56.5 to 62.25 |
 
 The rows were checked with a reimplementation of the footprint test; the last is computed from the rail constants
-(`biobuzz/BioBuzzField.java:152-166`) and the 141.5 in `FieldConfig.fieldWidthInches`. BLUE's is its 180° rotation.
+(`biobuzz/BioBuzzField.java:148-159`) and the 141.5 in `FieldConfig.fieldWidthInches`. BLUE's is its 180° rotation.
 Between the rail and the centre line only a 5.75 in strip is reachable.
 
 - `BallCollection.select` (`biobuzz/BallCollection.java:249-252`) drops these balls before picking the nearest
@@ -67,7 +67,7 @@ centre driving through it. Two checks decide it:
 
 - `IntakeCurvePlanner.essentialStops` picks the balls the intake curve must pass through: from the start and then
   each kept ball it runs straight to the furthest ball whose in-between balls all lie within `intakeWidthIn / 2` of
-  that chord (`IntakeCurvePlanner.sweptUp`, `architecture/planner/IntakeCurvePlanner.java:75-84`).
+  that chord (`IntakeCurvePlanner.sweptUp`, `architecture/planner/IntakeCurvePlanner.java:62-71`).
 - `RoutePathBuilder` builds Pedro's spline through those stops, traces the intake's middle (the robot's centre plus
   `intakeOffsetIn` along the heading, at `Segment`'s samples at most 1 in apart), and turns any ball farther than
   `intakeWidthIn / 2` from that track into a stop (`architecture/planner/RoutePathBuilder.java:244-274`). A leg

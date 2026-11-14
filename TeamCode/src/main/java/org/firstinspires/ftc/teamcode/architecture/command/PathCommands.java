@@ -22,7 +22,7 @@ import java.util.function.DoubleSupplier;
 public final class PathCommands {
     private PathCommands() {}
 
-    /** Follows {@code path} and finishes once Pedro's end-hold has settled. */
+    /** Follows {@code path} and finishes when Pedro clears isBusy(): once settled or timeoutConstraint into the end hold, so a long end turn may still be going. */
     public static CommandBuilder follow(Follower f, Path path) {
         return onFollower(f, Command.build()
                 .setStart(() -> {
@@ -44,10 +44,7 @@ public final class PathCommands {
                 .setEnd(stopIfInterrupted(f)));
     }
 
-    /**
-     * Follows {@code path} but finishes {@code inches} short of the end of the whole path, leaving Pedro
-     * driving the tail so the next command overlaps it.
-     */
+    /** Follows {@code path} but finishes {@code inches} short of the whole path's end, leaving Pedro driving the tail under the next command. */
     public static CommandBuilder followUntilRemaining(Follower f, Path path, double inches) {
         List<PathSegment> segments = path.getSegments();
         double[] tails = new double[segments.size()];
@@ -101,7 +98,6 @@ public final class PathCommands {
         };
     }
 
-    /** Trigger for {@code waitUntil}, e.g. {@code parallel(follow(f, p), sequential(waitUntil(remainingBelow(f, 8)), instant(...)))}. */
     public static BooleanSupplier remainingBelow(Follower f, double inches) {
         return () -> f.remainingDistance() <= inches;
     }

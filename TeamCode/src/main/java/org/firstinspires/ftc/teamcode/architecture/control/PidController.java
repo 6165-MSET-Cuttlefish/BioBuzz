@@ -122,7 +122,6 @@ public class PidController {
         return this;
     }
 
-    /** Wrap error to take the shortest path across a continuous range (e.g. heading in [-π, π]). */
     public PidController withContinuousInput(double minInput, double maxInput) {
         if (maxInput <= minInput) {
             throw new IllegalArgumentException("maxInput must be > minInput");

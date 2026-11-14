@@ -20,10 +20,7 @@ public final class FieldConfig {
         symmetry = fieldSymmetry;
     }
 
-    /**
-     * The dashboard's field background: a render with Pedro's origin at its bottom-left corner, {@code inches} wide,
-     * drawn at {@code opacity} (a light image needs less, or the white robot outline disappears into it).
-     */
+    /** Dashboard background with Pedro's origin at its bottom-left, {@code inches} wide; a light image needs a lower {@code opacity} or the white robot outline vanishes. */
     public static void setImage(String path, double inches, double opacity) {
         if (path == null || !(inches > 0) || !(opacity > 0 && opacity <= 1)) {
             throw new IllegalArgumentException(String.format(

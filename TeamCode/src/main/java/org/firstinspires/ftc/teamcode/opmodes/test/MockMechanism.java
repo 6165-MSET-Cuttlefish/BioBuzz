@@ -38,7 +38,6 @@ public class MockMechanism extends Module {
             // Safe the old motor before dropping it; write()/stop() only touch the current one.
             if (motor != null) motor.stop();
             motor = null;
-            // boundName is updated first so an unknown name throws once (fail-fast), not every loop.
             if (!name.isEmpty()) {
                 motor = new EnhancedMotor(hardwareMap, name);
             }
