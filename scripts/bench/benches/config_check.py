@@ -4,7 +4,7 @@ import re
 from xml.etree import ElementTree
 
 PAIRS = (("BioBuzz Tele", "biobuzz"), ("Turret Aim Test", "biobuzz"), ("SOTM Test", "biobuzz"),
-         ("BioBuzz Shooter Test", "biobuzz"), ("Intake Transfer Shooter Test", "intake_transfer_shooter"),
+         ("BioBuzz Shooter Test", "biobuzz"), ("Intake Transfer Shooter Test", "biobuzz"),
          ("Cell Tip Test", "camera"), ("Decode Tele", "cuttle_decode"))
 CONFIGS = tuple(dict.fromkeys(config for _, config in PAIRS))
 EXPANSION_ADDRESS = 2

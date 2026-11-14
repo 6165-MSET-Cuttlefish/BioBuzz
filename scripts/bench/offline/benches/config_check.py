@@ -1,6 +1,6 @@
 """Bench: Config Check offline: its verdicts on synthetic results (each one fails when weakened), its source scan, and
 the bench end to end on fake_hub.py with an Expansion Hub at address 2: the typed ports statement before any adb
-command, the port probe gate, four shipped configs by name, seven INITs and no START. No hub, no adb, no network.
+command, the port probe gate, three shipped configs by name, seven INITs and no START. No hub, no adb, no network.
 Run with: python3 -I scripts/bench/offline/benches/config_check.py
 """
 import contextlib
@@ -256,8 +256,8 @@ def mutation_cases():
 def source_scan():
     found = cc.desktop_lookups(WORKTREE)
     its = found.get("Intake Transfer Shooter Test") or {}
-    wanted = {"nectarFlywheel", "pollenFlywheel", "nectarHood", "pollenHood", "intake", "transfer", "melonbotics",
-              "blocker"}
+    wanted = {"NectarShooter", "PollenShooter", "NectarHood", "PollenHood", "intake", "transfer", "transferServo",
+              "hardstop"}
     expect("source scan: every OpMode's file is found", all(found.get(o) for o in ROBOT_OPMODES))
     expect("source scan: Intake Transfer Shooter Test's literal lookups are found, all in its config",
            wanted <= set(its.get("literals") or []) and not wanted & set(its.get("notInConfig") or []))
@@ -376,7 +376,7 @@ def on_the_fake_hub():
            and not [n for n in hub.configs if n.startswith("bench_")])
     probe = next((p for o, p in inits if o == "Bench: Photon Stock"), {})
     expect("the port probe ran first: Bench: Photon Stock on bench_photon, probe only, with the Expansion Hub on RS485",
-           names[names.index("bench_photon") + 1:names.index("bench_photon") + 5] == list(cc.CONFIGS)
+           names[names.index("bench_photon") + 1:names.index("bench_photon") + 1 + len(cc.CONFIGS)] == list(cc.CONFIGS)
            and probe.get("probeOnly") == 1 and probe.get("expansion") == 2 and "Bench: Photon Stock" in starts
            and 'name="efl" port="0"' in (out / "logs" / "bench_photon.xml").read_text())
     photon = ElementTree.fromstring((out / "logs" / "bench_photon.xml").read_text())
@@ -385,7 +385,7 @@ def on_the_fake_hub():
     expect("bench_photon names servos on ports 0 and 1 of each hub only, as the probe's servos=2 would",
            servo_ports == [("173", "0"), ("173", "1"), ("2", "0"), ("2", "1")])
     shipped = [s for s in hub.switched if s["name"] in cc.CONFIGS]
-    expect("four shipped configs, each activated by name with this install's resource id",
+    expect("three shipped configs, each activated by name with this install's resource id",
            [s["name"] for s in shipped] == list(cc.CONFIGS)
            and all(s["location"] == "RESOURCE" and s["resourceId"] == hub.probe["shippedConfigs"][s["name"]]
                    for s in shipped))
@@ -431,7 +431,7 @@ def on_the_fake_hub():
 
 
 def declaration():
-    expect("declared: flag-only, needs a person, the S3 statement, Bench: Photon Stock, bench_photon and four shipped "
+    expect("declared: flag-only, needs a person, the S3 statement, Bench: Photon Stock, bench_photon and three shipped "
            "configs", not BENCH.default and BENCH.person is not None and BENCH.statement == "--s3-ports"
            and BENCH.opmodes == ("Bench: Photon Stock",) and BENCH.configs == (rb.CONFIG_PHOTON,) + cc.CONFIGS)
     expect("its Needs a person command parses and carries --s3-ports",

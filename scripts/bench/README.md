@@ -484,8 +484,7 @@ shipped config, holds INIT 4 s, then STOPs it. It never STARTs one. No new OpMod
 
 | OpMode | config |
 |---|---|
-| BioBuzz Tele, Turret Aim Test, SOTM Test, BioBuzz Shooter Test | `biobuzz` |
-| Intake Transfer Shooter Test | `intake_transfer_shooter` |
+| BioBuzz Tele, Turret Aim Test, SOTM Test, BioBuzz Shooter Test, Intake Transfer Shooter Test | `biobuzz` |
 | Cell Tip Test | `camera` |
 | Decode Tele | `cuttle_decode` |
 
@@ -508,7 +507,7 @@ What it does, in order:
    the probe didn't reach both hubs, no robot OpMode is INITed. `bench_photon` names servos only on ports 0 and 1 of
    each hub, so the probe-only run turns off no other servo port's signal; `--s3-ports` has servo ports 0-5 of both
    hubs empty anyway.
-3. Activates each shipped config by name, with the resource id this install gives it (four config switches), and
+3. Activates each shipped config by name, with the resource id this install gives it (three config switches), and
    INITs that config's OpModes one at a time (seven INITs). Then it switches back to `bench_main`.
 
 | judged, per OpMode | FAIL when |

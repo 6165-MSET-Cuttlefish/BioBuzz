@@ -93,14 +93,14 @@ public class IntakeTransferShooterTest extends OpMode {
     public void init() {
         hubs = hardwareMap.getAll(LynxModule.class);
         for (LynxModule hub : hubs) hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
-        nectarFlywheel = hardwareMap.get(DcMotorEx.class, "nectarFlywheel");
-        pollenFlywheel = hardwareMap.get(DcMotorEx.class, "pollenFlywheel");
-        nectarHood = hardwareMap.get(ServoImplEx.class, "nectarHood");
-        pollenHood = hardwareMap.get(ServoImplEx.class, "pollenHood");
+        nectarFlywheel = hardwareMap.get(DcMotorEx.class, "NectarShooter");
+        pollenFlywheel = hardwareMap.get(DcMotorEx.class, "PollenShooter");
+        nectarHood = hardwareMap.get(ServoImplEx.class, "NectarHood");
+        pollenHood = hardwareMap.get(ServoImplEx.class, "PollenHood");
         intakeMotor = hardwareMap.get(DcMotorEx.class, "intake");
         transferMotor = hardwareMap.get(DcMotorEx.class, "transfer");
-        melonbotics = hardwareMap.get(CRServoImplEx.class, "melonbotics");
-        blockerServo = hardwareMap.get(ServoImplEx.class, "blocker");
+        melonbotics = hardwareMap.get(CRServoImplEx.class, "transferServo");
+        blockerServo = hardwareMap.get(ServoImplEx.class, "hardstop");
         battery = hardwareMap.voltageSensor.iterator().next();
         nectarFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
         pollenFlywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
