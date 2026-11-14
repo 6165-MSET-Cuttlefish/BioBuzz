@@ -51,7 +51,7 @@ GOOD_PROBE = {"power": 0.1, "ms": 200, "limitAmps": 0.3, "empty": True, "servoPo
               "ports": [{"channel": c, "hub": h, "idleAmps": 0.0, "drivenAmps": 0.05, "empty": True}
                         for h in (173, 2) for c in (("fl", "fr", "bl", "br") if h == 173 else ("efl", "efr", "ebl",
                                                                                               "ebr"))]}
-NECTAR = 'java.lang.IllegalArgumentException: Unable to find a hardware device with name "NectarTurret" and type Servo'
+NECTAR = 'java.lang.IllegalArgumentException: Unable to find a hardware device with name "nectarTurret" and type Servo'
 NPE = "java.lang.NullPointerException: Attempt to invoke virtual method 'double Pose.getX()' on a null object reference"
 WEBCAM = "java.lang.IllegalStateException: aprilTagDetector failed to open (EasyOpenCV error CAMERA_OPEN_ERROR)"
 PINPOINT = "java.lang.IllegalStateException: goBILDA Pinpoint 'pinpoint' isn't answering on its I2C port"
@@ -115,8 +115,8 @@ CASES = [
      lambda v: only_fails(v, ("Turret Aim Test", "lookups"))
      and v.detail[("Turret Aim Test", "lookups")].startswith("INIT stopped at a missing device")),
     ("the SDK's other two missing-device messages fail it too",
-     lambda: crash(crash(good_record(), "SOTM Test", 'Unable to find a hardware device with name "PollenHood"'),
-                   "BioBuzz Tele", 'Unable to find a hardware device with the name "NectarShooter"'),
+     lambda: crash(crash(good_record(), "SOTM Test", 'Unable to find a hardware device with name "pollenHood"'),
+                   "BioBuzz Tele", 'Unable to find a hardware device with the name "nectarFlywheel"'),
      lambda v: only_fails(v, ("SOTM Test", "lookups"), ("BioBuzz Tele", "lookups"))),
     ("a NullPointerException fails both checks",
      lambda: crash(good_record(), "BioBuzz Tele", NPE),
@@ -199,7 +199,7 @@ def verdict_cases():
     record = crash(good_record(), "Turret Aim Test", NECTAR)
     text = "\n".join(BENCH.summary(record))
     expect("summary: the table names the missing device and the OpMode's config", "| Turret Aim Test | biobuzz | threw |"
-           in text and "| NectarTurret |" in text)
+           in text and "| nectarTurret |" in text)
     expect("summary: one row per OpMode, and a line per OpMode for the source scan",
            sum(f"| {o} |" in text for o in ROBOT_OPMODES) == len(ROBOT_OPMODES) and text.count("names; not in") == 6)
     names = [c[0] for c in BENCH.checks(good_record())]
@@ -250,14 +250,14 @@ def mutation_cases():
 def source_scan():
     found = cc.desktop_lookups(WORKTREE)
     its = found.get("Intake Transfer Shooter Test") or {}
-    wanted = {"NectarShooter", "PollenShooter", "NectarHood", "PollenHood", "intake", "transfer", "transferServo",
-              "hardstop"}
+    wanted = {"nectarFlywheel", "pollenFlywheel", "nectarHood", "pollenHood", "intake", "transfer", "melonbotics",
+              "blocker"}
     expect("source scan: every OpMode's file is found", all(found.get(o) for o in ROBOT_OPMODES))
     expect("source scan: Intake Transfer Shooter Test's literal lookups are found, all in its config",
            wanted <= set(its.get("literals") or []) and not wanted & set(its.get("notInConfig") or []))
     shooter = found.get("BioBuzz Shooter Test") or {}
-    expect("source scan: it follows imports into the modules (Shooter's PollenHood, which biobuzz.xml lacks today)",
-           "PollenHood" in (shooter.get("literals") or []) and shooter.get("files", 0) > 1)
+    expect("source scan: it follows imports into the modules (Shooter's pollenHood)",
+           "pollenHood" in (shooter.get("literals") or []) and shooter.get("files", 0) > 1)
     expect("source scan: the bench OpModes aren't followed", not any("/opmodes/test/bench/" in str(v)
                                                                    for v in found.values()))
 
@@ -383,9 +383,9 @@ def on_the_fake_hub():
     expect("six INITs, in the table's order, each on its own config", robot_inits == ROBOT_OPMODES)
     expect("no robot OpMode was ever STARTed", not set(starts) & set(ROBOT_OPMODES))
     expect("then back to bench_main before the restore", names[names.index(cc.CONFIGS[-1]) + 1] == rb.CONFIG_MAIN)
-    expect("summary: Turret Aim Test's missing NectarTurret fails its lookup check",
+    expect("summary: Turret Aim Test's missing nectarTurret fails its lookup check",
            check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup").startswith("- FAIL")
-           and "'NectarTurret' as Servo" in check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup"))
+           and "'nectarTurret' as Servo" in check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup"))
     expect("summary: the webcam with another serial stops INIT where this station explains it, so its lookups FAIL as "
            "not judged",
            check_line(summary, "Cell Tip Test on camera: every hardware lookup").startswith("- FAIL")
@@ -396,7 +396,7 @@ def on_the_fake_hub():
     results = json.loads((out / "runner_results.json").read_text()).get("config_check") or {}
     turret = next((p for p in results.get("pairs", []) if p["opmode"] == "Turret Aim Test"), {})
     expect("record: per OpMode the INIT outcome, the error, the time to it and the pid before and after",
-           turret.get("crashed") is True and "NectarTurret" in turret.get("error", "")
+           turret.get("crashed") is True and "nectarTurret" in turret.get("error", "")
            and isinstance(turret.get("initToErrorMs"), int) and turret.get("pidBefore") == turret.get("pidAfter"))
     expect("the run exits 1 for the failed check", code == 1)
 

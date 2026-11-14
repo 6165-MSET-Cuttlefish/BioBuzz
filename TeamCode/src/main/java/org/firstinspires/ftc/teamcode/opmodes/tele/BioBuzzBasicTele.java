@@ -27,7 +27,7 @@ import java.util.List;
 @Config("BioBuzz Basic Tele")
 public class BioBuzzBasicTele extends OpMode {
     public static class Drive {
-        public double maxPower = 0.6;
+        public double maxPower = 1.0;
         public double slowPower = 0.3;
         public double stickDeadband = 0.05;
         public boolean reverseFl = true;
@@ -36,14 +36,39 @@ public class BioBuzzBasicTele extends OpMode {
         public boolean reverseBr = false;
     }
 
+    /** What each shooter tunes. The defaults live in {@link PollenFlywheel} and {@link NectarFlywheel}. */
     public static class Flywheel {
-        public double targetRpm = 0;
-        public double power = 0.2;
-        public double kV = 0;
-        public double kP = 0;
-        public double hoodPosition = 0.5;
-        public boolean reverseFlywheel = false;
-        public boolean reverseEncoder = false;
+        public double targetRpm;
+        public double power;
+        public double kV;
+        public double kP;
+        public double hoodPosition;
+        public boolean reverseFlywheel;
+        public boolean reverseEncoder;
+    }
+
+    public static class PollenFlywheel extends Flywheel {
+        public PollenFlywheel() {
+            targetRpm = 0;
+            power = 0.5;
+            kV = 0;
+            kP = 0;
+            hoodPosition = 0.5;
+            reverseFlywheel = false;
+            reverseEncoder = false;
+        }
+    }
+
+    public static class NectarFlywheel extends Flywheel {
+        public NectarFlywheel() {
+            targetRpm = 0;
+            power = 0.5;
+            kV = 0;
+            kP = 0;
+            hoodPosition = 0.5;
+            reverseFlywheel = false;
+            reverseEncoder = false;
+        }
     }
 
     public static class Intake {
@@ -54,10 +79,9 @@ public class BioBuzzBasicTele extends OpMode {
     }
 
     public static class Transfer {
-        public double feedPower = 0.8;
+        public double feedPower = 1.0;
         public double intakePower = 0;
         public boolean reverse = false;
-        public double servoFeedPower = 1;
         public boolean reverseServo = false;
         public double blockerOpenMs = 150;
     }
@@ -68,8 +92,8 @@ public class BioBuzzBasicTele extends OpMode {
     }
 
     public static Drive drive = new Drive();
-    public static Flywheel pollen = new Flywheel();
-    public static Flywheel nectar = new Flywheel();
+    public static PollenFlywheel pollen = new PollenFlywheel();
+    public static NectarFlywheel nectar = new NectarFlywheel();
     public static Intake intake = new Intake();
     public static Transfer transfer = new Transfer();
     public static Blocker blocker = new Blocker();
@@ -105,14 +129,14 @@ public class BioBuzzBasicTele extends OpMode {
         bl = hardwareMap.get(DcMotorEx.class, "bl");
         fr = hardwareMap.get(DcMotorEx.class, "fr");
         br = hardwareMap.get(DcMotorEx.class, "br");
-        pollenFlywheel = hardwareMap.get(DcMotorEx.class, "PollenShooter");
-        nectarFlywheel = hardwareMap.get(DcMotorEx.class, "NectarShooter");
+        pollenFlywheel = hardwareMap.get(DcMotorEx.class, "pollenFlywheel");
+        nectarFlywheel = hardwareMap.get(DcMotorEx.class, "nectarFlywheel");
         intakeMotor = hardwareMap.get(DcMotorEx.class, "intake");
         transferMotor = hardwareMap.get(DcMotorEx.class, "transfer");
-        pollenHood = hardwareMap.get(ServoImplEx.class, "PollenHood");
-        nectarHood = hardwareMap.get(ServoImplEx.class, "NectarHood");
-        blockerServo = hardwareMap.get(ServoImplEx.class, "hardstop");
-        transferServo = hardwareMap.get(CRServoImplEx.class, "transferServo");
+        pollenHood = hardwareMap.get(ServoImplEx.class, "pollenHood");
+        nectarHood = hardwareMap.get(ServoImplEx.class, "nectarHood");
+        blockerServo = hardwareMap.get(ServoImplEx.class, "blocker");
+        transferServo = hardwareMap.get(CRServoImplEx.class, "melonbotics");
         battery = hardwareMap.get(VoltageSensor.class, "Control Hub");
 
         for (DcMotorEx motor : new DcMotorEx[] {fl, bl, fr, br}) motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
@@ -195,13 +219,14 @@ public class BioBuzzBasicTele extends OpMode {
         boolean feeding = gamepad1.right_bumper && flywheelsOn
                 && (loopStartNs - flywheelsOnNs) / 1e6 >= transfer.blockerOpenMs;
         double intakeOutput = intakePower(gamepad1.right_trigger, gamepad1.left_trigger);
-        double transferOutput = feeding ? transfer.feedPower : Math.signum(intakeOutput) * transfer.intakePower;
+        double transferOutput = Range.clip(
+                feeding ? transfer.feedPower : Math.signum(intakeOutput) * transfer.intakePower, -1, 1);
         intakeMotor.setDirection(direction(intake.reverse));
         transferMotor.setDirection(direction(transfer.reverse));
         intakeMotor.setPower(intakeOutput);
-        transferMotor.setPower(Range.clip(transferOutput, -1, 1));
+        transferMotor.setPower(transferOutput);
         transferServo.setDirection(direction(transfer.reverseServo));
-        transferServo.setPower(feeding ? Range.clip(transfer.servoFeedPower, -1, 1) : 0);
+        transferServo.setPower(transferOutput);
         blockerServo.setPosition(Range.clip(blockerOpen ? blocker.openPosition : blocker.closedPosition, 0, 1));
 
         addGamepadMap();

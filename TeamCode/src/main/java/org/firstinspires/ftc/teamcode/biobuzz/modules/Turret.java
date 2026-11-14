@@ -76,8 +76,8 @@ public class Turret extends Module {
         this.follower = follower;
         goal = this::ownCell;
 
-        nectar = new TurretServos(hardwareMap, Tuning.nectar, "NectarTurret");
-        pollen = new TurretServos(hardwareMap, Tuning.pollen, "PollenTurretL", "PollenTurretR");
+        nectar = new TurretServos(hardwareMap, Tuning.nectar, "nectarTurret");
+        pollen = new TurretServos(hardwareMap, Tuning.pollen, "frontPollenTurret", "backPollenTurret");
     }
 
     private double sotmPollenDeg;

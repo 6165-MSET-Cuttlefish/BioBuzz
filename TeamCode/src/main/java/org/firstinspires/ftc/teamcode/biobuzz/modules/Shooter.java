@@ -167,11 +167,11 @@ public class Shooter extends Module {
     private double sotmPollenRpm, sotmPollenHood = 0.5, sotmNectarRpm, sotmNectarHood = 0.5;
 
     public Shooter(HardwareMap hardwareMap) {
-        pollen = new Flywheel(hardwareMap, "PollenShooter", "Pollen", pollenTuning);
-        nectar = new Flywheel(hardwareMap, "NectarShooter", "Nectar", nectarTuning);
-        pollenHood = new EnhancedServo(hardwareMap, "PollenHood").withCachingTolerance(0.001);
-        nectarHood = new EnhancedServo(hardwareMap, "NectarHood").withCachingTolerance(0.001);
-        hardstop = new EnhancedServo(hardwareMap, "hardstop").withCachingTolerance(0.001);
+        pollen = new Flywheel(hardwareMap, "pollenFlywheel", "Pollen", pollenTuning);
+        nectar = new Flywheel(hardwareMap, "nectarFlywheel", "Nectar", nectarTuning);
+        pollenHood = new EnhancedServo(hardwareMap, "pollenHood").withCachingTolerance(0.001);
+        nectarHood = new EnhancedServo(hardwareMap, "nectarHood").withCachingTolerance(0.001);
+        hardstop = new EnhancedServo(hardwareMap, "blocker").withCachingTolerance(0.001);
     }
 
     @Override

@@ -2,34 +2,34 @@
 <Robot type="FirstInspires-FTC">
     <LynxUsbDevice name="Control Hub Portal" parentModuleAddress="173" serialNumber="(embedded)">
         <LynxModule name="Control Hub" port="173">
-            <goBILDA5202SeriesMotor name="PollenShooter" port="0" />
-            <goBILDA5202SeriesMotor name="fl" port="1" />
+            <goBILDA5202SeriesMotor name="pollenFlywheel" port="0" />
+            <goBILDA5202SeriesMotor name="fr" port="1" />
             <goBILDA5202SeriesMotor name="br" port="2" />
-            <goBILDA5202SeriesMotor name="NectarShooter" port="3" />
+            <goBILDA5202SeriesMotor name="nectarFlywheel" port="3" />
 
-            <Servo name="PollenTurretL" port="0" />
-            <Servo name="PollenTurretR" port="1" />
-            <Servo name="NectarTurret" port="2" />
-            <Servo name="PollenHood" port="3" />
-            <Servo name="NectarHood" port="4" />
-            <Servo name="hardstop" port="5" />
+            <Servo name="frontPollenTurret" port="0" />
+            <Servo name="backPollenTurret" port="1" />
+            <Servo name="nectarTurret" port="2" />
+            <Servo name="pollenHood" port="3" />
+            <Servo name="blocker" port="4" />
+            <Servo name="nectarHood" port="5" />
 
             <AnalogInput name="floodgate" port="0" />
-            <AnalogInput name="analog0" port="1" />
-            <AnalogInput name="analog1" port="3" />
+            <AnalogInput name="frontRangefinder" port="1" />
+            <AnalogInput name="backRangefinder" port="3" />
 
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />
             <OctoQuadFTC name="octoquad" bus="2" port="0" />
             <goBILDAPrism name="prism" bus="3" port="0" />
         </LynxModule>
         <LynxModule name="Expansion Hub 2" port="2">
-            <goBILDA5202SeriesMotor name="fr" port="0" />
+            <goBILDA5202SeriesMotor name="fl" port="0" />
             <goBILDA5202SeriesMotor name="bl" port="1" />
             <goBILDA5202SeriesMotor name="intake" port="2" />
             <goBILDA5202SeriesMotor name="transfer" port="3" />
 
-            <ContinuousRotationServo name="transferServo" port="0" />
-            <Servo name="flowerIntake" port="1" />
+            <ContinuousRotationServo name="melonbotics" port="0" />
+            <Servo name="ruler" port="1" />
             <Servo name="rgbRight" port="2" />
             <Servo name="rgbLeft" port="4" />
         </LynxModule>

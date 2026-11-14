@@ -63,15 +63,15 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | port | device | note |
 |---|---|---|
 | motor 0, encoder 0 | pollen flywheel motor and its Through Bore | port 0 counts in hardware |
-| motor 1 | front-left drive | its own motor encoder stays unplugged; encoder 1 is spare |
+| motor 1 | front-right drive | its own motor encoder stays unplugged; encoder 1 is spare |
 | motor 2 | back-right drive | its own motor encoder stays unplugged |
 | encoder 2 | nectar turret Through Bore's count (A and B) | counted in software; the hub alone powers the encoder; zeroed at INIT from the OctoQuad: [Zeroing the nectar turret](#zeroing-the-nectar-turret) |
 | motor 3, encoder 3 | nectar flywheel motor and its Through Bore | port 3 counts in hardware |
 | servo 0, 1 | pollen turret servos | injector A |
 | servo 2 | nectar turret servo | injector B |
 | servo 3 | pollen hood | injector A |
-| servo 4 | nectar hood | injector B |
-| servo 5 | blocker | injector A |
+| servo 4 | blocker | injector B |
+| servo 5 | nectar hood | injector A |
 | analog 0 | Floodgate current output | shares connector 0-1 with rangefinder A through a splitter cable |
 | analog 1 | transfer rangefinder A (upstream), if kept | the port the bench config `laser_rangefinder.xml` uses |
 | analog 2 | spare | |
@@ -89,7 +89,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 
 | port | device | note |
 |---|---|---|
-| motor 0 | front-right drive | |
+| motor 0 | front-left drive | |
 | motor 1 | back-left drive | |
 | motor 2 | intake | |
 | motor 3 | transfer motor | |
@@ -99,18 +99,20 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | servo 2 and servo 4 | one RGB indicator light each | hub 5 V; one light per port pair |
 | servo 3, 5 | spare | |
 
-**Names in `biobuzz.xml`.** `PollenTurretL` on Control Hub servo 0 and `PollenTurretR` on servo 1 (`Turret` runs R
-`offset` above L; the retired Betta bot had R on 0), the blocker is `hardstop`, the transfer's
-continuous-rotation servo on Expansion Hub servo 0 is `transferServo` (read by BioBuzz Basic Tele), the flower intake
-servo is `flowerIntake`, the right and left RGB lights are `rgbRight` and `rgbLeft`, the Prism is `prism` (no code
-reads those four yet), rangefinders A and B are `analog0` and
-`analog1`, the Floodgate is `floodgate`, the OctoQuad `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0,
-read by nothing. The Expansion Hub is address 2 on RS485 and on USB. The rest use the code's names:
-`PollenShooter`, `NectarShooter`, `NectarTurret`, `PollenHood`, `NectarHood`, `fl`, `br`, `fr`, `bl`, `intake`,
-`transfer`, the Arducam `aprilTagDetector` and the Limelight `limelight`.
+**Names in `biobuzz.xml`.** The flywheels are `pollenFlywheel` and `nectarFlywheel`, the hoods `pollenHood` and
+`nectarHood`, the pollen turret's servos `frontPollenTurret` on Control Hub servo 0 and `backPollenTurret` on servo 1
+(`Turret` runs the back one `offset` above the front one), the nectar turret's `nectarTurret`, and the blocker
+`blocker`. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
+Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the right and left RGB lights are
+`rgbRight` and `rgbLeft`, and the Prism is `prism` (no code reads those four yet). The rangefinders are
+`frontRangefinder` on analog 1 and `backRangefinder` on analog 3; no robot code reads them yet, and the rangefinder
+test OpModes default to the rig config's `analog0` and `analog1`. The Floodgate is `floodgate`, the OctoQuad
+`octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0, read by nothing. The Expansion Hub is address 2 on
+RS485 and on USB. The rest: `fl`, `fr`, `bl`, `br`, `intake`, `transfer`, the Arducam `aprilTagDetector` and the
+Limelight `limelight`.
 
-**Servo power.** Injector A: pollen turret pair, pollen hood, blocker. Injector B: nectar turret, nectar hood,
-transfer servo, flower intake. Each injector takes an XT30 lead from the distribution board. Connect hub servo ports
+**Servo power.** Injector A, the back one: pollen turret pair, pollen hood, nectar hood. Injector B, the front one:
+nectar turret, blocker, transfer servo, flower intake. Each injector takes an XT30 lead from the distribution board. Connect hub servo ports
 to injector inputs with the leads the injector ships with, which have the red wire removed, so no hub 5 V reaches it.
 
 ## Why each placement
@@ -140,9 +142,10 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
   ([`sdk-hub-findings.md`](sdk-hub-findings.md), Encoder ports).
 - **Two drive motors on the Control Hub.** While driving, 6 motors change and a hub has 4 motor ports, so at least
   two changing motor writes cross RS485 whatever the map.
-- **A diagonal pair, front-left and back-right.** The loop cost is the same for any pair. The reason is failure: if
-  the Expansion Hub drops out, a diagonal pair can still translate without turning, and a same-side pair cannot (from
-  Pedro's mecanum wheel equations; untested on a robot).
+- **The right-side pair, front-right and back-right.** The loop cost is the same for any pair. Until 2026-11-13 the
+  map had a diagonal pair here (front-left and back-right); the wiring chart then moved to one side per hub. What
+  that gives up: if the Expansion Hub drops out, a diagonal pair can still translate without turning, and a same-side
+  pair cannot (from Pedro's mecanum wheel equations; untested on a robot).
 - **Not all four drive motors on the Control Hub.** That would move both flywheels to the Expansion Hub. Flywheel
   power changes every loop even when parked, and drive power only while driving, so the parked loop grows by 2.1 ms
   (20.8 against 18.7) and a driving loop with drive writes in half the loops by 1.0 ms; at the ceiling the two are
@@ -174,9 +177,11 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
 - **Lights on separate servo port pairs.** Ports 0-1, 2-3 and 4-5 each share one 2 A supply (ftc-docs hub tips).
   The lights take hub 5 V because the injectors' 6 V may power only servos (R613(C)). Their current draw is not
   published.
-- **Injectors split by shooter.** They carry no hub commands, so the split costs no loop time, and one injector
-  failing then stops one shooter's aim instead of both. The two pollen turret servos turn one gear: keep them on one
-  injector and one hub so they fail together.
+- **Injectors split by where they sit, back and front.** They carry no hub commands, so the split costs no loop
+  time. Until 2026-11-14 the map split them by shooter, so one injector failing stopped one shooter's aim; with the
+  nectar hood now on the back injector and the blocker on the front one, the back injector failing stops both hoods
+  and the pollen turret. The two pollen turret servos turn one gear: keep them on one injector and one hub so they
+  fail together.
 
 Against the layout planned before the CAD: three turret servos instead of four saves one write per aiming loop; that
 frees a Control Hub servo port for the blocker; the nectar turret encoder, the Floodgate, the transfer servo, the
@@ -224,7 +229,7 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
     writes: 16.1 / 24.8 ms if the two hubs' write times add up, as modelled, and 16.1 / 20.2 ms if they overlap
     fully, against 16.0 / 21.8 ms for the map in that case. Which it is has not been measured
     ([Still unknown](#still-unknown)). Until it is, wire the map and leave those two signal leads long enough to
-    reach either hub; both servos stay on injector B either way.
+    reach either hub; each servo stays on its own injector either way.
 - **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot, retired 2026-11-13).
 
 ## Open choices

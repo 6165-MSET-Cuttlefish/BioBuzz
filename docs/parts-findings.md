@@ -57,8 +57,8 @@ Transfer Shooter Test's config, `TeamCode/src/main/res/xml/intake_transfer_shoot
 (`pollenFlywheel`, `nectarFlywheel`) `goBILDA5202SeriesMotor` (lines 5 and 8): the 99.5:1 gearmotor, 2786 counts per
 revolution, 60 RPM, which `getVelocity(AngleUnit)` and `RUN_USING_ENCODER` scale by. `biobuzz/modules/Shooter.java`
 avoids both: it sets `RUN_WITHOUT_ENCODER` (line 301) and reads raw counts (line 335). That test reads raw counts too
-(`rpm()`, `opmodes/test/IntakeTransferShooterTest.java:199-209`). No config in the repo declares Shooter's
-`PollenShooter` and `NectarShooter` yet.
+(`rpm()`, `opmodes/test/IntakeTransferShooterTest.java:199-209`). `biobuzz.xml` declares the same two names
+the same way, and `Shooter` asks for them.
 
 ## 82 mm steel flywheel (goBILDA 3628-0032-0082)
 
@@ -157,8 +157,8 @@ supply 5 V ([REV][revexh]; Axon labels 4.8 V as hub voltage); the CAD runs the s
   hood (computed). The CAD's hood travel is 30° on Pollen, 20° on Nectar. 500-2500 µs gives 300°, 35.0° of hood.
 - To widen it, call `setPwmRange(new PwmRange(500, 2500))`, or declare the hood as the SDK's built-in `ServoFullRange`
   config type (500-2500 µs; read from source, not tried on a hub). Today Intake Transfer Shooter Test's config
-  declares its hoods as plain `Servo` (`intake_transfer_shooter.xml` lines 10-11), no config declares Shooter's
-  `PollenHood`/`NectarHood` yet, and nothing under `biobuzz/` calls `setPwmRange`.
+  declares its hoods as plain `Servo` (`intake_transfer_shooter.xml` lines 10-11), `biobuzz.xml` declares `Shooter`'s
+  `pollenHood`/`nectarHood` as plain `Servo` too, and nothing under `biobuzz/` calls `setPwmRange`.
 
 ## Game balls
 

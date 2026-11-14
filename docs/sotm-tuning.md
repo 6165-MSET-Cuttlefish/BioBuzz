@@ -8,7 +8,7 @@ All SOTM tunables are in the dashboard group **Shot Tuning** (`biobuzz/ShotTunin
 
 | Thing | Where | Check |
 |---|---|---|
-| Hardware config has `PollenTurretL`, `PollenTurretR`, `NectarTurret`, `PollenShooter`, `NectarShooter`, `PollenHood`, `NectarHood`, `hardstop`, plus everything `BioBuzzRobot` uses | Robot config | SOTM Test INITs with no missing-device error |
+| Hardware config has `frontPollenTurret`, `backPollenTurret`, `nectarTurret`, `pollenFlywheel`, `nectarFlywheel`, `pollenHood`, `nectarHood`, `blocker`, plus everything `BioBuzzRobot` uses | Robot config | SOTM Test INITs with no missing-device error |
 | Each flywheel motor is on port 0 or 3 with its Through Bore on the same-numbered encoder port | Wiring | `CLAUDE.md`, "Flywheel RPM" |
 | Alliance | Dashboard `Context.allianceColor`, before INIT | Telemetry and field view show the right side |
 | Unit tests pass | `./gradlew :TeamCode:testDebugUnitTest` | 0 failures |
