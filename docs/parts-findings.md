@@ -76,8 +76,12 @@ Considered as added inertia. goBILDA's [page][gbsteel], read 2026-11-10: steel, 
 
 ## REV Through Bore Encoder: V1 and V2
 
-For our code the two are the same: 8192 counts per revolution, up to 10,000 RPM, 3.3 to 5 V, JST-PH 6-pin. The hubs
-read only those counts, so the differences below don't reach our code.
+The nectar turret has a V1 fitted today; a V2 is on order to replace it (the owner, 2026-11-13).
+
+For the hubs the two are the same: 8192 counts per revolution, up to 10,000 RPM, 3.3 to 5 V, JST-PH 6-pin. The hubs
+read only those counts. The absolute output below differs, and the nectar turret's INIT zero reads it on the
+OctoQuad, so its pulse limits must match the version fitted
+([`wiring-findings.md`](wiring-findings.md#the-nectar-turret-encoder)).
 
 | | V1, REV-11-1271 | V2, REV-11-3174 |
 |---|---|---|

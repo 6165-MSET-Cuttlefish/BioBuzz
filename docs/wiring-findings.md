@@ -8,10 +8,10 @@ or ports.
 ([`robots-findings.md`](robots-findings.md)). Command costs are measured on the bench hubs
 ([`hub-bench-findings.md`](hub-bench-findings.md)). Loop periods are those costs added up by
 `scripts/looptimes/wiring_budget.py`, so they are estimates. CH is the Control Hub, EH the Expansion Hub. The nectar
-turret encoder's version, gearing and travel are the team's report of 2026-11-11
-([The nectar turret encoder](#the-nectar-turret-encoder)). Its wiring, a count on a Control Hub encoder port zeroed
-once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench: Turret Zero has run on a hub
-([Zeroing the nectar turret](#zeroing-the-nectar-turret)).
+turret encoder's gearing and travel are the team's report of 2026-11-11, and its version the owner's of 2026-11-13: a
+Through Bore V1 is fitted, a V2 is on order ([The nectar turret encoder](#the-nectar-turret-encoder)). Its wiring, a
+count on a Control Hub encoder port zeroed once from the OctoQuad at INIT, was decided 2026-11-12 for now, until Bench:
+Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-turret)).
 
 ## What to do
 
@@ -276,7 +276,8 @@ read only its absolute output, are in [The nectar turret encoder](#the-nectar-tu
   to 2.3). A rough angle within 75° of the truth picks the right turn: set the turret by hand within 75° of a mark
   before INIT, or use the commanded servo angle once the servo has settled (the turret follows the servo 1.008 to 1).
 - **Expect steps of about 0.15° of turret** if the OctoQuad reports the pulse in whole microseconds (not
-  confirmed): 0.35° of encoder on a V1 (1 to 1024 µs), 0.36° on a V2 (3.884 to 998.06 µs).
+  confirmed): 0.35° of encoder on the V1 fitted today (1 to 1024 µs), 0.36° on the V2 on order (3.884 to
+  998.06 µs).
 
 How each part is known, all read on 2026-11-11 and none of it run:
 
@@ -304,9 +305,31 @@ balls is what the counting test settles.
 
 ## The nectar turret encoder
 
-Reported by the team on 2026-11-11: the turret is geared to its encoder 1:2.4, the turret's travel is 200°, and the
-encoder is a REV Through Bore V2. Everything else in this section is computed from that, from the parts' pages
+Reported by the team on 2026-11-11: the turret is geared to its encoder 1:2.4 and the turret's travel is 200°. The
+encoder fitted is a REV Through Bore V1 (REV-11-1271); a V2 (REV-11-3174) is on order to replace it (the owner,
+2026-11-13). Everything else in this section is computed from that, from the parts' pages
 ([`parts-findings.md`](parts-findings.md)) and from SDK 12.0.0's `OctoQuad` source. Nothing is measured.
+
+What the version changes, from REV's specification pages for the
+[V1](https://docs.revrobotics.com/rev-crossover-products/sensors/tbe/v1/specs) and the
+[V2](https://docs.revrobotics.com/rev-crossover-products/sensors/tbe/specs), both read 2026-11-13:
+
+- **The same on both, so the plan holds for the V1:** 8192 counts per revolution, 3.3 to 5 V supply, 3.3 V typical
+  logic level (5 V max), JST-PH 6-pin. So the hub count (54.6 per turret degree at 2.4), the split cable with the
+  encoder powered from the hub's 3.3 V, and the turn pick are unchanged. The V1's own
+  [application examples](https://docs.revrobotics.com/rev-crossover-products/sensors/tbe/v1/application-examples)
+  say "'A' is the ABI encoder output mode which outputs the incremental and absolute encoder signals", so the split
+  cable's two outputs at once are documented for the V1 (for the V2 only from its case marking).
+- **Different, and the turret's INIT zero uses them:** the V1's absolute output is 10-bit, a 1025 µs period
+  (975.6 Hz), 1 µs at 0° to 1024 µs at 360°; the V2's is 12-bit, 1000 µs (1 kHz), 3.884 to 998.06 µs. Converting
+  a V1 pulse with the V2's limits reads up to 2.6% of a turn wrong, 9.4° of encoder or 3.9° of turret (computed).
+  The figures below give the V1 first.
+- **Unknown for the V1:** its accuracy (REV's V1 page states none; the ±0.5° is the V2's only). Unknown on either
+  version until metered: this unit's real pulse limits and its absolute output's high level on the hub's 3.3 V.
+  Bench: Turret Zero measures both on a V1, and checks a V2 only in its `--turret-zero-v2` phase
+  ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-turret-zero)).
+- **When the V2 arrives:** measure its pulse limits again, set them, and check the INIT zero against a mark before
+  trusting it.
 
 The plan reads the absolute output once, at INIT, to zero the hub's count
 ([Zeroing the nectar turret](#zeroing-the-nectar-turret)). This section describes the encoder, and how the two
@@ -338,19 +361,20 @@ fallback if the split cable can't be built or routed across the turret.
 - **Leave the OctoQuad's own wrap tracking off** (`setSingleChannelPulseWidthTracksWrap`). It counts turns from
   wherever the turret stood when the OctoQuad powered up, so it needs the same turn pick at start and loses it on a
   reboot. With it off the channel reports the raw pulse width in microseconds (`OctoQuad.java:368-393`).
-- **Measure this encoder's shortest and longest pulse.** REV's V2 page gives 3.884 to 998.06 µs; the SDK's notes say
-  Through Bores have been seen about 10 µs off their sheet, which is 1.5° of turret here. Turn the turret slowly
-  through the wrap point and note the two values it jumps between.
+- **Measure this encoder's shortest and longest pulse.** REV's V1 page gives 1 to 1024 µs for the V1 fitted today
+  (the V2's page: 3.884 to 998.06 µs); the SDK's notes say Through Bores, no version named, have been seen about
+  10 µs off their sheet, which is 1.5° of turret here. Turn the turret slowly through the wrap point and note the two
+  values it jumps between. Measure again when the V2 goes in.
 
 | | absolute output | counting output (A/B) |
 |---|---|---|
 | Wired to | OctoQuad channel 4 (pulse width needs 4 to 7) | Control Hub encoder 2 (on the OctoQuad it would need 0 to 3; the pods are on 0 and 1) |
-| Per turret degree at 2.4 | 6.63 µs: 0.15° per µs if the register is whole microseconds (not confirmed) | 54.6 counts: 0.018° per count |
+| Per turret degree at 2.4 | V1: 6.82 µs, 0.147° per µs; V2: 6.63 µs, 0.151° per µs; if the register is whole microseconds (not confirmed) | 54.6 counts: 0.018° per count |
 | Across 200° | 1.33 encoder turns | 10,923 counts |
 | Known at power-up | yes, to within the turn pick | no: needs a zero, and there is no hard stop |
 | After an OctoQuad reboot | right on the next read, once the bank is set again | on the hub, untouched; on the OctoQuad, zero lost |
-| Sensor accuracy | ±0.5° of encoder (REV), ±0.21° of turret | the same sensor |
-| Rate at full servo speed | 1 kHz pulse train: a new value each 1 ms | about 36,400 counts/s (estimated from the vendor's servo speed): under 4% of the OctoQuad's rating; port 2 has no published rating ([the cautions](#open-choices)) |
+| Sensor accuracy | V1: not stated by REV, unknown; V2: ±0.5° of encoder (REV), ±0.21° of turret | the same sensor |
+| Rate at full servo speed | V1: 975.6 Hz pulse train, a new value each 1.025 ms; V2: 1 kHz, each 1 ms | about 36,400 counts/s (estimated from the vendor's servo speed): under 4% of the OctoQuad's rating; port 2 has no published rating ([the cautions](#open-choices)) |
 
 - **The encoder does not see backlash in the last gear pair.** It sits before the turret's ring gear, so slop there
   is an aim error it cannot report. Measure it: hold the servo still, rock the turret by hand, and compare the swing
@@ -554,7 +578,8 @@ fetched 2026-11-10:
 - **The turret encoder**: which way the 1:2.4 runs and its tooth counts, and whether the 200° is 100° either side of
   straight back, are questions for the team. Whether the split cable can be built and routed across the turret (the
   absolute signal is on the Through Bore's 6-pin connector, not on the 4-pin encoder lead) is for whoever builds it;
-  if it can't, the absolute wire alone, read at INIT and now and then, is the fallback. This encoder's pulse limits,
+  if it can't, the absolute wire alone, read at INIT and now and then, is the fallback. The V1's accuracy has no
+  published figure. This encoder's pulse limits (the V1's now, the V2's when it arrives),
   whether the OctoQuad's pulse register is whole microseconds and the backlash after the encoder are tests in
   [The nectar turret encoder](#the-nectar-turret-encoder).
 - **Whether the absolute output read once at INIT works as the nectar turret's zero**, which the plan rests on.
