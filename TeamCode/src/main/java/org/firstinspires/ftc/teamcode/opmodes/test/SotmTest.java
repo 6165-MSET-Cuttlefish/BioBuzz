@@ -64,7 +64,7 @@ public class SotmTest extends BioBuzzOpMode {
         turret = new Turret(hardwareMap, robot.follower);
         shooter = new Shooter(hardwareMap);
         turret.setGoal(() -> {
-            double[] p = BioBuzzField.cellOpening(selector.upCell()).aimPoint(ShotTuning.aimDepthIn);
+            double[] p = BioBuzzField.cellOpening(selector.targetCell()).aimPoint(ShotTuning.aimDepthIn);
             return new Pose(p[0], p[1]);
         });
         solver = new ShotSolver(ShooterGeometry.pollen(), ShooterGeometry.nectar());
@@ -173,7 +173,7 @@ public class SotmTest extends BioBuzzOpMode {
 
     @Override
     protected void telemetry() {
-        telemetry.addData("Target CELL", "%s (%s)", selector.upCell(), cellByFieldHalf ? "by field half" : "X toggles");
+        telemetry.addData("Target CELL", "%s (%s)", selector.targetCell(), cellByFieldHalf ? "by field half" : "X toggles");
         telemetry.addData("SOTM", "%s (Y toggles; off is stationary aim), aim %s", ShotTuning.sotmEnabled ? "ON" : "OFF", aim);
         telemetry.addData("Flywheels", "%s (A on, B off), firing %s (hold RT)", flywheels ? "ON" : "OFF", firing);
         if (results == null) return;

@@ -25,8 +25,8 @@ public class BettaShooter extends Module {
         ON(0.7),
         OFF(0);
 
-        ShooterState(double position) {
-            setValue(position);
+        ShooterState(double power) {
+            setValue(power);
         }
 
         @Override

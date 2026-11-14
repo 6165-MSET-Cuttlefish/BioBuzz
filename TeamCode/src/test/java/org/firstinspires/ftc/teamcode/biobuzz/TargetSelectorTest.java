@@ -15,9 +15,9 @@ public class TargetSelectorTest {
         for (boolean blue : new boolean[] {false, true}) {
             TargetSelector s = new TargetSelector();
             s.followHalf(20, W, blue, 3);
-            Cell audience = s.upCell();
+            Cell audience = s.targetCell();
             s.followHalf(120, W, blue, 3);
-            Cell rear = s.upCell();
+            Cell rear = s.targetCell();
             assertEquals(audience.other(), rear);
             assertTrue(BioBuzzField.cellOpening(audience, blue, W).n[1] < 0);
             assertTrue(BioBuzzField.cellOpening(rear, blue, W).n[1] > 0);
@@ -29,13 +29,13 @@ public class TargetSelectorTest {
     public void holdsItsChoiceNearTheMidline() {
         TargetSelector s = new TargetSelector();
         s.followHalf(20, W, false, 3);
-        Cell audience = s.upCell();
+        Cell audience = s.targetCell();
         s.followHalf(W / 2 + 2, W, false, 3);
-        assertEquals(audience, s.upCell());
+        assertEquals(audience, s.targetCell());
         s.followHalf(W / 2 + 4, W, false, 3);
-        assertEquals(audience.other(), s.upCell());
+        assertEquals(audience.other(), s.targetCell());
         s.followHalf(W / 2 - 2, W, false, 3);
-        assertEquals(audience.other(), s.upCell());
+        assertEquals(audience.other(), s.targetCell());
     }
 
     @Test
@@ -43,9 +43,9 @@ public class TargetSelectorTest {
         TargetSelector s = new TargetSelector();
         s.onTipVerdict(true);
         s.onTipVerdict(true);
-        assertEquals(Cell.STARTS_DOWN, s.upCell());
+        assertEquals(Cell.STARTS_DOWN, s.targetCell());
         s.onTipVerdict(false);
         s.onTipVerdict(true);
-        assertEquals(Cell.STARTS_UP, s.upCell());
+        assertEquals(Cell.STARTS_UP, s.targetCell());
     }
 }

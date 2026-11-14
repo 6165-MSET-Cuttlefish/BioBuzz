@@ -281,7 +281,7 @@ public class Shooter extends Module {
                 ? shooterPid.FScale * (0.0253212 * Math.sqrt(targetVelocityRPM + 3626.49145) - 1.47831) / targetVelocityRPM
                 : 0;
         shooterPidController.setGains(shooterPid.Kp, shooterPid.Ki, shooterPid.Kd, shooterPid.Kl);
-        shooterPidController.kPosition = kf;
+        shooterPidController.kF = kf;
         shooterPidController.update(targetVelocityRPM, shooterCurrentVelocityRPM);
         return shooterPidController.calculate();
     }

@@ -8,7 +8,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
-import org.firstinspires.ftc.teamcode.architecture.input.LayerGamepad;
+import org.firstinspires.ftc.teamcode.architecture.input.EdgeGamepad;
 import org.firstinspires.ftc.teamcode.decode.DecodeOpMode;
 import org.firstinspires.ftc.teamcode.decode.modules.Magazine;
 import org.firstinspires.ftc.teamcode.decode.modules.Shooter;
@@ -34,8 +34,8 @@ public class DecodeTele extends DecodeOpMode {
 
     private long lastGamepad2RumbleMs;
 
-    private LayerGamepad d1;
-    private LayerGamepad d2;
+    private EdgeGamepad d1;
+    private EdgeGamepad d2;
 
     private EdgeBooleanSupplier d1Lt;
     private EdgeBooleanSupplier d1Rt;
@@ -137,8 +137,8 @@ public class DecodeTele extends DecodeOpMode {
     }
 
     private void setupGamepads() {
-        d1 = new LayerGamepad(gamepad1);
-        d2 = new LayerGamepad(gamepad2);
+        d1 = new EdgeGamepad(gamepad1);
+        d2 = new EdgeGamepad(gamepad2);
 
         d1Lt = d1.leftTrigger.greaterThan(0.5);
         d1Rt = d1.rightTrigger.greaterThan(0.5);

@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
-public final class LayerGamepad {
+public final class EdgeGamepad {
     private final List<EdgeBooleanSupplier> boolSuppliers = new ArrayList<>();
 
     public final CachedDoubleSupplier leftStickX, leftStickY;
@@ -22,7 +22,7 @@ public final class LayerGamepad {
     public final EdgeBooleanSupplier touchpad;
     public final CachedDoubleSupplier touchpadFinger1X, touchpadFinger1Y;
 
-    public LayerGamepad(Gamepad gamepad) {
+    public EdgeGamepad(Gamepad gamepad) {
         leftStickX  = new CachedDoubleSupplier(() -> gamepad.left_stick_x);
         leftStickY  = new CachedDoubleSupplier(() -> gamepad.left_stick_y);
         rightStickX = new CachedDoubleSupplier(() -> gamepad.right_stick_x);

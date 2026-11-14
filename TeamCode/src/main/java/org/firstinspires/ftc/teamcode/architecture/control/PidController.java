@@ -6,7 +6,7 @@ public class PidController {
     public double kP = 0, kI = 0, kD = 0;
 
     public double kS = 0;
-    public double kPosition = 0;
+    public double kF = 0;
 
     public boolean resetIntegralOnTargetChange = true;
 
@@ -50,10 +50,10 @@ public class PidController {
         double proportional = error * kP;
         double integral     = integralSum * kI;
         double derivative   = errorDerivative * kD;
-        double positionFF   = target * kPosition;
+        double feedforward  = target * kF;
         double staticKick   = Math.abs(error) <= staticDeadband ? 0 : Math.signum(error) * kS;
 
-        return proportional + integral + derivative + positionFF + staticKick;
+        return proportional + integral + derivative + feedforward + staticKick;
     }
 
     public void updatePosition(double update) {

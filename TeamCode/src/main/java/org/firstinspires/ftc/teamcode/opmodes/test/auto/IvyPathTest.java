@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.pedro.ivy;
+package org.firstinspires.ftc.teamcode.opmodes.test.auto;
 
 import static com.pedropathing.api.Paths.curve;
 import static com.pedropathing.ivy.commands.Commands.instant;
@@ -36,7 +36,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.BettaShooter;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.BettaTurret;
-import org.firstinspires.ftc.teamcode.opmodes.test.auto.BallCollectionRobot;
 
 @Autonomous(name = "Ivy Path Test", group = "Test")
 public class IvyPathTest extends EnhancedOpMode {

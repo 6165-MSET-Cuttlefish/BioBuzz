@@ -52,7 +52,7 @@ public final class LoopProfiler {
         List<Map.Entry<String, Bucket>> entries = new ArrayList<>(sections.entrySet());
         double sumMarks = 0;
         for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i).getValue().partition) sumMarks += entries.get(i).getValue().lifetimeAvg();
+            if (entries.get(i).getValue().topLevel) sumMarks += entries.get(i).getValue().lifetimeAvg();
         }
         Collections.sort(entries, (a, b) ->
                 Double.compare(b.getValue().lifetimeAvg(), a.getValue().lifetimeAvg()));
@@ -64,7 +64,7 @@ public final class LoopProfiler {
           .append(" unprofiled=").append(String.format("%.2f", loopAvgMs - sumMarks)).append("ms ||");
         for (int i = 0; i < entries.size(); i++) {
             Bucket b = entries.get(i).getValue();
-            sb.append(' ').append(entries.get(i).getKey()).append(b.partition ? "=" : "*=")
+            sb.append(' ').append(entries.get(i).getKey()).append(b.topLevel ? "=" : "*=")
               .append(String.format("%.2f", b.lifetimeAvg())).append('/')
               .append(String.format("%.1f", b.peak)).append('/').append(b.count).append(';');
         }
@@ -82,13 +82,13 @@ public final class LoopProfiler {
         markAnchorNs = 0L;
     }
 
-    private void accumulate(String section, double ms, boolean partition) {
+    private void accumulate(String section, double ms, boolean topLevel) {
         Bucket b = sections.get(section);
         if (b == null) {
             b = new Bucket();
             sections.put(section, b);
         }
-        b.partition = partition;
+        b.topLevel = topLevel;
         b.add(ms);
     }
 
@@ -102,8 +102,7 @@ public final class LoopProfiler {
         double total = 0;
         double peak = 0;
         double last = 0;
-        // True for a top-level stage (mark()); false for a nested drill-down (leaveSection()).
-        boolean partition = false;
+        boolean topLevel = false;
 
         void add(double v) {
             sum -= window[idx];
