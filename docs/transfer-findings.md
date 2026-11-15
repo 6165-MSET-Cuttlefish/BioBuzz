@@ -287,8 +287,49 @@ the plate.
   B's, so use 15°. A is 76 mm and B 56 mm before the ball held by a closed Pollen paddle (s 242), 257 and 237 mm
   before the turret. Body clearance: A is 4 to 5 mm from a servo-mount standoff, B 10 to 14 mm from anything.
 - With the Pollen paddle closed, the second queued ball (s 170) sits on A: count edges, not presence.
-- If the Nectar paddle is real and closed, a held Nectar ball (centre s 143) covers s 97 to 188, so D and E both read
-  "ball present" the whole time: count edges there too.
+- **A and B cannot count balls coming in while a paddle holds them** (inferred from the queue positions above). With
+  the Pollen paddle closed the queue's centres are s 242, 170, 98 and 27. The first ball passes both beams. The
+  second stops on A, and its edge at the beams' height reaches about s 189, 3 mm past B, so B may or may not see it.
+  The third and fourth stop before A (the third reaches only s 134) and are never seen. The same holds for Nectar: a
+  second held ball (centre s 50) never reaches D at s 118. So spots on the tracks suit counting balls as they leave
+  toward the turrets. Counting balls as they come in needs a sensor before the first place a ball can stop: before
+  about s 0 on the stretch both ball types share, which is also the fastest part (2.2 to 2.3 m/s free, a ball
+  passing a centre beam in 31 to 41 ms). No spot there has been looked for in the CAD.
+- **What the team needs from the sensors** (the team, 2026-11-15): the number of balls that have entered the robot,
+  of either type, to stay within the possession limit; and each Nectar ball's colour, to extake an opponent's Nectar
+  before it is shot. So the counting sensors belong on that shared stretch, not at A to E. One layout to check in CAD
+  (inferred, unchecked): two Laser Rangefinders in a line along the path on one plate at the intake hand-off, at the
+  same height, read as A and B by `TransferCounter`. Both see every ball, the order they see it in gives its
+  direction, so a ball extaken back past them can be taken off the count. The Color Rangefinder goes at the foot of
+  the Nectar ramp, just after the paths split and before the spokes: only Nectar passes there, the ball is slower
+  (1610 mm/s free, about 57 ms to pass, against 41 ms on the floor), and it is still the last ball in, so reversing
+  brings it out first. A Nectar column feeds first in, first out, so a colour read higher up comes too late once
+  another ball has followed. Open: whether anything can mount in either place; how close a ball can come to a laser's
+  face on a stretch with no side guide (a Nectar ball has 23 mm of side play in the 114.3 mm channel, a Pollen ball
+  43 mm); a beam height that shows a gap between touching balls of both sizes; and the Color Rangefinder's hue rate
+  (25 ms at best: two readings of a ball at the ramp's free speed, none to spare).
+- **Spacing for a pair that must also tell direction** (inferred): about half the gap the beams see between two
+  touching balls, and never more than that gap. Read as covered or clear, a ball going forward gives A, then both,
+  then B, then neither; backward gives the reverse order. If the next touching ball reaches A before the last one has
+  left B, the order reads as a ball going backward, so the spacing must be less than the gap; half the gap makes the
+  shortest step as long as it can be. For beams 30 mm off a Pollen ball's centre line (gap 33.0 mm) that is about
+  16 to 17 mm, which is also about as close as two 14 mm bodies fit. Each step then lasts 16.5 mm ÷ speed: 7 ms at
+  2304 mm/s, 11 ms at 1529, 21 ms at 803, so at a 10 ms update touching balls keep their order only at about
+  800 mm/s or slower, while single balls with space between them are fine at any of these speeds. `TransferCounter` does not read direction today: it counts a ball going backward as a ball.
+- **That beam height is wrong for a stretch both ball types cross** (inferred). 30 mm above a Pollen ball's centre
+  line is about 66 mm above the surface the balls roll on, and there a beam sees only a 9 mm gap between two touching
+  Nectar balls (chord 82.3 mm). With 17 mm spacing the second ball reaches A before the first leaves B, the order
+  reads as forward, back, forward, and the two balls count as one: an undercount, the dangerous way for a possession
+  limit. Because both types rest on the same surface, a beam close to that surface sees a gap for every pairing. At
+  6 mm above it: Pollen chord 39.5 mm and gap 31.6; Nectar chord 45.3 and gap 46.1; a Pollen ball touching a Nectar
+  ball leaves 38.2 (their centres are 2 × √(R₁R₂) = 80.6 mm apart). Half the smallest gap is 16 mm of spacing. The
+  gaps shrink fast as the beam rises (Pollen 21.7 mm at 10 mm up, 13.1 at 15), and a beam that low has the surface
+  inside its 15° cone (16 mm across at 60 mm), which may itself read as a target: check on a bench before choosing.
+- **Driving into a ball makes it enter faster** (inferred). Under the intake a ball is pinched between the wheels and
+  the surface below it and moves at about the average of the two surface speeds. On the field tile that lower
+  surface moves backward past the robot at the robot's own speed, so roughly half the robot's forward speed is added
+  to the 2.2 to 2.3 m/s above: about 0.5 m/s more at 1 m/s. On the robot's own floor plate that term is gone. So the
+  step times above are the slow case for a robot standing still with its intake at free speed.
 - A and B are on the undriven ramp: a lone ball at loaded speed may not climb it and can roll back, so use the pair
   to tell direction (inferred).
 - D and E: the spokes are 40 mm clear. D is 25 mm before the doubtful Nectar paddle's hold position (s 143); the
