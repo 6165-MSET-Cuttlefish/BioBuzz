@@ -70,7 +70,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | servo 0, 1 | pollen turret servos | injector A |
 | servo 2 | nectar turret servo | injector B |
 | servo 3 | pollen hood | injector A |
-| servo 4 | blocker | injector B |
+| servo 4 | right RGB indicator light | hub 5 V |
 | servo 5 | nectar hood | injector A |
 | analog 0 | Floodgate current output | shares connector 0-1 with rangefinder A through a splitter cable |
 | analog 1 | transfer rangefinder A (upstream), if kept | the port the bench config `laser_rangefinder.xml` uses |
@@ -96,15 +96,16 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | encoders, analog, digital, I2C | nothing | so this hub's bulk read never runs |
 | servo 0 | transfer continuous-rotation servo | injector B |
 | servo 1 | flower intake servo | injector B |
-| servo 2 and servo 4 | one RGB indicator light each | hub 5 V; one light per port pair |
+| servo 2 | left RGB indicator light | hub 5 V |
+| servo 4 | blocker | injector B; on this hub since 2026-11-14: [why it matters little](#why-each-placement) |
 | servo 3, 5 | spare | |
 
 **Names in `biobuzz.xml`.** The flywheels are `pollenFlywheel` and `nectarFlywheel`, the hoods `pollenHood` and
 `nectarHood`, the pollen turret's servos `frontPollenTurret` on Control Hub servo 0 and `backPollenTurret` on servo 1
 (`Turret` runs the back one `offset` above the front one), the nectar turret's `nectarTurret`, and the blocker
-`blocker`. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
-Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the right and left RGB lights are
-`rgbRight` and `rgbLeft`, and the Prism is `prism` (no code reads those four yet). The rangefinders are
+`blocker` on Expansion Hub servo 4. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
+Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the RGB lights are
+`rgbRight` on Control Hub servo 4 and `rgbLeft` on Expansion Hub servo 2, and the Prism is `prism` (no code reads those four yet). The rangefinders are
 `frontRangefinder` on analog 1 and `backRangefinder` on analog 3; no robot code reads them yet, and the rangefinder
 test OpModes default to the rig config's `analog0` and `analog1`. The Floodgate is `floodgate`, the OctoQuad
 `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0, read by nothing. The Expansion Hub is address 2 on
@@ -124,12 +125,12 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
 | | parked, aiming | driving and aiming | the same, firing |
 |---|---|---|---|
 | **the map** | **18.7** | **36.6** | **37.2** |
-| any input on the Expansion Hub | 23.1 | 40.8 | 41.4 |
-| the OctoQuad's encoder block read every loop, for the turret angle | 22.8 | 40.5 | 41.1 |
-| turret servos on the Expansion Hub | 18.7 | 39.5 | 40.0 |
+| any input on the Expansion Hub | 23.1 | 40.8 | 41.5 |
+| the OctoQuad's encoder block read every loop, for the turret angle | 22.8 | 40.5 | 41.2 |
+| turret servos on the Expansion Hub | 18.8 | 39.6 | 40.2 |
 | flywheels on the Expansion Hub, all four drive motors on the Control Hub | 20.8 | 36.6 | 37.2 |
-| intake and transfer on the Control Hub, all four drive motors on the Expansion Hub | 18.7 | 38.5 | 39.0 |
-| battery voltage read every loop | 20.3 | 38.1 | 38.6 |
+| intake and transfer on the Control Hub, all four drive motors on the Expansion Hub | 18.7 | 38.5 | 39.1 |
+| battery voltage read every loop | 20.3 | 38.1 | 38.7 |
 | the layout planned before the CAD existed | 18.3 | 37.4 | 37.8 |
 
 - **No inputs on the Expansion Hub.** With manual bulk caching a hub's bulk read runs only if something on it is
@@ -152,9 +153,13 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
   equal. It would also leave the hardware-counted encoder ports 0 and 3 under drive motors, so anything that resets
   a drive motor would reset a flywheel's count. What it would buy is full driving if the Expansion Hub drops out.
   Shooting stops in that case with either layout, because the transfer is on the Expansion Hub.
-- **All five aiming servos and the blocker on the Control Hub.** Turrets and hoods change every loop in
-  shoot-on-the-move. The blocker gates each shot: 1.55 ms on the Control Hub (measured) against about 2.45 ms.
-- **Rarely changing outputs on the Expansion Hub**: intake, transfer motor, transfer servo, flower intake, lights.
+- **All five aiming servos on the Control Hub.** Turrets and hoods change every loop in shoot-on-the-move.
+- **The blocker on Expansion Hub servo 4** (since 2026-11-14; before that Control Hub servo 4, where a light now
+  is). It moves twice per burst, so the hub matters only in those two loops: about 2.45 ms there (estimated)
+  against 1.55 ms on the Control Hub (measured), 0.9 ms more, and about 1.7 ms more with Photon on the Control
+  Hub alone. Every other loop is the same, and the period while firing moves by under 0.1 ms.
+- **Rarely changing outputs on the Expansion Hub**: intake, transfer motor, transfer servo, flower intake, blocker
+  and the left light. The right light is on Control Hub servo 4; no code writes either light yet.
 - **Flywheel and turret encoder counts on hub ports, not the OctoQuad.** On the Control Hub they ride the bulk read
   the loop already pays. Reading the OctoQuad's encoder block with its localizer block costs 6.58 ms against
   3.20 ms, +3.4 ms in every loop that reads it (measured): the table's row has it in every loop. The simulation in
@@ -184,8 +189,8 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
   fail together.
 
 Against the layout planned before the CAD: three turret servos instead of four saves one write per aiming loop; that
-frees a Control Hub servo port for the blocker; the nectar turret encoder, the Floodgate, the transfer servo, the
-lights, the Prism and the injectors are new.
+freed a Control Hub servo port, which a light now uses; the nectar turret encoder, the Floodgate, the transfer
+servo, the lights, the Prism and the injectors are new.
 
 ## Estimated loop period
 
@@ -209,7 +214,8 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
   27.5 / 29.8 / 32.1 / 34.4 ms. The Betta bot's measured cost of driving (retired 2026-11-13) on the same 2 + 2 split gives 33.5 ms.
 - **With the dashboard off**, as at events: about 2.1 ms less (measured on the bench with no Driver Station
   connected): 16.2 parked, 34.2 driving at the ceiling, 29.6 with drive writes in half the loops.
-- **The loop that starts a shot** adds about 6.5 ms: blocker, transfer motor, transfer servo.
+- **The loop that starts a shot** adds about 7.4 ms: blocker, transfer motor, transfer servo, all on the Expansion
+  Hub.
 - **The refresh sets the spikes, not the wiring.** Every output the code keeps writing costs one to three extra hub
   commands every 0.5 s ([`loop-time-findings.md`](loop-time-findings.md#how-often-a-write-re-send-reaches-the-hub)):
   66 to 82 ms of hub time per 0.5 s on this map. Outputs first written together expire together, so that time bunches
@@ -221,7 +227,7 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
   faster than RS485, so the fallback is RS485.
   The map stays the shortest of the layouts modelled under Photon: with all four drive motors on the Control Hub
   the same two figures are 20.4 / 28.1 on RS485 and 16.5 / 24.2 on USB, and with the turret servos on the
-  Expansion Hub 16.4 / 33.5 and 16.0 / 25.0. With Photon on both hubs every layout is within 1 ms of the map.
+  Expansion Hub 16.5 / 33.7 and 16.0 / 25.1. With Photon on both hubs every layout is within 1 ms of the map.
 - **Two swaps could still shorten it under Photon on USB** (estimated 2026-11-11, same model, parked / driving):
   - The pollen turret pair on one port through a Y-cable: 15.9 / 23.2 ms, 1.0 ms less while aiming. It costs the
     per-servo offset ([Open choices](#open-choices)).
@@ -442,8 +448,9 @@ Worth doing with it:
 
 ## What fails, and how this wiring behaves
 
-- **Expansion Hub or its cable lost:** both shooters still spin and aim, and the blocker can still stop feeding.
-  Intake, transfer and two drive motors are gone. The first write to the lost hub blocks the loop for about 250 ms
+- **Expansion Hub or its cable lost:** both shooters still spin and aim. The blocker, intake, transfer and two
+  drive motors are gone, so feeding stops with the transfer and the blocker stays where it was last commanded or
+  goes limp (unverified which). The first write to the lost hub blocks the loop for about 250 ms
   and later ones fail at once without an error (read from SDK source, without Photon). On USB the one mini-USB plug
   is the weak point: tie the cable to the frame beside it. On the RS485 fallback, two cables are the main
   protection. How long the lost hub's motors keep their last power is unverified.

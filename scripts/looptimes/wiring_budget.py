@@ -39,23 +39,23 @@ def devices(**hubs):
 
 
 MAP = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH'] * 3, hood=['CH'] * 2,
-              blocker=['CH'], intake=['EH'], transfer=['EH'], transfer_servo=['EH'], flower=['EH'],
-              light=['EH', 'EH'])
+              blocker=['EH'], intake=['EH'], transfer=['EH'], transfer_servo=['EH'], flower=['EH'],
+              light=['CH', 'EH'])
 ALL_DRIVE_ON_EH = devices(flywheel=['CH', 'CH'], drive=['EH'] * 4, turret=['CH'] * 3, hood=['CH'] * 2,
-                          blocker=['CH'], intake=['CH'], transfer=['CH'], transfer_servo=['EH'], flower=['EH'],
-                          light=['EH', 'EH'])
+                          blocker=['EH'], intake=['CH'], transfer=['CH'], transfer_servo=['EH'], flower=['EH'],
+                          light=['CH', 'EH'])
 FLYWHEELS_ON_EH = devices(flywheel=['EH', 'EH'], drive=['CH'] * 4, turret=['CH'] * 3, hood=['CH'] * 2,
-                          blocker=['CH'], intake=['EH'], transfer=['EH'], transfer_servo=['EH'], flower=['EH'],
-                          light=['EH', 'EH'])
+                          blocker=['EH'], intake=['EH'], transfer=['EH'], transfer_servo=['EH'], flower=['EH'],
+                          light=['CH', 'EH'])
 TURRET_SERVOS_ON_EH = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['EH'] * 3,
-                              hood=['CH'] * 2, blocker=['CH'], intake=['EH'], transfer=['EH'],
+                              hood=['CH'] * 2, blocker=['EH'], intake=['EH'], transfer=['EH'],
                               transfer_servo=['CH'], flower=['CH'], light=['CH', 'EH'])
 POLLEN_PAIR_ON_Y_CABLE = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH'] * 2,
-                                 hood=['CH'] * 2, blocker=['CH'], intake=['EH'], transfer=['EH'],
-                                 transfer_servo=['EH'], flower=['EH'], light=['EH', 'EH'])
+                                 hood=['CH'] * 2, blocker=['EH'], intake=['EH'], transfer=['EH'],
+                                 transfer_servo=['EH'], flower=['EH'], light=['CH', 'EH'])
 NECTAR_SERVOS_ON_EH = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH', 'CH', 'EH'],
-                              hood=['CH', 'EH'], blocker=['CH'], intake=['EH'], transfer=['EH'],
-                              transfer_servo=['EH'], flower=['EH'], light=['EH', 'EH'])
+                              hood=['CH', 'EH'], blocker=['EH'], intake=['EH'], transfer=['EH'],
+                              transfer_servo=['EH'], flower=['EH'], light=['CH', 'EH'])
 PLAN_BEFORE_CAD = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH'] * 4,
                           hood=['CH'] * 2, blocker=['EH'], intake=['EH'], transfer=['EH'], flower=['EH'])
 
