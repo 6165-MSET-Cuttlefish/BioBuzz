@@ -2,12 +2,10 @@
 analog update rate, a 20 ms control on sensor A (written over I2C, then its as-found settings written back), and cable
 flexes and swaps that name a sensor or a cable behind a swinging reading (scripts/bench/README.md)."""
 import json
-from xml.etree import ElementTree
 
 POLL = "Bench: Analog Poll"
 READ = "Bench: Rangefinder Read"
 CONFIGURE = "Configure Laser Rangefinder"
-ANALOG_SOURCE = "laser_rangefinder"
 CONFIG_ANALOG = "bench_rangefinders"
 CONFIG_I2C = "bench_rf_i2c"
 I2C_LINE = '<RevColorSensorV3 name="Laser" bus="3" port="0" />'
@@ -65,12 +63,7 @@ SWAPS_MEANS = ("the swaps didn't name one part: either no reading fell under 50 
 
 
 def analog_lines():
-    root = ElementTree.parse(rb.REPO_ROOT / rb.SHIPPED_CONFIG_DIR / f"{ANALOG_SOURCE}.xml").getroot()
-    lines = [f'<AnalogInput name="{e.get("name")}" port="{e.get("port")}" />' for e in root.iter("AnalogInput")]
-    names = {e.get("name"): int(e.get("port")) for e in root.iter("AnalogInput")}
-    if names != PORT:
-        raise rb.BenchError(f"{ANALOG_SOURCE}.xml names its rangefinders {names}, not {PORT}: update the bench")
-    return lines
+    return [f'<AnalogInput name="{name}" port="{port}" />' for name, port in PORT.items()]
 
 
 def ask(r, text):

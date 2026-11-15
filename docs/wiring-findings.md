@@ -74,7 +74,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | servo 4 | right RGB indicator light | hub 5 V |
 | servo 5 | nectar hood | injector A |
 | analog 0 | Floodgate current output | shares connector 0-1 with rangefinder A through a splitter cable |
-| analog 1 | transfer rangefinder A (upstream), if kept | the port the bench config `laser_rangefinder.xml` uses |
+| analog 1 | transfer rangefinder A (upstream), if kept | the port Bench: Rangefinders' `bench_rangefinders` uses |
 | analog 2 | spare | |
 | analog 3 | transfer rangefinder B (downstream), if kept | the bench port |
 | I2C bus 0 | nothing | the built-in IMU's bus |
@@ -107,8 +107,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 `blocker` on Expansion Hub servo 4. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
 Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the RGB lights are
 `rgbRight` on Control Hub servo 4 and `rgbLeft` on Expansion Hub servo 2, and the Prism is `prism` (no code reads those four yet). The rangefinders are
-`frontRangefinder` on analog 1 (upstream, the rig config's `analog0`) and `backRangefinder` on analog 3 (downstream,
-`analog1`); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Floodgate is `floodgate`, the OctoQuad
+`frontRangefinder` on analog 1 (upstream) and `backRangefinder` on analog 3 (downstream); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Floodgate is `floodgate`, the OctoQuad
 `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0, read by nothing. The Expansion Hub is address 2 on
 RS485 and on USB. The rest: `fl`, `fr`, `bl`, `br`, `intake`, `transfer`, the Arducam `aprilTagDetector` and the
 Limelight `limelight`.

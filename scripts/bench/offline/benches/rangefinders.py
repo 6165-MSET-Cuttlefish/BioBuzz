@@ -599,8 +599,9 @@ def declaration():
            and BENCH.configs == (rf.CONFIG_ANALOG, rf.CONFIG_I2C) and BENCH.opmodes == (rf.POLL, rf.READ))
     args = rb.parse_args(next(e for e in rb.needs_a_person() if e[0] == "rangefinders")[2])
     expect("its Needs a person command parses with --interactive", args.rangefinders and args.interactive)
-    expect("bench_rangefinders copies laser_rangefinder.xml's two analog inputs and nothing else",
-           rf.analog_lines() == ['<AnalogInput name="analog0" port="1" />', '<AnalogInput name="analog1" port="3" />'])
+    expect("bench_rangefinders carries its own two analog inputs, analog0 on port 1 and analog1 on port 3, and "
+           "nothing else", rf.analog_lines() == ['<AnalogInput name="analog0" port="1" />',
+                                               '<AnalogInput name="analog1" port="3" />'])
 
 
 def main():

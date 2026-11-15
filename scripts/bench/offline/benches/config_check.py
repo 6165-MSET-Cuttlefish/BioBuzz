@@ -1,6 +1,6 @@
 """Bench: Config Check offline: its verdicts on synthetic results (each one fails when weakened), its source scan, and
 the bench end to end on fake_hub.py with an Expansion Hub at address 2: the typed ports statement before any adb
-command, the port probe gate, two shipped configs by name, six INITs and no START. No hub, no adb, no network.
+command, the port probe gate, the shipped config by name, six INITs and no START. No hub, no adb, no network.
 Run with: python3 -I scripts/bench/offline/benches/config_check.py
 """
 import contextlib
@@ -282,8 +282,8 @@ class Station(fake_hub.Hub):
         if expansion:
             self.probe["hubs"].append({"parent": False, "address": 2, "firmware": "1.8.2", "responding": True})
         self.probe["webcams"] = [{"attached": True, "serial": "UC762"}]
-        self.probe["shippedConfigs"] = {n: 2131820545 + i for i, n in enumerate(
-            ("biobuzz", "camera", "intake_transfer_shooter", "laser_rangefinder", "laser_rangefinder_i2c"))}
+        self.probe["shippedConfigs"] = {"biobuzz": 0x7f110002, "intake_transfer_shooter": 0x7f110008,
+                                        "laser_rangefinder_i2c": 0x7f11000b}
         self.crashes = crashes or {}
         self.port_probe = GOOD_PROBE if probe is None else probe
         self.messages, self.switched = [], []
@@ -376,8 +376,8 @@ def on_the_fake_hub():
     expect("bench_photon names servos on ports 0 and 1 of each hub only, as the probe's servos=2 would",
            servo_ports == [("173", "0"), ("173", "1"), ("2", "0"), ("2", "1")])
     shipped = [s for s in hub.switched if s["name"] in cc.CONFIGS]
-    expect("two shipped configs, each activated by name with this install's resource id",
-           [s["name"] for s in shipped] == list(cc.CONFIGS)
+    expect("biobuzz, the one shipped config, activated by name with this install's resource id",
+           cc.CONFIGS == ("biobuzz",) and [s["name"] for s in shipped] == list(cc.CONFIGS)
            and all(s["location"] == "RESOURCE" and s["resourceId"] == hub.probe["shippedConfigs"][s["name"]]
                    for s in shipped))
     expect("six INITs, in the table's order, each on its own config", robot_inits == ROBOT_OPMODES)
@@ -388,8 +388,8 @@ def on_the_fake_hub():
            and "'nectarTurret' as Servo" in check_line(summary, "Turret Aim Test on biobuzz: every hardware lookup"))
     expect("summary: the webcam with another serial stops INIT where this station explains it, so its lookups FAIL as "
            "not judged",
-           check_line(summary, "Cell Tip Test on camera: every hardware lookup").startswith("- FAIL")
-           and "not judged" in check_line(summary, "Cell Tip Test on camera: every hardware lookup"))
+           check_line(summary, "Cell Tip Test on biobuzz: every hardware lookup").startswith("- FAIL")
+           and "not judged" in check_line(summary, "Cell Tip Test on biobuzz: every hardware lookup"))
     expect("summary: the OpModes that held INIT pass, and the probe passes",
            check_line(summary, "BioBuzz Tele on biobuzz: every hardware lookup").startswith("- PASS")
            and check_line(summary, "port probe").startswith("- PASS"))
@@ -420,8 +420,8 @@ def on_the_fake_hub():
 
 
 def declaration():
-    expect("declared: flag-only, needs a person, the S3 statement, Bench: Photon Stock, bench_photon and two shipped "
-           "configs", not BENCH.default and BENCH.person is not None and BENCH.statement == "--s3-ports"
+    expect("declared: flag-only, needs a person, the S3 statement, Bench: Photon Stock, bench_photon and the shipped "
+           "biobuzz", not BENCH.default and BENCH.person is not None and BENCH.statement == "--s3-ports"
            and BENCH.opmodes == ("Bench: Photon Stock",) and BENCH.configs == (rb.CONFIG_PHOTON,) + cc.CONFIGS)
     expect("its Needs a person command parses and carries --s3-ports",
            rb.parse_args(next(e for e in rb.needs_a_person() if e[0] == "config_check")[2]).s3_ports)

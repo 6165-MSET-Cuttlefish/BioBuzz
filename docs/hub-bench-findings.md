@@ -261,7 +261,8 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   a 14–17 ms driving loop already reads every one. Read the rangefinders in the loop's bulk read, or set both to a
   10 ms budget with Configure Laser Rangefinder before adding a poller. The vendored driver takes 5–1000 ms
   (`vendor/brushland/LaserRangefinder.java:74`).
-- **Analog refresh and poller threads** (Bench: Analog Poll, run by hand with `laser_rangefinder.xml`: 10 ms on
+- **Analog refresh and poller threads** (Bench: Analog Poll, run by hand with `laser_rangefinder.xml`, a rig config
+  deleted on 2026-11-14 whose `analog0` and `analog1` were Control Hub analog ports 1 and 3: 10 ms on
   2026-10-14, then 5, 7 and 10 ms on 2026-10-16 with both rangefinders plugged in):
   - The hub refreshes every ADC channel about every 10 ms. Back-to-back reads saw a new value every 9.7–11.1 ms
     (p50), never under about 9 ms, on both rangefinders, the battery monitor and the 5 V monitor, through GetADC or

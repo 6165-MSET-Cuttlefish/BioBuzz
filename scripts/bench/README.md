@@ -146,9 +146,9 @@ name devices on the bench ports unless you add `--ports-empty` once they are unp
    60 to 80 minutes with every device plugged in, about 45 on a bare hub; the Photon block is a separate run
    (`--photon`, below).
    The longest: Thread Lifecycle 6 (2 of them its Sloth reload), Freeze Dump 6 (five dashboard config changes; on
-   slothboard 6165.6 or older each one freezes the app until it is killed and relaunched), Config by name 3 (three
-   config switches), Turret PWM 2 (two config switches), Limelight Hung 1.5. Don't touch the hub. Ctrl-C once is
-   safe: it restores your hardware config and ignores more Ctrl-C until that's done.
+   slothboard 6165.6 or older each one freezes the app until it is killed and relaunched), Turret PWM 2 (two
+   config switches), Limelight Hung 1.5. Don't touch the hub. Ctrl-C once is safe: it restores your hardware config
+   and ignores more Ctrl-C until that's done.
 6. When it prints `Nothing to send back`, tell Claude.
 
 The Sloth race, Thread Lifecycle's reload and the Photon block's deploySloth step run `./gradlew :TeamCode:deploySloth`
@@ -493,8 +493,7 @@ shipped config, holds INIT 4 s, then STOPs it. It never STARTs one. No new OpMod
 
 | OpMode | config |
 |---|---|
-| BioBuzz Tele, Turret Aim Test, SOTM Test, BioBuzz Shooter Test, Intake Transfer Shooter Test | `biobuzz` |
-| Cell Tip Test | `camera` |
+| BioBuzz Tele, Turret Aim Test, SOTM Test, BioBuzz Shooter Test, Intake Transfer Shooter Test, Cell Tip Test | `biobuzz` |
 
 **Plug in:** the Control Hub on 12 V; an Expansion Hub on RS485 at address 2, powered from the Control Hub's second
 XT30 port (every shipped config with an Expansion Hub names it at address 2); the Pinpoint in Control Hub I2C port 1,
@@ -515,7 +514,7 @@ What it does, in order:
    the probe didn't reach both hubs, no robot OpMode is INITed. `bench_photon` names servos only on ports 0 and 1 of
    each hub, so the probe-only run turns off no other servo port's signal; `--s3-ports` has servo ports 0-5 of both
    hubs empty anyway.
-3. Activates each shipped config by name, with the resource id this install gives it (two config switches), and
+3. Activates each shipped config by name, with the resource id this install gives it (one config switch), and
    INITs that config's OpModes one at a time (six INITs). Then it switches back to `bench_main`.
 
 | judged, per OpMode | FAIL when |
@@ -897,7 +896,7 @@ target can't show the sensor's own rate: a fast target can, with a 20 ms control
 10 ms from 20 ms.
 
 **Plug in:** the Control Hub on 12 V; rangefinder A on Control Hub analog port 1 and B on analog port 3
-(`laser_rangefinder.xml`'s ports), both aimed at a matte card about 150 mm away; the Prism in Control Hub I2C port 3
+(`bench_rangefinders`' ports), both aimed at a matte card about 150 mm away; the Prism in Control Hub I2C port 3
 (the bench has you unplug it for the control). Have a fast target ready: a card on a swinging arm passing through 50-300
 mm, or a slotted disc spun by hand. Nothing on any motor or servo port: the bench drives none.
 
@@ -905,7 +904,7 @@ mm, or a slotted disc spun by hand. Nothing on any motor or servo port: the benc
 minutes. Every step waits for Enter. A timed step (a swing or a flex) starts when the runner prints `GO`; a closed
 terminal stops the bench.
 
-What it does, in order, on `bench_rangefinders` (`laser_rangefinder.xml`'s two analog inputs, no motor) unless said:
+What it does, in order, on `bench_rangefinders` (`analog0` on port 1, `analog1` on port 3, no motor) unless said:
 
 1. **Still**, 60 s: Bench: Analog Poll in mode `steady` reads both ports in one bulk read every 10 ms. A port that
    reads under 50 mV the whole time stops the bench: the sensor isn't plugged in.
@@ -1092,8 +1091,9 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 
 The OpModes also run from the dashboard, but they expect the runner's configs and write results only to the hub.
 
-**Bench: Analog Poll** in its default mode (`refresh`) is run by hand only: `laser_rangefinder.xml` active, both
-rangefinders plugged in (it commands no motor). About 80 s after START the DS and dashboard show its summary; the rest
+**Bench: Analog Poll** in its default mode (`refresh`) is run by hand only: `biobuzz.xml` active, both
+rangefinders plugged in as its `frontRangefinder` and `backRangefinder` (Control Hub analog ports 1 and 3, the
+names it defaults to; it commands no motor). About 80 s after START the DS and dashboard show its summary; the rest
 is in `analog_poll.json` in the hub's bench folder. It measures how often each analog value refreshes and what a poller
 thread (`pollMs` in that folder's `params.json`, default 10) costs a stand-in robot loop. Its `steady` and `rate`
 modes are Bench: Rangefinders' (above).
@@ -1122,6 +1122,7 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   when it did. Config by name picks two shipped configs with Control Hub devices alone, each with a device the other
   lacks, saves the first under the second's id (and `bench_unshipped` under that id), restarts the app and reads the
   hardware map's device names to tell which XML loaded; a load of no config reports no battery, which its switch allows.
+  Since `laser_rangefinder.xml` was deleted (2026-11-14) only `intake_transfer_shooter` qualifies: not tested.
 - When the original config's name is a `bench_*` one (a hub left on `bench_probe` by an earlier run), the restore
   writes its XML back from `original_config.xml`: the run overwrote that file with its own. Every distinct XML the run
   writes under one name is kept in `logs/` (`<name>.xml`, `<name>.2.xml`, ...).

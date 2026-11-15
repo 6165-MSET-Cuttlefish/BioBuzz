@@ -105,6 +105,10 @@ FtcRobotController tags end at v12.0.
   - `betta_decode.xml`, `butterfly.xml` and `cuttle_decode.xml` were deleted on 2026-11-14, which shifts `biobuzz`
     (now 0x7f110002) and every config after it: after the first full install of that build, re-activate each hub's
     config on the DS as above.
+  - `camera.xml` and `laser_rangefinder.xml` were deleted later on 2026-11-14. Both sort after `biobuzz`, which keeps
+    0x7f110002; `intake_transfer_shooter` (now 0x7f110008) and `laser_rangefinder_i2c` (now 0x7f11000b) sort after
+    `camera` and shift (read from that build's `R.txt` on 2026-11-14). After its first full install, re-activate a
+    hub left on either of those, or on a deleted one, as above.
   - A by-name lookup would fix it (`getResources().getIdentifier(name, "xml", packageName)` in
     `FtcRobotControllerActivity.requestRobotSetup`, then re-save the config), but `robotcontroller/` is SDK template
     code that CLAUDE.md keeps unedited. The bench already re-activates shipped configs by name

@@ -146,7 +146,8 @@ OLD = ('<?xml version="1.0"?><Robot type="FirstInspires-FTC"><Webcam name="ballD
        '</Robot>')
 BARE = '<?xml version="1.0"?><Robot type="FirstInspires-FTC"></Robot>'
 shipped = rb.shipped_config_names()
-expect("shipped: the hardware configs in res/xml", {"biobuzz", "camera"} <= shipped)
+expect("shipped: the hardware configs in res/xml",
+       shipped == {"biobuzz", "intake_transfer_shooter", "laser_rangefinder_i2c"})
 expect("shipped: app_settings and device_filter aren't configs", not {"app_settings", "device_filter"} & shipped)
 expect("devices: biobuzz names the webcam and the Limelight as the code does",
        rb.config_device_names(SHIPPED_ROBOT) == {"webcams": [rb.CELL_TIP_WEBCAM], "ethernet": [rb.LIMELIGHT_DEVICE]})

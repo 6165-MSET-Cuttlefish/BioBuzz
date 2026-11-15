@@ -344,7 +344,8 @@ class Hub:
         self.probe = {
             "hubs": [{"parent": True, "imuType": "BHI260", "firmware": "1.8.2", "address": 173, "responding": True}],
             "webcams": [], "limelights": [], "interfaces": ["wlan0", "lo"],
-            "shippedConfigs": {"biobuzz": 2131820545, "camera": 2131820546}}
+            "shippedConfigs": {"biobuzz": 0x7f110002, "intake_transfer_shooter": 0x7f110008,
+                               "laser_rangefinder_i2c": 0x7f11000b}}
         if everything:
             self.probe["hubs"].append({"parent": False, "address": 2, "firmware": "1.8.2", "responding": True})
             self.probe["webcams"] = [{"attached": True, "serial": "UC762"}]

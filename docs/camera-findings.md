@@ -131,7 +131,7 @@ Asked 2026-11-14; not tried on a hub. It should work for the cell-tip check, wit
   2026-11-14). The same 70° class of lens keeps tags about the size they are now.
 - **Change the serial in the hardware config.** `aprilTagDetector` is declared with the OV9782's serial; a webcam
   with another serial fails to open, which stops every OpMode built on `BioBuzzRobot` in INIT. Read the new camera's
-  serial on the Driver Station (Configure Robot, Scan) and put it in `biobuzz.xml` and `camera.xml`: a `res/` change,
+  serial on the Driver Station (Configure Robot, Scan) and put it in `biobuzz.xml`: a `res/` change,
   so a full install.
 - **White balance will probably be refused.** A monochrome sensor has none. `WebcamControls` records a refused mode
   and shows `REJECTED` instead of stopping (`biobuzz/modules/vision/WebcamControls.java`, `setModes`); whether the
@@ -139,8 +139,9 @@ Asked 2026-11-14; not tried on a hub. It should work for the cell-tip check, wit
   apply, and with no colour filter the sensor needs less exposure for the same picture.
 - **One per robot.** The same FTC docs page says the SDK has been seen to misbehave with more than one Arducam OV9281
   attached.
-- **Check before trusting it:** Cell Tip Test on `camera.xml` (INIT must pass and tags must be found at match
-  distance), then Bench: Webcam, whose white balance phases should read refused, not crash.
+- **Check before trusting it:** once `BioBuzzRobot` can INIT on `biobuzz.xml` (CLAUDE.md), Cell Tip Test on it
+  (INIT must pass and tags must be found at match distance), then Bench: Webcam, whose white balance phases should
+  read refused, not crash.
 - **Avoid Arducam's 130° OV9281 board**: wide-angle shrinks every tag, so the check reads TIPPED from closer in.
 
 ## Lens distortion, calibration and pose

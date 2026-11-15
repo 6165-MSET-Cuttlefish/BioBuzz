@@ -19,7 +19,7 @@ import java.util.Map;
 
 @TeleOp(name = "Bench: Analog Poll", group = "Test")
 public class AnalogPollBench extends OpMode {
-    private static final String HINT = "run it on laser_rangefinder.xml, whose analog0 and analog1 are the two rangefinders";
+    private static final String HINT = "run it on biobuzz.xml, whose frontRangefinder and backRangefinder are the two rangefinders";
     private static final long CHUNK_NS = 250_000_000L;
     // Long chunks: the few ms between loop() calls would delay the step that ends a dwell.
     private static final long RATE_CHUNK_NS = 1_000_000_000L;
@@ -169,8 +169,8 @@ public class AnalogPollBench extends OpMode {
         mode = BenchIO.param(params, "mode", "refresh");
         label = BenchIO.param(params, "label", mode);
         report = new BenchReport("Analog Poll", mode.equals("refresh") ? "analog_poll" : "analog_poll_" + label);
-        nameA = BenchIO.param(report.params, "sensorA", "analog0");
-        nameB = BenchIO.param(report.params, "sensorB", "analog1");
+        nameA = BenchIO.param(report.params, "sensorA", "frontRangefinder");
+        nameB = BenchIO.param(report.params, "sensorB", "backRangefinder");
         refreshSeconds = BenchIO.param(report.params, "refreshSeconds", 4);
         loopSeconds = BenchIO.param(report.params, "loopSeconds", 6);
         pollNs = (long) (BenchIO.param(report.params, "pollMs", 10) * 1e6);
