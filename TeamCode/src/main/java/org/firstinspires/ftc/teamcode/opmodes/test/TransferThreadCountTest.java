@@ -6,12 +6,16 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.AnalogInput;
+import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.util.ElapsedTime;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.TransferCounter;
+import org.firstinspires.ftc.teamcode.opmodes.tele.BioBuzzBasicTele;
 
 @TeleOp(name = "Transfer Thread Count Test", group = "Test")
 @Config("Transfer Thread Count Test")
@@ -19,14 +23,20 @@ public class TransferThreadCountTest extends OpMode {
     public static String upstreamSensorName = "frontRangefinder";
     public static String downstreamSensorName = "backRangefinder";
     public static String motor1Name = "transfer";
+    public static String servoName = "melonbotics";
+    public static String intakeName = "intake";
     public static double maxRangeMm = 1300;
     public static double diffThresholdMm = 25;
     public static double hysteresisMm = 10;
+    public static boolean oneSensor = false;
+    public static double oneSensorThresholdMm = 100;
     public static boolean runThread = true;
     public static double pollMs = 10;
     public static double loopMs = 20;
     public static int stopAtCount = 2;
     public static double motor1Power = 0;
+    public static double intakePower = 0;
+    public static boolean reverseIntake = true;
     public static boolean resetCount = false;
     public static boolean crashInLoop = false;
     public static boolean crashInStop = false;
@@ -36,6 +46,9 @@ public class TransferThreadCountTest extends OpMode {
     AnalogInput upstream;
     AnalogInput downstream;
     DcMotorEx motor1;
+    DcMotorEx intake;
+    DcMotorEx fl, bl, fr, br;
+    CRServo servo;
     TransferCounter counter;
     final TransferCounter.Edge loopEdge = new TransferCounter.Edge();
 
@@ -51,9 +64,20 @@ public class TransferThreadCountTest extends OpMode {
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         motor1.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        intake = hardwareMap.get(DcMotorEx.class, intakeName);
+        intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        servo = hardwareMap.get(CRServo.class, servoName);
+        fl = hardwareMap.get(DcMotorEx.class, "fl");
+        bl = hardwareMap.get(DcMotorEx.class, "bl");
+        fr = hardwareMap.get(DcMotorEx.class, "fr");
+        br = hardwareMap.get(DcMotorEx.class, "br");
+        for (DcMotorEx motor : new DcMotorEx[] {fl, bl, fr, br}) {
+            motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        }
         if (runThread) {
             counter = new TransferCounter(hardwareMap, upstreamSensorName, downstreamSensorName, maxRangeMm, pollMs);
-            counter.setThreshold(diffThresholdMm, hysteresisMm);
+            counter.setUpstreamOnly(oneSensor);
+            counter.setThreshold(threshold(), hysteresisMm);
         }
         lastResetCount = resetCount;
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
@@ -69,12 +93,16 @@ public class TransferThreadCountTest extends OpMode {
         if (crashInLoop) throw new IllegalStateException("crashInLoop is on: deliberate crash in loop() to test the TransferCounter thread");
         runtime.reset();
         lastPosition = motor1.getCurrentPosition();
-        if (counter != null) counter.setThreshold(diffThresholdMm, hysteresisMm);
+        double threshold = threshold();
+        if (counter != null) {
+            counter.setUpstreamOnly(oneSensor);
+            counter.setThreshold(threshold, hysteresisMm);
+        }
 
         double mmA = upstream.getVoltage() / 3.3 * maxRangeMm;
         double mmB = downstream.getVoltage() / 3.3 * maxRangeMm;
         double diff = mmA - mmB;
-        if (loopEdge.update(diff, diffThresholdMm, hysteresisMm)) loopCount++;
+        if (loopEdge.update(oneSensor ? mmA : diff, threshold, hysteresisMm)) loopCount++;
 
         if (resetCount != lastResetCount) {
             loopCount = 0;
@@ -85,6 +113,24 @@ public class TransferThreadCountTest extends OpMode {
         boolean stopped = stopAtCount > 0 && count >= stopAtCount;
 
         motor1.setPower(stopped ? 0 : motor1Power);
+        servo.setPower(stopped ? 0 : motor1Power);
+        intake.setDirection(direction(reverseIntake));
+        intake.setPower(stopped ? 0 : intakePower);
+
+        BioBuzzBasicTele.Drive drive = BioBuzzBasicTele.drive;
+        double[] wheels = BioBuzzBasicTele.mecanum(
+                BioBuzzBasicTele.deadband(-gamepad1.left_stick_y, drive.stickDeadband),
+                BioBuzzBasicTele.deadband(gamepad1.left_stick_x, drive.stickDeadband),
+                BioBuzzBasicTele.deadband(gamepad1.right_stick_x, drive.stickDeadband),
+                Range.clip(gamepad1.right_bumper ? drive.slowPower : drive.maxPower, 0, 1));
+        fl.setDirection(direction(drive.reverseFl));
+        bl.setDirection(direction(drive.reverseBl));
+        fr.setDirection(direction(drive.reverseFr));
+        br.setDirection(direction(drive.reverseBr));
+        fl.setPower(wheels[0]);
+        bl.setPower(wheels[1]);
+        fr.setPower(wheels[2]);
+        br.setPower(wheels[3]);
         double workMs = runtime.milliseconds();
 
         while (runtime.milliseconds() < loopMs) {
@@ -98,6 +144,9 @@ public class TransferThreadCountTest extends OpMode {
         telemetry.addData("Downstream (mm)", mmB);
         telemetry.addData("A - B (mm)", diff);
         telemetry.addData("Diff threshold (mm)", diffThresholdMm);
+        telemetry.addData("Counting on", oneSensor
+                ? "Upstream alone, each time it rises above " + oneSensorThresholdMm + " mm (a ball leaving)"
+                : "A - B rising above the diff threshold");
         if (counter != null) {
             TransferCounter.Stats s = counter.stats();
             if (s != null) {
@@ -110,13 +159,26 @@ public class TransferThreadCountTest extends OpMode {
             }
         }
         telemetry.addData("Motor Current (A)", motor1.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData("Intake Current (A)", intake.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("loop work (ms)", workMs);
         telemetry.addData("loop time (ms)", runtime.milliseconds());
         telemetry.addData("motor RPM", 60000 * (motor1.getCurrentPosition()-lastPosition) / runtime.milliseconds() / 145.1);
     }
 
+    private static DcMotorSimple.Direction direction(boolean reverse) {
+        return reverse ? DcMotorSimple.Direction.REVERSE : DcMotorSimple.Direction.FORWARD;
+    }
+
+    private static double threshold() {
+        return oneSensor ? oneSensorThresholdMm : diffThresholdMm;
+    }
+
     @Override
     public void stop() {
+        motor1.setPower(0);
+        servo.setPower(0);
+        intake.setPower(0);
+        for (DcMotorEx motor : new DcMotorEx[] {fl, bl, fr, br}) motor.setPower(0);
         if (crashInStop) throw new IllegalStateException("crashInStop is on: deliberate crash in stop() before stopping the TransferCounter thread");
         if (counter != null) counter.stop();
     }

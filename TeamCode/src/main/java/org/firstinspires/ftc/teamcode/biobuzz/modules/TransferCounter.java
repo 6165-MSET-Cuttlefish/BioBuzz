@@ -59,6 +59,7 @@ public final class TransferCounter {
     private final AtomicInteger count = new AtomicInteger();
     private volatile double thresholdMm;
     private volatile double hysteresisMm;
+    private volatile boolean upstreamOnly;
     private volatile boolean running;
     private volatile Throwable failure;
     private volatile Stats stats;
@@ -96,6 +97,10 @@ public final class TransferCounter {
     public void setThreshold(double thresholdMm, double hysteresisMm) {
         this.thresholdMm = thresholdMm;
         this.hysteresisMm = hysteresisMm;
+    }
+
+    public void setUpstreamOnly(boolean upstreamOnly) {
+        this.upstreamOnly = upstreamOnly;
     }
 
     public void start() {
@@ -166,7 +171,7 @@ public final class TransferCounter {
                 int mvB = r.getAnalogInput(portB);
                 double mmA = mvA / ADC_FULL_SCALE_MV * maxRangeMm;
                 double mmB = mvB / ADC_FULL_SCALE_MV * maxRangeMm;
-                if (edge.update(mmA - mmB, thresholdMm, hysteresisMm)) count.incrementAndGet();
+                if (edge.update(upstreamOnly ? mmA : mmA - mmB, thresholdMm, hysteresisMm)) count.incrementAndGet();
 
                 if (polls > 0) {
                     long gap = t1 - lastPollNs;

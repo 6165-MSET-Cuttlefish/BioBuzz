@@ -268,7 +268,7 @@ public class BioBuzzBasicTele extends OpMode {
     }
 
     /** Wheel powers in the order front-left, back-left, front-right, back-right, the largest held to {@code limit}. */
-    static double[] mecanum(double forward, double strafe, double turn, double limit) {
+    public static double[] mecanum(double forward, double strafe, double turn, double limit) {
         double scale = limit / Math.max(Math.abs(forward) + Math.abs(strafe) + Math.abs(turn), 1);
         return new double[] {
                 (forward + strafe + turn) * scale,
@@ -278,7 +278,7 @@ public class BioBuzzBasicTele extends OpMode {
         };
     }
 
-    static double deadband(double value, double band) {
+    public static double deadband(double value, double band) {
         return Math.abs(value) < band ? 0 : value;
     }
 
