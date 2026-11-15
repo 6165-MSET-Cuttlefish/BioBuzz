@@ -6,7 +6,6 @@ import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
-import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,7 +26,7 @@ public class PinpointAbsentBench extends LinearOpMode {
         long t0 = System.nanoTime();
         Follower follower;
         try {
-            follower = BioBuzzConstants.create(hardwareMap);
+            follower = PinpointSetup.create(hardwareMap);
             create.put("threw", null);
         } catch (RuntimeException e) {
             create.put("threw", e.toString());

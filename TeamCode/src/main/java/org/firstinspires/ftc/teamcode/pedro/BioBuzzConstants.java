@@ -9,17 +9,23 @@ import com.pedropathing.math.Matrix;
 import com.pedropathing.math.Vector2D;
 import com.pedropathing.revhub.drivetrains.Mecanum;
 import com.pedropathing.revhub.drivetrains.MecanumConfig;
-import com.pedropathing.revhub.localizers.PinpointConfig;
-import com.pedropathing.revhub.localizers.PinpointLocalizer;
-import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
+import com.pedropathing.revhub.localizers.OctoQuadConfig;
+import com.qualcomm.hardware.digitalchickenlabs.OctoQuad;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 
 @Config("BioBuzz Constants")
 public class BioBuzzConstants {
+
+    // Not public, so the dashboard (which lists public fields only) can't open the gate: it takes a source edit and a deploy.
+    static boolean measured = false;
 
     public static class MecanumSettings {
         public DcMotorSimple.Direction frontLeftDirection = DcMotorSimple.Direction.REVERSE;
@@ -28,14 +34,17 @@ public class BioBuzzConstants {
         public DcMotorSimple.Direction backRightDirection = DcMotorSimple.Direction.FORWARD;
     }
 
-    public static class PinpointSettings {
-        public String name = "pinpoint";
-        public GoBildaPinpointDriver.GoBildaOdometryPods podType = GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
-        // OctoQuad Localizer Test's TCP offset points from the pods' TCP to the centre, so these are (-tcpOffsetMmY, -tcpOffsetMmX) in inches.
-        public double xPodOffset = -6.1875;
-        public double yPodOffset = 1.34375;
-        public GoBildaPinpointDriver.EncoderDirection xPodDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
-        public GoBildaPinpointDriver.EncoderDirection yPodDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
+    public static class OctoQuadSettings {
+        public String name = "octoquad";
+        public int forwardPodChannel = 0;
+        public int strafePodChannel = 1;
+        public OctoQuad.EncoderDirection forwardPodDirection = OctoQuad.EncoderDirection.REVERSE;
+        public OctoQuad.EncoderDirection strafePodDirection = OctoQuad.EncoderDirection.REVERSE;
+        public double countsPerMm = 19.89436789;
+        public double forwardPodLeftOfCentreIn = -6.1875;
+        public double strafePodForwardOfCentreIn = 1.34375;
+        public double headingScalar = 1.0085;
+        public int velocityIntervalMs = 25;
     }
 
     public static class ForesightSettings {
@@ -64,7 +73,7 @@ public class BioBuzzConstants {
     }
 
     public static MecanumSettings mecanum = new MecanumSettings();
-    public static PinpointSettings pinpoint = new PinpointSettings();
+    public static OctoQuadSettings octoQuad = new OctoQuadSettings();
     public static ForesightSettings foresight = new ForesightSettings();
 
     public static MecanumConfig drivetrainConfig() {
@@ -80,16 +89,22 @@ public class BioBuzzConstants {
         });
     }
 
-    public static PinpointConfig localizerConfig() {
-        return new PinpointConfig(c -> {
-            c.name.set(pinpoint.name);
-            c.podType.set(pinpoint.podType);
-            c.xPodOffset.set(pinpoint.xPodOffset);
-            c.yPodOffset.set(pinpoint.yPodOffset);
-            c.xPodDirection.set(pinpoint.xPodDirection);
-            c.yPodDirection.set(pinpoint.yPodDirection);
-            c.globalDistanceUnit.set(DistanceUnit.INCH);
+    public static OctoQuadConfig localizerConfig() {
+        return new OctoQuadConfig(c -> {
+            c.name.set(octoQuad.name);
+            c.xPodPort.set(octoQuad.forwardPodChannel);
+            c.yPodPort.set(octoQuad.strafePodChannel);
+            c.xPodDirection.set(octoQuad.forwardPodDirection);
+            c.yPodDirection.set(octoQuad.strafePodDirection);
+            c.encoderResolutionUnit.set(DistanceUnit.MM);
+            c.ticksPerUnit.set(octoQuad.countsPerMm);
             c.offsetUnits.set(DistanceUnit.INCH);
+            c.xPodOffset.set(octoQuad.forwardPodLeftOfCentreIn);
+            c.yPodOffset.set(octoQuad.strafePodForwardOfCentreIn);
+            c.globalDistanceUnit.set(DistanceUnit.INCH);
+            c.headingScalar.set(octoQuad.headingScalar);
+            c.localizerVelocityIntervalMS.set(octoQuad.velocityIntervalMs);
+            c.i2cRecoveryMode.set(OctoQuad.I2cRecoveryMode.MODE_1_PERIPH_RST_ON_FRAME_ERR);
         });
     }
 
@@ -117,8 +132,15 @@ public class BioBuzzConstants {
         });
     }
 
-    public static PinpointLocalizer localizer(HardwareMap hardwareMap) {
-        return new PinpointLocalizer(hardwareMap, localizerConfig());
+    public static GuardedOctoQuadLocalizer localizer(HardwareMap hardwareMap) {
+        return new GuardedOctoQuadLocalizer(hardwareMap, localizerConfig());
+    }
+
+    /** For code that isn't an EnhancedOpMode, whose START would otherwise do the wait. */
+    public static GuardedOctoQuadLocalizer readyLocalizer(HardwareMap hardwareMap) {
+        GuardedOctoQuadLocalizer localizer = localizer(hardwareMap);
+        localizer.awaitRunning();
+        return localizer;
     }
 
     public static Mecanum drivetrain(HardwareMap hardwareMap) {
@@ -129,7 +151,28 @@ public class BioBuzzConstants {
         return new Foresight(foresightConfig());
     }
 
-    public static Follower create(HardwareMap hardwareMap) {
-        return new Follower(localizer(hardwareMap), drivetrain(hardwareMap), foresight());
+    /** Throws, before building anything, for an OpMode not marked {@link PedroNeverDrives} until {@link #measured} is set. */
+    public static Follower create(OpMode opMode) {
+        if (!opMode.getClass().isAnnotationPresent(PedroNeverDrives.class)) requireMeasured(displayName(opMode.getClass()));
+        return new Follower(localizer(opMode.hardwareMap), drivetrain(opMode.hardwareMap), foresight());
+    }
+
+    public static boolean isMeasured() {
+        return measured;
+    }
+
+    public static void requireMeasured(String what) {
+        if (measured) return;
+        throw new IllegalStateException(what + " lets Pedro drive the robot, so first measure the BIOBUZZ robot's drive "
+                + "directions, odometry pods, IMU heading scale and Foresight gains by docs/odometry-tuning.md and set "
+                + "BioBuzzConstants.measured to true: apart from the pod channels, the values in BioBuzzConstants are still the retired Betta bot's.");
+    }
+
+    static String displayName(Class<?> opMode) {
+        Autonomous auto = opMode.getAnnotation(Autonomous.class);
+        String name = auto != null ? auto.name() : "";
+        TeleOp tele = opMode.getAnnotation(TeleOp.class);
+        if (name.isEmpty() && tele != null) name = tele.name();
+        return name.isEmpty() ? opMode.getSimpleName() : name;
     }
 }

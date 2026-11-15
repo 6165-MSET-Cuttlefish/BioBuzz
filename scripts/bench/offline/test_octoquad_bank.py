@@ -34,7 +34,7 @@ def ms(p50, count=rb.OCTOQUAD_BANK_READS, **extra):
 
 
 MIXED, QUAD = rb.OCTOQUAD_MIXED_BANKS, rb.OCTOQUAD_QUADRATURE
-GOOD = {"podPorts": [3, 4], "asFound": QUAD,
+GOOD = {"podPorts": [0, 1], "asFound": QUAD,
         "readLocalizerDataAsFound": ms(3.20, invalid=0),
         "readLocalizerDataAndAllEncoderDataAsFound": ms(6.58, invalid=0),
         "afterSet": MIXED,
@@ -72,8 +72,11 @@ got, text = results(GOOD)
 expect("good: five checks", len(got) == 5)
 expect("good: every check passes", got and all(got.values()))
 expect("good: the summary says the bank survives the localizer's setup and reset", "the bank survives" in text)
-expect("good: the summary records the pod ports and the robot's channels",
-       "[3, 4]" in text and "on the robot the pods sit on channels 0 and 1" in text)
+expect("good: the summary records the pod ports as the robot's", "[0, 1], as on the robot" in text
+       and "a pod here" not in text)
+_, text = results(mutate(podPorts=[3, 4]))
+expect("pods on 3 and 4: the summary says channel 4's pod reads a pulse width",
+       "[3, 4]: channel 4 is in the second bank" in text and "channel 4 (a pod here)" in text)
 
 expect("cost: +0.5 ms with bank 2 in pulse-width mode fails",
        failing(mutate(readLocalizerDataMixed=ms(3.70, invalid=0)), "within 0.2 ms"))

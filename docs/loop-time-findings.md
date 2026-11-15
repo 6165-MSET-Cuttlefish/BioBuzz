@@ -10,8 +10,9 @@ BIOBUZZ robot's loop times to a file yet.
 
 - **Wire the BIOBUZZ robot as in [`wiring-findings.md`](wiring-findings.md)**: nothing that is read goes on the
   Expansion Hub, so each loop pays one bulk read, and outputs that change every loop go on the Control Hub.
-- **OctoQuad for odometry**: 3.2 ms against the Pinpoint's 5.8 ms every loop, with far less heading drift. Needs the
-  guarded localizer [`hub-bench-findings.md`](hub-bench-findings.md) describes (a missing OctoQuad hangs INIT).
+- **OctoQuad for odometry**: 3.2 ms against the Pinpoint's 5.8 ms every loop, with far less heading drift (bench
+  reads). The BIOBUZZ robot's follower reads it through `GuardedOctoQuadLocalizer`
+  ([`odometry-tuning.md`](odometry-tuning.md)); its loop cost on the robot isn't measured yet.
 - **Write tolerances** (other teams' are [below](#other-teams-decode-code-2026-10-25)): `Shooter`'s flywheels already
   use `withCachingTolerance(0.005)`; try 0.002–0.005 on its hoods (0.001 now) and keep 0.001 on the turret. `Intran`'s
   intake and transfer switch between fixed powers, so they already write only on a change; give them 0.02 if they

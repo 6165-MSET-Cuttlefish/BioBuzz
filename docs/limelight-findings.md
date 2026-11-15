@@ -152,7 +152,8 @@ Over the robot Wi-Fi, without the USB cable, the dashboard forwards these ports 
 `BallFieldTransform.Mount` (`BallFieldTransform.java:14-17`) is `xIn` 33.2, `yIn` -0.4, `headingDeg` 0, derived on
 2026-10-03 for the Betta bot's Limelight (retired 2026-11-13) rather than tape-measured; the BIOBUZZ robot's mount
 needs its own homography and `Mount`. It places the `(0,0)` crosshair, the ground point `H_ARRAY` calls (0,0),
-relative to the robot centre, the Pinpoint offsets' origin ([`CLAUDE.md`](../CLAUDE.md), Tuning):
+relative to the robot centre, the origin of `BioBuzzConstants.octoQuad`'s pod offsets ([`CLAUDE.md`](../CLAUDE.md),
+Tuning):
 
 - On the Betta bot the Limelight's lens sat 3.5 in ahead of the robot centre, on the centreline (measured 2026-10-03).
 - Decomposing `H_ARRAY` with the Limelight's lens calibration scaled to `CALIBRATION_SIZE`, 640 × 480

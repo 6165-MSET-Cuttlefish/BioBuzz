@@ -21,7 +21,9 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Shooter;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Turret;
 import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
+import org.firstinspires.ftc.teamcode.pedro.PedroNeverDrives;
 
+@PedroNeverDrives
 @TeleOp(name = "SOTM Test", group = "Test")
 @Config("SOTM Test")
 public class SotmTest extends BioBuzzOpMode {

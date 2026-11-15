@@ -1,53 +1,31 @@
 package org.firstinspires.ftc.teamcode.opmodes.test;
 
 import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
+import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
 import com.qualcomm.hardware.digitalchickenlabs.OctoQuad;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
+import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
 import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
-@Config("OctoQuad Localizer Test")
 @TeleOp(name = "OctoQuad Localizer Test", group = "Test")
 public class OctoQuadLocalizerTest extends LinearOpMode {
-    private static final double MM_PER_INCH = 25.4;
-
-    public static String name = "octoquad";
-    public static int portX = 3;
-    public static int portY = 4;
-    public static OctoQuad.EncoderDirection directionX = OctoQuad.EncoderDirection.REVERSE;
-    public static OctoQuad.EncoderDirection directionY = OctoQuad.EncoderDirection.REVERSE;
-    public static double ticksPerMmX = 19.89436789;
-    public static double ticksPerMmY = 19.89436789;
-    public static double tcpOffsetMmX = -34.13125f;
-    public static double tcpOffsetMmY = 157.1625f;
-    public static double imuHeadingScalar = 1.0085;
-    public static int velocityIntervalMs = 25;
-
-    private OctoQuad.LocalizerDataBlock pose = new OctoQuad.LocalizerDataBlock();
-    private OctoQuad.LocalizerDataBlock poseRead = new OctoQuad.LocalizerDataBlock();
-    private OctoQuad.EncoderDataBlock encoders = new OctoQuad.EncoderDataBlock();
-    private OctoQuad.EncoderDataBlock encodersRead = new OctoQuad.EncoderDataBlock();
+    private final OctoQuad.EncoderDataBlock encoders = new OctoQuad.EncoderDataBlock();
+    private GuardedOctoQuadLocalizer odometry;
     private OctoQuad octoquad;
     private DcMotorEx fl, bl, fr, br;
     private String firmware;
-    private boolean lastPacketOk;
-    private int badPackets;
-    private int totalPackets;
 
     @Override
     public void runOpMode() {
         telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
         telemetry.setMsTransmissionInterval(50);
-
-        octoquad = hardwareMap.get(OctoQuad.class, name);
-        firmware = octoquad.getFirmwareVersionString();
-        octoquad.setI2cRecoveryMode(OctoQuad.I2cRecoveryMode.MODE_1_PERIPH_RST_ON_FRAME_ERR);
 
         BioBuzzConstants.MecanumSettings m = BioBuzzConstants.mecanum;
         fl = motor(Drivetrain.FRONT_LEFT, m.frontLeftDirection);
@@ -55,23 +33,24 @@ public class OctoQuadLocalizerTest extends LinearOpMode {
         fr = motor(Drivetrain.FRONT_RIGHT, m.frontRightDirection);
         br = motor(Drivetrain.BACK_RIGHT, m.backRightDirection);
 
-        applyParameters();
+        applySettings();
         while (opModeInInit()) {
-            if (gamepad1.aWasPressed()) applyParameters();
-            if (gamepad1.bWasPressed()) octoquad.setLocalizerPose(0, 0, 0f);
+            if (gamepad1.aWasPressed()) applySettings();
+            if (gamepad1.bWasPressed()) odometry.setPose(Pose.zero());
             read();
             show();
         }
+        if (isStopRequested()) return;
 
-        waitForCalibration();
+        odometry.awaitRunning(this::isStopRequested);
         while (opModeIsActive()) {
             if (gamepad1.aWasPressed()) {
                 setDrivePower(0, 0, 0, 0);
-                applyParameters();
-                waitForCalibration();
+                applySettings();
+                odometry.awaitRunning(this::isStopRequested);
                 continue;
             }
-            if (gamepad1.bWasPressed()) octoquad.setLocalizerPose(0, 0, 0f);
+            if (gamepad1.bWasPressed()) odometry.setPose(Pose.zero());
             drive();
             read();
             show();
@@ -87,44 +66,16 @@ public class OctoQuadLocalizerTest extends LinearOpMode {
         return motor;
     }
 
-    private void applyParameters() {
-        octoquad.setSingleEncoderDirection(portX, directionX);
-        octoquad.setSingleEncoderDirection(portY, directionY);
-        octoquad.setAllLocalizerParameters(portX, portY,
-                (float) ticksPerMmX, (float) ticksPerMmY,
-                (float) tcpOffsetMmX, (float) tcpOffsetMmY,
-                (float) imuHeadingScalar, velocityIntervalMs);
-        // Parameters take effect only on a localizer reset.
-        octoquad.resetLocalizerAndCalibrateIMU();
-    }
-
-    private void waitForCalibration() {
-        OctoQuad.LocalizerStatus status;
-        while (!isStopRequested() && (status = octoquad.getLocalizerStatus()) != OctoQuad.LocalizerStatus.RUNNING) {
-            if (status == OctoQuad.LocalizerStatus.FAULT_NO_IMU) {
-                throw new IllegalStateException("OctoQuad has no IMU (MK1?): the localizer needs an MK2");
-            }
-            telemetry.addLine("Waiting for IMU calibration: keep the robot still");
-            telemetry.addData("Status", status);
-            telemetry.update();
-            sleep(20);
-        }
+    // A new localizer writes BioBuzzConstants.octoQuad to the board and recalibrates its IMU, exactly as every INIT does.
+    private void applySettings() {
+        odometry = BioBuzzConstants.localizer(hardwareMap);
+        octoquad = hardwareMap.get(OctoQuad.class, BioBuzzConstants.octoQuad.name);
+        firmware = octoquad.getFirmwareVersionString();
     }
 
     private void read() {
-        octoquad.readLocalizerDataAndAllEncoderData(poseRead, encodersRead);
-        totalPackets++;
-        lastPacketOk = poseRead.crcOk && encodersRead.crcOk;
-        if (!lastPacketOk) {
-            badPackets++;
-            return;
-        }
-        OctoQuad.LocalizerDataBlock p = pose;
-        pose = poseRead;
-        poseRead = p;
-        OctoQuad.EncoderDataBlock e = encoders;
-        encoders = encodersRead;
-        encodersRead = e;
+        odometry.update();
+        octoquad.readAllEncoderData(encoders);
     }
 
     private void drive() {
@@ -151,22 +102,23 @@ public class OctoQuadLocalizerTest extends LinearOpMode {
     }
 
     private void show() {
-        telemetry.addLine("Sticks: drive  A: apply parameters and recalibrate (keep still)  B: zero pose");
-        telemetry.addData("Status", pose.localizerStatus);
-        telemetry.addData("Last packet CRC ok", lastPacketOk);
-        telemetry.addData("x (in)", pose.posX_mm / MM_PER_INCH);
-        telemetry.addData("y (in)", pose.posY_mm / MM_PER_INCH);
-        telemetry.addData("heading (deg)", Math.toDegrees(pose.heading_rad));
-        telemetry.addData("x (mm)", pose.posX_mm);
-        telemetry.addData("y (mm)", pose.posY_mm);
-        telemetry.addData("heading (rad)", pose.heading_rad);
-        telemetry.addData("vx (in/s)", pose.velX_mmS / MM_PER_INCH);
-        telemetry.addData("vy (in/s)", pose.velY_mmS / MM_PER_INCH);
-        telemetry.addData("heading vel (deg/s)", Math.toDegrees(pose.velHeading_radS));
-        telemetry.addData("Raw X pod counts (push forward: rises)", encoders.positions[portX]);
-        telemetry.addData("Raw Y pod counts (push left: rises)", encoders.positions[portY]);
-        telemetry.addData("Bad packets", badPackets + "/" + totalPackets);
+        BioBuzzConstants.OctoQuadSettings s = BioBuzzConstants.octoQuad;
+        Pose pose = odometry.state().pose();
+        Velocity velocity = odometry.state().velocity();
+        telemetry.addLine("Sticks: drive  A: apply BioBuzz Constants and recalibrate (keep still)  B: zero pose");
+        telemetry.addData("Status", odometry.status());
         telemetry.addData("Firmware", firmware);
+        telemetry.addData("x (in)", "%.2f", pose.x());
+        telemetry.addData("y (in)", "%.2f", pose.y());
+        telemetry.addData("heading (deg)", "%.2f", Math.toDegrees(pose.heading()));
+        telemetry.addData("vx (in/s)", "%.1f", velocity.vx);
+        telemetry.addData("vy (in/s)", "%.1f", velocity.vy);
+        telemetry.addData("heading vel (deg/s)", "%.1f", Math.toDegrees(velocity.omega));
+        telemetry.addData("Forward pod, channel " + s.forwardPodChannel + " (push forward: rises)",
+                encoders.positions[s.forwardPodChannel]);
+        telemetry.addData("Strafe pod, channel " + s.strafePodChannel + " (push left: rises)",
+                encoders.positions[s.strafePodChannel]);
+        telemetry.addData("Encoder read CRC ok", encoders.crcOk);
         telemetry.update();
     }
 }

@@ -23,7 +23,7 @@ public class BioBuzzRobot extends Robot {
 
     @Override
     protected Follower createFollower(HardwareMap hardwareMap) {
-        return BioBuzzConstants.create(hardwareMap);
+        return BioBuzzConstants.create(opMode);
     }
 
     @Override

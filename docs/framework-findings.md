@@ -148,7 +148,7 @@ with the Cuttle bot: before calling other code unused, check it in git history a
 |---|---|
 | `architecture/hardware/AbsoluteAnalogEncoder.java` | an absolute encoder on an analog port: angle, multi-turn position, an optional filter that drops jumps over a set size |
 | `Module.logDS` (`architecture/core/Module.java:141-147`) | a Driver Station-only line, formatted only in a DS frame |
-| `Drivetrain.isBonk()` (`biobuzz/modules/Drivetrain.java:159-168`) | when called every loop: true once Pedro has been on a path, short of its end, at a speed under 2 (Pedro's velocity units) for 2 s; last season's autos, not in this repo, used it to skip a segment the robot was stuck on |
+| `Drivetrain.isBonk()` (`biobuzz/modules/Drivetrain.java:160-169`) | when called every loop: true once Pedro has been on a path, short of its end, at a speed under 2 (Pedro's velocity units) for 2 s; last season's autos, not in this repo, used it to skip a segment the robot was stuck on |
 | `Camera.getPredictedBallPosition` and `getPredictedFieldPosition` (`biobuzz/modules/Camera.java:118-124`, `:130-136`), with the `predict()` they call on `TrackedBall` and `FieldBall` | where a tracked ball will be after a lookahead, extrapolated at constant velocity |
 | `RobotShape.turnRadius()`, `centreFor`, `intakeAt` and `canTurnAt` (`architecture/planner/RobotShape.java:34-48`, `:121-128`) | footprint geometry for the ball planner |
 

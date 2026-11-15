@@ -7,7 +7,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 
 @TeleOp(name = "Bench: OctoQuad Absent", group = "Test")
 public class OctoQuadAbsentBench extends EnhancedOpMode {
@@ -23,7 +22,7 @@ public class OctoQuadAbsentBench extends EnhancedOpMode {
     @Override
     protected Robot createRobot() {
         report = new BenchReport("OctoQuad Absent", "octoquad_absent");
-        OctoQuad octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+        OctoQuad octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadSetup.name, BenchIO.RUNNER_HINT);
         report.put("chipId", octoQuad.getChipId() & 0xFF);
         report.phase("constructing");
         BenchIO.log("BENCH octoquad absent: constructing GuardedOctoQuadLocalizer");

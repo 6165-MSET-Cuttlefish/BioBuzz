@@ -10,7 +10,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.EnhancedOpMode;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -119,6 +118,7 @@ public class OctoQuadBench extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() {
+        BenchRobot.requireBenchConfig(hardwareMap);
         Map<String, Object> params = BenchIO.params();
         mode = BenchIO.param(params, "mode", "seed");
         if (!MODES.contains(mode)) {
@@ -130,7 +130,7 @@ public class OctoQuadBench extends EnhancedOpMode {
         report = new BenchReport("OctoQuad", "octoquad_" + mode);
         File rolled = new File(BenchIO.dir(), ROLLED_FILE);
         if (rolled.exists() && !rolled.delete()) throw new IllegalStateException("can't delete " + rolled);
-        octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+        octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadSetup.name, BenchIO.RUNNER_HINT);
         int chipId = octoQuad.getChipId() & 0xFF;
         present = chipId == (OctoQuad.OCTOQUAD_CHIP_ID & 0xFF);
         report.put("chipId", chipId);
@@ -139,7 +139,7 @@ public class OctoQuadBench extends EnhancedOpMode {
             lateJoin.put("answeredAtInit", present);
             present = true;
         } else if (!present) {
-            report.done("no OctoQuad answered on " + OctoQuadLocalizerTest.name + "'s I2C port");
+            report.done("no OctoQuad answered on " + OctoQuadSetup.name + "'s I2C port");
             return new BenchRobot(this);
         } else {
             report.put("firmware", octoQuad.getFirmwareVersionString());
@@ -397,7 +397,7 @@ public class OctoQuadBench extends EnhancedOpMode {
             lateJoin.put("runningPhase", running ? "running" : "init");
             int[] read = new int[podPorts.length];
             int[] expected = new int[podPorts.length];
-            OctoQuad.EncoderDirection[] want = {OctoQuadLocalizerTest.directionX, OctoQuadLocalizerTest.directionY};
+            OctoQuad.EncoderDirection[] want = {OctoQuadSetup.directionX, OctoQuadSetup.directionY};
             for (int i = 0; i < podPorts.length; i++) {
                 read[i] = octoQuad.getSingleEncoderDirection(podPorts[i]) == OctoQuad.EncoderDirection.REVERSE ? 1 : 0;
                 expected[i] = want[i] == OctoQuad.EncoderDirection.REVERSE ? 1 : 0;

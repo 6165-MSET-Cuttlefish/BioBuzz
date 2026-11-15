@@ -72,7 +72,7 @@ PROMPTED = (
      "follower)", ["--pinpoint", "--interactive"],
      "the goBILDA Pinpoint in Control Hub I2C port 1, both pods plugged in and still"),
     ("octoquad", "the OctoQuad's I2C cable pulled and replugged in Bench: OctoQuad", ["--octoquad", "--interactive"],
-     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 3 and 4, still, and nothing else on it: no "
+     "the OctoQuad MK2 in Control Hub I2C port 2, pods on its encoder ports 0 and 1, still, and nothing else on it: no "
      "split cable from a hub's encoder port, since the pull cuts the OctoQuad's power while the hub still powers that "
      "encoder"),
     ("octoquad_chain", "Bench: OctoQuad's chain: a pod rolled by hand, the cable pulled under Pedro's localizer and "

@@ -25,7 +25,7 @@ def expect(label, cond):
         print("FAIL", label)
 
 
-GOOD_BANK = {"podPorts": [3, 4], "asFound": "ALL_QUADRATURE",
+GOOD_BANK = {"podPorts": [0, 1], "asFound": "ALL_QUADRATURE",
              "readLocalizerDataAsFound": {"count": 300, "p50": 3.2, "p95": 3.8, "p99": 4.0, "max": 8.0, "invalid": 0},
              "readLocalizerDataAndAllEncoderDataAsFound": {"count": 300, "p50": 6.6, "p95": 8.5, "p99": 9.0,
                                                            "max": 17.0, "invalid": 0},

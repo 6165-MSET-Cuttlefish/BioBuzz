@@ -7,8 +7,11 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.Drivetrain;
+import org.firstinspires.ftc.teamcode.pedro.PedroNeverDrives;
 
 @Config("BioBuzz Tele")
+@PedroNeverDrives
 @TeleOp(name = "BioBuzz Tele", group = "A")
 public class BioBuzzTele extends BioBuzzOpMode {
 
@@ -65,6 +68,10 @@ public class BioBuzzTele extends BioBuzzOpMode {
     @Override
     protected void telemetry() {
         telemetry.addData("Slow Mode", slowMode ? "75%" : "OFF");
-        telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
+        if (Drivetrain.headingLockAvailable()) {
+            telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
+        } else {
+            telemetry.addLine("The heading lock (LB) waits for the robot's odometry to be measured (docs/odometry-tuning.md)");
+        }
     }
 }

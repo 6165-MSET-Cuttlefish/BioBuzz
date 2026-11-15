@@ -19,8 +19,6 @@ import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.core.Robot;
 import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,7 +53,7 @@ public class PinpointBench extends EnhancedOpMode {
 
         @Override
         protected Follower createFollower(HardwareMap hardwareMap) {
-            return BioBuzzConstants.create(hardwareMap);
+            return PinpointSetup.create(hardwareMap);
         }
 
         @Override
@@ -69,8 +67,7 @@ public class PinpointBench extends EnhancedOpMode {
 
         @Override
         protected Follower createFollower(HardwareMap hardwareMap) {
-            return new Follower(new TimedLocalizer(BioBuzzConstants.localizer(hardwareMap)),
-                    BioBuzzConstants.drivetrain(hardwareMap), BioBuzzConstants.foresight());
+            return BenchRobot.benchFollower(hardwareMap, h -> new TimedLocalizer(PinpointSetup.localizer(h)));
         }
 
         @Override
@@ -84,7 +81,7 @@ public class PinpointBench extends EnhancedOpMode {
 
         @Override
         protected Follower createFollower(HardwareMap hardwareMap) {
-            return BenchRobot.softwareFollower(hardwareMap);
+            return BenchRobot.drivingFollower(hardwareMap);
         }
 
         @Override
@@ -208,22 +205,23 @@ public class PinpointBench extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() {
+        BenchRobot.requireBenchConfig(hardwareMap);
         mode = BenchIO.param(BenchIO.params(), "mode", "seed");
         if (!MODES.contains(mode)) {
             throw new IllegalArgumentException("bench param mode must be one of " + MODES + ", was " + mode);
         }
         report = new BenchReport("Pinpoint", resultFile(mode));
-        driver = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, BioBuzzConstants.pinpoint.name, BenchIO.RUNNER_HINT);
+        driver = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, PinpointSetup.pinpoint.name, BenchIO.RUNNER_HINT);
         int version = driver.getDeviceVersion();
         present = version != 0;
         report.put("deviceVersion", version);
         report.put("present", present);
         if (!present) {
-            report.done("no Pinpoint answered on " + BioBuzzConstants.pinpoint.name + "'s I2C port");
+            report.done("no Pinpoint answered on " + PinpointSetup.pinpoint.name + "'s I2C port");
             return new BenchRobot(this);
         }
         if (mode.equals("soak") || mode.equals("recal")) {
-            octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+            octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadSetup.name, BenchIO.RUNNER_HINT);
             int chipId = octoQuad.getChipId() & 0xFF;
             octoQuadPresent = chipId == (OctoQuad.OCTOQUAD_CHIP_ID & 0xFF);
             report.put("octoQuadChipId", chipId);

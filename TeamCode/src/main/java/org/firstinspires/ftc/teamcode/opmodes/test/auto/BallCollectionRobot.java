@@ -16,7 +16,7 @@ public class BallCollectionRobot extends Robot {
 
     @Override
     protected Follower createFollower(HardwareMap hardwareMap) {
-        return BioBuzzConstants.create(hardwareMap);
+        return BioBuzzConstants.create(opMode);
     }
 
     @Override

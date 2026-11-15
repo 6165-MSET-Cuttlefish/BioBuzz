@@ -8,8 +8,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.VoltageUnit;
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -69,14 +67,14 @@ public class ExpansionHubBench extends LinearOpMode {
 
         Map<String, Runnable> odometry = new LinkedHashMap<>();
         Map<String, Map<String, Object>> devices = new LinkedHashMap<>();
-        OctoQuad octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+        OctoQuad octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadSetup.name, BenchIO.RUNNER_HINT);
         OctoQuad.LocalizerDataBlock block = new OctoQuad.LocalizerDataBlock();
-        odometry.put(OctoQuadLocalizerTest.name, () -> octoQuad.readLocalizerData(block));
-        devices.put(OctoQuadLocalizerTest.name, device(octoQuad.getConnectionInfo(), octoQuad.getChipId() & 0xFF));
-        GoBildaPinpointDriver pinpoint = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, BioBuzzConstants.pinpoint.name,
+        odometry.put(OctoQuadSetup.name, () -> octoQuad.readLocalizerData(block));
+        devices.put(OctoQuadSetup.name, device(octoQuad.getConnectionInfo(), octoQuad.getChipId() & 0xFF));
+        GoBildaPinpointDriver pinpoint = BenchIO.require(hardwareMap, GoBildaPinpointDriver.class, PinpointSetup.pinpoint.name,
                 BenchIO.RUNNER_HINT);
-        odometry.put(BioBuzzConstants.pinpoint.name, pinpoint::update);
-        devices.put(BioBuzzConstants.pinpoint.name, device(pinpoint.getConnectionInfo(), pinpoint.getDeviceVersion()));
+        odometry.put(PinpointSetup.pinpoint.name, pinpoint::update);
+        devices.put(PinpointSetup.pinpoint.name, device(pinpoint.getConnectionInfo(), pinpoint.getDeviceVersion()));
 
         Map<String, Map<String, Timed>> commands = new LinkedHashMap<>();
         List<Timed> commandReads = new ArrayList<>();

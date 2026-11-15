@@ -139,8 +139,9 @@ Asked 2026-11-14; not tried on a hub. It should work for the cell-tip check, wit
   apply, and with no colour filter the sensor needs less exposure for the same picture.
 - **One per robot.** The same FTC docs page says the SDK has been seen to misbehave with more than one Arducam OV9281
   attached.
-- **Check before trusting it:** once `BioBuzzRobot` can INIT on `biobuzz.xml` (CLAUDE.md), Cell Tip Test on it
-  (INIT must pass and tags must be found at match distance), then Bench: Webcam, whose white balance phases should
+- **Check before trusting it:** Cell Tip Test on `biobuzz.xml` (its follower reads the OctoQuad and it is marked
+  `@PedroNeverDrives`, so it INITs there before the odometry is measured: CLAUDE.md; INIT must pass and tags must be
+  found at match distance), then Bench: Webcam, whose white balance phases should
   read refused, not crash.
 - **Avoid Arducam's 130° OV9281 board**: wide-angle shrinks every tag, so the check reads TIPPED from closer in.
 

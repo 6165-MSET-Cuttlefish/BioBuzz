@@ -163,7 +163,7 @@ Missing hardware skips its benches, and the summary says so.
 | a UVC webcam streaming 640x480 MJPEG (the robot's Arducam OV9782 is best) | Control Hub USB | Bench: Webcam ([its clamped and refused settings](#bench-webcams-clamped-and-refused-settings) included), Webcam Stop, Webcam Thread Failure; with `--planner-stop`, Bench: Planner Stop's webcam trials |
 | the Limelight 3A, booted, with 4 Pollen balls in its view ([below](#bench-limelights-ball-phases)) | Control Hub USB | Bench: Limelight (the runner restores the pipeline it found); with `--dashboard-off`, a check that its web UI answers on port 5801 after the recovery; with `--limelight-reload` and this Mac's Gradle, Bench: Limelight Reload |
 | a goBILDA Pinpoint, both pods plugged in and still | Control Hub I2C bus 1 | Bench: Pinpoint (else Pinpoint Absent); with `--pinpoint-soak`, the OctoQuad in bus 2 too and both boards taped down, its soak |
-| an OctoQuad MK2, pods on encoder ports 3 and 4, still (on the robot they sit on 0 and 1) | Control Hub I2C bus 2 | Bench: OctoQuad, its bank phase included |
+| an OctoQuad MK2, pods on encoder ports 0 and 1 (as on the robot), still | Control Hub I2C bus 2 | Bench: OctoQuad, its bank phase included |
 | the same OctoQuad with its pods moved to channels 0 and 1 | Control Hub I2C bus 2 | with `--octoquad-chain --interactive`, Bench: OctoQuad's chain ([below](#bench-octoquad-chain)) |
 | a Driver Hub paired with the Control Hub, showing its telemetry (its USB cable on this Mac too, for screenshots) | the Control Hub's Wi-Fi | with `--fault-render --interactive`, Bench: Fault Render ([below](#bench-fault-render)) |
 | laser rangefinders A and B aimed at a matte card about 150 mm away, a fast target, the Prism | A on Control Hub analog port 1, B on analog port 3; the Prism in I2C port 3, to unplug when asked | with `--rangefinders --interactive`, Bench: Rangefinders ([below](#bench-rangefinders)) |
@@ -529,9 +529,16 @@ ends and the lookups after it don't run. That check FAILs as "not
 judged", not as a bad config: this station can't check those lookups, and step 1's list covers only some of them.
 
 The `summary.md` table gives, per OpMode: the INIT outcome, the error, the device a missing-device error names, the
-time from INIT to the error and the pid before and after. Until `biobuzz.xml` is rewritten to the map in
-[`docs/wiring-findings.md`](../../docs/wiring-findings.md), the `biobuzz` OpModes are expected to FAIL their lookup
-check.
+time from INIT to the error and the pid before and after. Read from source, every lookup the table's OpModes make
+names a device `biobuzz.xml` has, so apart from the webcam error above each is expected to PASS its lookup check; no
+hub has run them on today's `biobuzz.xml` yet.
+
+Every OpMode in the table but Intake Transfer Shooter Test builds `BioBuzzRobot`, whose follower reads the OctoQuad
+named `octoquad`, not a `pinpoint`, and is marked `@PedroNeverDrives`, so `BioBuzzConstants`' measured gate doesn't
+stop it. INIT writes the OctoQuad's directions and localizer settings for channels 0 and 1 and resets it; with no
+OctoQuad answering, INIT goes on and raises the `OctoQuad` fault after about 3 s. Runs before 2026-11-14 stopped at a
+`pinpoint` lookup instead, so compare outcomes with that in mind. The OctoQuad benches that run later write their own
+channel settings (`OctoQuadSetup`), so they don't depend on what these INITs leave on the board.
 
 Only a hub shows: the real error text each OpMode throws, whether the allowed error reads the way the bench expects,
 what each OpMode writes during INIT, and how long each INIT and STOP takes. Offline:
@@ -555,7 +562,7 @@ config back at the end.
 
 The runs, on `bench_octoquad`:
 
-1. **Soak**: INIT held 2 s, then RUN for the time asked, Pedro's `PinpointLocalizer` built as `BioBuzzConstants` builds it,
+1. **Soak**: INIT held 2 s, then RUN for the time asked, Pedro's `PinpointLocalizer` built as `PinpointSetup` builds it,
    so the follower reads the Pinpoint every loop with no guard. Each loop times the Pinpoint read alone (its `update()`),
    and `follower.update()`, and reads the status; every read over 20 ms is kept with its loop and ART's blocking-GC
    and GC counts across it; every status other than READY after the first READY is kept as a streak (status, reads,
@@ -602,7 +609,7 @@ ports 0-1.
 
 **Command:** `python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`, from a
 terminal, about 12 minutes. Without `--octoquad-chain`, `--octoquad --interactive` runs the seed run and one pull and
-replug, as before (pods on channels 3 and 4).
+replug, as before (pods on channels 0 and 1 there too).
 
 **What the person does,** each when asked:
 
@@ -847,6 +854,11 @@ mid-run. [`docs/wiring-findings.md`](../../docs/wiring-findings.md) says from so
 `BioBuzzRobot` then stops in INIT; this bench checks that on a hub, against a control INIT with the bank in.
 `BioBuzzRobot` looks up drive motors on the Expansion Hub, so the Expansion Hub has to be there.
 
+BioBuzz Tele's follower reads the OctoQuad named `octoquad` (Control Hub I2C bus 2 in `biobuzz.xml`): INIT writes
+its settings for channels 0 and 1 and resets it, and with nothing on that bus INIT still holds, with the `OctoQuad`
+fault after about 3 s. Before 2026-11-14 BioBuzz Tele stopped at INIT looking up a `pinpoint` that `biobuzz.xml`
+doesn't name, so the control never held; the odometry no longer stops it.
+
 **Plug in:** the Control Hub on 12 V; an Expansion Hub on RS485 at address 2, powered from the Control Hub's second
 XT30 port; the webcam and the Limelight 3A on the powered USB hub, its power bank plugged in, on the Control Hub's USB
 3.0 port. **Nothing on either hub's motor ports 0-3 or servo ports 0-5**: BioBuzz Tele may write its motors during
@@ -880,8 +892,9 @@ What it does, in order:
 Recorded: per INIT its outcome, error, first team-code frame and constructor; with the bank out, what the probe found;
 mid-run, the Limelight fault's time from the last good poll and from your Enter, the webcam's last frame against that
 poll, the cell tip verdict and its staleness at the fault, the loop period's p95 before and after the pull (and every
-10 s), and whether each camera came back without a re-INIT. Until `biobuzz.xml` is rewritten to the map, expect the
-control to stop at a device it doesn't name: that FAILs setup and skips step 3, and the mid-run part runs anyway.
+10 s), and whether each camera came back without a re-INIT. From source the control is expected to hold INIT on
+`biobuzz.xml` (with the `OctoQuad` fault after about 3 s if no OctoQuad answers); no hub has run it on today's
+`biobuzz.xml`, and runs before 2026-11-14 FAILed setup at the `pinpoint` lookup and skipped step 3.
 
 Only a hub shows: everything this bench judges and records. Offline: `python3 -I
 scripts/bench/offline/benches/camera_power.py` (the prompts in order, the control first, the probes, a failing control,
@@ -1023,7 +1036,17 @@ saves settings that name a shipped config by another one's resource id, and a na
 switches back. The configs put `fl`/`fr`/`bl`/`br` on motor ports 0-3, `benchServo`/`benchServo2` on servo ports 0-1
 (`TurretL`/`TurretR` in `bench_turret`), `floodgate` on analog 0 and `analog0`/`analog1` on analog 2 and 3; only the
 Photon block's config also names the Expansion Hub's motor ports 0-3 (`efl`/`efr`/`ebl`/`ebr`) and servo ports 0-1
-(`eServo`/`eServo2`). Bench: Freeze Dump, last, sends slothboard's SET (three times), WRITE (the active config's own
+(`eServo`/`eServo2`). Every bench built on `BenchRobot`, Bench: Raw Loop, Bench: Limelight Fault, Bench: Power
+Readback, Bench: Pinpoint, Bench: Pinpoint Absent, Bench: OctoQuad and Bench: OctoQuad Absent stop at INIT unless the
+active config names `benchServo` and neither of the robot's own `intake` and `transfer` motors
+(`BenchRobot.requireBenchConfig`): `benchServo` alone doesn't prove a config isn't the robot's. A follower on the bench's
+Pinpoint or OctoQuad (`PinpointSetup.create`, `OctoQuadSetup.create`) comes only from `BenchRobot.benchFollower`, which
+refuses such a config before it builds anything and caps the wheels at 0.2 as the other driving benches are. Several of them
+drive the wheels with nobody at the sticks (Pedro following a path with a pose that never moves, or a fixed creep),
+Power Readback pulses `fl` at 0.2 in INIT, and `biobuzz.xml` names no `benchServo`, so none can start on the robot.
+`offline/dryrun_default.py` checks that the runner INITs each of them on a config naming `benchServo` and neither motor,
+Power Readback included; `DrivingBenchGateTest` builds each of them (the ones built on `BenchRobot` through its
+follower) on a config without `benchServo` and expects the refusal. Bench: Freeze Dump, last, sends slothboard's SET (three times), WRITE (the active config's own
 contents) and DELETE (a `bench_freeze_scratch` it pushes first) from idle; on slothboard 6165.6 or older each one
 freezes the app, which the Control Hub kills and relaunches. It also raises the hub's log buffer to 8 MB until the next
 reboot. It never deletes the active config, and a run that stops before writing the first `bench_*` config leaves the
@@ -1167,8 +1190,8 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   `saveParametersToFlash`. STOP waits for that `gameLoop()`, and 900 ms in the SDK makes every Lynx call throw (SDK
   12.0.0 `OpModeManagerImpl.OpModeStuckCodeMonitor`), the restore's too, so the phase checks STOP's gate
   (`OpModeManagerImpl.shouldPreventDangerousHardwareAccess()`, raised as STOP begins) before each read and poll and
-  ends early, and the `finally` runs within milliseconds of the STOP. Its pods are on channels 3 and 4, and channel 4 is in the second bank, so while that bank
-  is in pulse-width mode the pod reads a pulse width: only timings and bank read-backs are judged. A crash there
+  ends early, and the `finally` runs within milliseconds of the STOP. Its pods are on channels 0 and 1, as on the robot, in the first bank, so they keep counting while the second bank
+  is in pulse-width mode; only timings and bank read-backs are judged. A crash there
   leaves the seed checks and the cable pull as they were (`bank_phase_crashed`). `getChannelBankConfig` returns
   ALL_QUADRATURE for any byte it doesn't know, the all-zero reply of a failed read included (SDK 12.0.0
   `OctoQuadImpl`), so only the pulse-width read-back after the set is a positive answer. The INIT read is
@@ -1180,7 +1203,7 @@ passes, is in [`offline/README.md`](offline/README.md); the Photon block has its
   `art.gc.blocking-gc-count` and `art.gc.gc-count` (`Debug.getRuntimeStat`) around each read. It saves its summary
   every 5 minutes and its heading rows only at the end.
 - Bench: OctoQuad's chain: `OctoQuadSetup` reads `portX`, `portY` and `guard` from the runner's params
-  (OctoQuadLocalizerTest's ports and the guard when they're absent). With `guard` 0 it reads the `LocalizerDataBlock`
+  (its own ports, 0 and 1 as on the robot, and the guard when they're absent). With `guard` 0 it reads the `LocalizerDataBlock`
   Pedro's `OctoQuadLocalizer` keeps private by reflection (field `localizer`, revhub 3.0.2), and that constructor waits
   for RUNNING with no timeout, so the control runs only after the seed run found the OctoQuad. The markers run waits
   for the runner's `octoquad_rolled.json` in the bench folder (deleted at INIT), polled every 200 ms. The control counts

@@ -83,9 +83,11 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     `auto-stopping` and restarted the Robot Controller app. In the other 5, `stop()` began at most 744 ms after STOP.
   - A restart loses dashboard edits and the alliance. The dashboard answered again about 16 s after STOP, but no
     OpMode could run until 44.9 s after it (`Robot Status: running` in logcat).
-- **A missing or faulting Pinpoint raises nothing.** Before any Pedro-driven run, check that the status telemetry's
+- **A missing or faulting Pinpoint raises nothing.** The BIOBUZZ robot has no Pinpoint this year; if one goes back
+  on, before any Pedro-driven run check that the status telemetry's
   `Robot Position` line reads the start pose after INIT: (0, 0, 0) means the Pinpoint isn't answering.
-  - Missing (2026-10-24, nothing on I2C bus 1): `BioBuzzConstants.create` built the follower in 571 ms with no error,
+  - Missing (2026-10-24, nothing on I2C bus 1): a follower on Pedro's `PinpointLocalizer` with the values in
+    `opmodes/test/bench/PinpointSetup` was built in 571 ms with no error,
     `follower.update()` ran 4.25 / 5.01 / 19.64 (n=200) with no error, and after `follower.setPose(56, 8, 90°)` every
     sampled pose read (0, 0, 0) (`opmodes/test/bench/PinpointAbsentBench.java`). `hardwareMap.get` only needs the
     config to name the device. With no device version read, SDK 12's `GoBildaPinpointDriver.update()` reads nothing
@@ -94,14 +96,14 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   - Missing again (2026-11-14, over USB, the same hub, nothing on I2C bus 1): the same result. The follower built in
     578 ms, `follower.update()` ran 4.09 / 5.61 / 21.82 (n=200), no error and no fault, and every sampled pose (one per
     50 updates) read (0, 0, 0) after `setPose(56, 8, 90°)`. Logcat showed the SDK's reads of the Pinpoint getting
-    nothing back (`readStatusQuery: cbExpected=5 cbRead=0`, 201 times). Main still builds a plain `PinpointLocalizer`
-    (`pedro/BioBuzzConstants.java:120-121`), as the bench's follower did.
+    nothing back (`readStatusQuery: cbExpected=5 cbRead=0`, 201 times). The bench's follower is a plain
+    `PinpointLocalizer` (`opmodes/test/bench/PinpointSetup.java`); the robot's follower reads the OctoQuad instead.
   - Faulting (read from source; not yet seen on a hub): a bad read keeps the previous pose, a failed one snaps it to
     (0, 0, 0), and Pedro never reads the status: [`sdk-hub-findings.md`](sdk-hub-findings.md#device-drivers). No
     robot OpMode shows the Pinpoint's status; Bench: Pinpoint does.
   - A guard, like `GuardedOctoQuadLocalizer` for the OctoQuad (below), must check at INIT that the Pinpoint answers
     and stop with an error naming it and its port, then check the status on every read, counting non-READY only after
-    the first READY. The Pinpoint reported `FAULT_BAD_READ` right after `BioBuzzConstants.create`, then READY 71 ms
+    the first READY. The Pinpoint reported `FAULT_BAD_READ` right after the follower was built, then READY 71 ms
     later.
 - **Every app start takes 37–41 s; budget 40–45 s for a config switch or a STOP-time app restart at a match.**
   On 14 config switches on a bare hub (2026-10-24), process start to `INIT FINISH` in logcat took 37.1–38.1 s; on 9
@@ -207,8 +209,8 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     (`python3 scripts/bench/run_bench.py --pinpoint-soak --ports-empty`, an hour untouched) judges the heading over the
     first 5 s and 5-120 s against the OctoQuad's beside it, and times a recalibration.
 - **Pedro's `OctoQuadLocalizer` hangs INIT when the OctoQuad is missing: give a follower that uses the OctoQuad
-  `GuardedOctoQuadLocalizer` (`architecture/hardware/`) instead.** No robot's follower uses either yet; only the
-  OctoQuad benches build the guarded one. Pedro's constructor (measured on 3.0.1 on 2026-10-09, unchanged in 3.0.2)
+  `GuardedOctoQuadLocalizer` (`architecture/hardware/`) instead.** The BIOBUZZ robot's follower uses the guarded one
+  (`BioBuzzConstants.localizer`, [`odometry-tuning.md`](odometry-tuning.md)), as do the OctoQuad benches. Pedro's constructor (measured on 3.0.1 on 2026-10-09, unchanged in 3.0.2)
   waits for RUNNING in a loop with no timeout and no STOP check.
   - With nothing on the bus, or an MK1 reporting `FAULT_NO_IMU`, INIT hangs with no message.
   - STOP gets out: the SDK force-stopped the OpMode in about 1.3 s without restarting the app.
@@ -410,7 +412,7 @@ that session didn't reach:
   so with no Pinpoint it behaved as the plain Pedro `PinpointLocalizer` this build uses.
 - **2026-11-14:** the 2026-10-24 hub, same firmware (1.8.2), Android and SDK, bare, on a battery that read
   14.11 V falling to 13.64 V, reached over a USB cable from a Mac (`--usb`), the hub's first bench run that way. The
-  build was a bench branch with 127 OpModes; its planner code and its plain Pedro Pinpoint follower are main's.
+  build was a bench branch with 127 OpModes; its planner code and its plain Pedro Pinpoint follower were main's then.
   - What worked over the cable: the session backed up the hub's app (its APK, configs and Sloth folder), installed
     the bench build and started the app, up about 42 s after launch; the probe (about 2 min); 11 config switches over
     adb, each first time; one `adb forward` to the dashboard port, made at the default suite's start, still carrying

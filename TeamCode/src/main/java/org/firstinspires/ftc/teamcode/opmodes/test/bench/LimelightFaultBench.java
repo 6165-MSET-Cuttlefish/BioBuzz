@@ -44,7 +44,7 @@ public class LimelightFaultBench extends EnhancedOpMode {
 
         @Override
         protected Follower createFollower(HardwareMap hardwareMap) {
-            return BenchRobot.softwareFollower(hardwareMap);
+            return BenchRobot.drivingFollower(hardwareMap);
         }
 
         @Override

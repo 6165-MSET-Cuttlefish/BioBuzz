@@ -21,12 +21,13 @@ now: its odometry is the OctoQuad. The hub bench keeps every Pinpoint bench, in 
   ([`toolchain-findings.md`](toolchain-findings.md#deploying)).
 - Kept: `BettaTurret`, which Bench: Turret PWM drives.
 - Still the Betta bot's, not measured on the BIOBUZZ robot: every value in `pedro/BioBuzzConstants` (drive directions,
-  Pinpoint settings, Foresight gains), `biobuzz/RobotGeometry`'s size and intake, `BallFieldTransform.Mount` and the
-  Limelight's `H_ARRAY` ([`limelight-findings.md`](limelight-findings.md)), and the Close Flower start pose.
-- So, until the follower reads the OctoQuad, BioBuzz Tele and everything else that builds `BioBuzzConstants`'
-  follower (all of `BioBuzzRobot`) stop at INIT on `biobuzz.xml`, which has no Pinpoint
-  ([`wiring-findings.md`](wiring-findings.md)), and until those values are measured nothing that follows a path runs
-  on the robot.
+  OctoQuad settings, Foresight gains) apart from the pods' channels, 0 and 1, which are the wiring chart's; the pods'
+  counts per millimetre are the goBILDA 4-bar pod's figure, still unmeasured on this robot, `biobuzz/RobotGeometry`'s size and
+  intake, `BallFieldTransform.Mount` and the Limelight's `H_ARRAY` ([`limelight-findings.md`](limelight-findings.md)),
+  and the Close Flower start pose.
+- The follower reads the OctoQuad. BioBuzz Tele and the hand-driven tests INIT on `biobuzz.xml`; every OpMode that
+  lets Pedro drive stops at INIT until `BioBuzzConstants.measured` is set, after the checklist in
+  [`odometry-tuning.md`](odometry-tuning.md).
 - Measurements made on the two retired robots stay in these pages, marked "retired 2026-11-13".
 
 ## The BIOBUZZ robot, from CAD

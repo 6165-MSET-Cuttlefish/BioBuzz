@@ -59,6 +59,7 @@ public class PowerReadbackBench extends OpMode {
 
     @Override
     public void init() {
+        BenchRobot.requireBenchConfig(hardwareMap);
         report = new BenchReport("Power Readback", "power_readback");
         hub = HubRegisters.controlHub(hardwareMap, "Bench: Power Readback");
         fl = BenchIO.require(hardwareMap, DcMotorEx.class, "fl", BenchIO.RUNNER_HINT);

@@ -15,6 +15,7 @@ import org.firstinspires.ftc.teamcode.architecture.core.AllianceColor;
 import org.firstinspires.ftc.teamcode.architecture.core.Context;
 import org.firstinspires.ftc.teamcode.architecture.core.Module;
 import org.firstinspires.ftc.teamcode.architecture.hardware.EnhancedMotor;
+import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 @Config("Drivetrain")
 public class Drivetrain extends Module {
@@ -189,7 +190,13 @@ public class Drivetrain extends Module {
         lockHeading(follower.pose().heading());
     }
 
+    /** The heading lock turns the chassis from the OctoQuad's heading, so it stays off until that heading is measured. */
+    public static boolean headingLockAvailable() {
+        return BioBuzzConstants.isMeasured();
+    }
+
     public void lockHeading(double headingRadians) {
+        if (!headingLockAvailable()) return;
         lockedHeading = headingRadians;
         headingLockController.reset();
         headingLocked = true;

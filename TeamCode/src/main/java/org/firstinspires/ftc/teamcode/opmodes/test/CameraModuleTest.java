@@ -9,7 +9,9 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.Camera;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.FieldBall;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.vision.TrackedBall;
 import org.firstinspires.ftc.teamcode.opmodes.test.auto.CameraRobot;
+import org.firstinspires.ftc.teamcode.pedro.PedroNeverDrives;
 
+@PedroNeverDrives
 @TeleOp(name = "Camera Module Test", group = "Test")
 public class CameraModuleTest extends EnhancedOpMode {
 

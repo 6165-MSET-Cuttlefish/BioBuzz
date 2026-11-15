@@ -17,6 +17,7 @@ import sys
 import tempfile
 import textwrap
 import traceback
+from xml.etree import ElementTree
 
 sys.dont_write_bytecode = True
 HERE = pathlib.Path(__file__).resolve().parent
@@ -441,8 +442,24 @@ def own_tests():
             print(r.stdout[-3000:], r.stderr[-3000:])
 
 
+def main_config():
+    """The runner's main bench config, which every bench that powers the drive motors needs: it names a Servo
+    benchServo and none of the robot's own motors BenchRobot.requireBenchConfig refuses."""
+    source = (WORKTREE / "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/opmodes/test/bench/BenchRobot.java")
+    found = re.search(r"ROBOT_ONLY_DEVICES = \{([^}]*)\}", source.read_text())
+    robot = re.findall(r'"([^"]+)"', found.group(1)) if found else []
+    expect("main config: BenchRobot.java still lists the robot's own motors it refuses", bool(robot))
+    for label, options in (("plain", {}), ("with the Pinpoint", {"pinpoint": True}),
+                           ("with the Pinpoint and OctoQuad", {"pinpoint": True, "octoquad_bus": rb.OCTOQUAD_BUS})):
+        root = ElementTree.fromstring(rb.hub_config(rb.main_devices("BHI260", **options)))
+        devices = {(e.tag, e.get("name")) for e in root.iter() if e.get("name")}
+        expect(f"main config ({label}): names a Servo benchServo", ("Servo", "benchServo") in devices)
+        expect(f"main config ({label}): names none of {robot}", not [n for _, n in devices if n in robot])
+
+
 def main():
-    for section in (the_real_folder, missing_folder, rules, wiring, on_the_fake_hub, typed_statement, own_tests):
+    for section in (the_real_folder, missing_folder, rules, wiring, on_the_fake_hub, typed_statement, main_config,
+                    own_tests):
         try:
             section()
         except Exception as e:

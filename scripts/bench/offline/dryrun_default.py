@@ -30,6 +30,11 @@ EVERYTHING = "wifi_everything.json"
 NONCE = re.compile(r'"nonce": "[0-9-]+"')
 POLL = re.compile(r"^adb devices$| shell pidof | shell logcat -d ")
 HUB_TIME = re.compile(r"'(?:\d{4}-)?\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}'")
+BENCH_JAVA = WORKTREE / "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/opmodes/test/bench"
+BENCH_GATE = re.compile(r"\bnew (?:BenchRobot|CameraRobot)\(|\bBenchRobot\.(?:drivingFollower|requireBenchConfig|benchFollower)\("
+                        r"|\b(?:PinpointSetup|OctoQuadSetup)\.create\(|\bnew (?:OctoQuadSetup\.)?OctoQuadRobot\(")
+TELEOP_NAME = re.compile(r'@TeleOp\(name = "([^"]+)"')
+ROBOT_ONLY = re.compile(r"ROBOT_ONLY_DEVICES = \{([^}]*)\}")
 SELECTION_ARGV = ([], ["--all"], ["--hub", "--loop"], ["--photon"], ["--turret-zero"], ["--dashboard-off"], ["--no-sloth"],
                   ["--all", "--no-sloth"], ["--webcam"], ["--photon", "--hub"])
 
@@ -138,6 +143,90 @@ def everything_record(rb):
                                   "tcp": hub.tcp, "http": hub.http, "benches": benches_entered(runner)}))
 
 
+def gated_benches():
+    """The bench OpModes whose source builds a BenchRobot, calls its config gate or takes a follower from the bench's
+    Pinpoint or OctoQuad, so each stops at INIT on a config without benchServo."""
+    names = set()
+    for path in BENCH_JAVA.glob("*.java"):
+        text = path.read_text()
+        name = TELEOP_NAME.search(text)
+        if name and BENCH_GATE.search(text):
+            names.add(name.group(1))
+    return names
+
+
+def robot_only_devices():
+    """The robot's motors BenchRobot.requireBenchConfig refuses a config for naming."""
+    return re.findall(r'"([^"]+)"', ROBOT_ONLY.search((BENCH_JAVA / "BenchRobot.java").read_text()).group(1))
+
+
+def gated_inits(label, hub):
+    gated, robot = gated_benches(), robot_only_devices()
+    ran = [(opmode, config, xml) for opmode, config, xml in hub.opmode_inits if opmode in gated]
+    wrong = [(opmode, config) for opmode, config, xml in ran if 'name="benchServo"' not in (xml or "")
+             or any(f'name="{device}"' in xml for device in robot)]
+    expect(f"{label}: every gated bench the runner INITs gets a config naming benchServo and none of the robot's "
+           f"own motors {robot} ({wrong[:3]})", ran and robot and not wrong)
+
+
+class HardwareViewHub(fake_hub.Hub):
+    """fake_hub's Control Hub whose Hardware OpMode lists fl's Power, and whose Bench: Power Readback stops at INIT on
+    a config without benchServo, as BenchRobot.requireBenchConfig makes it, or else reports a working readback."""
+
+    def __init__(self, rb, **kw):
+        super().__init__(**kw)
+        self.rb, self.listed, self.refused = rb, False, []
+
+    def power_tree(self):
+        node = {"__type": "double", "__value": 0.0}
+        for key in reversed(self.rb.HARDWARE_POWER_PATH):
+            node = {"__type": "custom", "__value": {key: node}}
+        return node
+
+    def on_message(self, session, msg):
+        kind, opmode = msg.get("type"), msg.get("opModeName")
+        with self.lock:
+            if kind == "GET_CONFIG" and self.listed:
+                session.send({"type": "RECEIVE_CONFIG", "configRoot": self.power_tree()})
+                return
+            if kind == "INIT_OP_MODE" and opmode == "Bench: Power Readback":
+                if 'name="benchServo"' not in (self.configs.get(self.active["name"]) or ""):
+                    self.refused.append(self.active["name"])
+                    self.opmode_inits.append((opmode, self.active["name"], self.configs.get(self.active["name"])))
+                    self.status["errorMessage"] = "java.lang.IllegalStateException: No Servo \"benchServo\""
+                    self.set_active(fake_hub.IDLE, "STOPPED")
+                    return
+                window = {"loops": 40, "maxHubPower": 0.0, "maxSdkPower": 0.0, "firstMovedMs": None}
+                self.bench["files/bench/power_readback.json"] = json.dumps({
+                    "selfCheck": {"ok": True, "hubPowerAfterSettingIt": 0.2, "hubPowerAfterZero": 0.0},
+                    "init": window, "run": window})
+            super().on_message(session, msg)
+            if kind == "INIT_OP_MODE" and opmode == self.rb.HARDWARE_OPMODE:
+                self.listed = True
+                self.dash.broadcast({"type": "RECEIVE_CONFIG", "configRoot": self.power_tree()})
+            if kind == "INIT_OP_MODE" and opmode == "Bench: Power Readback":
+                self.dash.broadcast({"type": "RECEIVE_TELEMETRY", "telemetry": [{
+                    "data": {self.rb.KEY_LOOP: 40, "Bench self-check": "OK"}, "timestamp": self.clock,
+                    "fieldOverlay": {"ops": []}}]})
+
+
+def power_readback_run(rb):
+    """--hardware-view on a fake hub that refuses Bench: Power Readback off a benchServo config: the runner's own run
+    of it starts and its checks pass."""
+    hub = HardwareViewHub(rb)
+    hub, runner, code, _ = default_run(rb, ["--hardware-view"], hub=hub)
+    summary = (runner.out / "summary.md").read_text()
+    inits = [(config, xml) for opmode, config, xml in hub.opmode_inits if opmode == "Bench: Power Readback"]
+    expect("power readback: it is one of the gated benches", "Bench: Power Readback" in gated_benches())
+    expect(f"power readback: the runner INITs it once, on a config naming benchServo ({[c for c, _ in inits]})",
+           len(inits) == 1 and not hub.refused and 'name="benchServo"' in (inits[0][1] or ""))
+    hv = [line for line in summary.splitlines() if line.startswith(("- PASS hardware view", "- FAIL hardware view"))]
+    expect(f"power readback: the runner's hardware-view checks all pass ({hv})",
+           len(hv) == 3 and all(line.startswith("- PASS") for line in hv))
+    expect("power readback: the run ends with the original config back", code == 0 and hub.active["name"] ==
+           "competition")
+
+
 def wifi_checks(rb):
     hub, runner, code, console = default_run(rb)
     wanted = [n for n in rb.BENCHES if n in selections(rb)["(none) | bare"]]
@@ -151,6 +240,7 @@ def wifi_checks(rb):
     expect("wifi: deploySloth ran with ANDROID_SERIAL at the hub's Wi-Fi serial",
            hub.deploys and all(d["ANDROID_SERIAL"] == fake_hub.WIFI_SERIAL for d in hub.deploys))
     expect("wifi: the fake hub knew every adb command", not hub.unknown)
+    gated_inits("wifi", hub)
     return hub, runner
 
 
@@ -242,6 +332,7 @@ def usb_default(rb):
            "Nothing to send back" in console and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
     expect("usb: not one adb connect or disconnect", not connects(hub))
+    gated_inits("usb", hub)
     expect("usb: every socket went to a port adb forwarded to this hub's port, never 192.168.43.1",
            through_forwards(hub) and not [t for t in hub.tcp if t[0] == fake_hub.HUB_IP])
     expect("usb: the Limelight proxy's HTTP went through a forward to 5807",
@@ -504,6 +595,7 @@ def main():
         return 0
 
     hub, runner = wifi_checks(rb)
+    power_readback_run(rb)
     link_checks(rb)
     same_calls("wifi: the adb calls are the recorded ones, in order and byte for byte, polls aside (fixtures/" + CALLS
                + ")", normalized(hub, runner), (FIXTURES / CALLS).read_text().splitlines())

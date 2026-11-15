@@ -47,10 +47,11 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
   ignore every write. Check the robot's Arducam serial too: `UC852` is the bench Arducam's (it may be the same on
   every unit, unverified), and a webcam with another serial fails to open, which stops everything built on
   `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s analog inputs `sensorLeft` and `sensorRight` (no port; nothing builds `Intran`,
-  and it only looks them up, so nothing says which rangefinder either would be), and the Pinpoint
-  `BioBuzzConstants` asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to
-  the OctoQuad. BioBuzz Basic Tele (`opmodes/tele/BioBuzzBasicTele.java`) is the TeleOp that runs on it today: drive,
-  intake, transfer and both flywheels from gamepad 1, with no odometry, cameras or turret.
+  and it only looks them up, so nothing says which rangefinder either would be). The follower reads the OctoQuad
+  ([`odometry-tuning.md`](odometry-tuning.md)), so every OpMode built on `BioBuzzRobot` finds its odometry here; the
+  ones that let Pedro drive still stop at INIT until `BioBuzzConstants.measured` is set. BioBuzz Basic Tele
+  (`opmodes/tele/BioBuzzBasicTele.java`) drives, runs the intake, transfer and both flywheels from gamepad 1, with no
+  odometry, cameras or turret.
 - **`biobuzz` kept its config ID through the rewrite** ([`toolchain-findings.md`](toolchain-findings.md#deploying)),
   so a hub with `biobuzz` active loads the new layout after the full install with nothing to re-activate. The layout
   it held before was the intake test robot's, retired 2026-11-13: on that robot the new motor names would drive other
@@ -136,7 +137,7 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
 
 - **No inputs on the Expansion Hub.** With manual bulk caching a hub's bulk read runs only if something on it is
   read. Both hubs' bulk reads cost 5.72 ms against 2.10 ms for the Control Hub alone (measured). Things that would
-  start it without anyone noticing: `Drivetrain.encoderTelemetry` (`biobuzz/modules/Drivetrain.java:256-262`),
+  start it without anyone noticing: `Drivetrain.encoderTelemetry` (`biobuzz/modules/Drivetrain.java:263-269`),
   `isOverCurrent()` on an Expansion Hub motor, or an analog input mapped there.
 - **Flywheels on Control Hub motors 0 and 3.** Their power changes every loop in closed loop, parked or driving. A
   Control Hub motor write is 1.64 ms (measured); over RS485 it is about 2.5 ms (estimated: the 0.9 ms hop is measured
@@ -176,7 +177,7 @@ Loop period in ms for the map and for the same map with one thing moved, on the 
 - **Prism on its own bus.** That separates its data lines from the OctoQuad's. It does not separate power: all of a
   hub's I2C ports share one 3.3 V supply (500 mA total, REV's specifications).
 - **Analog on the Control Hub, read in the loop.** `Drivetrain.read()` reads the Floodgate after every driving loop
-  (`Drivetrain.java:97-99`). `TransferCounter` needs both rangefinders on one hub.
+  (`Drivetrain.java:98-100`). `TransferCounter` needs both rangefinders on one hub.
 - **Cameras on USB 3.0.** The USB 2.0 port shares a bus with the hub's radio
   ([ftc-docs hub tips](https://ftc-docs.firstinspires.org/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html),
   fetched 2026-11-10).
@@ -431,8 +432,8 @@ For this wiring to work:
   would cost 2 × 2.61 = 5.2 ms per telemetry loop there (measured per read).
 - **Count transfers in the loop.** `TransferCounter` runs only as a thread today.
 - **OctoQuad:** a localizer that times out with a named error at INIT and checks every read
-  ([`hub-bench-findings.md`](hub-bench-findings.md)); pods on channels 0 and 1 (`OctoQuadLocalizerTest` uses 3 and
-  4). At INIT it must set the bank mode and the turret channel's pulse limits, read the bank back to see the set
+  ([`hub-bench-findings.md`](hub-bench-findings.md)); pods on channels 0 and 1 (`BioBuzzConstants.octoQuad`; the bench's
+  `OctoQuadSetup` uses the same two by default). At INIT it must set the bank mode and the turret channel's pulse limits, read the bank back to see the set
   took, and read channel 4 once (`readAllEncoderData`); in the loop it reads the localizer block only. Either
   alternative would instead read the localizer and encoder blocks in one transaction
   (`readLocalizerDataAndAllEncoderData`) in each loop that reads the turret, and hand the turret its channel. What a
@@ -444,7 +445,7 @@ Worth doing with it:
   `write()` (`:343`), with the drive writes in between.
 - Loosen the hood write tolerance from 0.001 to 0.002-0.005 (`Shooter.java:172-173`): at one hood write per loop
   that is about 1.8 ms off the driving loop.
-- Remove or gate `Drivetrain.encoderTelemetry`'s lines (`Drivetrain.java:256-262`): the back-right velocity would be
+- Remove or gate `Drivetrain.encoderTelemetry`'s lines (`Drivetrain.java:263-269`): the back-right velocity would be
   the turret's, and the Expansion Hub lines would start its bulk read.
 
 ## What fails, and how this wiring behaves

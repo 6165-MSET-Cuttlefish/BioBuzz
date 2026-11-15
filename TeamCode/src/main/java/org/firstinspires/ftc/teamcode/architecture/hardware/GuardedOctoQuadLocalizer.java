@@ -11,6 +11,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.teamcode.architecture.core.Faults;
 
+import java.util.function.BooleanSupplier;
+
 public final class GuardedOctoQuadLocalizer implements Localizer {
     public static final String FAULT_KEY = "OctoQuad";
     private static final long RUNNING_TIMEOUT_NANOS = 3_000_000_000L;
@@ -52,8 +54,13 @@ public final class GuardedOctoQuadLocalizer implements Localizer {
     }
 
     public void awaitRunning() {
+        awaitRunning(() -> false);
+    }
+
+    /** Returns early, not yet running, once stopRequested is true: STOP in a LinearOpMode must end the wait. */
+    public void awaitRunning(BooleanSupplier stopRequested) {
         long deadline = System.nanoTime() + RUNNING_TIMEOUT_NANOS;
-        while (!running) {
+        while (!running && !stopRequested.getAsBoolean()) {
             update();
             if (!running && (gaveUp() || System.nanoTime() > deadline)) throw new IllegalStateException(problem());
         }

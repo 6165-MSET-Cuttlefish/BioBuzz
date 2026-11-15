@@ -6,7 +6,9 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.Turret;
+import org.firstinspires.ftc.teamcode.pedro.PedroNeverDrives;
 
+@PedroNeverDrives
 @TeleOp(name = "Turret Aim Test", group = "Test")
 @Config("Turret Aim Test")
 public class TurretAimTest extends BioBuzzOpMode {

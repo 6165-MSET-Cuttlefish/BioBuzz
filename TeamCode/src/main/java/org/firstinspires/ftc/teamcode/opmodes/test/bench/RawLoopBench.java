@@ -18,11 +18,11 @@ public class RawLoopBench extends LinearOpMode {
 
     @Override
     public void runOpMode() {
-        BenchReport report = new BenchReport("Raw Loop", "raw_loop");
-        double phaseSeconds = BenchIO.param(report.params, "phaseSeconds", 8);
         Scheduler.reset();
         FieldConfig.setSymmetry(BioBuzzField.SYMMETRY);
-        Follower follower = BenchRobot.softwareFollower(hardwareMap);
+        Follower follower = BenchRobot.drivingFollower(hardwareMap);
+        BenchReport report = new BenchReport("Raw Loop", "raw_loop");
+        double phaseSeconds = BenchIO.param(report.params, "phaseSeconds", 8);
         CloseFlowerPaths paths = new CloseFlowerPaths();
         follower.setPose(paths.start);
         follower.update();

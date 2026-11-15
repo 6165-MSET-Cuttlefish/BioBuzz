@@ -9,6 +9,7 @@ import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.teamcode.architecture.hardware.GuardedOctoQuadLocalizer;
 import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 public abstract class BarePedroAuto extends LinearOpMode {
@@ -23,12 +24,19 @@ public abstract class BarePedroAuto extends LinearOpMode {
     public void runOpMode() {
         Scheduler.reset();
         Pose start = startPose();
-        follower = BioBuzzConstants.create(hardwareMap);
+        follower = BioBuzzConstants.create(this);
+        GuardedOctoQuadLocalizer odometry = (GuardedOctoQuadLocalizer) follower.localizer;
         follower.setPose(start);
-        follower.update();
         Command routine = routine();
 
-        waitForStart();
+        while (opModeInInit()) {
+            follower.update();
+            telemetry.addData("OctoQuad", odometry.status());
+            addFollowerTelemetry(telemetry, follower);
+            telemetry.update();
+        }
+        if (isStopRequested()) return;
+        odometry.awaitRunning(this::isStopRequested);
         schedule(routine);
 
         while (opModeIsActive()) {

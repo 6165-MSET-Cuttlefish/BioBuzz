@@ -324,6 +324,7 @@ class Hub:
         self.speed = speed
         self.lock = threading.RLock()
         self.calls, self.tcp, self.http, self.unknown, self.deploys = [], [], [], [], []
+        self.opmode_inits = []
         self.forwards = [Forward(self, s, local, remote, virtual=True) for s, local, remote in foreign_forwards]
         self.foreign = list(self.forwards)
         self.made_forwards = []
@@ -404,6 +405,7 @@ class Hub:
             if kind == "GET_ROBOT_STATUS":
                 session.send({"type": "RECEIVE_ROBOT_STATUS", "status": dict(self.status)})
             elif kind == "INIT_OP_MODE":
+                self.opmode_inits.append((msg["opModeName"], self.active["name"], self.configs.get(self.active["name"])))
                 self.dash.broadcast({"type": "RECEIVE_TELEMETRY", "telemetry": []})
                 self.set_active(msg["opModeName"], "INIT")
                 self.dash.broadcast({"type": "RECEIVE_TELEMETRY", "telemetry": [

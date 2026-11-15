@@ -16,8 +16,6 @@ import com.qualcomm.robotcore.hardware.I2cDeviceSynchDevice;
 import com.qualcomm.robotcore.util.TypeConversion;
 
 import org.firstinspires.ftc.teamcode.architecture.hardware.photon.PhotonCore;
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-import org.firstinspires.ftc.teamcode.pedro.BioBuzzConstants;
 
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -41,9 +39,9 @@ final class PhotonI2c {
 
     PhotonI2c(HardwareMap map, PhotonRig rig) {
         this.rig = rig;
-        GoBildaPinpointDriver pinpoint = BenchIO.require(map, GoBildaPinpointDriver.class, BioBuzzConstants.pinpoint.name,
+        GoBildaPinpointDriver pinpoint = BenchIO.require(map, GoBildaPinpointDriver.class, PinpointSetup.pinpoint.name,
                 BenchIO.RUNNER_HINT);
-        OctoQuad octoQuad = BenchIO.require(map, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+        OctoQuad octoQuad = BenchIO.require(map, OctoQuad.class, OctoQuadSetup.name, BenchIO.RUNNER_HINT);
         LynxModule pinpointHub = rig.expansionHub != null ? rig.expansionHub : rig.controlHub;
         LynxModule octoQuadHub = rig.controlHub;
         int id = pinpoint.getDeviceID();

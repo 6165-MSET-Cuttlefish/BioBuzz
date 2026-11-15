@@ -13,8 +13,9 @@ a hub.
 1. **Never let a NaN reach the follower.** Pedro drops a NaN or infinite drive power without a word and the motors
    keep their last power, so the robot drives on instead of stopping.
 2. **Before the next Foresight run, re-copy the AutoTune procedures and move `tuning` to 1.0.3. Never use 1.0.2.**
-   The vendored Foresight tuner has no runaway stop and passes a NaN result on to the robot. Even with the new copy,
-   clear 5 ft behind and to the right of each braking start and keep a hand on DS STOP.
+   The vendored Foresight tuner has no runaway stop and passes a NaN result on to the robot, so `pedro/Tuning.java`
+   doesn't register it until then. Even with the new copy, clear 5 ft behind and to the right of each braking start
+   and keep a hand on DS STOP.
 3. **For a turn of 180° or more in a set direction, don't use `linear`.** It turns the short way, and at 180° apart
    rounding picks the direction. Use `Interpolator.longLinear` for the long way, or split a half turn in two.
 4. **Don't read `follower.isBusy() == false` as "heading arrived".** It goes false 100 ms into the end hold at the
@@ -141,9 +142,10 @@ only `ForesightTuner.java` and its dependency file, which now pins `revhub` 3.0.
 - Run `scripts/update-pedro-quickstart.sh`, set `tuning` to 1.0.3 in `TeamCode/build.gradle` in the same commit
   (CLAUDE.md, Conventions), then do a full install. The script copies master's current head: if it prints a commit
   other than 4f33ef5, read what else changed before running it on the robot.
-- AutoTune lists only the procedures `pedro/Tuning.java` registers: Mecanum, Pinpoint, Foresight and Tests. The
-  script copies every Quickstart procedure, so five more (`OctoQuadTuner`, `OTOSTuner`, `ThreeWheelIMUTuner`,
-  `ThreeWheelTuner`, `TwoWheelTuner`; 1,606 lines) ship in every APK where nothing can reach them, and one deleted by
+- AutoTune lists only the procedures `pedro/Tuning.java` registers: Mecanum, OctoQuad and Tests. Foresight is left
+  out until this re-copy: register it again in the same commit, with `BioBuzzConstants::readyLocalizer`. The
+  script copies every Quickstart procedure, so five more (`PinpointTuner`, `OTOSTuner`, `ThreeWheelIMUTuner`,
+  `ThreeWheelTuner`, `TwoWheelTuner`) ship in every APK where nothing can reach them, and one deleted by
   hand comes back at the next refresh (read from source, 2026-11-12). To drop them, narrow the script's copy list.
 - What the new `ForesightTuner` adds (read from source, Quickstart 4f33ef5):
   - It stops with a message when a measured value is NaN, infinite, or not positive where it must be, and when a
@@ -172,10 +174,13 @@ space" or "space" around the robot, but a runaway backwards (forward braking) or
 The guard can't catch everything (read from source: Quickstart 4f33ef5 `ForesightTuner.java`; SDK 12.0.0
 `GoBildaPinpointDriver` and `TimestampedI2cData`):
 
-- **A Pinpoint that stops giving good data.** The SDK's driver keeps the previous value for a NaN or out-of-range
-  read (the pose freezes), and a failed I2C read can read as zeros, putting the pose back at the test's start
-  ([`sdk-hub-findings.md`](sdk-hub-findings.md)). Pedro's `PinpointLocalizer.update` doesn't check the status, so the
-  guard never trips. Check the pose reads the start pose after INIT right before Foresight.
+- **A Pinpoint that stops giving good data**, if one goes back on: the SDK's driver keeps the previous value for a
+  NaN or out-of-range read (the pose freezes), and a failed I2C read can read as zeros, putting the pose back at the
+  test's start ([`sdk-hub-findings.md`](sdk-hub-findings.md)). Pedro's `PinpointLocalizer.update` doesn't check the
+  status, so the guard never trips. Registered with `BioBuzzConstants::readyLocalizer`, the Foresight Tuner reads
+  `GuardedOctoQuadLocalizer` instead, which stops the step after 250 ms without a valid read (read from source,
+  2026-11-14). A valid read that doesn't move, such as an unplugged pod or the forward and strafe pods on swapped
+  channels, trips nothing.
 - **The driving steps have no timeout.** With a bad pose a step drives on at its power until stopped: full power in
   the velocity and deceleration steps, which have no guard at all, and up to 0.7 forward or 1.0 strafe in the braking
   steps.

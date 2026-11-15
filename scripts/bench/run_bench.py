@@ -353,7 +353,7 @@ PINPOINT_SEED_PENDING = ("a start pose set in initialize() didn't survive the Pi
                          "auto sets the pose only in INIT, so they'd all start their first path from a pose the robot isn't "
                          "at. A PASS means only that the INIT sequence the autos use keeps the pose; a pose set at other "
                          "delays after the recalibration isn't tried. No fix is in flight")
-PINPOINT_CRASHED = ("Bench: Pinpoint crashed (see the error): with a Pinpoint status check in BioBuzzConstants or the "
+PINPOINT_CRASHED = ("Bench: Pinpoint crashed (see the error): with a Pinpoint status check in PinpointSetup or the "
                     "framework, a status other than READY at INIT (CALIBRATING right after create, FAULT_NO_PODS_DETECTED "
                     "without both pods) stops every OpMode, which the check must allow for")
 PINPOINT_DROPOUT_PENDING = ("expected until the Pinpoint status fix: on a failed I2C read the SDK driver keeps the last pose "
@@ -362,7 +362,7 @@ PINPOINT_DROPOUT_PENDING = ("expected until the Pinpoint status fix: on a failed
                             "frozen or (0, 0, 0) pose with no fault and no error")
 PINPOINT_ABSENT_POSE_IN = 0.5
 PINPOINT_ABSENT_TURN_DEG = 1.0
-PINPOINT_ABSENT_MEANS = ("with nothing on the Pinpoint's I2C port, the follower built from BioBuzzConstants neither raised a "
+PINPOINT_ABSENT_MEANS = ("with nothing on the Pinpoint's I2C port, the follower built from PinpointSetup neither raised a "
                          "fault nor kept the pose setPose set (the detail has the poses it read; on 2026-10-24 every one "
                          "was (0, 0, 0)): an auto on a robot whose Pinpoint is unplugged or dead follows every path from "
                          "the field origin with no warning. Nothing on this branch checks for a missing Pinpoint")
@@ -428,8 +428,8 @@ OCTOQUAD_BANK_COST_MEANS = ("with channels 4-7 in pulse-width mode the loop's lo
 OCTOQUAD_INIT_READ_MEANS = ("the one-off INIT read the turret zero would use (readAllEncoderData) failed its CRC or took "
                             f"{OCTOQUAD_INIT_READ_P95_MS:.0f} ms or more at p95: the zero needs retries or costs INIT time")
 OCTOQUAD_BANK_RESTORE_MEANS = ("the OctoQuad doesn't read back the bank it had before the phase, so channels 4-7 may "
-                               "still be pulse-width inputs and the pod on channel 4 isn't counted until the OctoQuad is "
-                               "power-cycled: check that before the next odometry run")
+                               "still be pulse-width inputs, so nothing on them is counted until the OctoQuad is "
+                               "power-cycled: check that before the next odometry or turret run")
 OCTOQUAD_BANK_CRASH_MEANS = ("the bank phase threw (see the error), or a STOP ended it early, after the seed phase had "
                              "finished, so the seed checks above stand; the bank phase restores the bank it found in a "
                              "finally")
@@ -4939,7 +4939,8 @@ def octoquad_bank_checks(bank, error=""):
              f"- positive control, readLocalizerDataAndAllEncoderData as found: {fmt(combined)} (p50 "
              f"{p50_diff(local, combined)} ms)",
              f"- the turret's one-off INIT read, readAllEncoderData with bank 2 in pulse-width mode: {fmt(init)}, "
-             f"{init.get('crcFailures')} CRC failures; channel 4 (a pod here) read {init.get('channel4')}"]
+             f"{init.get('crcFailures')} CRC failures; channel 4{' (a pod here)' if 4 in pods else ''} read "
+             f"{init.get('channel4')}"]
     if setup or reset:
         lines.append("- the bank " + ("survives" if setup.get("bank") == reset.get("bank") == OCTOQUAD_MIXED_BANKS
                                       else "does NOT survive") + " the localizer's own setup and reset calls (recorded, not judged)")
@@ -9957,9 +9958,9 @@ class Runner:
 
     def _pinpoint_seed(self, o, res):
         info, seed = res.get("info") or {}, res.get("seed") or {}
-        s = ["## Bench: Pinpoint (a Pinpoint on I2C bus 1 through BioBuzzConstants.create, the follower left idle)\n",
+        s = ["## Bench: Pinpoint (a Pinpoint on I2C bus 1 through PinpointSetup.create, the follower left idle)\n",
              f"- firmware (device version) {res.get('deviceVersion')}, device id {info.get('deviceId')}; status right "
-             f"after BioBuzzConstants.create {info.get('statusAfterCreate')} ({info.get('createMs')} ms to create); "
+             f"after PinpointSetup.create {info.get('statusAfterCreate')} ({info.get('createMs')} ms to create); "
              f"Pinpoint loop {fmt(res.get('frequencyHz'), 'Hz')}",
              f"- pod offsets x {info.get('xOffsetIn')} in, y {info.get('yOffsetIn')} in; yaw scalar {info.get('yawScalar')}",
              f"- status changes [ms since create, status, phase]: {res.get('statusChanges')}; loops per status "

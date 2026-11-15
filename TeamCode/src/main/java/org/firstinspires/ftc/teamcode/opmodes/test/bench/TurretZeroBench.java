@@ -7,8 +7,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
-import org.firstinspires.ftc.teamcode.opmodes.test.OctoQuadLocalizerTest;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -64,7 +62,7 @@ public class TurretZeroBench extends LinearOpMode {
         int reads = (int) BenchIO.param(params, "reads", 1);
         File finish = new File(BenchIO.dir(), FINISH_FILE);
         if (finish.exists() && !finish.delete()) throw new IllegalStateException("can't delete " + finish);
-        octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadLocalizerTest.name, BenchIO.RUNNER_HINT);
+        octoQuad = BenchIO.require(hardwareMap, OctoQuad.class, OctoQuadSetup.name, BenchIO.RUNNER_HINT);
         motor = BenchIO.require(hardwareMap, DcMotor.class, MOTOR, BenchIO.RUNNER_HINT);
         if (motor.getPortNumber() != PORT) {
             throw new IllegalStateException(MOTOR + " is on motor port " + motor.getPortNumber() + ", not " + PORT + ": "
@@ -75,7 +73,7 @@ public class TurretZeroBench extends LinearOpMode {
         int chipId = octoQuad.getChipId() & 0xFF;
         if (chipId != (OctoQuad.OCTOQUAD_CHIP_ID & 0xFF)) {
             throw new IllegalStateException(String.format("no OctoQuad answered as \"%s\" (chip id 0x%02x): check its I2C "
-                    + "cable in Control Hub I2C port 2", OctoQuadLocalizerTest.name, chipId));
+                    + "cable in Control Hub I2C port 2", OctoQuadSetup.name, chipId));
         }
         boolean pulseWidth = !phase.equals("quad");
         boolean tracksWrap = octoQuad.getSingleChannelPulseWidthTracksWrap(CHANNEL);
