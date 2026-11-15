@@ -93,7 +93,7 @@ class FakeAdb:
         return 100
 
     def config_names(self):
-        return ["betta_decode"]
+        return ["competition"]
 
     def read_config(self, name):
         return "<Robot type=\"FirstInspires-FTC\"></Robot>"

@@ -446,7 +446,7 @@ def on_the_fake_hub():
     expect("chain: its record is in runner_results.json under octoquad_chain, one entry per step",
            {"earlystart", "markers", "unguarded", "guarded", "latejoin"} <= set(results.get("octoquad_chain") or {}))
     expect("chain: one config switch to bench_octoquad for the whole chain, and the original config back at the end",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")])
 
     hub = Station(late_fault=False)
     code, out, terminal, _ = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
@@ -462,7 +462,7 @@ def on_the_fake_hub():
                                                    [None, hub.pull, hub.plug, hub.pull, KeyboardInterrupt])
     expect("Ctrl-C at the late plug-in: the log says to plug the OctoQuad back in, and the config is put back",
            interrupted and rb.OCTOQUAD_LEFT_OUT in (out / "run.log").read_text()
-           and hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+           and hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")])
 
     hub = Station()
     code, out, terminal, interrupted = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
@@ -494,7 +494,7 @@ def on_the_fake_hub():
     code, out, terminal, interrupted = station_run(["--octoquad", "--octoquad-chain", "--interactive"], hub,
                                                    [KeyboardInterrupt])
     expect("Ctrl-C at the roll prompt: the runner stops, puts the original config back and leaves no bench config",
-           interrupted and len(terminal.reads) == 1 and hub.active["name"] == "betta_decode"
+           interrupted and len(terminal.reads) == 1 and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
 
 

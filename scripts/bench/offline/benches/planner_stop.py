@@ -541,7 +541,7 @@ def check_line(text, part):
 
 
 def put_back(hub):
-    return hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")]
+    return hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")]
 
 
 def sliced_on_the_fake_hub():

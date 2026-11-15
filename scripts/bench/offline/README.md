@@ -45,6 +45,9 @@ Run from the repo root.
 | Bench: Rangefinders: its verdicts, each weakened, and a dry run: prompt order, the save and read-back of Configure Laser Rangefinder's settings, a crash after the 20 ms write, Ctrl-C | `python3 -I scripts/bench/offline/benches/rangefinders.py` | `... passed, 0 failed` |
 | `TurretZeroMath`, `PinpointMath`, `OctoQuadMath`, `PlannerWorkload`, `DwellStats`, `SoakWindows`, `HtmlFormatter.faultLine`, `ReloadFake` across two class loaders, the vision benches' helpers and the private fields the benches read (JUnit) | `./gradlew :TeamCode:testDebugUnitTest` | `BUILD SUCCESSFUL ...` |
 
+The config a fake hub has before the run is `fixtures/competition.xml`, a name no `res/xml` file has, so editing or
+deleting a shipped config doesn't break these suites; the recorded adb calls in `fixtures/` name it too.
+
 A bench's offline file goes in `benches/`, named for the bench, whether the bench is new or one in `run_bench.py`
 that an extension adds to; `test_benches.py` runs every file there.
 

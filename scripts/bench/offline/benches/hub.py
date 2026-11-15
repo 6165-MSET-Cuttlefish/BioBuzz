@@ -196,7 +196,7 @@ def on_the_fake_hub():
     expect("--hub --hub-planner-baseline: Bench: Hub's section gives this run's plan times against the earlier run's",
            f"against {earlier}" in text and "  - random, n=4: then 558.00 / 1888.00 / 2434.00, now 697.50 / 2360.00 / "
                                             "3042.50 (1.25x)" in text)
-    expect("--hub --hub-planner-baseline: the config is put back", hub.active["name"] == "betta_decode"
+    expect("--hub --hub-planner-baseline: the config is put back", hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
     hub, alone, text = hub_run([])
     expect("--hub alone: no comparison lines", "Plan times from request to done against" not in text)
