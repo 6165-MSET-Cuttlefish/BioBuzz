@@ -83,7 +83,7 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   robot, retired 2026-11-13) had a shot table to 3275 rpm (`decode/modules/ShooterInterpolation.java:169`, deleted
   2026-11-13: `git log --diff-filter=D -- <path>` names the commit, whose parent has it) on an 8192 counts/rev encoder
   (`decode/modules/Shooter.java:21` there) on Expansion Hub encoder port 3
-  (`TeamCode/src/main/res/xml/cuttle_decode.xml`), about 447,000 counts/s; lost counts there were never checked.
+  (`cuttle_decode.xml`, deleted 2026-11-14), about 447,000 counts/s; lost counts there were never checked.
 
 ## Bulk reads
 

@@ -102,6 +102,9 @@ FtcRobotController tags end at v12.0.
     the new file's devices, one on `laser_rangefinder` the SDK's `k9usbbot`, and one on `laser_rangefinder_i2c`
     `laser_rangefinder.xml`'s. The 2026-11-13 rewrite of `biobuzz.xml` added and removed no file, so every ID stayed;
     `biobuzz` itself now holds the BIOBUZZ robot's layout, and the intake test robot whose layout it held is retired.
+  - `betta_decode.xml`, `butterfly.xml` and `cuttle_decode.xml` were deleted on 2026-11-14, which shifts `biobuzz`
+    (now 0x7f110002) and every config after it: after the first full install of that build, re-activate each hub's
+    config on the DS as above.
   - A by-name lookup would fix it (`getResources().getIdentifier(name, "xml", packageName)` in
     `FtcRobotControllerActivity.requestRobotSetup`, then re-save the config), but `robotcontroller/` is SDK template
     code that CLAUDE.md keeps unedited. The bench already re-activates shipped configs by name
