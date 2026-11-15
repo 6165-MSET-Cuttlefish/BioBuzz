@@ -192,8 +192,11 @@ From the CAD:
   - **Pollen paddle**, at z 120 to 123: swung 75° to 135° from its drawn pose it crosses the Pollen path at s 264 to
     294 and holds the first ball at s 242; 4 balls then queue, at s 242, 170, 98 and 27. Past about 138° it hits a
     side plate. In its drawn pose (0°) it is clear of the path, so that pose reads as open.
-  - **Nectar paddle**, at z 241 to 244: it would hold a ball at s 143 with one more at s 50, but its post is drawn
-    through a roller shaft, so as placed it can't be the real part.
+  - **Nectar paddle**, at z 241 to 244. In the assembly the team added on 2026-11-15 that places both turrets on
+    the transfer, its post sits just outside the right plate at the Nectar column (x 39.6 to 47.6, y 94.9 to 101.9),
+    so it is as plausible as the Pollen one (CAD, 2026-11-15). On the 2026-11-14 CAD, where the turret was drawn at
+    another angle, it held a ball at s 143 with one more at s 50; those two positions have not been worked out again
+    for the new placement, so don't rely on them.
   - **A goBILDA 2000-0025-0504 five-turn servo** with a hub and a matching 20T pulley sits unmated in the Pollen turret
     tab, far from the paddle. Very probably the blocker's servo, with the belt not drawn (inferred). As parked, its
     output axis is horizontal and the paddle's is vertical, so no belt could join them in that pose.
@@ -221,8 +224,9 @@ Questions for hardware:
 ## What the CAD cannot tell
 
 - Whether the servo's roller touches a ball (it misses by 0.9 mm as drawn), and whether the servo or a belt drives it:
-  a 285 mm belt was also drawn that evening from that shaft to a motor-driven one, but the pulley for it is missing
-  and it cuts through another pulley, so it looks unfinished. If the motor drives that roller, the ball there moves at
+  a 285 mm belt is drawn from that shaft to a motor-driven one. The pulley it cut through on 2026-11-14 was deleted
+  the next morning, so the belt looks intended, but its other end still has no pulley drawn (CAD, 2026-11-15): ask
+  hardware which of the two drives the roller. If the motor drives that roller, the ball there moves at
   1529 / 803 like the side rollers.
 - The servo's voltage and loaded speed. Also: as placed, the servo body reaches through the drivetrain's inner plate
   and about 13 mm into the Control Hub's outline (inferred from the CAD's placement, good to a few mm). Is there a
@@ -313,13 +317,13 @@ the plate.
   about s −46, under the intake. The first ball stops on C. The second stops on both A and B: its centre is 30 mm from
   A's beam and 33.5 mm from B's, both inside its 35.55 mm radius. The third (69 mm from A) and fourth never reach A.
   `TransferCounter` counts only when A clears while B is still covered, so the second ball is never counted. For
-  Nectar, a ball held by the Nectar paddle (s 143) covers both D and E, and a second (s 50) never reaches D. The
-  Nectar paddle's post is drawn through a roller shaft ([above](#path-capacity-and-the-blocker)); without it a full
-  column parks at s 202, 110 and 18, and the second ball again covers D and E while the third never reaches D. So
+  Nectar, a ball held by the Nectar paddle (s 143 on the 2026-11-14 CAD) covers both D and E, and a second (s 50)
+  never reaches D; the hold position is not yet worked out for the paddle's 2026-11-15 placement
+  ([above](#path-capacity-and-the-blocker)). With the paddle open a full column parks at s 202, 110 and 18, and the second ball again covers D and E while the third never reaches D. So
   spots on the tracks suit counting balls as they leave toward the turrets, not as they come in.
 - A and B are on the undriven ramp: a lone ball at loaded speed may not climb it and can roll back, so use the pair
   to tell direction (inferred).
-- D and E: the spokes are 40 mm clear. D is 25 mm before the doubtful Nectar paddle's hold position (s 143); the
+- D and E: the spokes are 40 mm clear. D is 25 mm before the Nectar paddle's hold position on the 2026-11-14 CAD (s 143); the
   turret is at s 202.
 - Rejected (CAD): s 266 to 298 (the Pollen paddle swings through the beam), s 306 (2 mm from the paddle and the tubes),
   s 394, and an earlier pair at s 282, 290 and 306.
