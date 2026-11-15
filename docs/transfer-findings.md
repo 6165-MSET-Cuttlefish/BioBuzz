@@ -351,10 +351,15 @@ the pages read names the chip or gives a minimum range or a timing budget floor.
   If the guess is right, the sensor can't range at 10 ms, and every spot is inside its minimum range.
 - Either way: every spot above is 15 to 41 mm from the ball, so bench-test at 15 to 40 mm in SHORT at 10 ms before
   drilling, and leave room for spacers.
-- **The Color Rangefinder may suit this short range better** (inferred, untested): its distance mode tops out at
-  100 mm (vendor, [Parts](parts-findings.md#brushland-color-rangefinder)), the far plate is 117.5 mm from the sensor
-  face, so an empty channel reads beyond its range, and at A and B the ball is 35 to 41 mm from the sensor face. Its
-  update rate isn't documented, so the same bench test applies.
+- **The Color Rangefinder's range fits, but its speed and its colour dependence are unknown** (inferred, untested).
+  Its distance mode tops out at 100 mm (vendor), the far plate is 117.5 mm from the sensor face, so an empty channel
+  reads beyond its range, and at A and B the ball is 35 to 41 mm away. But it measures the strength of reflected
+  light, not time of flight, so a yellow, a red and a blue ball may read different distances; its chip repeats a
+  distance measurement every 6.25 to 400 ms depending on a setting the vendor doesn't publish, and a colour
+  measurement every 25 ms at best ([Parts](parts-findings.md#brushland-color-rangefinder)). Against the table above:
+  a new value every 6.25 ms is safe, 12.5 ms is workable, 25 ms or slower misses balls at free speed. Hue at 25 ms
+  gives a ball passing in about 25 to 31 ms one reading at most. Until its rate is measured, the Laser Rangefinder at
+  a 10 ms budget is the only one of the two with a published rate fast enough.
 
 ## The 10.9 balls per second figure
 

@@ -244,6 +244,25 @@ Configure Color Rangefinder writes it and Transfer Thread Count Test reads its h
   from these: red 10-50°, blue 170-210°, pollen 70-89°; Configure Color Rangefinder's red and blue match.
 - **Distance**: 940 nm class 1 VCSEL laser, maximum range 100 mm (specifications). The laser rangefinders' SHORT mode
   reaches 1.3 m (`vendor/brushland/LaserRangefinder.java`'s `DistanceMode`).
+- **Its distance is the strength of reflected light, not time of flight.** The vendor's [full docs text][crfllms]
+  (read 2026-11-15) says the sensor emits an IR laser and measures "the amount of reflected light", and that an
+  onboard microcontroller turns that into distance with pre-calibrated constants and does the threshold checks. So
+  the distance it reports depends on how reflective the object is: a yellow, a red and a blue ball at the same real
+  distance need not read the same, and a threshold set with one colour may not suit another (inferred, untested).
+  The Laser Rangefinder measures time of flight and does not have this dependence.
+- **The chip is a Broadcom APDS-9999** (the vendor's own [CAD model][crfcad] names it on the board, read 2026-11-15;
+  its 940 nm VCSEL matches the specifications). From [Broadcom's datasheet][apds9999] (DS102, read 2026-11-15):
+  the proximity measurement repeats every 6.25, 12.5, 25, 50, 100 (the chip's default), 200 or 400 ms, chosen by a
+  register, and runs slower than the setting when one measurement takes longer than that; the colour measurement
+  repeats every 25 ms at the fastest. The datasheet gives no minimum range. Which settings Brushland's firmware uses
+  is not published, and neither is how the microcontroller makes the 0 to 3.3 V output or whether it averages. The
+  other chip on the board, the microcontroller, is not named in the CAD.
+- **So the update rate is unknown, between about 6 ms and 100 ms or more for distance, and no faster than 25 ms for
+  hue or any pin gated on colour** (inferred from the chip). A search of FTC forums, public code and the vendor's
+  pages on 2026-11-15 found no published or measured rate. For counting balls that show for about 25 ms, 6.25 ms
+  would be safe, 12.5 ms workable, and 25 ms or slower would miss balls
+  ([`transfer-findings.md`](transfer-findings.md#the-sensor)). A ball-counting pin should be a pure distance
+  threshold, not a colour one.
 - **Power and logic**: 3.3 V in, 3.3 V digital logic (specifications). Bulk reads take every non-I2C port of a hub in
   3-4 ms (reading data). Dust on the window spoils colours: blow it off or wipe it with a moist swab (reading data).
 - **The configuration page contradicts itself twice.** Its example's prose says pin 0 is true for red or yellow and the
@@ -260,10 +279,11 @@ Configure Color Rangefinder writes it and Transfer Thread Count Test reads its h
   (getting started).
 
 **For the transfer** (inferred, untested): distance mode reads only to 100 mm, and at the transfer's recommended
-Pollen spots the ball is 35 to 41 mm from the sensor face and the far plate 117.5 mm, so it may suit counting there better than
-the Laser Rangefinder: [`transfer-findings.md`](transfer-findings.md#the-sensor).
+Pollen spots the ball is 35 to 41 mm from the sensor face and the far plate 117.5 mm, so its range fits. Whether it
+is fast enough to count there, and whether all three ball colours read alike, is unknown until it is measured:
+[`transfer-findings.md`](transfer-findings.md#the-sensor).
 
-**Not documented on those pages:** the update rate or response time of the analog, digital and I2C outputs, distance
+**Not documented by the vendor:** the update rate or response time of the analog, digital and I2C outputs, distance
 accuracy or noise, which hub channel of a two-channel analog or digital connector each pin reaches (a pin 1 digital
 output on the analog channel would read only about 0 or 3.3 V: an inference), what the analog hue reads with nothing
 in front, and how many thresholds a pin holds.
@@ -301,7 +321,8 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 | How much each ball's hue varies on the Color Rangefinder (one reading each so far), and what the empty chute reads at the real mount | In HUE mode, graph Transfer Thread Count Test's `Hue (deg)` for several balls of each colour at the mount's distance and under event lighting, then with nothing there. |
 | Which hub analog channel the Color Rangefinder's pin 0 reaches | In HUE mode on Control Hub analog connector 2-3 with nothing else on it, read `colorRangefinder` (analog 2) and `backRangefinder` (analog 3). |
 | How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35 and 40 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). |
-| The Color Rangefinder's output update rate and distance noise | Log its analog distance every 10 ms against a ball moved at a known speed, and its spread with the ball held still. |
+| The Color Rangefinder's output update rate, and whether its analog output steps or ramps | With pin 0 on distance, name it as `upstreamSensorName` in Transfer Thread Count Test (`maxRangeMm` 100, `oneSensor` on), move a ball through 30 to 60 mm and read `new A values/s`: about 100 means a new value at least every 10 ms. |
+| Whether a Pollen, a red and a blue ball read the same distance on the Color Rangefinder | Hold each at 35 mm from its face and read the distance line; then set one threshold that all three cross. |
 
 [gb5000]: https://www.gobilda.com/5000-series-12vdc-motor-with-8mm-rex-pinion-shaft/
 [gb5000pdf]: https://www.gobilda.com/content/spec_sheets/5000-0002-4008_spec-sheet.pdf
@@ -325,3 +346,6 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 [crfread]: https://web.archive.org/web/20251112032637/https://docs.brushlandlabs.com/sensors/color-rangefinder/reading-data
 [crfstart]: https://web.archive.org/web/20251112041041/https://docs.brushlandlabs.com/sensors/color-rangefinder/getting-started
 [crfspec]: https://web.archive.org/web/20251113084727/https://docs.brushlandlabs.com/sensors/color-rangefinder/specifications
+[crfllms]: https://docs.brushlandlabs.com/llms-full.txt
+[crfcad]: https://brushlandlabs.com/wp-content/uploads/Color-Rangefinder.zip
+[apds9999]: https://docs.broadcom.com/doc/APDS-9999-DS
