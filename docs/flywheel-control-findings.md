@@ -16,7 +16,8 @@ line numbers as of 2026-11-10 (commit 366596c).
 1. **Tune the RPM table while firing the burst you will use**, not with single shots. Tuned on single shots, ball 1
    sits on the nominal shot and every slower ball after it has only the low side of the scoring window. Tuned on the
    burst, the RPMs come out a constant 2.6 to 3.4% higher (Pollen, 36 to 84 in) and the burst uses the whole window:
-   today's loop then feeds Pollen with no waiting (92 ms between balls) out to 84 in, against 120 ms tuned on single
+   today's loop then feeds Pollen with no waiting (92 ms between balls, a simulated feed interval: the transfer's
+   real rate is unmeasured, [`transfer-findings.md`](transfer-findings.md#the-109-balls-per-second-figure)) out to 84 in, against 120 ms tuned on single
    shots (simulated). **Loop changes are optional**: their simulated gain existed only under single-shot tuning, and
    didn't survive occasional long loops like those measured in [`loop-time-findings.md`](loop-time-findings.md).
 2. **Design: one motor runs out of power at long range, and a second motor is the lever.** As designed (one goBILDA
@@ -97,7 +98,9 @@ Wheel RPM needed before the ball, including the dip during contact, and its shar
 ### Fastest feed interval
 
 The shortest gap, from 92, 105, 120, 135, 150, 175, 200, 250 and 300 ms, at which all 10 balls of a burst score in
-all 8 random runs; 92 ms (10.9 balls a second) is no waiting. Each cell is **burst-tuned to single-shot-tuned**, for
+all 8 random runs; 92 ms (10.9 balls a second) is no waiting. That 10.9 was an estimate of the transfer's limit
+with no recorded basis; the CAD of 2026-11-14 gives a touching Pollen train 46.5 to 88.5 ms between balls
+([`transfer-findings.md`](transfer-findings.md#the-109-balls-per-second-figure)). Each cell is **burst-tuned to single-shot-tuned**, for
 today's loop on a hub encoder port, f 0.45, 12.5 V (simulated):
 
 | shooter, drag | 36 in | 60 in | 84 in | 108 in | 132 in |

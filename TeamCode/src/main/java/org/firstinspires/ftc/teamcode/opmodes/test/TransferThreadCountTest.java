@@ -15,7 +15,10 @@ import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.TransferCounter;
+import org.firstinspires.ftc.teamcode.biobuzz.modules.TransferTiming;
 import org.firstinspires.ftc.teamcode.opmodes.tele.BioBuzzBasicTele;
+
+import java.util.Locale;
 
 @TeleOp(name = "Transfer Thread Count Test", group = "Test")
 @Config("Transfer Thread Count Test")
@@ -68,7 +71,7 @@ public class TransferThreadCountTest extends OpMode {
     DcMotorEx fl, bl, fr, br;
     CRServo servo;
     TransferCounter counter;
-    final TransferCounter.Edge loopEdge = new TransferCounter.Edge();
+    final TransferTiming loopTiming = new TransferTiming();
 
     int loopCount;
     int lastPosition = 0;
@@ -127,7 +130,7 @@ public class TransferThreadCountTest extends OpMode {
         double mmA = upstream.getVoltage() / 3.3 * maxRangeMm;
         double mmB = downstream.getVoltage() / 3.3 * maxRangeMm;
         double diff = mmA - mmB;
-        if (loopEdge.update(oneSensor ? mmA : diff, threshold, hysteresisMm)) loopCount++;
+        if (loopTiming.update(System.nanoTime(), oneSensor ? mmA : diff, oneSensor, threshold, hysteresisMm)) loopCount++;
         double colorVolts = colorSensor.getVoltage();
         double hueDeg = colorVolts / 3.3 * 360;
         boolean present = presence.getVoltage() > 1.65;
@@ -135,6 +138,7 @@ public class TransferThreadCountTest extends OpMode {
 
         if (resetCount != lastResetCount) {
             loopCount = 0;
+            loopTiming.reset();
             if (counter != null) counter.resetCount();
             talliedCount = 0;
             nectarCount = 0;
@@ -200,12 +204,41 @@ public class TransferThreadCountTest extends OpMode {
                 telemetry.addData("max poll gap (ms)", s.maxGapMs);
                 telemetry.addData("bulk read mean (ms)", s.meanCommandMs);
             }
+            addTiming(counter.timing(), "the thread, at each " + ms(counter.pollMs()) + " ms poll");
+        } else {
+            addTiming(loopTiming.snapshot(), "the loop, once per loop");
         }
         telemetry.addData("Motor Current (A)", motor1.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("Intake Current (A)", intake.getCurrent(CurrentUnit.AMPS));
         telemetry.addData("loop work (ms)", workMs);
         telemetry.addData("loop time (ms)", runtime.milliseconds());
         telemetry.addData("motor RPM", 60000 * (motor1.getCurrentPosition()-lastPosition) / runtime.milliseconds() / 145.1);
+    }
+
+    private void addTiming(TransferTiming.Snapshot t, String source) {
+        telemetry.addData("Ball timing from", source + (t == null ? ": no poll since INIT or resetCount yet" : ""));
+        if (t == null) return;
+        telemetry.addData("Ball-to-ball period, last (ms)", ms(t.lastPeriodMs));
+        telemetry.addData("Ball-to-ball period, shortest (ms)", ms(t.shortestPeriodMs));
+        telemetry.addData("Ball-to-ball period, mean (ms)", ms(t.meanPeriodMs));
+        telemetry.addData("Ball-to-ball periods timed since reset", t.periods);
+        StringBuilder recent = new StringBuilder();
+        for (double p : t.recentPeriodsMs()) recent.append(recent.length() == 0 ? "" : ", ").append(ms(p));
+        telemetry.addData("Last " + TransferTiming.RECENT + " periods, oldest first (ms)",
+                recent.length() == 0 ? "none yet" : recent);
+        String armed = t.upstreamOnly ? "Ball in front of the beam" : "From re-arm until a ball leaves A";
+        String rearm = t.upstreamOnly ? "Gap between balls at the beam"
+                : "Ball's back edge from A to B, or until the next ball reaches A";
+        telemetry.addData(armed + ", last (ms)", ms(t.lastArmedMs));
+        telemetry.addData(armed + ", shortest (ms)", ms(t.shortestArmedMs));
+        telemetry.addData(rearm + ", last (ms)", ms(t.lastRearmMs));
+        telemetry.addData(rearm + ", shortest (ms)", ms(t.shortestRearmMs));
+        telemetry.addData("Ball timing accuracy", "about one rangefinder update (20 ms at a 20 ms timing budget, "
+                + "10 ms at 10 ms) or one " + (counter == null ? "loop" : "poll") + ", whichever is longer");
+    }
+
+    static String ms(double value) {
+        return Double.isNaN(value) ? "none yet" : String.format(Locale.US, "%.1f", value);
     }
 
     private static DcMotorSimple.Direction direction(boolean reverse) {

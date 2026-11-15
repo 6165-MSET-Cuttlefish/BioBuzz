@@ -7,7 +7,7 @@ import com.qualcomm.hardware.lynx.commands.core.LynxGetBulkInputDataResponse;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class TransferCounter {
     private static final long JOIN_TIMEOUT_MS = 250;
@@ -25,6 +25,10 @@ public final class TransferCounter {
             if (diffMm <= thresholdMm - hysteresisMm) armed = true;
             return false;
         }
+
+        public boolean armed() {
+            return armed;
+        }
     }
 
     public static final class Stats {
@@ -36,9 +40,11 @@ public final class TransferCounter {
         public final double maxGapMs;
         public final double meanCommandMs;
         public final double seconds;
+        final TransferTiming.Snapshot timing;
+        final int timingEpoch;
 
         Stats(double mmA, double mmB, long polls, long newValues, long latePolls, double maxGapMs, double meanCommandMs,
-              double seconds) {
+              double seconds, TransferTiming.Snapshot timing, int timingEpoch) {
             this.mmA = mmA;
             this.mmB = mmB;
             this.polls = polls;
@@ -47,6 +53,70 @@ public final class TransferCounter {
             this.maxGapMs = maxGapMs;
             this.meanCommandMs = meanCommandMs;
             this.seconds = seconds;
+            this.timing = timing;
+            this.timingEpoch = timingEpoch;
+        }
+    }
+
+    static final class Tally {
+        private final AtomicLong state = new AtomicLong();
+
+        long read() {
+            return state.get();
+        }
+
+        int count() {
+            return count(state.get());
+        }
+
+        int epoch() {
+            return epoch(state.get());
+        }
+
+        void reset() {
+            long s;
+            do {
+                s = state.get();
+            } while (!state.compareAndSet(s, (long) (epoch(s) + 1) << 32));
+        }
+
+        boolean increment(long read) {
+            return state.compareAndSet(read, read + 1);
+        }
+
+        static int count(long state) {
+            return (int) state;
+        }
+
+        static int epoch(long state) {
+            return (int) (state >>> 32);
+        }
+    }
+
+    static final class Sampler {
+        private final Tally tally;
+        private final TransferTiming timing = new TransferTiming();
+        private int timingEpoch;
+
+        Sampler(Tally tally) {
+            this.tally = tally;
+        }
+
+        boolean sample(long read, long nowNs, double signal, boolean upstreamOnly, double thresholdMm,
+                       double hysteresisMm) {
+            if (Tally.epoch(read) != timingEpoch) {
+                timing.reset();
+                timingEpoch = Tally.epoch(read);
+            }
+            return timing.update(nowNs, signal, upstreamOnly, thresholdMm, hysteresisMm) && tally.increment(read);
+        }
+
+        TransferTiming.Snapshot snapshot() {
+            return timing.snapshot();
+        }
+
+        int timingEpoch() {
+            return timingEpoch;
         }
     }
 
@@ -56,7 +126,7 @@ public final class TransferCounter {
     private final double maxRangeMm;
     private final long periodNs;
     private final long latePollNs;
-    private final AtomicInteger count = new AtomicInteger();
+    private final Tally tally = new Tally();
     private volatile double thresholdMm;
     private volatile double hysteresisMm;
     private volatile boolean upstreamOnly;
@@ -130,11 +200,15 @@ public final class TransferCounter {
 
     public int count() {
         check();
-        return count.get();
+        return tally.count();
     }
 
     public void resetCount() {
-        count.set(0);
+        tally.reset();
+    }
+
+    public double pollMs() {
+        return periodNs / 1e6;
     }
 
     public double latePollMs() {
@@ -146,6 +220,11 @@ public final class TransferCounter {
         return stats;
     }
 
+    public TransferTiming.Snapshot timing() {
+        Stats s = stats();
+        return s == null || s.timingEpoch != tally.epoch() ? null : s.timing;
+    }
+
     private void check() {
         Throwable t = failure;
         if (t != null) throw new IllegalStateException("TransferCounter thread died", t);
@@ -153,7 +232,7 @@ public final class TransferCounter {
 
     private void run(Thread opModeThread) {
         try {
-            Edge edge = new Edge();
+            Sampler sampler = new Sampler(tally);
             long startNs = System.nanoTime();
             long next = startNs;
             long lastPollNs = 0;
@@ -171,7 +250,8 @@ public final class TransferCounter {
                 int mvB = r.getAnalogInput(portB);
                 double mmA = mvA / ADC_FULL_SCALE_MV * maxRangeMm;
                 double mmB = mvB / ADC_FULL_SCALE_MV * maxRangeMm;
-                if (edge.update(upstreamOnly ? mmA : mmA - mmB, thresholdMm, hysteresisMm)) count.incrementAndGet();
+                boolean oneSensor = upstreamOnly;
+                sampler.sample(tally.read(), t1, oneSensor ? mmA : mmA - mmB, oneSensor, thresholdMm, hysteresisMm);
 
                 if (polls > 0) {
                     long gap = t1 - lastPollNs;
@@ -184,7 +264,7 @@ public final class TransferCounter {
                 polls++;
                 commandNs += t1 - t0;
                 stats = new Stats(mmA, mmB, polls, newValues, latePolls, maxGapNs / 1e6, commandNs / 1e6 / polls,
-                        (t1 - startNs) / 1e9);
+                        (t1 - startNs) / 1e9, sampler.snapshot(), sampler.timingEpoch());
 
                 next += periodNs;
                 long wait = next - System.nanoTime();

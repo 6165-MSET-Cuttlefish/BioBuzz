@@ -314,7 +314,9 @@ run-mode changes and, with a lab supply, a brownout
 ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-turret-zero)).
 
 In a loop at 34 to 37 ms, in-loop sampling sees about half of the rangefinders' 20 ms readings. Whether that misses
-balls is what the counting test settles.
+balls is what the counting test settles. By the CAD's ball speeds, a free-running Pollen train shows the beam a gap
+of only about 21 ms at the recommended spots, so even a 20 ms reading can miss one (inferred): where to mount the
+rangefinders and the sampling each spot needs are in [`transfer-findings.md`](transfer-findings.md#rangefinder-spots).
 
 ## The nectar turret encoder
 
@@ -602,6 +604,6 @@ fetched 2026-11-10:
   power-cycle with the turret at several angles and compare the angle the code reports with a protractor mark.
 - **Where the USB ports really are on the mounted hubs**, and whether the battery clears them: check on the built
   robot, since the CAD's port positions are estimates.
-- **Inspection questions** only an inspector or the Q&A can settle: the Axon servos' and the power bank's
-  compliance, and a resistor divider on an analog port for battery voltage (R612's note allows high-impedance
-  monitoring).
+- **Inspection questions** only an inspector or the Q&A can settle: the Axon servos', the Melonbotics Super Servo
+  Plus's and the power bank's compliance, and a resistor divider on an analog port for battery voltage (R612's note
+  allows high-impedance monitoring).

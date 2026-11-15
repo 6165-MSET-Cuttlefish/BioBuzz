@@ -1,7 +1,8 @@
 # Parts findings
 
-Specs for the parts the shooter depends on: read before buying, swapping or wiring one, or trusting a simulation of
-it. Where each part sits is in [`robots-findings.md`](robots-findings.md). Java paths are under
+Specs for the parts the shooter and the transfer depend on: read before buying, swapping or wiring one, or trusting a
+simulation of it. Where each part sits is in [`robots-findings.md`](robots-findings.md); the transfer's ball speeds
+and sensor spots are in [`transfer-findings.md`](transfer-findings.md). Java paths are under
 `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`, as of 2026-11-10 (commit 366596c). Simulated numbers are
 from the CAD rerun in [`flywheel-control-findings.md`](flywheel-control-findings.md); commands to rerun it are in
 [`scripts/sim/README.md`](../scripts/sim/README.md).
@@ -145,12 +146,26 @@ counts per second, overflows above 240 RPM.
 |---|---|---|---|---|
 | goBILDA 2000-0025-0003 (25-3 Speed) | both hoods, through 8.571:1 | 0.09 s/60° | 0.11 s/60° | 300° over 500-2500 µs |
 | Axon MINI MK2 | turrets | 0.090 s/60° | 0.110 s/60° | 360° max, 500-2500 µs |
-| Axon MAX MK2 | transfer, continuous | 0.115 s/60° | 0.140 s/60° | 360° max, 500-2500 µs |
+| Axon MAX MK2 | front sweeper bar's hinge, 1:1 by belt (16T:16T); that it is the config's `ruler` is inferred | 0.115 s/60° | 0.140 s/60° | 360° max, 500-2500 µs |
+| Melonbotics Super Servo Plus | transfer, continuous (`melonbotics`): the lower rear Pollen roller shaft | 1000 RPM free (0.01 s/60°), voltage not stated | not stated | continuous only |
+| goBILDA 2000-0025-0504 (5-turn) | unmated in the Pollen turret; probably the blocker (inferred) | 0.043 s/60° | 0.055 s/60° | 1800° over 500-2500 µs |
 
 From the [goBILDA page][gbservo] and Axon's [MINI MK2][axmini] and [MAX MK2][axmax] pages, read 2026-11-10; no load.
-The CAD says only "Axon Mini" and "Axon MAX"; Axon's older MINI+ and MAX+ list the same speeds. Hub servo ports
+The CAD says only "Axon Mini" and "Axon MAX"; Axon's older MINI+ and MAX+ list the same speeds. The Super Servo Plus
+and the 5-turn servo are from the [Melonbotics docs][ssp], [Melonbotics store page][ssp2] and [goBILDA 5-turn
+page][gb5turn], read 2026-11-15; where each sits is from the team's CAD as of the evening of 2026-11-14. Hub servo ports
 supply 5 V ([REV][revexh]; Axon labels 4.8 V as hub voltage); the CAD runs the servos at 6 V through power injectors.
 
+- **The transfer's continuous servo is a Melonbotics Super Servo Plus.** The CAD as of 2026-11-14 has one
+  there (a tab named like the vendor's `SuperServoPlus_No_Plate.step`, placed coaxial on the lower rear Pollen
+  roller shaft) and its only Axon MAX on the front sweeper's hinge. Speeds and what that changes: [`transfer-findings.md`](transfer-findings.md#ball-speeds).
+- **Super Servo Plus** (vendor): 6 W at 6 V, stall 2.3 kgf·cm at 3.9 A (the controller's limit; the motor alone
+  about 4.7 A), 0.16 A free, 90 g. 1000 RPM is very likely its 6 V speed (2.3 kgf·cm × 1000 RPM ÷ 4 = 5.9 W,
+  computed); 833 RPM at 5 V and 800 at 4.8 V assume speed scales with voltage (inferred). The store page advises
+  gearing it to run at about 450-700 RPM; that is not a loaded speed.
+- **5-turn servo** (vendor): 0.90° per µs; 4.0 / 4.7 kg·cm stall at 4.8 / 6.0 V; a programmer switches it to
+  continuous rotation (1000-2000 µs). At the SDK's default 600-2400 µs, a position step of 0.07 is about 113°
+  (computed).
 - **Hood speed** (computed): 77.8° of hood per second at 6 V, so 2° takes 26 ms and 5° takes 64 ms; 63.6°/s at 4.8 V.
 - **The SDK's default pulse range cuts hood travel.** SDK 12.0.0's default `PwmRange` is 600-2400 µs
   (`PwmControl.PwmRange.defaultRange`, RobotCore 12.0.0 decompiled): at the servo's 0.15°/µs that is 270°, 31.5° of
@@ -159,6 +174,26 @@ supply 5 V ([REV][revexh]; Axon labels 4.8 V as hub voltage); the CAD runs the s
   config type (500-2500 µs; read from source, not tried on a hub). Today Intake Transfer Shooter Test's config
   declares its hoods as plain `Servo` (`intake_transfer_shooter.xml` lines 10-11), `biobuzz.xml` declares `Shooter`'s
   `pollenHood`/`nectarHood` as plain `Servo` too, and nothing under `biobuzz/` calls `setPwmRange`.
+
+## Intake and transfer motors
+
+| at 12 V (vendor) | 5204-8002-0003, intake | 5202-2402-0005, transfer |
+|---|---|---|
+| Ratio | 3.7:1 | 5.2:1 |
+| No-load speed | 1,620 RPM | 1,150 RPM |
+| No-load / stall current | 0.25 A / 9.2 A | 0.25 A / 9.2 A |
+| Stall torque | 5.4 kg·cm (75.8 oz-in) | 7.9 kg·cm (109 oz-in) |
+| Encoder | 103.8 PPR at the output shaft | 145.1 PPR at the output shaft |
+
+From goBILDA's [5204-8002-0003][gb5204] and [5202-2402-0005][gb52025] pages, read 2026-11-15. The part numbers are
+the CAD's (2026-11-14); read the label on each motor before trusting them.
+
+- **`biobuzz.xml` declares `intake` and `transfer` as `goBILDA5202SeriesMotor`**, which in SDK 12.0.0 is the
+  99.5:1 gearmotor: 2786 counts per revolution, 60 RPM (`GoBILDA5202Series`, sources jar). So `getMotorType()`,
+  `getVelocity(AngleUnit)` and `RUN_USING_ENCODER` scale both motors wrong, 19 to 27 times. Transfer Thread Count
+  Test's `motor RPM` divides raw counts by goBILDA's 145.1 instead.
+- **"Loaded"** in [`transfer-findings.md`](transfer-findings.md#ball-speeds) is the transfer motor at 52.5% of free
+  speed, 604 RPM, from the team's 4.5 A with no balls on a straight line between these currents (inferred).
 
 ## Game balls
 
@@ -224,10 +259,34 @@ Configure Color Rangefinder writes it and Transfer Thread Count Test reads its h
   pins on I2C and read colour and distance from one REV Color Sensor V3 device, at upwards of 4 ms per I2C read
   (getting started).
 
+**For the transfer** (inferred, untested): distance mode reads only to 100 mm, and at the transfer's recommended
+Pollen spots the ball is 35 to 41 mm from the sensor face and the far plate 117.5 mm, so it may suit counting there better than
+the Laser Rangefinder: [`transfer-findings.md`](transfer-findings.md#the-sensor).
+
 **Not documented on those pages:** the update rate or response time of the analog, digital and I2C outputs, distance
 accuracy or noise, which hub channel of a two-channel analog or digital connector each pin reaches (a pin 1 digital
 output on the analog channel would read only about 0 or 3.3 V: an inference), what the analog hue reads with nothing
 in front, and how many thresholds a pin holds.
+
+## Brushland Laser Rangefinder
+
+Read on 2026-11-15 from Wayback Machine snapshots, since the live site refuses connections from here: the [product
+page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06-14) and [specifications][lrfspec]
+(2025-03-21). The helper class is vendored as `vendor/brushland/LaserRangefinder.java`.
+
+- **Product page:** 20 mm × 14 mm × 10 mm; M4 through holes spaced 8 mm apart; up to 4 m; "Up to 100Hz distance
+  sampling rate at 3m"; class 1 940 nm VCSEL; 3.3-5 V; I2C, 2 analog or 2 digital outputs; 12-bit analog; 4-pin JST PH.
+- **Distance modes** (ranging configuration): SHORT 1.3 m, "Resistant to ambient light"; MEDIUM 3 m; LONG 4 m. In SHORT
+  (and MEDIUM at low budgets) "the sensor assumes that its max range is never exceeded".
+- **Timing** (ranging configuration): the budget is how long one range takes; a period of 0 starts the next range at
+  once, otherwise the period must be at least 4 ms more than the budget. Its examples: SHORT 10 ms and MEDIUM 10 ms,
+  "100Hz ranging with good accuracy"; LONG 16 ms 60 Hz, noisy; LONG 33 ms 30 Hz; LONG 50 ms 20 Hz. The vendored
+  driver accepts 5 to 1000 ms.
+- **Field of view** (ranging configuration): a 16 × 16 grid of photodiodes; the smallest region, 4 × 4, gives 15°,
+  the full grid 27°. Smaller regions are noisier.
+- **Not on those pages:** the chip, a minimum range, and the analog output's own update rate. That the chip is an ST
+  VL53L1X, with a 20 ms minimum budget and a 4 cm minimum distance, is an unconfirmed guess
+  ([`transfer-findings.md`](transfer-findings.md#the-sensor)); the 10 ms examples above don't fit it.
 
 ## Still unknown
 
@@ -241,6 +300,7 @@ in front, and how many thresholds a pin holds.
 | Whether hub ports 0 and 3 count 614,400 counts/s without loss (no rating found) | Spin one Through Bore into a hub port and the OctoQuad at once; compare positions after a long run. |
 | How much each ball's hue varies on the Color Rangefinder (one reading each so far), and what the empty chute reads at the real mount | In HUE mode, graph Transfer Thread Count Test's `Hue (deg)` for several balls of each colour at the mount's distance and under event lighting, then with nothing there. |
 | Which hub analog channel the Color Rangefinder's pin 0 reaches | In HUE mode on Control Hub analog connector 2-3 with nothing else on it, read `colorRangefinder` (analog 2) and `backRangefinder` (analog 3). |
+| How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35 and 40 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). |
 | The Color Rangefinder's output update rate and distance noise | Log its analog distance every 10 ms against a ball moved at a known speed, and its spread with the ball held still. |
 
 [gb5000]: https://www.gobilda.com/5000-series-12vdc-motor-with-8mm-rex-pinion-shaft/
@@ -252,6 +312,14 @@ in front, and how many thresholds a pin holds.
 [axmini]: https://docs.axon-robotics.com/servos/mini
 [axmax]: https://docs.axon-robotics.com/servos/max
 [revexh]: https://docs.revrobotics.com/duo-control/control-system-overview/expansion-hub-basics
+[ssp]: https://docs.melonbotics.com/super-servo-plus
+[ssp2]: https://www.melonbotics.com/pages/super-servo-plus
+[gb5turn]: https://www.gobilda.com/2000-series-5-turn-dual-mode-servo-25-4-super-speed/
+[gb5204]: https://www.gobilda.com/5204-series-yellow-jacket-planetary-gear-motor-3-7-1-ratio-80mm-length-8mm-rex-shaft-1620-rpm-3-3-5v-encoder/
+[gb52025]: https://www.gobilda.com/5202-series-yellow-jacket-planetary-gear-motor-5-2-1-ratio-24mm-length-6mm-d-shaft-1150-rpm-36mm-gearbox-3-3-5v-encoder/
+[lrfprod]: https://web.archive.org/web/20251112022303/https://brushlandlabs.com/product/laser-rangefinder/
+[lrfrange]: https://web.archive.org/web/20250614232513/https://docs.brushlandlabs.com/sensors/laser-rangefinder/ranging-configuration
+[lrfspec]: https://web.archive.org/web/20250321014953/https://docs.brushlandlabs.com/sensors/laser-rangefinder/specifications
 [oqdocs]: https://github.com/DigitalChickenLabs/OctoQuad/tree/master/documentation
 [crfconf]: https://web.archive.org/web/20250614233146/https://docs.brushlandlabs.com/sensors/color-rangefinder/configuration
 [crfread]: https://web.archive.org/web/20251112032637/https://docs.brushlandlabs.com/sensors/color-rangefinder/reading-data

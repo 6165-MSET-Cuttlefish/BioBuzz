@@ -176,10 +176,11 @@ the schedule, over both shooters and bases (nominal drag):
 **The hood is a slow trim, not a per-ball correction.**
 
 - It turns about 78°/s at 6 V and 64°/s at 4.8 V with no load (vendor speeds through 8.571:1): 5° takes 64 to 79 ms,
-  against 92 ms between balls at the 10.9 balls per second the transfer could pass (inferred).
+  against 92 ms between balls at the 10.9 balls per second the transfer could pass (inferred; that estimate has no
+  recorded basis: [`transfer-findings.md`](transfer-findings.md#the-109-balls-per-second-figure)).
 - It would have to follow the burst spread, not the per-ball dip. A ball takes 13 to 22% (Pollen) or 22 to 37%
   (Nectar) of wheel speed in contact, but the next ball meets only what has not recovered: over 5 balls at 10.9 per
-  second into one shooter, Pollen 0 / 0.9 to 2.1 / 3.6 to 11.4% at 60 / 70 / 80% of free speed, Nectar 2.4 to 4.9 /
+  second (the same unrecorded figure) into one shooter, Pollen 0 / 0.9 to 2.1 / 3.6 to 11.4% at 60 / 70 / 80% of free speed, Nectar 2.4 to 4.9 /
   5.7 to 16 / 8 to 25%. Alternating the transfer between shooters (5.45 per second each) removes it for Pollen up to
   80%; Nectar 0 / 0 / 4.7%. Simulated at fraction 0.45: the per-ball loss and the alternating case at the inferred
   0.78 × 10⁻⁴ kg·m², which leaves out the rotor and feed roller; the 5-ball spreads for 0.78 to 6 × 10⁻⁴. The as-built

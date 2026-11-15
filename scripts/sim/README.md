@@ -264,7 +264,8 @@ read 6.6 ms after the latch; the units and int16 overflow are unverified).
 
 A burst of 10 balls (3 and 5 are prefixes) passes at a feed interval when every ball of all 8 seeds stays inside
 the window, and every longer interval passes too. Intervals are 92, 105, 120, 135, 150, 175, 200, 250 and 300 ms;
-92 ms is the transfer's limit of 10.9 balls a second. Deviations are measured from the mean first-ball exit speed.
+92 ms is the transfer's limit of 10.9 balls a second, an estimate with no recorded basis
+(`docs/transfer-findings.md`, "The 10.9 balls per second figure"). Deviations are measured from the mean first-ball exit speed.
 Two windows: the **reference window**, for a 2.8 in ball from a 14 in exit at the turret axis on the minimum-speed
 line (−2.10/+6.00% at 36 in down to −1.55/+2.41% at 132 in, from `ballistics/windows_nodrag.py`), and each
 shooter's **own window** (its exit point, ball size and hood stop, from `ballistics.py`).
@@ -373,7 +374,7 @@ offset). The target, aim point and entry rule are the generic study's, read from
 | flywheel | 72 mm wheel at 1:1, 0.14842 in/s of surface speed per RPM; exit speed = eta × surface speed, eta 0.35, 0.45 or 0.50; free speed 5400 or 5800 RPM | wheel from the CAD model; eta assumed; free speeds as given to the study |
 | hood speed | 78°/s with no load: 0.09 s per 60° at 6 V through 8.571:1 | vendor, https://www.gobilda.com/2000-series-dual-mode-servo-25-3-speed/, as read on 2026-11-10 (not saved); slower at 4.8 V and under load |
 | shot picks | robust: the widest speed window among shots whose hood window is at least ±2° and distance window at least ±3 in; best speed and robust picks also need an exit speed the flywheel can reach (`V_REACH`: 90% of 5400 RPM at eta 0.45, 324.6 in/s) and hood and distance windows open on both sides; when no shot passes, the robust pick reads `none` and schedule `i` holds the last distance's m | assumed |
-| sag model (`sag_energy.py`) | per-ball sag = (1 + k)/2 · m · eta · r² / I, I = 0.78e-4 (also 1e-4, 1.5e-4, 3e-4); stall 1.47 kg·cm at 12 V; 10.9 balls a second | inertia inferred from the CAD model as of 2026-11-10; motor from https://www.gobilda.com/5203-series-yellow-jacket-motor-1-1-ratio-24mm-length-8mm-rex-shaft-6000-rpm-3-3-5v-encoder/; model order-of-magnitude |
+| sag model (`sag_energy.py`) | per-ball sag = (1 + k)/2 · m · eta · r² / I, I = 0.78e-4 (also 1e-4, 1.5e-4, 3e-4); stall 1.47 kg·cm at 12 V; 10.9 balls a second | inertia inferred from the CAD model as of 2026-11-10; motor from https://www.gobilda.com/5203-series-yellow-jacket-motor-1-1-ratio-24mm-length-8mm-rex-shaft-6000-rpm-3-3-5v-encoder/; model order-of-magnitude; 10.9 balls a second has no recorded basis (`docs/transfer-findings.md`) |
 
 Schedules in the tables: `i` is the best-tolerance schedule (the robust pick at each distance, made non-increasing in
 m and rounded to 0.5°); `floor` is the lowest-speed angle inside the travel; `k3`, `k5` and `k8` sit 3, 5 and 8°

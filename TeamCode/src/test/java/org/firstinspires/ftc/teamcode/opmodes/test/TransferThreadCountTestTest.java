@@ -42,6 +42,13 @@ public class TransferThreadCountTestTest {
     }
 
     @Test
+    public void anUntimedDurationReadsNoneYetAndATimedOneHasOneDecimal() {
+        assertEquals("none yet", TransferThreadCountTest.ms(Double.NaN));
+        assertEquals("46.5", TransferThreadCountTest.ms(46.54));
+        assertEquals("88.5", TransferThreadCountTest.ms(88.5));
+    }
+
+    @Test
     public void theDefaultRangesNameEachBallColour() {
         assertEquals(TransferThreadCountTest.NECTAR_RED, TransferThreadCountTest.ballColour(30));
         assertEquals(TransferThreadCountTest.NECTAR_BLUE, TransferThreadCountTest.ballColour(190));

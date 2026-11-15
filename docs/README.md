@@ -12,7 +12,8 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 | [`robots-findings.md`](robots-findings.md) | deciding what may run on the BIOBUZZ robot, writing code for its shooters, turrets or cameras, running a shooter or turret test OpMode, or setting a robot's size in code or a `.pp` file |
 | [`wiring-findings.md`](wiring-findings.md) | wiring the BIOBUZZ robot, writing its hardware config, or moving a device between hubs or ports |
 | [`game-findings.md`](game-findings.md) | packing for an event, adding anything that talks over Wi-Fi or USB, changing HIVE numbers in `BioBuzzField`, or planning routes under the HIVE |
-| [`parts-findings.md`](parts-findings.md) | buying or swapping a Through Bore encoder or a flywheel motor, or configuring or wiring the Brushland Color Rangefinder |
+| [`parts-findings.md`](parts-findings.md) | buying or swapping a Through Bore encoder, a flywheel, intake or transfer motor or a servo, or configuring or wiring a Brushland Laser or Color Rangefinder |
+| [`transfer-findings.md`](transfer-findings.md) | mounting or moving a transfer sensor, choosing its timing or sampling rate, writing code that counts or times balls, running Transfer Thread Count Test's ball timing, or trusting a feed rate in a shooter simulation |
 | [`camera-findings.md`](camera-findings.md) | changing the AprilTag webcam, its mount, cable, USB port, resolution or exposure, or trusting a cell-tip verdict |
 
 **Shooting**
