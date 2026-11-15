@@ -1,8 +1,8 @@
 # SDK and hub findings
 
-What FTC SDK 12.0.0 and the REV hubs do underneath motor, servo and sensor calls, bulk reads, threads and the OpMode
-lifecycle. Read it before writing a hardware wrapper, a sensor thread or voltage compensation, or before trusting an
-encoder velocity read from a hub.
+What FTC SDK 12.0.0 and the REV hubs do underneath motor, servo and sensor calls, bulk reads, threads, gamepad presses
+and the OpMode lifecycle. Read it before writing a hardware wrapper, a sensor thread or voltage compensation, before
+trusting an encoder velocity read from a hub, or before reading gamepad presses in a TeleOp.
 
 "Source" below means the SDK 12.0.0 `Hardware` and `RobotCore` sources jars (`org.firstinspires.ftc` on Maven Central,
 the version `TeamCode/build.gradle` pins), cited by class and method because SDK line numbers move between releases.
@@ -33,6 +33,10 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   before quoting a log anywhere public.
   [Control Hub network, adb and app restarts](#control-hub-network-adb-and-app-restarts) has these, the dashboard
   starting OpModes with no Driver Station, and Run killing a running OpMode.
+- **The SDK's `aWasPressed()`-style edges are latched and used up by the first read**: read each one once per loop,
+  and drain every one when TeleOp switches layers, or an old press fires later. The SDK clears them at INIT and START
+  but counts a button held through START as a new press: drain them in `start()` too
+  ([Gamepad button edges](#gamepad-button-edges)).
 
 ## Encoder velocity
 
@@ -197,7 +201,8 @@ every other device (source: `OpModeManagerImpl.resetHardwareForOpMode`):
 - **Gamepads:** an iterative OpMode copies the latest Driver Station snapshot into `gamepad1`/`gamepad2` before every
   `init_loop()`, `start()`, `loop()` and `stop()`, but not before `init()` (source: `OpMode.internalPreUserCode`), so
   anything code writes into them is overwritten on the next call. A LinearOpMode copies on arrival, from the event-loop
-  thread (`LinearOpMode.newGamepadDataAvailable`). Edge detection resets at INIT and at START.
+  thread (`LinearOpMode.newGamepadDataAvailable`). Edge detection resets at INIT and at START
+  ([Gamepad button edges](#gamepad-button-edges)).
 - **Telemetry:** the SDK calls `telemetry.update()` after every `init_loop()`, `start()`, `loop()` and `stop()`, not
   after `init()` (`OpMode.internalPostUserCode`). The `EnhancedOpMode` rule: CLAUDE.md, OpMode lifecycle.
 - **Overhead:** an iterative OpMode sleeps 1 ms (`Thread.sleep(1)`) after every `init_loop()` and `loop()`
@@ -349,8 +354,39 @@ OS 1.1.3 on the hub whose properties were read; source lines are the SDK 12.0.0 
   read 2026-11-13; no value given). In three 2026-10-09 app restarts, the first hub status logged read
   `KeepAliveTimeout|FailSafe` (the line names no module). The timeout itself is not measured on a hub.
 
+## Gamepad button edges
+
+Read from the RobotCore 12.0.0 classes with `javap` on 2026-11-14 (`Gamepad`, `GamepadStateChanges$ButtonStateMonitor`),
+not run on a hub.
+
+- `Gamepad` has a `...WasPressed()` and `...WasReleased()` for every button, both bumpers, both stick buttons, the
+  touchpad, share, options and ps, under both naming schemes (`aWasPressed()` and `crossWasPressed()`), and for both
+  triggers (`leftTriggerWasPressed()`), which count as pressed past `getTriggerThreshold()`
+  (`setTriggerThreshold(float)`, also `left_trigger_pressed`). Sticks have none. The two names for one button have
+  separate monitors (`GamepadStateChanges.a` and `.cross`), so one press makes both `aWasPressed()` and
+  `crossWasPressed()` true once each.
+- The flags update when the SDK copies the latest snapshot into `gamepad1`/`gamepad2` (`copy()` calls
+  `fromByteArray`), whose timing is under [OpMode lifecycle](#opmode-lifecycle). The SDK also reassigns both fields on
+  every event-loop pass (`OpModeManagerImpl.runActiveOpMode`): read the field each time rather than keeping the object.
+- There is no time debounce. Each monitor sets a flag on a rising or falling edge of the button's state, and
+  `wasPressed()` returns that flag and clears it. So a press shorter than a loop still shows up, the second call in the
+  same loop returns false, and a press that nothing reads stays set until something does, however long ago it was.
+- No double-click, hold time or toggle helper. `rumble`, `rumbleBlips`, `runRumbleEffect`, `setLedColor` and
+  `runLedEffect` are there.
+- **The SDK clears the flags at INIT and at START**, and nowhere else: `OpModeInternal.internalInit()` and
+  `internalStart()` call `gamepad1.resetEdgeDetection()` and `gamepad2.resetEdgeDetection()`. So a press made in INIT
+  and never read doesn't reach `loop()`.
+- **`resetEdgeDetection()` also forgets which buttons are down.** It replaces every monitor with a new one whose last
+  state is "up", so a button held through the reset counts as a new press at the next copy. At START that copy runs
+  just before `start()`: a button held while START is pressed reads as pressed in `start()` and, unless something
+  reads it there, in the first `loop()`. Reading every flag once in `start()` (`GamepadPresses.clear`) drops
+  it. For a layer switch, reading every flag is the right clear and `resetEdgeDetection()` the wrong one: it would turn
+  the still-held switch button into a press in the new layer.
+
 ## Still unknown
 
+- **The held-through-START press on a hub:** hold A, press START, and print `aWasPressed()` in `start()` and on the
+  first `loop()`, with and without `GamepadPresses.clear` in `start()`.
 - **Hub velocity above 32,767 counts/s, and its multiples of 20:** spin a Through Bore on port 0 or 3 past 240 rpm and
   log raw `getVelocity()` next to velocity from position. It wraps if the raw value tracks the true value minus a
   multiple of 65,536; check `v % 20 == 0` on every sample.

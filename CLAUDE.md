@@ -71,6 +71,8 @@ Pedro Pathing 3:
 
 **OctoQuad localizer**: give a follower `GuardedOctoQuadLocalizer` (`architecture/hardware/`), never Pedro's `OctoQuadLocalizer` (hangs INIT, keeps stale poses); it faults in INIT and `EnhancedOpMode`'s START throws; a bare OpMode calls `awaitRunning()` (`docs/hub-bench-findings.md`).
 
+**Gamepad input**: a TeleOp reads the SDK's own presses (`gamepad1.aWasPressed()`) in its layer functions and switches layers only through `setD1Layer`/`setD2Layer` (BioBuzz Tele; layers in `opmodes/tele/ActionLayer`). A press stays latched until its first read: read each once per loop, and call `GamepadPresses.clear` on a layer switch and in `onStart()`, never `Gamepad.resetEdgeDetection()`, which turns a held button into a press (`docs/sdk-hub-findings.md`).
+
 **Game code.** Game commands go in `RobotActions` (`robot.actions`). `Camera` starts ENABLED, polling the Limelight and able to raise its fault, so an OpMode that doesn't use ball vision calls `disableBallVision()` in `initialize()`.
 
 **Ball collection** (`RobotActions.collectBalls`) plans once and drives back to where it planned from. It ends SKIPPED on a Limelight fault before it plans, or on a START before the INIT Limelight sync is done (about 2 s; it waits only `visionWaitMs`).
