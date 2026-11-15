@@ -46,7 +46,8 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
   out of the hardware map, so INIT stops; on USB with the wrong serial the SDK only warns and hands out devices that
   ignore every write. Check the robot's Arducam serial too: `UC852` is the bench Arducam's (it may be the same on
   every unit, unverified), and a webcam with another serial fails to open, which stops everything built on
-  `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s `ruler`, `sensorLeft` and `sensorRight` (no port), and the Pinpoint
+  `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s analog inputs `sensorLeft` and `sensorRight` (no port; nothing builds `Intran`,
+  and it only looks them up, so nothing says which rangefinder either would be), and the Pinpoint
   `BioBuzzConstants` asks for (no port), so nothing built on `BioBuzzRobot` passes INIT on it until odometry moves to
   the OctoQuad. BioBuzz Basic Tele (`opmodes/tele/BioBuzzBasicTele.java`) is the TeleOp that runs on it today: drive,
   intake, transfer and both flywheels from gamepad 1, with no odometry, cameras or turret.
@@ -106,8 +107,8 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 `blocker` on Expansion Hub servo 4. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
 Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the RGB lights are
 `rgbRight` on Control Hub servo 4 and `rgbLeft` on Expansion Hub servo 2, and the Prism is `prism` (no code reads those four yet). The rangefinders are
-`frontRangefinder` on analog 1 and `backRangefinder` on analog 3; no robot code reads them yet, and the rangefinder
-test OpModes default to the rig config's `analog0` and `analog1`. The Floodgate is `floodgate`, the OctoQuad
+`frontRangefinder` on analog 1 (upstream, the rig config's `analog0`) and `backRangefinder` on analog 3 (downstream,
+`analog1`); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Floodgate is `floodgate`, the OctoQuad
 `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0, read by nothing. The Expansion Hub is address 2 on
 RS485 and on USB. The rest: `fl`, `fr`, `bl`, `br`, `intake`, `transfer`, the Arducam `aprilTagDetector` and the
 Limelight `limelight`.
@@ -540,8 +541,8 @@ What follows:
 From the Competition Manual revision named in [`game-findings.md`](game-findings.md), and REV's and goBILDA's pages,
 fetched 2026-11-10:
 
-- R503: at most 8 motors and 8 servos. The map uses all 8 of each, so there is no spare. `Intran` builds a ninth
-  servo (`ruler`) and must be rewritten to the CAD before it is used.
+- R503: at most 8 motors and 8 servos. The map uses all 8 of each, so there is no spare; `Intran`'s `ruler` is the
+  flower intake servo, one of the 8.
 - R505: two servos per hub servo port or injector port.
 - R608: hubs and injectors are powered only by XT30 from the main battery. R613(C): injector 6 V powers servos only.
 - R701(C), R707, R708, R611(A): one extra Expansion Hub, which may connect by USB; UVC webcams, the Limelight and a

@@ -16,9 +16,9 @@ import org.firstinspires.ftc.teamcode.biobuzz.modules.TransferCounter;
 @TeleOp(name = "Transfer Thread Count Test", group = "Test")
 @Config("Transfer Thread Count Test")
 public class TransferThreadCountTest extends OpMode {
-    public static String upstreamSensorName = "analog0";
-    public static String downstreamSensorName = "analog1";
-    public static String motor1Name = "transfer1";
+    public static String upstreamSensorName = "frontRangefinder";
+    public static String downstreamSensorName = "backRangefinder";
+    public static String motor1Name = "transfer";
     public static double maxRangeMm = 1300;
     public static double diffThresholdMm = 25;
     public static double hysteresisMm = 10;

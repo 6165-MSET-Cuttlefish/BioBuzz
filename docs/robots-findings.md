@@ -175,13 +175,6 @@ None of these is fixed. Each was read from source on 2026-11-11, with SDK 12.0.0
   STOP. Proposed fix: `melonbotics.setPwmDisable()` in `stop()`, which the SDK still sends. To check, on
   `intake_transfer_shooter.xml`: set `melonboticsPower` to 0.5, press STOP before and after the fix, and watch
   whether the servo keeps turning; logcat shows a `nack rec'd` line for each refused write.
-- **Simple Intake Transfer Shooter Test can't INIT on any hardware config in the repo.** It looks up `flywheel` and
-  `hood` (`opmodes/test/SimpleIntakeTransferShooterTest.java:33`, `:36`). `intake_transfer_shooter.xml` names them
-  `pollenFlywheel`, `nectarFlywheel`, `pollenHood` and `nectarHood`, no config has a `flywheel`, and none has had a
-  `hood` since `betta_decode.xml` and `cuttle_decode.xml` were deleted (2026-11-14); `hardwareMap.get` throws on the
-  first missing name (`HardwareMap.get`). Use Intake Transfer Shooter Test, which drives the same rig with both
-  shooters; it lacks only the gamepad1 A blocker toggle, and its dashboard `blocker.open` does the same. Proposed fix:
-  delete the OpMode, or keep it for a config made on the Driver Station.
 - **Butterfly Test has no shipped config since `butterfly.xml` was deleted (2026-11-14):** it needs `fl`, `fr`, `bl`,
   `br`, `left_shifter` and `right_shifter` (`opmodes/test/ButterflyTest.java:30-36`), so a config made on the DS.
 

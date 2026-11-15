@@ -12,8 +12,8 @@ import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
 @TeleOp(name = "Two Motor Test", group = "Test")
 @Config("Two Motor Test")
 public class TwoMotorTest extends OpMode {
-    public static String name1 = "motor1";
-    public static String name2 = "motor2";
+    public static String name1 = "pollenFlywheel";
+    public static String name2 = "nectarFlywheel";
     public static double power = 0;
     public static boolean reverse2 = false;
     DcMotorEx motor1, motor2;

@@ -10,8 +10,8 @@ import com.qualcomm.robotcore.hardware.AnalogInput;
 @TeleOp(name = "Laser Rangefinder Test", group = "Test")
 @Config("Laser Rangefinder Test")
 public class LaserRangefinderTest extends LinearOpMode {
-    public static String sensorAName = "analog0";
-    public static String sensorBName = "analog1";
+    public static String sensorAName = "frontRangefinder";
+    public static String sensorBName = "backRangefinder";
     public static double maxRangeMm = 1300;
 
     @Override

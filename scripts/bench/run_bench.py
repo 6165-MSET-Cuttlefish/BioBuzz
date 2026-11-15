@@ -562,7 +562,7 @@ THREAD_LISTINGS = (
 )
 THREAD_LISTING_MIN = 10
 THREAD_LEFTOVER_MEANS = {
-    "normal": "TransferCounter's poller outlives a normal STOP: every run of Transfer Count Test adds a thread reading "
+    "normal": "TransferCounter's poller outlives a normal STOP: every run of Transfer Thread Count Test adds a thread reading "
               "the hub every 10 ms under every later OpMode, until the app restarts",
     "stop_before_start": "a STOP from INIT leaves a TransferCounter poller running although start() never ran",
     "crash_in_loop": "after a crash in loop() the poller's isAlive tie didn't end it: it keeps reading the hub under "
