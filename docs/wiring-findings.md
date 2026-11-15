@@ -75,7 +75,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | servo 5 | nectar hood | injector A |
 | analog 0 | Floodgate current output | shares connector 0-1 with rangefinder A through a splitter cable |
 | analog 1 | transfer rangefinder A (upstream), if kept | the port Bench: Rangefinders' `bench_rangefinders` uses |
-| analog 2 | spare | |
+| analog 2 | Brushland Color Rangefinder's analog pin 0 (hue, for ball colour), if kept | shares connector 2-3 with rangefinder B, so both need a splitter cable; Brushland doesn't say which channel of a connector pin 0 reaches: if `colorRangefinder` sits at about 0 V, or only jumps between about 0 and 3.3 V as something comes within `presenceMm` (likely pin 1's digital output, an inference), try `backRangefinder` (analog 3) with rangefinder B unplugged ([parts](parts-findings.md#brushland-color-rangefinder)) |
 | analog 3 | transfer rangefinder B (downstream), if kept | the bench port |
 | I2C bus 0 | nothing | the built-in IMU's bus |
 | I2C bus 1 | spare | |
@@ -107,7 +107,8 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 `blocker` on Expansion Hub servo 4. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
 Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the RGB lights are
 `rgbRight` on Control Hub servo 4 and `rgbLeft` on Expansion Hub servo 2, and the Prism is `prism` (no code reads those four yet). The rangefinders are
-`frontRangefinder` on analog 1 (upstream) and `backRangefinder` on analog 3 (downstream); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Floodgate is `floodgate`, the OctoQuad
+`frontRangefinder` on analog 1 (upstream) and `backRangefinder` on analog 3 (downstream); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Color
+Rangefinder is `colorRangefinder` on analog 2, read only by Transfer Thread Count Test. The Floodgate is `floodgate`, the OctoQuad
 `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0, read by nothing. The Expansion Hub is address 2 on
 RS485 and on USB. The rest: `fl`, `fr`, `bl`, `br`, `intake`, `transfer`, the Arducam `aprilTagDetector` and the
 Limelight `limelight`.

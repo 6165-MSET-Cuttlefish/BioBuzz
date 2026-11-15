@@ -73,7 +73,9 @@ FtcRobotController tags end at v12.0.
 - `scripts/bench/` and `scripts/looptimes/` Python imports only the standard library (checked 2026-11-11);
   `scripts/sim/` needs numpy, and scipy for some steps (`scripts/sim/README.md`, Before running).
 - `vendor/prism`, `vendor/digitalchickenlabs` and `vendor/sdk` match upstream's current revision apart from the edits
-  their `*_REV` files list (diffed 2026-11-10). `vendor/brushland` is unchecked (Still unknown).
+  their `*_REV` files list (diffed 2026-11-10). `vendor/brushland/ColorRangefinder.java` matches the configuration
+  page's 2025-06-14 Wayback snapshot apart from its `BRUSHLAND_REV` edits (diffed 2026-11-14); `LaserRangefinder.java`
+  and the live pages are unchecked (Still unknown).
 - Everything on Dairy's and acmerobotics' `ftc-dashboard` master is in the team's slothboard fork. The one open
   acmerobotics PR it lacks, [#231](https://github.com/acmerobotics/ftc-dashboard/pull/231) "Allow disabling Limelight
   proxy", matters only if Panels (`com.bylazar:fullpanels`) is added: slothboard's Limelight proxy listens on the
@@ -229,4 +231,4 @@ FtcRobotController tags end at v12.0.
   processor, give two OpModes one name, deploySloth, and watch the DS and logcat.
 - `vendor/brushland/LaserRangefinder.java` against Brushland's page: the docs site reset the connection on 2026-10-30
   and 2026-11-10. From another network, diff the page's class against the file after reapplying `BRUSHLAND_REV`'s
-  edits.
+  edits. The same for `ColorRangefinder.java` against the live configuration page (refused 2026-11-14).

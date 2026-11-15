@@ -16,6 +16,7 @@
 
             <AnalogInput name="floodgate" port="0" />
             <AnalogInput name="frontRangefinder" port="1" />
+            <AnalogInput name="colorRangefinder" port="2" />
             <AnalogInput name="backRangefinder" port="3" />
 
             <LynxEmbeddedIMU name="imu" bus="0" port="0" />

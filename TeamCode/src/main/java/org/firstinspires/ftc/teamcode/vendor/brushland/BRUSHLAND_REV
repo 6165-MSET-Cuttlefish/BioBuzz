@@ -4,3 +4,10 @@ date=2026-02-24
 fetched=2026-10-18
 files=LaserRangefinder.java
 note=the page's LaserRangefinder helper class moved into its own file and made public, as the page directs; package line and the imports it uses added; otherwise verbatim
+
+url=https://web.archive.org/web/20250614233146/https://docs.brushlandlabs.com/sensors/color-rangefinder/configuration
+ref=docs page, unversioned; the Wayback Machine snapshot of 2025-06-14, since the live page could not be fetched on 2026-11-14; date is the page's last-updated stamp in that snapshot
+date=2025-02-19
+fetched=2026-11-14
+files=ColorRangefinder.java
+note=the page's ColorRangefinder helper class moved into its own file and made public; package line and the imports it uses added; otherwise verbatim

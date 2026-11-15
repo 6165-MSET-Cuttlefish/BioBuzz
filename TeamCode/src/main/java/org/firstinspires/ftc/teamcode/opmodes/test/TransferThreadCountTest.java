@@ -22,6 +22,9 @@ import org.firstinspires.ftc.teamcode.opmodes.tele.BioBuzzBasicTele;
 public class TransferThreadCountTest extends OpMode {
     public static String upstreamSensorName = "frontRangefinder";
     public static String downstreamSensorName = "backRangefinder";
+    public static String colorSensorName = "colorRangefinder";
+    public static String presenceSensorName = "backRangefinder";
+    public static boolean usePresence = false;
     public static String motor1Name = "transfer";
     public static String servoName = "melonbotics";
     public static String intakeName = "intake";
@@ -30,6 +33,13 @@ public class TransferThreadCountTest extends OpMode {
     public static double hysteresisMm = 10;
     public static boolean oneSensor = false;
     public static double oneSensorThresholdMm = 100;
+    public static double redHueLowDeg = 10;
+    public static double redHueHighDeg = 50;
+    public static double blueHueLowDeg = 170;
+    public static double blueHueHighDeg = 210;
+    public static double pollenHueLowDeg = 70;
+    public static double pollenHueHighDeg = 89;
+    public static double noSignalBelowDeg = 2;
     public static boolean runThread = true;
     public static double pollMs = 10;
     public static double loopMs = 20;
@@ -41,10 +51,18 @@ public class TransferThreadCountTest extends OpMode {
     public static boolean crashInLoop = false;
     public static boolean crashInStop = false;
 
+    static final String NECTAR_RED = "nectar red";
+    static final String NECTAR_BLUE = "nectar blue";
+    static final String POLLEN = "pollen";
+    static final String NONE = "none";
+    static final String NO_SIGNAL = "no signal";
+
     private final ElapsedTime runtime = new ElapsedTime();
 
     AnalogInput upstream;
     AnalogInput downstream;
+    AnalogInput colorSensor;
+    AnalogInput presence;
     DcMotorEx motor1;
     DcMotorEx intake;
     DcMotorEx fl, bl, fr, br;
@@ -55,11 +73,18 @@ public class TransferThreadCountTest extends OpMode {
     int loopCount;
     int lastPosition = 0;
     boolean lastResetCount;
+    int talliedCount;
+    int nectarCount;
+    int pollenCount;
+    int otherCount;
+    String lastBallColour = NONE;
 
     @Override
     public void init() {
         upstream = hardwareMap.analogInput.get(upstreamSensorName);
         downstream = hardwareMap.analogInput.get(downstreamSensorName);
+        colorSensor = hardwareMap.analogInput.get(colorSensorName);
+        presence = hardwareMap.analogInput.get(presenceSensorName);
         motor1 = hardwareMap.get(DcMotorEx.class, motor1Name);
         motor1.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         motor1.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
@@ -103,13 +128,23 @@ public class TransferThreadCountTest extends OpMode {
         double mmB = downstream.getVoltage() / 3.3 * maxRangeMm;
         double diff = mmA - mmB;
         if (loopEdge.update(oneSensor ? mmA : diff, threshold, hysteresisMm)) loopCount++;
+        double colorVolts = colorSensor.getVoltage();
+        double hueDeg = colorVolts / 3.3 * 360;
+        boolean present = presence.getVoltage() > 1.65;
+        String colour = usePresence && !present ? NONE : ballColour(hueDeg);
 
         if (resetCount != lastResetCount) {
             loopCount = 0;
             if (counter != null) counter.resetCount();
+            talliedCount = 0;
+            nectarCount = 0;
+            pollenCount = 0;
+            otherCount = 0;
+            lastBallColour = NONE;
         }
         lastResetCount = resetCount;
         int count = counter != null ? counter.count() : loopCount;
+        for (; talliedCount < count; talliedCount++) tally(colour);
         boolean stopped = stopAtCount > 0 && count >= stopAtCount;
 
         motor1.setPower(stopped ? 0 : motor1Power);
@@ -144,6 +179,14 @@ public class TransferThreadCountTest extends OpMode {
         telemetry.addData("Downstream (mm)", mmB);
         telemetry.addData("A - B (mm)", diff);
         telemetry.addData("Diff threshold (mm)", diffThresholdMm);
+        telemetry.addData("Hue (deg)", hueDeg);
+        telemetry.addData("Colour sensor distance (mm), pin 0 in DISTANCE mode", colorVolts / 3.3 * 100);
+        telemetry.addData("Ball present (1 yes, 0 no)", present ? 1 : 0);
+        telemetry.addData("Ball colour", colour);
+        telemetry.addData("Nectar count", nectarCount);
+        telemetry.addData("Pollen count", pollenCount);
+        telemetry.addData("Other count", otherCount);
+        telemetry.addData("Last ball colour", lastBallColour);
         telemetry.addData("Counting on", oneSensor
                 ? "Upstream alone, each time it rises above " + oneSensorThresholdMm + " mm (a ball leaving)"
                 : "A - B rising above the diff threshold");
@@ -171,6 +214,26 @@ public class TransferThreadCountTest extends OpMode {
 
     private static double threshold() {
         return oneSensor ? oneSensorThresholdMm : diffThresholdMm;
+    }
+
+    static boolean hueInRange(double hueDeg, double lowDeg, double highDeg) {
+        return lowDeg <= highDeg ? hueDeg >= lowDeg && hueDeg <= highDeg : hueDeg >= lowDeg || hueDeg <= highDeg;
+    }
+
+    static String ballColour(double hueDeg) {
+        // 0 V is also what an unplugged input or the connector's other channel reads, and it falls in the red range.
+        if (hueDeg < noSignalBelowDeg) return NO_SIGNAL;
+        if (hueInRange(hueDeg, redHueLowDeg, redHueHighDeg)) return NECTAR_RED;
+        if (hueInRange(hueDeg, blueHueLowDeg, blueHueHighDeg)) return NECTAR_BLUE;
+        if (hueInRange(hueDeg, pollenHueLowDeg, pollenHueHighDeg)) return POLLEN;
+        return NONE;
+    }
+
+    private void tally(String colour) {
+        lastBallColour = colour;
+        if (colour.equals(NECTAR_RED) || colour.equals(NECTAR_BLUE)) nectarCount++;
+        else if (colour.equals(POLLEN)) pollenCount++;
+        else otherCount++;
     }
 
     @Override

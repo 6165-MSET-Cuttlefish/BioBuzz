@@ -171,6 +171,64 @@ The masses are unverified vendor figures from the CAD notes; the manual gives no
 ([`robots-findings.md`](robots-findings.md)). Every simulated ball-to-ball spread rests on that range: as built, the
 lightest and heaviest ball change exit speed by +0.59 / −0.96% on Pollen and +1.08 / −1.69% on Nectar (simulated).
 
+## Brushland Color Rangefinder
+
+Read on 2026-11-14 from Wayback Machine snapshots, since the live site refused connections: [configuration][crfconf]
+(snapshot 2025-06-14), [reading data][crfread] (2025-11-12), [getting started][crfstart] (2025-11-12) and
+[specifications][crfspec] (2025-11-13). The helper class is vendored as `vendor/brushland/ColorRangefinder.java`;
+Configure Color Rangefinder writes it and Transfer Thread Count Test reads its hue (usage in `CLAUDE.md`).
+
+- **Out of the box it is an I2C sensor that emulates a REV Color Sensor V3**: configure it as one (getting started).
+  A standard I2C read on the Control Hub takes upwards of 4 ms (getting started).
+- **Configuration is written over I2C and persists**; afterwards the sensor no longer sends data over I2C, but listens
+  for I2C traffic in the first second after power-up. Reset: INIT and stop the configuring OpMode with the sensor
+  unplugged, then plug it in; the LED blinks (configuration). Sensors shipped before Nov. 2024 reset with a button
+  instead. A sensor with a side switch keeps it toward the connector while configuring and flips it away for analog
+  (configuration).
+- **Both pins must be configured in one go**: one pin non-I2C with the other left on I2C reverts the sensor to I2C
+  (configuration). On success the LED blinks twice (configuration).
+- **Only pin 0 can output analog, one channel at a time**: red, blue, green, alpha, HSV hue or distance (the helper's
+  `AnalogMode`), 0 to 3.3 V (configuration). Hue in degrees = volts / 3.3 × 360; distance in mm = volts / 3.3 × 100
+  (reading data). Analog is 12-bit (specifications).
+- **A digital pin is true when its thresholds are met**: an HSV hue range on a 0 to 255 scale (degrees / 360 × 255),
+  several ranges per pin by calling the setter again, optionally with a maximum distance the object must be within; or
+  a distance range in mm (configuration). Hue wraps at 360, inside red; the page's fix is to invert the pin's whole hue
+  wheel by 180°, and it says only very specific shades of red need it, and its example red samples do not
+  (configuration). Configure Color Rangefinder writes a wrapping range as two ranges instead; whether our nectar red
+  needs inversion is unmeasured.
+- **Pin 0 analog with pin 1 digital works**, but needs custom wiring or a splitter cable to reach both port types
+  (configuration).
+- **To find a colour's hue**, put pin 0 on analog HSV and read it; the page's example turns a reading of 70° into
+  bounds of 50-90° (configuration). Its example ranges are for other game pieces: red 0-50°, yellow 55-90° (55-75° in
+  a second snippet), blue 180-250° (configuration).
+- **Our balls' hue, one reading each** (the owner, 2026-11-14, Transfer Thread Count Test's `Hue (deg)`; the distance
+  to the ball was not recorded): nectar red 30°, nectar blue 190°, pollen 86°, and 93° with nothing in front of the
+  sensor. Red and blue are far from everything else. Pollen and the empty reading are 7° apart, so hue alone cannot
+  tell a pollen ball from no ball: use presence as well (the rangefinder count, or the sensor's own "within N mm"
+  pin), or put a background of some other colour opposite the sensor. Transfer Thread Count Test's defaults are set
+  from these: red 10-50°, blue 170-210°, pollen 70-89°; Configure Color Rangefinder's red and blue match.
+- **Distance**: 940 nm class 1 VCSEL laser, maximum range 100 mm (specifications). The laser rangefinders' SHORT mode
+  reaches 1.3 m (`vendor/brushland/LaserRangefinder.java`'s `DistanceMode`).
+- **Power and logic**: 3.3 V in, 3.3 V digital logic (specifications). Bulk reads take every non-I2C port of a hub in
+  3-4 ms (reading data). Dust on the window spoils colours: blow it off or wipe it with a moist swab (reading data).
+- **The configuration page contradicts itself twice.** Its example's prose says pin 0 is true for red or yellow and the
+  colour must be within 30 mm; its code makes pin 0 blue or yellow and requires 20 mm. LED brightness is "0-100"
+  in the prose (nonlinear: 50 looks like 100, visibly dimmer below 30) but "between 0-255" in the helper's comment.
+  Configure Color Rangefinder writes the LED only when `ledBrightness` is 0 or more.
+- **Configurations take effect the next time the sensor powers on** (configuration), so it keeps answering I2C
+  between pin writes in one run. That is why Configure Color Rangefinder can read calibration for pin 1's distance
+  threshold after writing pin 0; the page's own examples only show that read after a digital pin 0, never after an
+  analog one, so the first hub run should confirm the LED blinks twice and pin 1 switches at `presenceMm`.
+- **One sensor for colour and counting**, from the facts above: pin 0 can carry hue or distance on analog, not both,
+  so with hue on pin 0 the only distance left is pin 1's digital "within N mm", and only within 100 mm. Or leave both
+  pins on I2C and read colour and distance from one REV Color Sensor V3 device, at upwards of 4 ms per I2C read
+  (getting started).
+
+**Not documented on those pages:** the update rate or response time of the analog, digital and I2C outputs, distance
+accuracy or noise, which hub channel of a two-channel analog or digital connector each pin reaches (a pin 1 digital
+output on the analog channel would read only about 0 or 3.3 V: an inference), what the analog hue reads with nothing
+in front, and how many thresholds a pin holds.
+
 ## Still unknown
 
 | question | test |
@@ -181,6 +239,9 @@ lightest and heaviest ball change exit speed by +0.59 / −0.96% on Pollen and +
 | Steel flywheel fit | Place it on the flywheel shaft in CAD: bore and hub, clearance to the ball path and the hood. |
 | OctoQuad velocity: refresh timing, jitter, and whether an overflow wraps or saturates (no source says) | Spin a Through Bore steadily on a 20 ms channel and log each value with a timestamp; then pass 4800 RPM on a 50 ms channel. |
 | Whether hub ports 0 and 3 count 614,400 counts/s without loss (no rating found) | Spin one Through Bore into a hub port and the OctoQuad at once; compare positions after a long run. |
+| How much each ball's hue varies on the Color Rangefinder (one reading each so far), and what the empty chute reads at the real mount | In HUE mode, graph Transfer Thread Count Test's `Hue (deg)` for several balls of each colour at the mount's distance and under event lighting, then with nothing there. |
+| Which hub analog channel the Color Rangefinder's pin 0 reaches | In HUE mode on Control Hub analog connector 2-3 with nothing else on it, read `colorRangefinder` (analog 2) and `backRangefinder` (analog 3). |
+| The Color Rangefinder's output update rate and distance noise | Log its analog distance every 10 ms against a ball moved at a known speed, and its spread with the ball held still. |
 
 [gb5000]: https://www.gobilda.com/5000-series-12vdc-motor-with-8mm-rex-pinion-shaft/
 [gb5000pdf]: https://www.gobilda.com/content/spec_sheets/5000-0002-4008_spec-sheet.pdf
@@ -192,3 +253,7 @@ lightest and heaviest ball change exit speed by +0.59 / −0.96% on Pollen and +
 [axmax]: https://docs.axon-robotics.com/servos/max
 [revexh]: https://docs.revrobotics.com/duo-control/control-system-overview/expansion-hub-basics
 [oqdocs]: https://github.com/DigitalChickenLabs/OctoQuad/tree/master/documentation
+[crfconf]: https://web.archive.org/web/20250614233146/https://docs.brushlandlabs.com/sensors/color-rangefinder/configuration
+[crfread]: https://web.archive.org/web/20251112032637/https://docs.brushlandlabs.com/sensors/color-rangefinder/reading-data
+[crfstart]: https://web.archive.org/web/20251112041041/https://docs.brushlandlabs.com/sensors/color-rangefinder/getting-started
+[crfspec]: https://web.archive.org/web/20251113084727/https://docs.brushlandlabs.com/sensors/color-rangefinder/specifications
