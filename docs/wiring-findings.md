@@ -315,8 +315,9 @@ run-mode changes and, with a lab supply, a brownout
 
 In a loop at 34 to 37 ms, in-loop sampling sees about half of the rangefinders' 20 ms readings. Whether that misses
 balls is what the counting test settles. By the CAD's ball speeds, a free-running Pollen train shows the beam a gap
-of only about 21 ms at the recommended spots, so even a 20 ms reading can miss one (inferred): where to mount the
-rangefinders and the sampling each spot needs are in [`transfer-findings.md`](transfer-findings.md#rangefinder-spots).
+of only about 16 to 19 ms at spots A and B, so even a 20 ms reading can miss one, and in-loop reading at 34 to 37 ms
+is too slow for counting balls coming in at the intake (inferred): where to mount the rangefinders and the sampling
+each spot needs are in [`transfer-findings.md`](transfer-findings.md#rangefinder-spots).
 
 ## The nectar turret encoder
 

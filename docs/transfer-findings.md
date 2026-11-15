@@ -7,24 +7,37 @@ counts or times balls, or trusting a feed rate in a shooter simulation.
 **Nothing on this page has been run on the robot.** Each number says how it is known:
 
 - **(CAD)**: measured on the team's CAD as of the evening of 2026-11-14 (about 23:00 PST). The CAD was still changing.
-- **(vendor)**: from the vendor page linked under [Sources](#sources), read on 2026-11-15 unless it says otherwise.
+- **(vendor)**: from the vendor page or chip datasheet linked under [Sources](#sources), read on 2026-11-15 unless it
+  says otherwise.
+- **(manual)**: the Competition Manual, read on 2026-11-15 ([Sources](#sources)).
 - **(team)**: the team said so; not checked.
 - **(inferred)**: worked out from the above; the reasoning is given.
+- **(simulated)**: a model of balls, beams and the hub's sampling; its assumptions are listed with its results.
 
 ## What to do
 
+- **Spots A to E can't count balls coming in, so don't drill them for the possession count.** While a paddle holds
+  balls, the queue stops on or short of them, so they see only the first one or two balls of a load. They suit
+  counting balls leaving toward the turrets, and the timing measurement below
+  ([Rangefinder spots](#rangefinder-spots)).
+- **No spot for counting balls coming in has been checked in the CAD.** Don't build the two-laser direction pair at
+  the intake hand-off: the two ball types share a surface only on the field tile in front of the plates, where nothing
+  fixed can carry a sensor. The best-supported plan is one Laser Rangefinder per track, counting arrivals, with
+  direction taken from the motor's commanded direction, and the Color Rangefinder on the Nectar ramp
+  ([Counting balls coming in](#counting-balls-coming-in)).
 - **Take the one measurement below before trusting any speed here.** It tells which part of the transfer sets the
   ball rate, and it needs only one rangefinder and Transfer Thread Count Test.
 - **The transfer's continuous servo `melonbotics` is a Melonbotics Super Servo Plus** (CAD). It sits on the lower
   rear Pollen roller shaft. The only Axon MAX in the CAD turns the front sweeper bar's hinge
   ([Parts](parts-findings.md#servos)).
 - **Bench-test a Laser Rangefinder at 15 to 40 mm, in SHORT mode at a 10 ms timing budget, before anyone drills a
-  hole for one.** No vendor page gives a minimum range, every spot below has the ball 15 to 41 mm from the sensor
-  face, and 10 ms is the setting the spots need.
-- **Use a 10 ms timing budget (SHORT mode) for any transfer rangefinder.** At the default 20 ms only spots A and B can
-  work, only with the transfer motor loaded, and maybe not even then (the beam is a cone: see
-  [below](#ball-and-gap-times-and-which-sampling-rate-works)). If the bench test shows the sensor can't range at
-  10 ms, no Nectar spot works, and Pollen works only at A or B with the motor loaded, if at all.
+  hole for one.** Its chip is an ST VL53L1X, and ST's datasheet promises accurate distances only from 40 mm and a
+  timing budget no shorter than 20 ms; Brushland lists 10 ms ([The sensor](#the-sensor)). Every spot below has the
+  ball 15 to 41 mm from the sensor face.
+- **Try a 10 ms timing budget (SHORT mode) for any transfer rangefinder, but don't count on it.** At 20 ms no spot
+  sees the gap between touching Pollen balls for two readings, even with the transfer motor loaded. At 10 ms, A and B
+  see it only while the train is slowed (motor loaded, or the servo roller metering), and maybe not even then (the
+  beam is a cone: see [below](#ball-and-gap-times-and-which-sampling-rate-works)). No Nectar spot works at 20 ms.
 - **Don't drill spots A and B as drawn: the two sensor bodies would overlap.** See
   [What to tell hardware](#what-to-tell-hardware).
 - **Don't trust "the transfer passes 10.9 balls a second".** See [that section](#the-109-balls-per-second-figure).
@@ -71,9 +84,9 @@ How good the numbers are:
   measured 2026-10-14 and 2026-10-16), so each time is good to about one sensor update or one poll, whichever is
   longer: ±20 ms at 20 ms, ±10 ms at 10 ms.
 - The mean of four periods is the first-to-last time divided by 4, so it is good to about a quarter of that.
-- At free speed a ball shows for about 25 ms and the gap for about 21 ms, or less (below). At a 20 ms budget a gap
-  can fall between two readings, two balls then count as one, and one period reads about double. If the count isn't
-  5, or one period is about twice the others, repeat at a 10 ms budget.
+- At free speed, at A or B, a ball shows for about 28 to 32 ms and the gap for about 16 to 19 ms, or less (below). At
+  a 20 ms budget a gap can fall between two readings, two balls then count as one, and one period reads about
+  double. If the count isn't 5, or one period is about twice the others, repeat at a 10 ms budget.
 - With `runThread` off the loop times the same events, once per loop, so each time is good to about one loop. A loop
   is longer than `loopMs` (20 ms by default): it waits until `loopMs` has passed, then still adds about 30 telemetry
   lines and reads the motor's encoder and currents. `loop time (ms)` shows most of it.
@@ -224,6 +237,14 @@ state.
 
 ### What to tell hardware
 
+- **Spots A to E count only balls leaving toward the turrets.** For the possession count the sensors go at the
+  intake end of each track, where no spot has been checked in CAD yet: don't drill A to E for that count
+  ([Counting balls coming in](#counting-balls-coming-in)).
+- **The case can't be screwed flat behind a plate** (vendor CAD). Its two M4 holes, 8 mm apart, run through the
+  14 mm side, parallel to the face with the windows and 6.4 mm below it. The two 2 mm windows sit 2.5 mm off the
+  case's centre along its 20 mm side and 3 mm apart along its 14 mm side. The plug (JST PH, side entry) comes out of
+  one 14 mm end. With the 14 mm side along the ball path, the screws run along the path, so two cases side by side
+  need long M4 screws through both, or a bracket.
 - **Which plate.** The CAD study calls the sensor plate "the left plate". Find it by what is outside it: the plate
   with the Super Servo Plus mount bolted to its outer face, on the Control Hub's side (CAD). Go by the servo mount,
   not the word "left": the CAD's own frame puts robot left on the other side, so which side the study meant by
@@ -231,12 +252,12 @@ state.
 - **Pollen: spots A and B as drawn don't fit side by side.** Each body is 20 × 14 mm on the plate; with its 20 mm side
   across the ball's travel, 14 mm runs along it. A's and B's beam points are only 13.4 mm apart in a straight line,
   so with each beam at its body's centre the bodies overlap by about 0.6 mm (inferred). Before drilling, either ask
-  CAD to move A earlier along the path (lower s, toward the intake) until the bodies clear, and recheck its cone, or use B with C instead
-  (36.5 mm apart, fits; C sees a gap of only about 4 ms at free speed, so C tells only which way a ball moved). Where
-  the beam sits on the body isn't on the pages read; take it from Brushland's STEP file. Use the narrow 15° field
-  of view.
+  CAD to move A earlier along the path (lower s, toward the intake) until the bodies clear, and recheck its cone, or
+  use B with C instead (36.5 mm apart, fits; C sees a gap of only about 2 to 4 ms at free speed, so C tells only which
+  way a ball moved). Place the hole on the windows (above), not on the case's centre. Use the narrow 15° field of
+  view.
 - **Bench-test one rangefinder at 15 to 40 mm, in SHORT at a 10 ms budget, first.** If it can't read that close, the
-  sensor has to stand back from the plate on spacers. For a 40 mm minimum range (the guess [below](#the-sensor)) that
+  sensor has to stand back from the plate on spacers. For ST's 40 mm minimum ([below](#the-sensor)) that
   is about 5 mm at A and B, 12 to 14 mm at C and 21 to 22 mm at D and E (40 minus the nearest face-to-ball distance;
   inferred). Each mm of stand-back puts the body 1 mm farther out behind the plate and widens the hole the cone
   needs (below). Behind the plate at A, the body is already only 4 to 5 mm from a standoff of the servo mount, and
@@ -248,7 +269,8 @@ state.
   hits E's body if it turns to +108° to +114° (CAD).
 - The two cones overlap on the far plate, so the CAD study advises firing the two sensors alternately (an inferred
   crosstalk risk) and never mounting two facing each other across the channel. In analog mode both range on their
-  own, so the bench test should also run two side by side.
+  own, and neither Brushland's pages nor ST's datasheet give a way to make them take turns, so the bench test should
+  also run two side by side.
 
 ### Where they go
 
@@ -286,50 +308,15 @@ the plate.
 - A and B: nothing moving is in a 15° cone. At the 27° setting a compliant wheel takes 1.6% of A's cone and 3.0% of
   B's, so use 15°. A is 76 mm and B 56 mm before the ball held by a closed Pollen paddle (s 242), 257 and 237 mm
   before the turret. Body clearance: A is 4 to 5 mm from a servo-mount standoff, B 10 to 14 mm from anything.
-- With the Pollen paddle closed, the second queued ball (s 170) sits on A: count edges, not presence.
-- **A and B cannot count balls coming in while a paddle holds them** (inferred from the queue positions above). With
-  the Pollen paddle closed the queue's centres are s 242, 170, 98 and 27. The first ball passes both beams. The
-  second stops on A, and its edge at the beams' height reaches about s 189, 3 mm past B, so B may or may not see it.
-  The third and fourth stop before A (the third reaches only s 134) and are never seen. The same holds for Nectar: a
-  second held ball (centre s 50) never reaches D at s 118. So spots on the tracks suit counting balls as they leave
-  toward the turrets. Counting balls as they come in needs a sensor before the first place a ball can stop: before
-  about s 0 on the stretch both ball types share, which is also the fastest part (2.2 to 2.3 m/s free, a ball
-  passing a centre beam in 31 to 41 ms). No spot there has been looked for in the CAD.
-- **What the team needs from the sensors** (the team, 2026-11-15): the number of balls that have entered the robot,
-  of either type, to stay within the possession limit; and each Nectar ball's colour, to extake an opponent's Nectar
-  before it is shot. So the counting sensors belong on that shared stretch, not at A to E. One layout to check in CAD
-  (inferred, unchecked): two Laser Rangefinders in a line along the path on one plate at the intake hand-off, at the
-  same height, read as A and B by `TransferCounter`. Both see every ball, the order they see it in gives its
-  direction, so a ball extaken back past them can be taken off the count. The Color Rangefinder goes at the foot of
-  the Nectar ramp, just after the paths split and before the spokes: only Nectar passes there, the ball is slower
-  (1610 mm/s free, about 57 ms to pass, against 41 ms on the floor), and it is still the last ball in, so reversing
-  brings it out first. A Nectar column feeds first in, first out, so a colour read higher up comes too late once
-  another ball has followed. Open: whether anything can mount in either place; how close a ball can come to a laser's
-  face on a stretch with no side guide (a Nectar ball has 23 mm of side play in the 114.3 mm channel, a Pollen ball
-  43 mm); a beam height that shows a gap between touching balls of both sizes; and the Color Rangefinder's hue rate
-  (25 ms at best: two readings of a ball at the ramp's free speed, none to spare).
-- **Spacing for a pair that must also tell direction** (inferred): about half the gap the beams see between two
-  touching balls, and never more than that gap. Read as covered or clear, a ball going forward gives A, then both,
-  then B, then neither; backward gives the reverse order. If the next touching ball reaches A before the last one has
-  left B, the order reads as a ball going backward, so the spacing must be less than the gap; half the gap makes the
-  shortest step as long as it can be. For beams 30 mm off a Pollen ball's centre line (gap 33.0 mm) that is about
-  16 to 17 mm, which is also about as close as two 14 mm bodies fit. Each step then lasts 16.5 mm ÷ speed: 7 ms at
-  2304 mm/s, 11 ms at 1529, 21 ms at 803, so at a 10 ms update touching balls keep their order only at about
-  800 mm/s or slower, while single balls with space between them are fine at any of these speeds. `TransferCounter` does not read direction today: it counts a ball going backward as a ball.
-- **That beam height is wrong for a stretch both ball types cross** (inferred). 30 mm above a Pollen ball's centre
-  line is about 66 mm above the surface the balls roll on, and there a beam sees only a 9 mm gap between two touching
-  Nectar balls (chord 82.3 mm). With 17 mm spacing the second ball reaches A before the first leaves B, the order
-  reads as forward, back, forward, and the two balls count as one: an undercount, the dangerous way for a possession
-  limit. Because both types rest on the same surface, a beam close to that surface sees a gap for every pairing. At
-  6 mm above it: Pollen chord 39.5 mm and gap 31.6; Nectar chord 45.3 and gap 46.1; a Pollen ball touching a Nectar
-  ball leaves 38.2 (their centres are 2 × √(R₁R₂) = 80.6 mm apart). Half the smallest gap is 16 mm of spacing. The
-  gaps shrink fast as the beam rises (Pollen 21.7 mm at 10 mm up, 13.1 at 15), and a beam that low has the surface
-  inside its 15° cone (16 mm across at 60 mm), which may itself read as a target: check on a bench before choosing.
-- **Driving into a ball makes it enter faster** (inferred). Under the intake a ball is pinched between the wheels and
-  the surface below it and moves at about the average of the two surface speeds. On the field tile that lower
-  surface moves backward past the robot at the robot's own speed, so roughly half the robot's forward speed is added
-  to the 2.2 to 2.3 m/s above: about 0.5 m/s more at 1 m/s. On the robot's own floor plate that term is gone. So the
-  step times above are the slow case for a robot standing still with its intake at free speed.
+- **A to E cannot count balls coming in while a paddle holds them** (CAD queue positions; distances from the CAD
+  path). With the Pollen paddle closed the queue's centres are s 242, 170, 98 and 27, and a fifth ball would stop at
+  about s −46, under the intake. The first ball stops on C. The second stops on both A and B: its centre is 30 mm from
+  A's beam and 33.5 mm from B's, both inside its 35.55 mm radius. The third (69 mm from A) and fourth never reach A.
+  `TransferCounter` counts only when A clears while B is still covered, so the second ball is never counted. For
+  Nectar, a ball held by the Nectar paddle (s 143) covers both D and E, and a second (s 50) never reaches D. The
+  Nectar paddle's post is drawn through a roller shaft ([above](#path-capacity-and-the-blocker)); without it a full
+  column parks at s 202, 110 and 18, and the second ball again covers D and E while the third never reaches D. So
+  spots on the tracks suit counting balls as they leave toward the turrets, not as they come in.
 - A and B are on the undriven ramp: a lone ball at loaded speed may not climb it and can roll back, so use the pair
   to tell direction (inferred).
 - D and E: the spokes are 40 mm clear. D is 25 mm before the doubtful Nectar paddle's hold position (s 143); the
@@ -339,68 +326,223 @@ the plate.
 
 ### Ball and gap times, and which sampling rate works
 
-A beam h mm off the ball's centre line crosses a chord of 2 × √(R² − h²) of each ball, and the gap it sees between
-touching balls is D minus that chord. Ball time = chord ÷ v; gap time = (gap + any gap a hand-off opened) ÷ v.
+On a straight stretch, a beam h mm off the ball's centre line crosses a chord of 2 × √(R² − h²) of each ball, and
+the gap it sees between touching balls is D minus that chord. Ball time = chord ÷ v; gap time = (gap + any gap a
+hand-off opened) ÷ v. Where the path bends, the CAD path itself gives the numbers (inferred: a touching train moved
+along the CAD path, each beam covered while a ball's centre is within its radius of the beam):
 
-- Pollen at A and B (h 30, R 35.55): chord 38.1 mm, gap 33.0 mm.
-- Pollen at C (h 15): chord 64.5 mm, gap 6.6 mm: 4.3 ms at free speed, so C tells only direction.
+- Pollen at A and B (h 30, R 35.55) sit on the inside of the ramp's bend. At A a ball covers the beam for 48.6 mm of
+  travel and the gap is 24.3 mm; at B 43.6 mm and 28.4 mm. A straight stretch at h 30 would give 38.1 and 33.0.
+- Pollen at C (h 15): a gap of only 3.6 mm (6.6 on a straight stretch): about 2 ms at free speed, so C tells only
+  direction.
 - A centre beam: chord = D, so touching balls show no gap at all.
-- Nectar at D and E (h 21, R 45.7): chord 81.2 mm, gap 10.2 mm, plus the ramp-to-spokes gap when free.
+- Nectar at D and E (h 21, R 45.7), on the outside of the bend: a gap of 14.6 mm at D and 12.5 mm at E (10.2 on a
+  straight stretch), plus the ramp-to-spokes gap when free.
 
-**The beam is a cone, not a line** (inferred; not checked in CAD or on a sensor). At 15° it is 2 × distance × tan 7.5°
-across: about 11 mm where it meets the middle of a Pollen ball at A or B (41 mm out) and 16 mm where the beam meets
-the ball's edge (60 mm out, the chord's ends). The pages read don't say how much of the cone a ball must fill before
+**The beam is a square pyramid, not a line** (inferred; not checked in CAD or on a sensor). ST gives the 15° and 27°
+as the diagonal of a square field of view (vendor). At 15° it is 2 × distance × tan 7.5° across the diagonal: about
+11 mm where it meets the middle of a Pollen ball at A or B (41 mm out) and 16 mm where the beam meets the ball's
+edge (60 mm out, the chord's ends). Across the flats it is about 0.71 of that (about 11 mm at 60 mm). Below, "cone"
+means this field. The pages read don't say how much of the cone a ball must fill before
 the reading changes, so a ball can look up to about one cone width longer, and the gap that much shorter, than the
 chord says. Even with a ball centred on A or B, 14% of the cone misses it (CAD). The "with the cone" column below is
 that worst case; the bench test with a ball moved at a known speed shows where the truth lies.
 
 **The rule** (the CAD study's, inferred): a sensor sees a ball reliably when the ball and the gap each last at least
 two sensor updates, so one bad reading can't make or hide a count: 40 ms each at a 20 ms update, 20 ms at 10 ms.
-So the train must move at no more than gap ÷ (2 × update): 824 mm/s at 20 ms, 1648 mm/s at 10 ms for A and B, on a
-thin beam. (For ball + gap together, the limits are D ÷ 80 ms and D ÷ 40 ms: 889 and 1778 mm/s Pollen, 1143 and
-2285 Nectar.)
+So the train must move at no more than gap ÷ (2 × update), on a thin beam: at A 608 mm/s at 20 ms and 1215 mm/s at
+10 ms; at B 710 and 1420. (For ball + gap together, the limits are D ÷ 80 ms and D ÷ 40 ms: 889 and 1778 mm/s
+Pollen, 1143 and 2285 Nectar.) This rule assumes a new distance every update; the chain from sensor to code
+([The sensor](#the-sensor)) makes it optimistic.
 
-| at A and B, Pollen | speed (mm/s) | ball / gap (ms) | gap with the cone (ms) | 20 ms updates | 10 ms updates |
+| Pollen, A / B | speed (mm/s) | ball / gap (ms) | gap with the cone (ms) | 20 ms updates | 10 ms updates |
 |---|---|---|---|---|---|
-| side rollers set it, free | 1529 | 24.9 / 21.5 | 11–14 | fails | passes; fails with the cone |
-| motor loaded | 803 | 47.5 / 41.0 | 21–28 | passes; fails with the cone | passes |
-| servo meters at 833 rpm | 1107 | 34.4 / 29.8 | 16–20 | fails | passes; at best just passes with the cone |
-| servo meters at 1000 rpm | 1329 | 28.7 / 24.8 | 13–17 | fails | passes; fails with the cone |
+| side rollers set it, free | 1529 | A 31.8 / 15.9, B 28.5 / 18.6 | A 5–9, B 8–11 | fails | fails |
+| motor loaded | 803 | A 60.5 / 30.3, B 54.3 / 35.4 | A 10–17, B 15–22 | fails | passes; with the cone fails at A, at best just passes at B |
+| servo meters at 833 rpm | 1107 | A 43.9 / 22.0, B 39.4 / 25.7 | A 8–12, B 11–16 | fails | passes; fails with the cone |
+| servo meters at 1000 rpm | 1329 | A 36.6 / 18.3, B 32.8 / 21.4 | A 6–10, B 9–13 | fails | fails at A, just passes at B; fails with the cone |
 
-20 ms also passes on a thin beam if the servo meters at 620 rpm or less (824 mm/s × 2 ÷ (2π × 25.4) × 60). At 10 ms
-the free case passes on a thin beam with only 1.5 ms to spare.
+20 ms passes on a thin beam only if the servo meters at 457 rpm or less at A, 534 at B (gap ÷ 40 ms × 2 ÷
+(2π × 25.4) × 60).
 
-| at D and E, Nectar | ball / gap (ms) | gap with the cone (ms) | 20 ms | 10 ms |
+| D / E, Nectar | ball / gap (ms) | gap with the cone (ms) | 20 ms | 10 ms |
 |---|---|---|---|---|
-| free, ball at 0.5 × tip (2571) | 31.6 / 25.2 | 19–23 | fails | passes; at best just passes with the cone |
-| free, ball at 0.363 × tip (1867) | 43.5 / 13.3 | 5–11 | fails | fails |
-| loaded (1350 to 980) | 60 / 8 to 83 / 10 | less | fails | fails |
+| free, ball at 0.5 × tip (2571) | D 30.1 / 26.9, E 30.8 / 26.1 | 20–25 | fails | passes; at best just passes with the cone |
+| free, ball at 0.363 × tip (1867) | D 41.4 / 15.9, E 42.4 / 14.7 | 6–13 | fails | fails |
+| loaded (1350 to 980) | 57 to 81 / 9 to 15 | less | fails | fails |
 
 For Nectar the cone is about 5 mm across at the ball's middle (20 mm out) and 16 mm at the chord's ends (60 mm out).
-At 10 ms, Nectar passes on a thin beam only if the ball rolls at 0.43 × the tip speed or more (2211 mm/s gives a
-20.1 ms gap).
+At 10 ms, Nectar passes on a thin beam only if the ball rolls at 0.41 × the tip speed or more at D (2089 mm/s),
+0.42 at E (2146 mm/s).
 
 ### The sensor
 
 From Brushland's pages ([Parts](parts-findings.md#brushland-laser-rangefinder)): 20 × 14 × 10 mm, 15° to 27° field
-of view, up to 4 m, "up to 100Hz", M4 holes 8 mm apart; SHORT mode at a 10 ms budget gives 100 Hz (vendor). None of
-the pages read names the chip or gives a minimum range or a timing budget floor.
+of view, up to 4 m, "up to 100Hz", M4 holes 8 mm apart; SHORT mode at a 10 ms budget gives 100 Hz (vendor).
 
-- The CAD study guessed the chip is an ST VL53L1X (from the 16 × 16 receiver grid, the 27° field of view and the
-  940 nm laser) and, from that chip's datasheet, a 20 ms minimum budget and 4 cm guaranteed minimum distance. That is
-  unconfirmed: ST's datasheet was not opened for this page, and Brushland's own ranging page lists a 10 ms budget.
-  If the guess is right, the sensor can't range at 10 ms, and every spot is inside its minimum range.
-- Either way: every spot above is 15 to 41 mm from the ball, so bench-test at 15 to 40 mm in SHORT at 10 ms before
-  drilling, and leave room for spacers.
+- **The chip is an ST VL53L1X.** Brushland's own CAD model of the sensor names the part `VL53L1CXV0FY_1` and a
+  "VL53L1 Module Outline" (vendor); VL53L1CXV0FY/1 is the VL53L1X's order code in ST's datasheet. That datasheet
+  (vendor) says: "Up to 50 Hz ranging frequency"; "20 ms is the minimum timing budget and can be used only in short
+  distance mode"; "The minimum ranging distance ensured is 4 cm. Under this minimum distance, the sensor detects a
+  target, but the measurement is not accurate"; and the 15° to 27° is a diagonal field of view. So Brushland's 10 ms
+  budget at 100 Hz goes beyond what the chip's maker rates, every spot on this page is inside the 4 cm, and both
+  hold only if the bench test shows them. Brushland also says smaller regions (the 4 × 4 that gives 15°) are noisier
+  and need a longer budget.
+- Every spot above is 15 to 41 mm from the ball, so bench-test at 15 to 40 mm in SHORT at 10 ms before drilling, and
+  leave room for spacers. To try 10 ms: Configure Laser Rangefinder with `timingBudgetMs` 10 (its default is 20).
+- **No sensor update rate on this page has been measured.** Every bench run so far had the lasers at 20 ms
+  ([`hub-bench-findings.md`](hub-bench-findings.md)). "A reading every 10 ms" is the poller's rate, not a new
+  distance every 10 ms. Three clocks run one after another, each on its own: the sensor's update, the hub's ADC
+  refresh (every 9.7 to 11.1 ms, measured) and the poll (10 ms). So the code can learn of a change up to about
+  31 ms after it happens at a 10 ms budget, 41 ms at 20 ms, plus the bulk read and the board's own delay to its
+  analog output, which Brushland doesn't publish; and when the ADC refreshes slower than a 10 ms sensor, up to about
+  10% of the sensor's updates are never sampled (inferred: 1 − 10 ÷ 11.1).
+- **The timing on this page assumes the 10 ms poller thread.** [`wiring-findings.md`](wiring-findings.md)'s default
+  reads the rangefinders in the loop instead, at 34 to 37 ms a loop, which is slower than any gap on this page
+  (inferred): counting balls needs the poller.
+- In analog mode the sensor's range status (no target, weak signal) never reaches the hub; only I2C reads it
+  (vendor).
 - **The Color Rangefinder's range fits, but its speed and its colour dependence are unknown** (inferred, untested).
   Its distance mode tops out at 100 mm (vendor), the far plate is 117.5 mm from the sensor face, so an empty channel
   reads beyond its range, and at A and B the ball is 35 to 41 mm away. But it measures the strength of reflected
   light, not time of flight, so a yellow, a red and a blue ball may read different distances; its chip repeats a
   distance measurement every 6.25 to 400 ms depending on a setting the vendor doesn't publish, and a colour
-  measurement every 25 ms at best ([Parts](parts-findings.md#brushland-color-rangefinder)). Against the table above:
-  a new value every 6.25 ms is safe, 12.5 ms is workable, 25 ms or slower misses balls at free speed. Hue at 25 ms
-  gives a ball passing in about 25 to 31 ms one reading at most. Until its rate is measured, the Laser Rangefinder at
-  a 10 ms budget is the only one of the two with a published rate fast enough.
+  measurement every 25 ms at best ([Parts](parts-findings.md#brushland-color-rangefinder)). By the two-reading rule
+  above, a free-running Pollen train at A or B (gap 15.9 to 18.6 ms) needs a new value every 8 to 9 ms: only the
+  6.25 ms setting would do. Hue every 25 ms gives a ball passing in 28 to 32 ms one reading at most. Neither sensor's
+  rate is settled until it is measured: Brushland's 10 ms for the Laser Rangefinder exceeds its chip's rating.
+
+### Counting balls coming in
+
+**What the team needs** (team, 2026-11-15): the number of balls of either type that have entered the robot, to stay
+within the possession limit, and each Nectar ball's colour, to get rid of an opponent's Nectar before it is shot.
+
+**What the rules say** (manual):
+
+- G407: "A ROBOT may not simultaneously CONTROL more than 4 SCORING ELEMENTS." A verbal warning; a major foul and a
+  yellow card per match if strategic. A robot that "MOMENTARILY CONTROLS 5 SCORING ELEMENTS which they 'reverse'
+  quickly" is likely not strategic; "REPEATED instances" of 5 or more likely are, "even if the ROBOT has a 'keep 4 and
+  discard the rest' sorting mechanism". MOMENTARY is "fewer than approximately 3 seconds".
+- CONTROL includes a ball "fully supported by or stuck in, on, or under the ROBOT" and herding. So a ball pinched
+  under the intake already counts, before any transfer sensor sees it.
+- G408: "A ROBOT may not CONTROL the opponent's NECTAR", and repeated instances are likely strategic "even if the
+  ROBOT has a sorting mechanism that automatically discards opponent NECTAR". Taking one in and spitting it out is
+  the pattern the rule names.
+
+So (inferred): an undercount is the costly error, and an overcount only stops the robot early, so every counter
+should err toward counting too many. Stop intaking at a count of 4 and reverse within well under 3 s, since with
+balls arriving touching a fifth can be under the intake before any sensor sees it: with the Pollen paddle closed it
+stops at about s −46, inside the intake. Keep opponent Nectar out with the camera and the driver; the colour sensor
+is the backstop. Balls that are shot pass no intake sensor, so the code must subtract shots.
+
+**Why not a sensor pair at the hand-off** (CAD):
+
+- Both types roll on one surface only on the field tile under the intake, until about 28 mm in front of the floor
+  plate's front edge (Pollen s −29, Nectar s −37, CAD path). By s 0 the Pollen ball sits on the 10 mm floor plate
+  (centre 45 mm above the floor) and the Nectar ball rides the cheek edges (centre 68 mm, bottom 22 mm up).
+- Nothing fixed can carry a low beam there. The side plates have no material in front of y 11.5 (35 mm before the
+  floor plate's edge), only above z 69.5 from there to y 41, and only above z 49.5 from y 42 to the edge at y 46.9.
+  From s 0 the floor plate's 18.5 mm solid cheeks stand between a low side beam and the Pollen ball.
+- Above the cheeks, between s 0 and about s 11, a beam sees at most 6 to 7 mm between touching balls of both types.
+- At the 66 mm height of a beam 30 mm above the Pollen centre line, two touching Nectar balls leave a 9.1 mm gap
+  (chord 82.3 mm). Read as covered or clear by two beams 17 mm apart, a touching Nectar train reads as forward, back,
+  forward and counts as one ball (inferred, and simulated below).
+- On the tile in front of the plate, side play is 29 to 85 mm for a Pollen ball and 27 to 45 mm for a Nectar ball,
+  set by the funnels and the intake, not by the 114.3 mm channel. From about s −20 a Nectar ball rides the cheek
+  edges within about ±0.75 mm; a Pollen ball is held within about ±9 mm at s −15, narrowing to about ±3 mm from s 5
+  (CAD path table).
+
+**The best-supported layout** (inferred; mounting room not checked in CAD):
+
+- **One Laser Rangefinder per track**, where only that type passes, and early enough that every ball of a full load
+  crosses its beam. Count +1 each time the beam goes from clear to covered, or −1 instead while that track's motor is
+  commanded in reverse. Wrong counts then fall on the high side. Each track carries one type, so the beam height can
+  suit it: about 30 mm off the Pollen centre line (gap 33.0 mm on a straight stretch, 35.6 mm at the best offset of
+  30.8 mm), 35 to 40 mm off the Nectar centre line (gap 32.6 to 47.2 mm).
+- **Nectar:** on the ramp near s 20 to 30, the beam 35 to 40 mm off the centre line toward the front and up, away
+  from the Pollen path (62 mm or more from it). The side plate is solid there (CAD). A full column's third ball parks
+  at s 18 and its edge still reaches such a beam. The intake arm swings close by: check in CAD.
+- **Pollen: no spot found yet.** A beam 30 mm above the Pollen centre line meets the Nectar path until about s 70,
+  but with the paddle closed the fourth ball parks at s 27 and its edge reaches no further than about s 46 at that
+  height. So the Pollen beam has to run below the centre line, 5 to 10 mm above the floor plate's top (gap 32 to
+  22 mm), between s 0 and about s 46: that means a pocket through the floor plate's cheek, and the plate's surface
+  would sit inside the sensor's field of view (at 5 mm up it enters about 40 mm out, about where the ball is), which
+  may read as a target. Both need a CAD change and a bench check.
+- **Color Rangefinder:** through the Nectar's centre on the ramp at s 20 to 28 (transfer y 61 to 66, z 82 to 88).
+  It is the only stretch where a centre beam crosses only Nectar: earlier, every Pollen ball crosses it too (hue still
+  tells yellow from red and blue). The hole goes through the plate and the outer part fixed to it, 8.2 mm in all; the
+  ball is 19.6 mm from the face, and an empty beam ends on the far plate 117.5 to 122.5 mm away, beyond the sensor's
+  100 mm range. Pollen balls pass 0.9 to 7.2 mm below the beam's axis, so they may graze its field of view, which
+  Brushland doesn't publish.
+- Shooting is first in, first out, so reading colours anywhere every Nectar passes gives their order. Reading early
+  only means fewer balls move when one is put back out. Reversing the transfer motor to put a Nectar back out also
+  moves the Pollen (every transfer shaft turns 1:1 off that motor); reversing the intake alone reaches only a ball
+  the intake wheels still touch.
+- **Colour timing.** The ball passes the colour beam in about 57 ms if the intake still drives it there (1610 mm/s
+  free). The intake arm probably can't drop fast enough to follow it, so it likely coasts at about 1.2 to 1.5 m/s
+  (62 to 77 ms; inferred from the arm's length and gravity alone, its mass and any spring unknown). At the chip's
+  fastest colour rate, 25 ms, one or two readings fall wholly on the ball (two or three at the slow end), assuming
+  each reading averages the whole 25 ms, as the 16-bit colour Brushland lists suggests; at the chip's 100 ms default,
+  possibly none. The next touching Nectar arrives 57 ms or more later, so the colour can
+  arrive after it.
+- **Speeds at the intake** (inferred, no slip assumed): on the tile a pinched ball moves at 2.2 to 2.8 m/s with the
+  robot standing still. Driving adds about 0.47 × the robot's speed (0.465 Pollen, 0.481 Nectar, with the wheel above
+  the ball): at 1.85 m/s, the only drive speed in the repo (`BioBuzzConstants`, still the Betta bot's value), that is
+  about 3.1 to 3.5 m/s. On the plate and the ramp most of that gain is lost. All intake-derived speeds scale with the
+  intake's real loaded speed, which is unknown, and with battery voltage, since the intake runs at power 1.0 with no
+  voltage compensation. The side rollers' 1529 / 803 mm/s come from the transfer motor and don't change with driving.
+
+**Alternatives worth knowing:**
+
+- **A two-laser direction pair, if used anyway:** read as covered or clear, the spacing must be below both the gap
+  and the chord the beams see (the next ball reaching A before the last one leaves B reads as backward), and half the
+  smaller of the two makes the shortest step longest. `TransferCounter` is not such a reader: it counts when A clears
+  while B is still covered, can't tell direction, and counts a ball going backward as another ball. It does best with
+  the beams about as far apart as the gap (34 to 38 mm for a beam 5 to 6 mm up; simulated).
+- **Digital outputs.** The Laser Rangefinder can output a distance threshold as a digital pin (vendor). The Control
+  Hub's 8 digital ports are all unused in `biobuzz.xml`, and a digital pin skips the hub's 10 ms ADC refresh
+  (inferred). How often the hub samples digital inputs is unmeasured.
+- **Break-beam sensors** on Control Hub digital ports: Adafruit's 2167 lists "Response Time: <2 ms" (vendor). Not
+  checked against the robot rules.
+- **Occupancy where balls rest** (a beam at a queue position) gives a cross-check that brings the count back in line
+  after a miss. Motor current can't count a touching train: it is one continuous load (inferred).
+
+**Simulated** (a model written for this page, not in the repo; nothing tested on a sensor). Highest speed at which
+99% of runs count right, in m/s:
+
+| beams | reader | sensor update | single ball | touching trains, all kinds | touching Pollen only |
+|---|---|---|---|---|---|
+| pair 66 mm up, 17 mm apart | covered/clear order | 10 ms | 1.9 | never (Nectar pairs read as one) | 1.6 |
+| pair 66 mm up, 17 mm apart | `TransferCounter` | 10 ms | 0.9 | 0.5 | 0.9 |
+| pair 6 mm up, 16 mm apart | covered/clear order | 10 ms | 2.0 | 1.6 | 1.6 |
+| pair 6 mm up, 16 mm apart | covered/clear order | 20 ms | 1.0 | 0.9 | 0.9 |
+| pair 6 mm up, 16 mm apart | `TransferCounter` | 10 ms | 0.9 | 0.8 | 0.8 |
+
+- At 2.3 m/s a single ball is counted wrong 2 to 3% of the time by the order reader and 33 to 37% by
+  `TransferCounter` at 16 to 17 mm spacing, and no extra space between balls removes that. No height or spacing
+  reached 99% for touching trains above 1.7 m/s.
+- One beam per track, counting arrivals: 4 touching Pollen at 1529 mm/s were counted right in 75 to 100% of runs,
+  4 touching Nectar at 1610 mm/s (beam 40 mm off centre) in 98 to 100%. The low ends are the pessimistic cases for
+  the field of view and for how a part-covered reading reads.
+- Assumptions: balls in line, at constant speed, touching or as stated, no slip or bounce, on a flat surface; a
+  thin beam unless a cone is named; each sensor updating every 10 or 20 ms at a random phase; the hub's ADC refreshing
+  every 9.7 to 11.1 ms (measured, [`hub-bench-findings.md`](hub-bench-findings.md)); a 10 ms poll with 0.3 ms
+  jitter; at least 2000 runs per case. The order reader takes ±1 per covered/clear step; `TransferCounter` uses its
+  defaults (threshold 25 mm, hysteresis 10 mm). The 6 mm pair can't be built at the hand-off (above).
+- How the sensor reads a ball that half fills its field during one ranging window decides most of this and is
+  unknown.
+
+**What would settle it:**
+
+1. Bench: one Laser Rangefinder at a 10 ms budget: does it range at all, and does it read a Pollen ball correctly at
+   15 to 40 mm ([Parts](parts-findings.md#still-unknown)). Run two side by side for crosstalk.
+2. Hardware: which paddles exist, and where a per-track sensor for each type can mount.
+3. With a temporary bracket at the chosen Pollen spot, the sensor in SHORT at 10 ms and Transfer Thread Count Test
+   with `oneSensor` on, run 5 touching Pollen balls 20 times and 3 touching Nectar balls 20 times through the real
+   intake at full power, and record the count each run. If fewer than 99% of runs are right, try break-beams.
+4. A slow-motion video of the intake arm as balls pass: whether the wheels follow a ball or let it coast.
+5. Colour: hue for several balls of each colour at the mount's distance, and with nothing there
+   ([Parts](parts-findings.md#still-unknown)).
 
 ## The 10.9 balls per second figure
 
@@ -423,5 +565,9 @@ so 92 ms stays a fair feed interval to simulate, but not a known limit.
   read 2026-11-15.
 - goBILDA 2000-0025-0504: <https://www.gobilda.com/2000-series-5-turn-dual-mode-servo-25-4-super-speed/>, read
   2026-11-15.
-- Brushland Laser Rangefinder: see [Parts](parts-findings.md#brushland-laser-rangefinder) for the snapshots read.
+- Brushland Laser Rangefinder: see [Parts](parts-findings.md#brushland-laser-rangefinder) for the snapshots read,
+  its CAD model and ST's VL53L1X datasheet.
+- Competition Manual (G407, G408, CONTROL, MOMENTARY): <https://ftc-resources.firstinspires.org/ftc/game/cm-html>,
+  read 2026-11-15.
+- Adafruit 2167 break-beam sensor: <https://www.adafruit.com/product/2167>, read 2026-11-15.
 - The CAD numbers: the team's CAD as of about 23:00 PST on 2026-11-14.
