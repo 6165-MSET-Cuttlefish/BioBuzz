@@ -74,10 +74,10 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | servo 3 | pollen hood | injector A |
 | servo 4 | right RGB indicator light | hub 5 V |
 | servo 5 | nectar hood | injector A |
-| analog 0 | Floodgate current output | shares connector 0-1 with rangefinder A through a splitter cable |
-| analog 1 | transfer rangefinder A (upstream), if kept | the port Bench: Rangefinders' `bench_rangefinders` uses |
-| analog 2 | Brushland Color Rangefinder's analog pin 0 (hue, for ball colour), if kept | shares connector 2-3 with rangefinder B, so both need a splitter cable; Brushland doesn't say which channel of a connector pin 0 reaches: if `colorRangefinder` sits at about 0 V, or only jumps between about 0 and 3.3 V as something comes within `presenceMm` (likely pin 1's digital output, an inference), try `backRangefinder` (analog 3) with rangefinder B unplugged ([parts](parts-findings.md#brushland-color-rangefinder)) |
-| analog 3 | transfer rangefinder B (downstream), if kept | the bench port |
+| analog 0 | Floodgate current output | shares connector 0-1 with laser A through a splitter cable |
+| analog 1 | laser A, the front Laser Rangefinder at the transfer entrance (beam at y 52.49, z 68.9: [transfer](transfer-findings.md#the-plan)) | the port Bench: Rangefinders' `bench_rangefinders` uses |
+| analog 2 | Brushland Color Rangefinder's analog pin 0 (hue, for Nectar colour), at the transfer entrance | shares connector 2-3 with laser B, so both need a splitter cable; Brushland doesn't say which channel of a connector pin 0 reaches: if `colorRangefinder` sits at about 0 V, or only jumps between about 0 and 3.3 V as something comes within `presenceMm` (likely pin 1's digital output, an inference), try `backRangefinder` (analog 3) with laser B unplugged ([parts](parts-findings.md#brushland-color-rangefinder)) |
+| analog 3 | laser B, the rear Laser Rangefinder at the transfer entrance, 22 mm behind laser A (y 74.49, z 68.9) | the bench port |
 | digital 0 to 7 | nothing | all 8 free in `biobuzz.xml`; break-beams or a "Pollen track full" switch would go here: [Switches and on/off sensors](#switches-and-onoff-sensors) |
 | I2C bus 0 | nothing | the built-in IMU's bus |
 | I2C bus 1 | spare | |
@@ -109,7 +109,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 `blocker` on Expansion Hub servo 4. The transfer's continuous-rotation servo on Expansion Hub servo 0 is `melonbotics` (read by BioBuzz Basic
 Tele and Intake Transfer Shooter Test), the flower intake servo is `ruler`, the RGB lights are
 `rgbRight` on Control Hub servo 4 and `rgbLeft` on Expansion Hub servo 2, and the Prism is `prism` (no code reads those four yet). The rangefinders are
-`frontRangefinder` on analog 1 (upstream) and `backRangefinder` on analog 3 (downstream); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Color
+`frontRangefinder` on analog 1 (laser A, the front one at the transfer entrance) and `backRangefinder` on analog 3 (laser B, 22 mm behind it); no robot code reads them yet, and Laser Rangefinder Test and Transfer Thread Count Test default to them. The Color
 Rangefinder is `colorRangefinder` on analog 2, read only by Transfer Thread Count Test. The Floodgate is `floodgate`, the OctoQuad
 `octoquad`, and the built-in IMU stays in as `imu` on I2C bus 0, read by nothing. The Expansion Hub is address 2 on
 RS485 and on USB. The rest: `fl`, `fr`, `bl`, `br`, `intake`, `transfer`, the Arducam `aprilTagDetector` and the
@@ -317,8 +317,10 @@ run-mode changes and, with a lab supply, a brownout
 In a loop at 34 to 37 ms, in-loop sampling sees about half of the rangefinders' 20 ms readings. Whether that misses
 balls is what the counting test settles. By the CAD's ball speeds, a free-running Pollen train shows the beam a gap
 of only about 16 to 19 ms at spots A and B, so even a 20 ms reading can miss one, and in-loop reading at 34 to 37 ms
-is too slow for counting balls coming in at the intake (inferred): where to mount the rangefinders and the sampling
-each spot needs are in [`transfer-findings.md`](transfer-findings.md#rangefinder-spots).
+is too slow for counting balls coming in at the intake (inferred). At the transfer entrance a passing Pollen covers a
+laser for only 21 to 23 ms at 2.3 m/s, so counting needs the 10 ms poller thread
+([`transfer-findings.md`](transfer-findings.md#the-plan)); spots A to E and the sampling each needs are in
+[`transfer-findings.md`](transfer-findings.md#rangefinder-spots).
 
 ## The nectar turret encoder
 

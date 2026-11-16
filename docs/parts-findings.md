@@ -298,15 +298,17 @@ Configure Color Rangefinder writes it and Transfer Thread Count Test reads its h
 **For the transfer** (inferred, untested): distance mode reads only to 100 mm; at spots A and B the ball is 35 to
 41 mm from the sensor face and the far plate 117.5 mm, so its range fits. But A to E count only balls leaving, and
 whether it is fast enough to count, and whether all three ball colours read alike, is unknown until it is measured:
-[`transfer-findings.md`](transfer-findings.md#the-sensor). For reading Nectar colour near the intake
-([`transfer-findings.md`](transfer-findings.md#colour-the-color-rangefinder-on-the-x-guide-flange)):
+[`transfer-findings.md`](transfer-findings.md#the-sensor). For reading Nectar colour at the transfer entrance
+([`transfer-findings.md`](transfer-findings.md#colour-the-color-rangefinder-on-the-x-side-plate)):
 
-- At the CAD's C1 (s 25), on the +x guide's flange: the Nectar at 19.7 mm, nothing nearer than 109.8 mm when empty,
-  and a passing Pollen in view from about 55 mm (CAD, 2026-11-15).
-- The same mount at s 32 to 35, which keeps a passing Pollen out of a 15° view: a passing Nectar 19.65 mm from the
-  face, the resting 3rd Nectar 21 to 25 mm, the nearest empty return 121.9 to 122.5 mm for a 15° cone, but at 27°
-  2% of rays end 8.4 mm out (inferred from the CAD). Either spot works; the transfer page gives the trade.
-- At the CAD's C2 (s 60, −x plate): the Nectar at 14.7 mm, the far plate at 117.5 mm (CAD).
+- Where the CAD draws it on 2026-11-16, on the +x side with its beam at (y 44.0, z 102.28): a passing Nectar 28.5 mm
+  from the face and the resting 3rd Nectar about 29 mm, both beyond the "first 20mm" where Brushland promises 0.1 mm;
+  nothing within its 100 mm range when empty; a centred Pollen 12.2 mm outside a 15° view, but inside one about
+  33.5° across (inferred from the CAD). Configure Color Rangefinder's `presenceMm` default of 30 sits right at the
+  Nectar's distance there.
+- Considered and not chosen: the CAD's C1 (s 25) on the +x guide's flange, the Nectar at 19.7 mm but a passing
+  Pollen in view from about 55 mm (CAD, 2026-11-15); the same mount at s 32 to 35, the Nectar at 19.65 mm and no
+  Pollen in a 15° view (inferred from the CAD); and C2 (s 60, −x plate), the Nectar at 14.7 mm (CAD).
 
 All of these depend on the field of view, which Brushland doesn't publish.
 
@@ -411,6 +413,15 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 - **Field of view** (ranging configuration): a 16 × 16 grid of photodiodes; the smallest region, 4 × 4, gives 15°,
   the full grid 27°. Smaller regions are noisier and need a longer budget. ST gives these angles as the diagonal of a
   square field ([ST's datasheet][vl53l1x]), so 15° is about 10.6° from side to side.
+- **Setting the field of view** (the vendor's [full docs text][crfllms], read 2026-11-15, and the live ranging
+  configuration page, read 2026-11-16): the region is a box on the 16 × 16 grid, given by its top-left and
+  bottom-right corners and written over I2C with `setROI`; "wire connector side up is positive y". There is no
+  button or app for it. Like every setting, it goes to the sensor's persistent memory while the sensor is in I2C
+  mode, and "Changes take effect the next power-on". The vendored `setROI` rejects a box under 4 × 4 or a corner
+  outside 0 to 15, and `getROI` and `getOpticalCenter` read back the box and the factory-calibrated centre.
+  Configure Laser Rangefinder's `roiSize` 4, its default, writes a 4 × 4 box centred on that optical centre
+  (`opmodes/test/ConfigureLaserRangefinder.java`). What a new sensor ships with isn't stated. The transfer's
+  entrance lasers need the 4 × 4 box ([`transfer-findings.md`](transfer-findings.md#the-plan)).
 - **Wires** (vendor's [full docs text][crfllms], read 2026-11-15): "Pin0 is the white wire while Pin1 is the blue
   wire". REV's analog port page gives blue as channel n and white as n+1 ([REV][revanalog], read 2026-11-15), so on a
   straight cable pin 0 lands on the odd channel of a connector: analog 1 or 3 (inferred). Brushland states this only
@@ -445,7 +456,9 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 | Whether hub ports 0 and 3 count 614,400 counts/s without loss (no rating found) | Spin one Through Bore into a hub port and the OctoQuad at once; compare positions after a long run. |
 | How much each ball's hue varies on the Color Rangefinder (one reading each so far), and what the empty chute reads at the real mount | In HUE mode, graph Transfer Thread Count Test's `Hue (deg)` for several balls of each colour at the mount's distance and under event lighting, then with nothing there. |
 | Which hub analog channel the Color Rangefinder's pin 0 reaches | In HUE mode on Control Hub analog connector 2-3 with nothing else on it, read `colorRangefinder` (analog 2) and `backRangefinder` (analog 3). |
-| How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35, 40 and 45 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). For the low Pollen beam over the floor plate (P66), repeat with a plate 6 mm below the beam, which enters a 15° field 45 mm out and a 27° field 25 mm out, and with a Pollen 35 to 40 mm out filling most of the field. |
+| How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35, 40 and 45 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). For the lasers at the transfer entrance, at `roiSize` 4, read a Pollen at 39 mm and a Nectar at 20 to 25 mm with a plate 104 to 123 mm behind; for the Color Rangefinder there, a Nectar at 29 mm ([`transfer-findings.md`](transfer-findings.md#the-plan)). |
+| What region of interest and timing the robot's two lasers hold (nothing records it) | Before switching each to analog, run Configure Laser Rangefinder with `roiSize` 4 and `timingBudgetMs` 10, and write down the ROI and timing it reads back. |
+| How a Laser Rangefinder reads a ball that fills part of its field | Slide a ball across the beam 39 mm from the face and log the distance against the ball's position. Where it crosses the threshold decides which entrance laser changes first between touching Pollen ([`transfer-findings.md`](transfer-findings.md#the-plan)). |
 | The Color Rangefinder's field of view (unpublished; whether a passing Pollen shows at the colour spot depends on it) | Slide a ball sideways past the window at 20 mm and at 50 mm and note where hue and distance start to change. |
 | Whether a Laser Rangefinder really ranges at a 10 ms budget (ST rates its chip at 20 ms or more) | Configure it with `timingBudgetMs` 10, roll a ball slowly through its beam and log the analog distance at every 10 ms poll; the trace moves in steps as long as the update period. Repeat at 20 ms and compare. |
 | The Color Rangefinder's output update rate, and whether its analog output steps or ramps | `new A values/s` can't show it: hub ADC noise changes the reading at almost every refresh ([`hub-bench-findings.md`](hub-bench-findings.md)). Instead drop a ball past the sensor, 35 mm from its face, so it passes at a known speed (falling from rest, speed = √(2 × 9.81 × height): 270 mm of fall gives 2.3 m/s, 115 mm gives 1.5 m/s). With pin 0 on distance, name the sensor as `upstreamSensorName` in Transfer Thread Count Test (`maxRangeMm` 100, `oneSensor` on) and count how many of 20 drops are counted; `Ball in front of the beam, last (ms)` against the ball's width ÷ speed shows how late the output follows. |
