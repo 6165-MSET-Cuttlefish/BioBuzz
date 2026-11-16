@@ -65,7 +65,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | port | device | note |
 |---|---|---|
 | motor 0, encoder 0 | pollen flywheel motor and its Through Bore | port 0 counts in hardware |
-| motor 1 | front-right drive | its own motor encoder stays unplugged; encoder 1 is spare |
+| motor 1 | front-right drive | its own motor encoder stays unplugged; encoder 1 is spare, counted in software, and no place for switches: [Switches and on/off sensors](#switches-and-onoff-sensors) |
 | motor 2 | back-right drive | its own motor encoder stays unplugged |
 | encoder 2 | nectar turret Through Bore's count (A and B) | counted in software; the hub alone powers the encoder; zeroed at INIT from the OctoQuad: [Zeroing the nectar turret](#zeroing-the-nectar-turret) |
 | motor 3, encoder 3 | nectar flywheel motor and its Through Bore | port 3 counts in hardware |
@@ -78,6 +78,7 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | analog 1 | transfer rangefinder A (upstream), if kept | the port Bench: Rangefinders' `bench_rangefinders` uses |
 | analog 2 | Brushland Color Rangefinder's analog pin 0 (hue, for ball colour), if kept | shares connector 2-3 with rangefinder B, so both need a splitter cable; Brushland doesn't say which channel of a connector pin 0 reaches: if `colorRangefinder` sits at about 0 V, or only jumps between about 0 and 3.3 V as something comes within `presenceMm` (likely pin 1's digital output, an inference), try `backRangefinder` (analog 3) with rangefinder B unplugged ([parts](parts-findings.md#brushland-color-rangefinder)) |
 | analog 3 | transfer rangefinder B (downstream), if kept | the bench port |
+| digital 0 to 7 | nothing | all 8 free in `biobuzz.xml`; break-beams or a "Pollen track full" switch would go here: [Switches and on/off sensors](#switches-and-onoff-sensors) |
 | I2C bus 0 | nothing | the built-in IMU's bus |
 | I2C bus 1 | spare | |
 | I2C bus 2 | OctoQuad: odometry pods on channels 0 and 1; channel 4 takes the nectar turret encoder's absolute wire | channel 4 is read once at INIT, to zero the turret's count: [Zeroing the nectar turret](#zeroing-the-nectar-turret) |
@@ -540,6 +541,28 @@ What follows:
     28/24 AWG by retailer listings; its shielding is not confirmed);
   - or the straight 3 ft cable above without the mount, tied to the frame near the plug.
 
+## Switches and on/off sensors
+
+Nothing here is wired or tested; the sources are REV's [5 V sensors][rev5v] and [digital sensors][revdigital] pages
+and its [Control Hub specifications][revch], read 2026-11-15. Whether to fit any switch at all:
+[`transfer-findings.md`](transfer-findings.md#limit-switches).
+
+- **Put them on Control Hub digital ports**, never the Expansion Hub (rule 1 above). Each 4-pin connector carries two
+  channels: black ground, red 3.3 V, blue channel n (the even port), white n+1 (the odd one). The ports take 0 to
+  3.3 V, and their 3.3 V supply gives 1 A in total.
+- **Wire a limit switch REV's way:** the signal to COM, ground to NC, NO left unconnected. Not pressed reads `FALSE`,
+  pressed `TRUE`, and an open wire reads `TRUE`, the same as pressed (REV; the last is inferred). Every hub digital
+  input has a pull-up resistor, value not given. REV warns: "Incorrect wiring of a limit switch to a digital input
+  can create a conflict making the Control or Expansion Hub unresponsive." The switch's 3.2 mm spades need a
+  home-made harness ([`parts-findings.md`](parts-findings.md#gobilda-micro-limit-switch-roller-lever)).
+- **Never wire a switch across an encoder port's 3.3 V.** Wired COM to channel A, NC to the port's 3.3 V and NO to
+  ground, a switch shorts that 3.3 V to ground whenever it is pressed if its harness swaps COM and NC, and at rest if
+  it swaps COM and NO. The supply is 500 mA shared by all the hub's encoder ports, so a short could take the flywheel
+  encoders on ports 0 and 3 with it (inferred).
+- **Encoder ports 0 and 3 count in hardware, 1 and 2 in software** ([ftc-docs hub tips][hubtips]). The only free
+  Control Hub encoder port is 1, counted in software and shared with the front-right drive motor; the transfer page
+  says why a switch pair doesn't go there. Whether encoder inputs have pull-ups is undocumented.
+
 ## Rules and limits that bound the map
 
 From the Competition Manual revision named in [`game-findings.md`](game-findings.md), and REV's and goBILDA's pages,
@@ -553,7 +576,8 @@ fetched 2026-11-10:
   USB hub on USB; a USB battery pack may power that hub.
 - Per hub: 4 motor ports, 4 encoder ports, 6 servo ports, 4 analog inputs, 8 digital channels, 4 I2C buses (SDK
   12.0.0 `LynxConstants`). Motor ports 10 A continuous; servo port pairs 2 A each, 5 A across all servo and 5 V
-  ports; encoder and I2C supplies 3.3 V, 500 mA total each (REV).
+  ports; encoder and I2C supplies 3.3 V, 500 mA total each (REV); digital supply 3.3 V, 1 A total (REV's
+  [Control Hub specifications][revch], read 2026-11-15).
 - goBILDA servo power injector 3125-0001-0001: 6 channels, 8 to 15 V in, 6 V and 24 A out, no output on a channel
   until it sees a PWM pulse over 500 µs
   (<https://www.gobilda.com/6v-servo-power-injector-6-channel-8-15v-input/>).
@@ -567,6 +591,8 @@ fetched 2026-11-10:
   ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-camera-power-loss)).
 - **The highest count rate hub encoder ports keep up with**, hardware-counted or software-counted. No REV or FIRST
   figure exists. The two encoder tests above settle it for our speeds.
+- **How often a hub samples its digital inputs, the value of their pull-ups, and whether encoder inputs have
+  pull-ups.** No REV document says. Tests: [`sdk-hub-findings.md`](sdk-hub-findings.md#still-unknown).
 - **The cost of a write on an RS485 Expansion Hub.** Every 2.5 ms here is the Control Hub cost plus the hop measured
   on reads. Test: time 1000 changed `setPower` calls on each hub in one OpMode.
 - **Whether the hubs tolerate USB and RS485 connected at once.** Only USB alone has been benched. Test: on bench
@@ -608,3 +634,8 @@ fetched 2026-11-10:
 - **Inspection questions** only an inspector or the Q&A can settle: the Axon servos', the Melonbotics Super Servo
   Plus's and the power bank's compliance, and a resistor divider on an analog port for battery voltage (R612's note
   allows high-impedance monitoring).
+
+[rev5v]: https://docs.revrobotics.com/duo-control/sensors/5v-sensors
+[revdigital]: https://docs.revrobotics.com/duo-control/sensors/digital
+[revch]: https://docs.revrobotics.com/duo-control/control-system-overview/control-hub-basics
+[hubtips]: https://ftc-docs.firstinspires.org/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html

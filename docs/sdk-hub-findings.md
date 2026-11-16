@@ -27,6 +27,10 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   Expansion Hub on RS485 are one link, so a second thread can't overlap their traffic; it only adds waiting.
 - **The SDK skips an identical write for 500 ms, even when the earlier send failed**, so a lost write reaches the hub
   again only after 500 ms, whatever a wrapper's re-send period.
+- **A hub digital input is only a level at the moment it is read.** The SDK has no command that latches a digital
+  input or counts its edges, so a pulse shorter than the gap between reads can be missed; whether the hub's firmware
+  holds a short pulse is unmeasured. With bulk caching off two pins are two commands at two moments
+  ([Digital inputs](#digital-inputs)).
 - **Every motor in our hardware configs is the SDK's 99.5:1 motor type.** On any other motor, angle-unit velocities
   and RUN_USING_ENCODER `setPower()` are scaled wrong; tick counts and `getVelocity()` in ticks/s are right.
 - **A hub's logcat holds its Wi-Fi name and password, and its ports and adb take no credential**: strip those lines
@@ -78,7 +82,19 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   fetched 2026-11-10). gm0 adds that encoders over about 4000 counts/rev should not go on ports 1 and 2, which can
   lose counts at high speed
   ([gm0](https://gm0.org/en/latest/docs/software/adv-control-system/control-system-internals.html), fetched
-  2026-11-10). Where to put a flywheel encoder: CLAUDE.md, Flywheel RPM.
+  2026-11-10). gm0 gives the reason: ports 0 and 3 use the processor's Quadrature Encoder Interface, and 1 and 2
+  general-purpose timers, which "often start to lose counts at high speeds". Where to put a flywheel encoder:
+  CLAUDE.md, Flywheel RPM.
+- Each encoder port is a 4-pin JST PH with ground, 3.3 V, channel A and channel B; inputs take 0 to 3.3 V, and the
+  3.3 V supply gives 500 mA in total across the hub's encoder ports (REV's
+  [Control Hub specifications](https://docs.revrobotics.com/duo-control/control-system-overview/control-hub-basics)
+  and [port pinouts](https://docs.revrobotics.com/duo-control/control-system-overview/port-pinouts), read
+  2026-11-15). No REV or FIRST page says whether the encoder inputs have pull-ups, or whether any port filters short
+  glitches such as switch bounce.
+- Two switches on one port's A and B, staggered so a ball holds both at once, make the port count ±4 per ball with
+  direction; one switch on A alone counts −1 then +1, net zero (inferred). Why the robot doesn't do this, and the
+  wiring hazard: [`transfer-findings.md`](transfer-findings.md#limit-switches),
+  [`wiring-findings.md`](wiring-findings.md#switches-and-onoff-sensors).
 - No REV or FIRST page found gives a maximum count rate for any port. The Cuttle bot's DECODE shooter (last season's
   robot, retired 2026-11-13) had a shot table to 3275 rpm (`decode/modules/ShooterInterpolation.java:169`, deleted
   2026-11-13: `git log --diff-filter=D -- <path>` names the commit, whose parent has it) on an 8192 counts/rev encoder
@@ -108,6 +124,27 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   loop reads, since it always reads: an unneeded Expansion Hub bulk read adds about 3.6 ms to every loop (both hubs'
   bulk reads 5.72 ms p50 against 2.10 ms for the Control Hub alone, [`hub-bench-findings.md`](hub-bench-findings.md)).
   `EnhancedOpMode` clears (`architecture/core/EnhancedOpMode.java:404`) and never checks.
+
+## Digital inputs
+
+- **The bulk read carries one bit per digital channel: the level at that moment** (source:
+  `LynxGetBulkInputDataResponse`, its `digitalInputs` byte). SDK 12.0.0's hub commands for digital pins are get and
+  set, one pin or all, and direction: none latches a level, counts edges, captures a time or raises an interrupt
+  (source). So a pulse shorter than the gap between reads can be missed entirely (inferred).
+- `LynxDigitalChannelController.getDigitalChannelState` takes the level from the bulk cache unless caching is OFF;
+  then every call sends its own `LynxGetSingleDIOInputCommand` (source). With caching off, two pins read one after
+  the other are two commands at two moments. Read every pin a counter compares from one bulk read
+  ([`transfer-findings.md`](transfer-findings.md#two-sensors-staggered-along-the-path) has what skew between them
+  costs).
+- Each hub has 8 digital pins; `initializeHardware` sets every one to input, and so does the per-OpMode reset
+  ([OpMode lifecycle](#opmode-lifecycle)) (source).
+- `RevTouchSensor.isPressed()` returns `!getDigitalChannelState(...)` (source), so a limit switch wired REV's way
+  reads inverted through the REV Touch Sensor type
+  ([`parts-findings.md`](parts-findings.md#gobilda-micro-limit-switch-roller-lever)).
+- A failed bulk read makes every digital input read false ([Bulk reads](#bulk-reads)). With REV's limit-switch wiring
+  false means not pressed, so for that loop a "track full" switch reads empty (inferred).
+- Unknown: how often the hub's firmware samples its digital inputs and how fresh the level in a bulk read is (REV
+  publishes no protocol document), and the pull-up's value.
 
 ## What writes send, skip and repeat
 
@@ -368,6 +405,11 @@ OS 1.1.3 on the hub whose properties were read; source lines are the SDK 12.0.0 
   multiple of 65,536; check `v % 20 == 0` on every sample.
 - **The highest count rate ports 0 and 3 keep up with:** run a Through Bore at rising speeds and compare its rpm from
   position against an independent speed reference until they part.
+- **How a hub samples digital inputs:** pulse a Control Hub digital input for 2, 5 and 8 ms and log the share a
+  10 ms poll sees; above the pulse length ÷ 10 ms means the hub holds or latches the level
+  ([`transfer-findings.md`](transfer-findings.md#limit-switches), bench test 3).
+- **Whether encoder inputs have pull-ups:** meter channel A of an empty encoder port; about 3.3 V means a pull-up
+  (inferred).
 - **BRAKE at partial power:** coast down from the same speed at power 0.05 under BRAKE and under FLOAT.
 - **Whether the firmware acts on the current-alert level:** stall a motor with the alert set low and log its current.
 - **What a Pinpoint reads when unplugged mid-run:** the Pinpoint cable pull in

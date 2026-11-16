@@ -11,7 +11,8 @@ counts or times balls, or trusting a feed rate in a shooter simulation.
   transfer. The CAD was still changing: the transfer's part shapes are from the evening of 2026-11-14 and lack
   pockets cut on 2026-11-15, the assembly that places the turrets uses an older version of the transfer that nobody
   compared with the current one, and every number near the intake shifts 1:1 with the transfer's front-to-back
-  placement, which is known to only a few mm.
+  placement, which is known to only a few mm. The limit-switch layouts and the mid-height beam are the CAD on the
+  evening of 2026-11-15.
 - **(vendor)**: from the vendor page or chip datasheet linked under [Sources](#sources), read on 2026-11-15 unless it
   says otherwise.
 - **(manual)**: the Competition Manual, read on 2026-11-15 ([Sources](#sources)).
@@ -43,6 +44,24 @@ counts or times balls, or trusting a feed rate in a shooter simulation.
   count most balls twice (inferred); touching Nectars leave only 1.2 mm between them at spot 4; and spot 1 never sees
   a 4th ball that stops under the intake behind 3 Nectars. No pair of beams 16 to 17 mm apart fits anywhere there
   (CAD).
+- **Don't count balls coming in with goBILDA's roller-lever limit switches.** The roller moves at most about 4.3 mm
+  before its lever meets the body (vendor STEP), less than the 5.1 mm a Pollen can shift sideways at the cheek spot
+  found for a switch body; there a passing Pollen holds it for about 7 ms at 2.3 m/s, so a 10 ms read misses fast
+  lone balls (simulated); and no spot is pressed by both ball types within the lever's travel. The CAD on 2026-11-15
+  rated every layout it checked red or impossible except a new hinged flap at the floor-plate lip, orange for Pollen
+  only: a Pollen holds it for about 18 ms at 2.3 m/s, but as drawn it may not trip, it can't count Nectar, and
+  nothing beyond the CAD has looked at it. The one use left is a "Pollen track full" switch where the 4th Pollen
+  rests, which the CAD hasn't checked. Don't wire a two-switch pair to a hub encoder port either
+  ([Limit switches](#limit-switches)).
+- **Break-beams look legal by our reading of the rules; ask the official Q&A before relying on them.** A break-beam is
+  a CUSTOM CIRCUIT, which R607 and R613 allow under conditions it can meet, and REV says every hub digital input has
+  the pull-up its open-collector output needs ([Break-beams and the rules](#break-beams-and-the-rules)).
+- **If one on/off sensor per track counts too slowly, first make its press about half a ball long; then add a second
+  sensor a little further along the track and read the pair as a forward-only four-step cycle,** never as ordinary
+  quadrature, which halves the speed. The pair counts touching balls about 1.5 times faster than one sensor
+  (simulated). The price: overcounts when a ball rocks or backs out, and both pins must come from one bulk read. No
+  spot for a second sensor has been found on this robot, so [The plan](#the-plan) is unchanged
+  ([Two sensors staggered along the path](#two-sensors-staggered-along-the-path)).
 - **Read Nectar colour with the Color Rangefinder on the +x side, on the guide's flange, at the CAD's spot C1 (s 25)
   or at s 32 to 35.** It sees every Nectar pass and the last Nectar in at rest, though at free speed only 52 to 83% of
   passing Nectars get one whole colour reading (simulated). C1 gets the most passing readings and the earliest colour,
@@ -349,7 +368,9 @@ marked; every number in it shifts 1:1 with the transfer's front-to-back placemen
 - A ball 20 mm off centre is pushed inward: a Pollen by a cheek's front corner, which it meets with its centre at
   y 19.25 to 20.25 (the contact's sideways component is 0.5), and a Nectar by a plate's front edge at (y 11.9, z 69),
   which it meets with its centre at about y −1 (0.81). Whether that Pollen is turned inward or rides up the corner
-  is unknown. From y 58.9 the guide's face at x 2.9 pushes the Pollen onto V1.
+  is unknown. The guide's face at x 2.9 pushes the Pollen onto V1, but between z 30 and 60, where it would meet a
+  Pollen, it starts only at about y 86 to 88; in front of that the Pollen has the cheeks' full 5.1 mm of sideways
+  play (inferred from the CAD's meshes).
 - The intake's wheels touch a Pollen from s −99.5 to −3.0 and a Nectar from −124.5 to +18.5 at the drawn arm pose.
   With the arm 5° up a Pollen is touched from −97 to −17, 10° up from −93 to −36; a Nectar from −126.5 to +4.5 at
   10° up and from −117.5 to −38.5 at 20° up. The arm's rest angle is unknown, and it moves every number near the
@@ -690,10 +711,11 @@ CAD's paths); a cone stays covered a little longer.
   the N20 rows are conservative. Model: covered travel from the CAD paths, a part-filled cone counted as covered from
   50%; a laser takes a snapshot every 10 or 20 ms at a random phase, read through the hub's ADC (refreshing every 9.7 to
   11.1 ms, measured) by a 10 ms poll; a break-beam is a thin beam whose state is read every 5 or 10 ms.
-- **So use break-beams if they are legal** and a 5 to 10 ms poll reads fresh digital values; otherwise the two
-  lasers at a 10 ms budget in the same spots. A break-beam pair needs the same tunnel through the +x cheek and plate
-  at P66, and a hole through the +x plate at N20; Adafruit 2167 halves fit on both sides at both spots (inferred). If
-  break-beams carry the count, the lasers can still give the "track full" signals.
+- **So use break-beams if the Q&A confirms our reading that they are legal**
+  ([Break-beams and the rules](#break-beams-and-the-rules)) and a 5 to 10 ms poll reads fresh digital values;
+  otherwise the two lasers at a 10 ms budget in the same spots. A break-beam pair needs the same tunnel through the
+  +x cheek and plate at P66, and a hole through the +x plate at N20; Adafruit 2167 halves fit on both sides at both
+  spots (inferred). If break-beams carry the count, the lasers can still give the "track full" signals.
 - **Speeds at the intake** (inferred, no slip assumed): on the tile a pinched ball moves at 2.2 to 2.8 m/s with the
   robot standing still. Driving adds about 0.47 × the robot's speed (0.465 Pollen, 0.481 Nectar, with the wheel above
   the ball): at 1.85 m/s, the only drive speed in the repo (`BioBuzzConstants`, still the Betta bot's value), that is
@@ -741,6 +763,21 @@ The verdicts are CAD; back and up are worked out from (y, z), and the covered ra
 - **A beam pair 30 mm above the Pollen centre line**, at about z 76, can't count Nectars: touching Nectars leave at
   most 9.1 mm there (chord 82.3 mm), and only 1.2 mm at spot 4. Read as covered or clear by two beams 17 mm apart, a
   touching Nectar train counts as one ball (inferred, and simulated below).
+- **A mid-height beam both types block: a quick pass by the CAD on 2026-11-15, not checked.** Nothing in this bullet
+  changes [The plan](#the-plan). At (y 56, z 46) a Pollen covers the beam for 72 mm of travel and a Nectar for 76 mm,
+  about 31 and 34 ms at free speed. A laser body fits only on the +x side, on the guide's (Part 1 <15>) flange, face
+  x 32.9, at y 54 to 60, z 46 to 58, 5 mm clear; nothing fits on the −x side. The parked 4th Pollen and 3rd Nectar
+  both sit in that beam. But touching Pollen show no gap there (72 mm covered against a 71.1 mm ball), touching
+  Nectars about 15.6 mm (7 ms at free speed), and mixed pairs between the two: all shorter than one 20 ms reading.
+  No beam height gives both a ball seen for 2 readings and a gap of 1 reading at 20 ms; at 10 ms a 47 mm slice gives
+  a ball 20 ms and a gap 10 ms, which is marginal, and needs a different height for each ball type. The quick pass
+  also argues (inferred) that the intake itself separates a touching pair, since the first ball leaves it at about
+  2.3 m/s while the second still arrives at the robot's driving speed v (m/s): for Pollen the gap at the beam is
+  about 71 × (4.3 − v) ÷ (v × (4.3 + v)) ms, about 44 ms at 1 m/s, 23 ms at 1.5 and 13 ms at 2, with a check of
+  the time the beam stays blocked against the intake encoder's speed as a backstop. It also placed a second laser
+  at (y 70, z 62) with the first at (56, 46), or a level pair at (52, 62) and (68, 62), 16 mm apart, all on the +x
+  guide plate, 5 mm clear with a box bracket. That disagrees with the checked "none fits" row above, which stands
+  until someone checks it.
 
 #### Colour: the Color Rangefinder on the +x guide flange
 
@@ -857,11 +894,14 @@ above; nothing tested):
   behind it is where the resting 4th Pollen covers it, which a beam at z 16 escapes only at y 52.3 or less (inferred).
 - **Digital outputs.** The Laser Rangefinder can output a distance threshold as a digital pin (vendor). The Control
   Hub's 8 digital ports are all unused in `biobuzz.xml`, and a digital pin skips the hub's 10 ms ADC refresh
-  (inferred). How often the hub samples digital inputs is unmeasured.
+  (inferred). How often the hub samples digital inputs is unmeasured, and a read gives only the level at that
+  moment: the SDK has no command that latches a digital input or counts its edges
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md#digital-inputs)).
 - **Break-beam sensors** on Control Hub digital ports: Adafruit's 2167 lists "Response Time: <2 ms", "20mm x 10mm x
   8mm", a sensing distance of "Approx 25cm", "3.3 - 5.5VDC" and an "open collector transistor output" (vendor), so
-  it needs a pull-up; whether a hub digital port gives one is unchecked, and so is whether the robot rules allow it.
-  A thin on/off beam has no plate-top return and no minimum range. The halves fit at P66 and N20 but hit the funnels
+  it needs a pull-up, which REV says every hub digital input has; for the rules, see
+  [Break-beams and the rules](#break-beams-and-the-rules). A thin on/off beam has no plate-top return and no minimum
+  range. The halves fit at P66 and N20 but hit the funnels
   at spot 1 (inferred). How fresh a digital read is at a 5 ms poll is unmeasured; a 5 ms poller added 6.6 ms to an
   OctoQuad driving loop, against 3.0 ms at 10 ms ([`hub-bench-findings.md`](hub-bench-findings.md)).
 - **Occupancy where balls rest** is a cross-check only (inferred). Even six beams at rest positions can't tell 3
@@ -873,6 +913,10 @@ above; nothing tested):
   and by V2 from 3 Pollen (barely: that ball rests at s 97.3 and V2 reaches from 97); the intake only by a resting
   3rd Nectar (0.8 mm inside its reach) or a ball in the mouth; loads of up to 2 Pollen and at most 1 Nectar load
   nothing. Log it as a jam and full alarm.
+- **goBILDA roller-lever limit switches can't count balls coming in**: at most a "Pollen track full" signal
+  ([Limit switches](#limit-switches)).
+- **A second sensor staggered along each track** raises the countable speed about 1.5 times if read as a forward-only
+  four-step cycle ([Two sensors staggered along the path](#two-sensors-staggered-along-the-path)).
 
 **Simulated** (a model written for this page, not in the repo; nothing tested on a sensor). Highest speed at which
 99% of runs count right, in m/s:
@@ -890,6 +934,8 @@ above; nothing tested):
   reached 99% for touching trains above 1.7 m/s.
 - These pairs assume balls in line on a flat surface; the one-beam-per-track figures in [The plan](#the-plan) use
   the CAD's paths instead.
+- The order reader is ordinary quadrature, which needs every state seen; that is why it is so slow. A forward-only
+  reader does far better ([Two sensors staggered along the path](#two-sensors-staggered-along-the-path); inferred).
 - Assumptions: balls in line, at constant speed, touching or as stated, no slip or bounce, on a flat surface; a
   thin beam unless a cone is named; each sensor updating every 10 or 20 ms at a random phase; the hub's ADC refreshing
   every 9.7 to 11.1 ms (measured, [`hub-bench-findings.md`](hub-bench-findings.md)); a 10 ms poll with 0.3 ms
@@ -907,8 +953,8 @@ above; nothing tested):
    than the ball). For N20: a Nectar about 30 mm out with a plate at 117.5 mm. Run two side by side for crosstalk.
 2. Hardware or CAD: is the floor plate's −x cheek solid, and can it take a tunnel at (y 66, z 16)? Is there room for
    the laser bodies outside the −x plate at both spots, and does the sweeper bar clear N20's beam? Where does the
-   intake arm rest? Will the Nectar paddle ever close (the plan changes if it does)? Are break-beams legal, and does
-   a Control Hub digital port pull their output up?
+   intake arm rest? Will the Nectar paddle ever close (the plan changes if it does)? And ask the official Q&A
+   whether break-beams are legal: our reading says yes ([Break-beams and the rules](#break-beams-and-the-rules)).
 3. Still: load balls one at a time with the paddle closed and read each sensor at rest. Does P66 read covered with
    the 4th Pollen at rest, and do N20 and the Color Rangefinder (at about 20 mm) with the 3rd Nectar?
 4. With temporary brackets at P66 and N20 and Transfer Thread Count Test with `oneSensor` on, run 4 touching Pollen
@@ -926,6 +972,230 @@ above; nothing tested):
    the 2nd Nectar comes to rest or the mouth jams would make a jam and full alarm.
 8. A slow-motion video of the intake arm as balls pass: whether the wheels follow a ball or let it coast, and where
    the arm rests.
+
+#### Limit switches
+
+**Don't count balls coming in with goBILDA's roller-lever micro limit switch** (3103-0001-0001; the part is in
+[Parts](parts-findings.md#gobilda-micro-limit-switch-roller-lever)). Keep the lasers or break-beams at P66 and N20
+for the count. A switch earns a place, if at all, only beside them as a "Pollen track full" signal, and only after
+the bench tests below. What would change this: a lone ball measured at 1.5 m/s or less where a switch would sit, or
+2 mm or more of travel measured after the click. The "track full" use and the encoder-port pair below both hang on
+the lever's force, which nobody has measured; neither is established until it is. Nothing here was tried on a switch
+or on the robot.
+
+Why:
+
+- **Travel against side play.** The roller moves at most about 4.3 mm up (about 4.4 mm counting its small sideways
+  shift) before the lever meets the body, and how much of that comes after the click is unknown: 0 to about 4 mm
+  (vendor STEP), or about 0.7 to 2.3 mm with Omron's figures as a stand-in (inferred;
+  [Parts](parts-findings.md#gobilda-micro-limit-switch-roller-lever)). The only room found for a switch body beside
+  the Pollen's path is inside the hollow +x cheek, at the 4th Pollen's rest (y 73, z 40) (inferred from the CAD's
+  meshes; not one of the CAD's checked layouts). A spot on the guide face at y 86 to 100, where V1 pins the ball, was
+  not looked at for fit; the resting 4th Pollen never reaches it. At the cheek the Pollen has the cheeks' 5.1 mm of
+  sideways play ([The intake hand-off](#the-intake-hand-off), Beside the path), more than the whole travel. A ball on
+  the switch side bottoms the lever unless the lever shoves it across within about 20 mm of travel, which takes about
+  57 m/s² at 1.5 m/s and 135 m/s² at 2.3 m/s; Omron's operating forces, 0.16 to 0.49 N max (SS-5GL2-F, SS-5GL2), on
+  a 24.9 g ball give 6 to 20 m/s² (inferred; neither that force nor that mass is verified).
+- **A short press against a 10 ms read.** Set 1.5 mm into the path, the cheek switch is pressed over about 16 mm of a
+  passing Pollen's travel, 7.0 ms at 2.3 m/s, with the click assumed 1 mm in (simulated). A 10 ms read then catches a
+  lone Pollen 70, 57 and 46% of the time at 2.3, 2.8 and 3.5 m/s, and counts all 4 of 4 lone balls in only 23, 11
+  and 4% of runs (simulated): an undercount, the costly error. At 1.5 m/s it catches every one. The SDK has no
+  command that latches a digital input or counts its edges
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md#digital-inputs)). P66 shows its laser a passing Pollen for 17.1 ms at
+  2.3 m/s, so as a counter of passing balls the cheek switch is worse than the planned laser and worse than a
+  break-beam.
+- **No spot both types press within the lever's travel.** After the hand-off the Pollen rolls on the floor plate and
+  the Nectar rides the cheek crests, its bottom 10.6 mm higher at y 45 and 24.7 mm at y 60 (CAD). A switch in the +x
+  face at y 62 to 66, z 45.6 that a Pollen presses 1.5 to 3 mm is pushed 4.4 to 7.7 mm by a Nectar, at or past the
+  lever's travel (simulated).
+  Nothing holds a ball against a lever but its own weight and, at the lip, the intake's push, which is part of why
+  Nectar is unreliable (CAD).
+- **The CAD's ratings** (the CAD on 2026-11-15, each layout designed and then checked again against the meshes):
+
+| layout | rating | why |
+|---|---|---|
+| hinged flap at the floor-plate lip, switch in a pocket in the −x cheek (a new part) | orange, Pollen only | a Nectar lifts it only when centred; see the flap, below |
+| bare roller at the lip | red | the switch body would reach z −5.7; the plate is only 5 mm above the tile |
+| roller on the side of a cheek | red | a Pollen presses it anywhere from 0.75 to 5.85 mm, a Nectar 0 to 13 mm |
+| one switch per track | red | a crest roller goes from 5.8 mm to 0 with 1 to 2.5 mm of Nectar side shift, and clips passing Pollen |
+| pair 17 to 20 mm apart at the one spot both types cross | not possible | the Nectar is off the floor by y 57, and at y 69 the resting 4th Pollen sits on the second switch |
+| "Pollen track full" in the +x cheek, y 73, z 40 | not checked | |
+
+**The flap, the one layout the CAD rated better than red** (CAD, 2026-11-15). A new part: a light flap over x −55 to
+−10 and y 50.5 to 62, hinged at its rear edge (y 62), its front edge 3.5 mm above the plate, with the switch upside
+down in a pocket in the −x cheek (body about x −80.2 to −73.8, y 52.8 to 72.7, z 21.9 to 32.2).
+
+- A Pollen lifts it 3.5 mm over 42.5 mm of travel, about 18 ms at 2.3 m/s, wherever it sits sideways.
+- A Nectar lifts it 3.2 mm over 11 mm only when centred, 2.3 mm over under 1 mm when 5 mm off centre, and not at all
+  10 mm off; a Nectar can sit up to ±11.4 mm off centre between the plates. So it can't count Nectar.
+- With the roller 10 mm behind the hinge the switch sees only about 3.0 mm, which may not trip it. The CAD's check
+  would put the roller 13 mm behind the hinge (about 4.0 mm) with a hard stop at flush.
+- The resting 4th Pollen and 3rd Nectar leave it untouched; with the paddle open the 7th Pollen (s −8.6) holds it
+  down 3.3 mm. A ball rolling back out lifts it again, so the code must count down then.
+- It still isn't in the plan and doesn't replace P66: it is rated orange, it is a new part, as drawn it may not trip,
+  it can't count Nectar, and nothing about it has been built or tested beyond the CAD.
+
+**The one use left: "Pollen track full"** (inferred; not checked in the CAD). A switch in the +x cheek face where
+the 4th Pollen rests with the paddle closed (s 26.3: y about 73, z about 40) should stay pressed while 4 Pollen are
+in, if the switch clicks within about 1.5 mm and the lever doesn't push the resting ball across: set 1.5 mm into the
+path, it is pressed exactly 1.5 mm by a resting 4th Pollen pushed to the far cheek. A lone Pollen stalled at s 20 to
+46 would press it too, a false "full". Wired REV's way, an open wire reads as pressed, so a broken wire stops the
+intake early, the safe direction ([Parts](parts-findings.md#gobilda-micro-limit-switch-roller-lever)). Whether a
+resting ball holds it pressed despite the side play is bench test 4 below. It gives no colour, so the Color
+Rangefinder stays.
+
+**Don't build the two-switch pair on an encoder port.** Two switches on a hub encoder port's A and B inputs,
+staggered so each ball holds both at once, make the hub count ±4 per ball with direction, and on hardware-counted
+ports 0 and 3 no poll can miss an edge; one switch alone counts −1 then +1, net zero (inferred). On this robot:
+
+- Its best settings need more travel than the part has. The best depth for Pollen is about 4.4 mm past the click,
+  which, added to the travel before the click, is more than the roller's whole travel. At depths that can be built,
+  1 to 2 mm, the switches' edges are 8.7 to 12.2 mm of travel apart: 3.8 to 5.3 ms at 2.3 m/s and 2.5 to 3.5 ms at
+  3.5 m/s, against a bounce time nobody knows. In a simulation, with bounce longer than the gap between an A and a B
+  edge an edge counter was wrong 213 times in 400, and with bounce as long as that gap one sampled at 1 kHz was
+  wrong 220 times in 400.
+- The CAD found no spot for a pair (table above): the only surface both ball types ride along is the tile, and the
+  one spot both roll over, the floor plate's front lip, has no room for a pair.
+- A ball that hops off both levers is lost for good. In a simulation a lone Pollen at 2.2 m/s hopping 5 mm was lost
+  at 10 of 41 take-off points, and hopping 10 mm at 14 of 41. A lid over the pair, or a guide that presses balls
+  against the switches, would prevent it (inferred).
+- The only free hub encoder port, Control Hub encoder 1, counts in software, at a rate and with filtering nobody
+  publishes. It is also the front-right drive motor's port: if anything puts `fr` in RUN_USING_ENCODER or calls
+  `setVelocity` on it, the hub's speed loop reads ball counts as wheel speed, and a STOP_AND_RESET_ENCODER zeroes the
+  count (inferred).
+- Wiring a switch across the port's 3.3 V risks the flywheel encoders:
+  [`wiring-findings.md`](wiring-findings.md#switches-and-onoff-sensors).
+
+The rules (manual): no rule names limit switches or says what may go on an encoder port. R706 A lets "wires, cables,
+and signal lines" connect "via the standard connection points provided on the devices"; R613 A and B allow powering
+a device only from the port it plugs into; and a passive switch is not a CUSTOM CIRCUIT, which R607 defines as "any
+active electrical item that is not an actuator ... or power regulation device" (the last point is our reading).
+
+**Bench tests, in order, before anyone cuts metal for a switch:**
+
+1. Measure the real ball speed at the hand-off and on the plate:
+   [the one-rangefinder measurement](#the-measurement-that-settles-most-of-it) plus slow-motion video. If lone balls
+   move at 1.5 m/s or less where a switch would sit, one switch can count passing balls at a 10 ms read (100% in
+   the model); otherwise keep switches to "track full".
+2. Measure one switch with calipers and a gram scale: the roller's released, click, release and bottom heights, and
+   the force at the click and at the bottom. Check that the roller moves at most about 4.3 mm. Under about 1.5 mm
+   left after the click rules out a switch fixed in the cheek wall (the side play is 5.1 mm): use a spring-mounted
+   switch or none. At 2 mm or more, look at it again.
+3. Wire it REV's way to a Control Hub digital port and read its bit from the bulk read `TransferCounter` already
+   sends at a 10 ms poll (no code reads a digital pin yet).
+   - Pulse the input for 2, 5 and 8 ms (from another hub's digital output or a test rig) and log the share of pulses
+     seen. A share above the pulse length ÷ 10 ms means the hub holds or latches the level, and counting passing
+     balls gets better.
+   - Unplug the switch and confirm it reads pressed.
+   - Run about 10,000 presses and log any dropout, for the contacts' sake. One dropout rules the part out.
+4. Weigh 5 Pollen and 5 Nectar. Then, on a printed 76.2 mm channel with a mock-up of the crest:
+   - Roll Pollen at the measured speeds, hugging the switch wall and then the far wall. Record any bottoming, kicks
+     and stalls, and whether a resting ball holds the switch pressed.
+   - Push a Nectar against a roller in the crest to see whether the roller lifts it.
+   - If the lever bottoms or bends, or a resting ball holds it pressed in fewer than 20 of 20 tries, drop the cheek
+     switch. If a Nectar lifts, drop any Nectar switch.
+5. In the same rig and the same runs, compare the switch with a break-beam at P66's height (z 16) and with the
+   laser. If the break-beam counts 4 balls right in 99% or more of runs and the switch doesn't, the break-beam counts
+   and the switch, if kept at all, is only "track full".
+6. Only if an encoder-port pair is still wanted:
+   - Measure the voltage on Control Hub encoder 1's channel A with nothing plugged in.
+   - If it shows a pull-up, wire each switch between its input and ground only, never to the 3.3 V pin.
+   - Press them by hand in order: expect ±4 per ball.
+   - Then run 500 balls at the measured speed on port 1. Anything but 0 errors in 500 abandons it. If the errors drop
+     with the pair on the OctoQuad's hardware-counted channel 2, software counting was the cause. The OctoQuad has no
+     pull-ups on its A and B inputs (datasheet Rev 3.0C), so there each switch needs a resistor to its own plug's
+     3.3 V (R613 B; inferred).
+
+#### Break-beams and the rules
+
+- **Our reading: break-beams are allowed. Ask the official [Q&A](https://game-qa.firstinspires.org/boards/2027/FTC/QA)
+  before relying on it.** A break-beam is active, so it is a CUSTOM CIRCUIT: R607 calls "any active electrical item
+  that is not an actuator ... or power regulation device" one. R607 lets CUSTOM CIRCUITS be used as long as they
+  "shall not provide regulated output voltages exceeding 5V, except if solely used for powering LEDs", and R613 A and
+  B require power only from the hub port the device plugs into (manual). Adafruit's 2167 runs on 3.3 to 5.5 V, so the
+  digital port's own 3.3 V can power it (inferred).
+- REV says every hub digital input has a pull-up resistor, which the 2167's open-collector output needs; REV gives
+  no value ([Parts](parts-findings.md#gobilda-micro-limit-switch-roller-lever)).
+- A read gives only the level the hub reports at that moment: the SDK has no command that latches a digital input or
+  counts its edges, and whether the firmware holds a short pulse is unmeasured
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md#digital-inputs)). The break-beam rows in [The plan](#the-plan) assume a
+  fresh level at every 5 or 10 ms read, which nobody has measured.
+- A break-beam a little behind P66, at (y 76 to 78, z 16), would need holes through the two side plates only, no
+  tunnel through a cheek, and the resting 4th Pollen still blocks it (inferred from the CAD's meshes). Room for the
+  sensor bodies outside the plates (the pulley flange from y 83.7, the −x plate's opening from y 81) is unchecked.
+
+#### Two sensors staggered along the path
+
+This holds for any two on/off sensors a ball passes one after the other: switches, break-beams, or a laser read
+against a threshold. All of it is simulated and derived; nothing was tested. The model reads a fresh level at every
+read; a laser's own update period counts as extra gap between reads (inferred).
+
+- **Read the pair as a forward-only four-step cycle.** With sensor A upstream and B a short stagger downstream, the
+  pair goes 00 → 10 → 11 → 01 → 00 once per ball. Count each change between two reads as 0 to 3 steps forward,
+  and one ball per 4 steps. On touching trains that raises the highest speed at which 99% of 4-ball trains count
+  exactly about 1.5 times over one sensor: Pollen from about 2.55 to 3.85 m/s, Nectar from about 3.35 to 5.05 m/s
+  (reads 0 to 3 ms late, 1 ms bounce).
+- **Why** (derived; the simulation lands on these limits): one sensor must see every press and every release, so a
+  ball may move at most half its diameter between reads. The four-step reader loses a ball only when one gap between
+  reads spans all four changes, which allows about three quarters of a diameter. Ordinary quadrature, ±1 per step,
+  must see every state: a quarter of a diameter, half the speed of one sensor.
+- **Press length and stagger.** Make the press (the stretch of travel over which a ball holds the sensor on) about
+  half a ball, and the stagger about a quarter of a ball. The stagger must be shorter than the press, and press plus
+  stagger shorter than a ball, or the cycle breaks and the count falls to zero. The overlap, press minus stagger, must
+  be at least speed × bounce time.
+  - Pollen: stagger 18 to 19 mm, never more than 21 mm (from about 23 to 24 mm the count falls to zero). A switch
+    pressed about 4.5 mm deep into the ball gives about half a ball of press.
+  - Nectar: stagger 23 to 24 mm, safe from about 18 to 30 mm; a switch pressed about 6 mm deep.
+  - Those depths are past the click, so the goBILDA switch, whose roller moves at most about 4.3 mm, can't reach
+    them (inferred; [Limit switches](#limit-switches)).
+  - Depth matters more than stagger. Within ±1 mm on both, Pollen still counts to at least 3.6 m/s at 1 ms bounce;
+    within ±2 mm, 3.3. ±3 mm is not safe for Pollen: at 3 ms bounce it falls to 2.2 m/s even at the best mount.
+- **What it costs:**
+  - Overcounts when a ball goes backward: +1 each time a stopped ball rocks across any of the four edges, and +1 to
+    +4 when a ball backs out (one sensor does the same on its two edges). For example, a ball rocking ±1.5 mm at
+    20 Hz for 1 s adds 20 with 0.5 mm of differential travel. Counting only while the intake runs forward doesn't
+    stop it; only enough differential travel (a switch's hysteresis) does: in the model 1 mm stopped ±1.5 mm rocks
+    and 3 mm stopped ±3 mm, because the band it gives along the path depends on depth. A break-beam has none; a laser
+    gets it only from hysteresis in the code's threshold (inferred). Whether balls rock or stall while the intake runs
+    is unknown.
+  - Both pins must come from one bulk read. With bulk caching off, each digital read is its own hub command (SDK
+    12.0.0 source), so two pins are read at two moments. For Pollen at 1 ms bounce, 1, 2, 3 and 5 ms between the two
+    reads cut the limit from 3.85 to 3.6, 3.4, 3.15 and 2.8 m/s: 2 ms costs about 0.45 m/s, 5 ms most of the gain.
+  - The longest gap between reads sets the limit, not the 10 ms average. If 1% of reads come 20 ms late, Pollen at
+    2.2 m/s counts exactly in 0.927 of runs with the four-step reader and 0.917 with one sensor; at 3.5 m/s, 0.94
+    against 0.20.
+  - A second sensor and pin per track.
+- If one sensor sticks, the four-step reader falls back to counting like one sensor.
+- **Before adding a second sensor, make the one sensor's press about half a ball long**: that alone gives the
+  one-sensor row below.
+- Whether Pollen at 3.5 m/s counts right depends on bounce and on the longest gap between reads, and neither is
+  measured: 3.85 m/s at 1 ms bounce, 3.35 at 3 ms.
+- Where a pair would fit on this robot is unchecked: the CAD found no spot for a switch pair (above), and none for
+  lasers 16 to 17 mm apart at the hand-off ([Spots considered](#spots-considered); an unchecked quick pass by the CAD
+  placed a level laser pair 16 mm apart on the +x guide plate, see the mid-height beam there).
+
+Highest speed at which 99% of 4-ball touching trains count exactly, at 1 ms / 3 ms bounce (simulated):
+
+| reader | Pollen (m/s) | Nectar (m/s) | error when it fails | what breaks it |
+|---|---|---|---|---|
+| one sensor | 2.55 / 2.2 | 3.35 / 2.9 | undercount when too fast; overcount when a ball rocks or backs out on its edges | long gaps between reads |
+| A or B (either on) | 1.25 / 1.1 | 1.7 / 1.45 | undercount | too little time off between touching balls; on a lone ball or a short press it equals the four-step reader |
+| ordinary quadrature | 1.25 / 1.1 | 1.6 / 1.4 | undercount | every state must be read |
+| forward four-step | 3.85 / 3.35 | 5.05 / 4.35 | undercount when too fast; +1 per rock on any of the 4 edges, +1 to +4 on a back-out | read skew, long gaps between reads, bounce longer than the time both sensors are on |
+| hybrid, −1 to +2 per change | 2.45 / 2.15 | 3.35 / 2.9 | undercount | speed; it is immune to rocking and back-outs |
+| larger of two separate counts | 3.15 / 2.5 | 4.05 / 3.25 | undercount | with no errors at all, only about 0.15 m/s above one sensor (2.35 → 2.5 for Pollen) |
+| four-step and larger-of-two together | as four-step | as four-step | as four-step | adds nothing measurable |
+
+- Model: rigid trains at constant speed; Pollen with the sensors pressed 5 mm deep and 18 mm apart, Nectar 6 mm and
+  23 mm; 1 mm of differential travel; reads every 10 ms plus 0 to 3 ms, never early; a read within the bounce time
+  after an edge returns a random value; 2000 runs per case, speeds in 0.05 m/s steps. The A-or-B and ordinary
+  quadrature rows come from runs with Pollen 5 mm deep, 0 mm of differential travel and 17.8 mm apart, and Nectar
+  6 mm, 1 mm and 22 mm. The depth, stagger and tolerance figures above come from a grid of 600 runs per case in
+  0.1 m/s steps, worst case over 0, 1 and 3 mm of differential travel. Not modelled: a ball off centre in the track
+  (a Pollen has 5.1 mm of sideways play at the cheek) and the roller's radius.
+- Moving steadily forward, no reader overcounted, except the four-step reader with 5 ms between its two pin reads and
+  3 ms bounce, and shallow mounts where the overlap is shorter than speed × bounce (there both signs: for example
+  0.9% under and 0.7% over at 2.0 m/s).
 
 ## The 10.9 balls per second figure
 
@@ -950,9 +1220,20 @@ so 92 ms stays a fair feed interval to simulate, but not a known limit.
   2026-11-15.
 - Brushland Laser Rangefinder: see [Parts](parts-findings.md#brushland-laser-rangefinder) for the snapshots read,
   its CAD model and ST's VL53L1X datasheet.
-- Competition Manual (G407, G408, CONTROL, MOMENTARY): <https://ftc-resources.firstinspires.org/ftc/game/cm-html>,
-  read 2026-11-15.
+- Competition Manual (G407, G408, CONTROL, MOMENTARY, R607, R613, R706, CUSTOM CIRCUIT):
+  <https://ftc-resources.firstinspires.org/ftc/game/cm-html>, read 2026-11-15.
 - Adafruit 2167 break-beam sensor: <https://www.adafruit.com/product/2167>, read 2026-11-15.
+- goBILDA micro limit switch, roller lever, 3103-0001-0001:
+  <https://www.gobilda.com/micro-limit-switch-roller-lever-2-pack/> and its STEP file
+  <https://www.gobilda.com/content/step_files/3103-0001-0001.zip>, read 2026-11-15; Omron's SS datasheet as a
+  stand-in, <https://omronfs.omron.com/en_US/ecb/products/pdf/en-ss.pdf>. Details: [Parts](parts-findings.md).
+- REV, wiring a limit switch to a digital input: <https://docs.revrobotics.com/duo-control/sensors/5v-sensors>, read
+  2026-11-15.
+- OctoQuad datasheet Rev 3.0C (no pull-ups on A and B):
+  <https://github.com/DigitalChickenLabs/OctoQuad/tree/master/documentation>.
+- The simulations of switches and staggered pairs: models written on 2026-11-15, not in the repo; their assumptions
+  are given with each result.
 - The CAD numbers: the team's CAD as of about 23:00 PST on 2026-11-14, and as of 13:13 PST on 2026-11-15 for the
-  paddles, where balls rest and everything near the intake, with both turrets placed on the transfer.
+  paddles, where balls rest and everything near the intake, with both turrets placed on the transfer, and as of the
+  evening of 2026-11-15 for the limit-switch layouts and the mid-height beam.
 - The code facts: `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/opmodes/tele/BioBuzzBasicTele.java`.

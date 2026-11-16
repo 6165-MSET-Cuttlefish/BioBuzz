@@ -26,6 +26,10 @@ from the CAD rerun in [`flywheel-control-findings.md`](flywheel-control-findings
   ([`shot-calculation-findings.md`](shot-calculation-findings.md)). The full range gives 35°.
 - **Weigh 20 balls of each type** before trusting any simulated ball-to-ball spread.
 - **Don't buy the 82 mm steel flywheel until it fits in CAD.** Its fit on the shaft and next to the hood is unchecked.
+- **Don't buy goBILDA's roller-lever micro limit switch (3103-0001-0001) to count balls coming in.** goBILDA publishes
+  no force, travel or bounce, and its roller moves at most about 4.3 mm (vendor STEP). Why that fails at the
+  intake, and the one use left for it, are in [`transfer-findings.md`](transfer-findings.md#limit-switches); the
+  part itself is [below](#gobilda-micro-limit-switch-roller-lever).
 
 ## Flywheel motor: goBILDA 5000-0002-4008
 
@@ -312,6 +316,84 @@ each pin reaches (a pin 1 digital output on the analog channel would read only a
 the analog hue reads with nothing in front, and how many thresholds a pin holds. The product page, re-read on
 2026-11-15, also doesn't name the chip.
 
+## goBILDA micro limit switch, roller lever
+
+SKU 3103-0001-0001, sold as a 2-pack. Looked at on 2026-11-15 as a ball sensor for the transfer; nobody has tried a
+real one. Where it could go on the robot, and why it can't count balls coming in:
+[`transfer-findings.md`](transfer-findings.md#limit-switches).
+
+**What goBILDA states** ([product page][gblimit], read 2026-11-15): 2.2 g each; "SPDT Momentary Limit Switch"; max
+current 6 A, continuous 2 A; max voltage 250 VAC; "3.2mm Width Spade Terminals"; switching life 200,000 cycles;
+−25 to 85 °C; contact resistance ≤0.02 Ω; insulation resistance ≥100 MΩ. The page's text calls them "5 amp units",
+which contradicts its own 6 A. It lists the Limit Switch Mount 1207-0032-0001, the goRAIL mount 1207-0032-0002 and
+TJC8 servo leads as related products, and no JST PH cable.
+
+**What goBILDA doesn't state:** operating force, release force, pretravel, overtravel, differential travel, where
+the switch clicks, contact bounce, contact material, minimum load, a speed limit for the lever, or who makes it.
+
+**Size.** The drawing on the product page and the vendor's [STEP file][gblimitstep] (SolidWorks 2016, inch units,
+measured 2026-11-15) agree except on the terminals. In mm:
+
+| | drawing | STEP |
+|---|---|---|
+| Body | 19.9 long, 6.4 thick; height not given | 19.89 × 6.44 × 10.28 |
+| Mounting holes | Ø2.4, 9.5 apart | Ø2.39, 9.52 apart, 2.43 above the body's bottom face |
+| Roller | Ø5, 3.5 wide | Ø4.95, 3.48 wide |
+| Roller centre above the hole line, released | 14.8 | 14.79 |
+| Terminals past the body | 4.1 | about 5.4 |
+
+- The roller overhangs the body's end by about 1.8 mm. It rides on a hinged lever: the hinge pin is at the body's
+  far end, 16.83 mm from the roller's centre, and the plunger 3.74 mm from the hinge, so the roller moves about 4.5
+  times as far as the plunger (vendor STEP, measured).
+- **The roller can move at most about 4.3 mm up before the lever meets the body** (vendor STEP, measured). The
+  body's top steps down 0.73 mm, and the lever's end meets that lower face after 15.1° of swing, which moves the
+  roller 4.3 mm up (about 4.4 mm counting its small sideways shift). The plunger's own stroke inside the body is
+  unknown and could stop it sooner. The CAD on 2026-11-15 got 4.3 to 4.5 mm from the same file.
+- **The STEP shows only the released position**, so it doesn't say where the switch clicks. The travel left after the
+  click, the overtravel, is anywhere from 0 to about 4 mm.
+
+**Omron's SS-5GL2 as a stand-in, not goBILDA's numbers.** The body and holes match Omron's SS series (19.8 × 6.4 ×
+10.2 mm, Ø2.35 mm holes 9.5 ± 0.1 mm apart) and its SS-5GL2 hinge roller lever ([Omron SS datasheet][omronss], Cat.
+No. B032-E1-14, read 2026-11-15), so this is very likely an SS-size switch from an unknown maker (inferred).
+goBILDA's ratings match no SS model, and its roller is a little bigger than the Omron's 4.8 × 3.2 mm.
+
+- SS-5GL2 (vendor, Omron): operating force 0.49 N max, release force 0.06 N min, overtravel 1.2 mm min, movement
+  differential 0.8 mm max, free position 19.3 mm max, operating position 14.5 ± 0.8 mm. Omron gives a speed limit
+  (0.1 mm to 1 m/s) only for its pin plunger models, none for the lever.
+- If goBILDA's switch clicked at Omron's operating position, about 0.7 to 2.3 mm of travel would be left after the
+  click (inferred). Omron measures both positions from the mounting-hole line to the roller's top; goBILDA's
+  released roller top sits about 17.3 mm above that line (14.79 + half of 4.95), so the click would come 2.0 to
+  3.6 mm in, out of about 4.3. Omron's lever differs (its free position is up to 19.3 mm), so this is only a
+  stand-in.
+
+**Contacts at a hub's tiny current.** Omron warns: "Using a model for ordinary loads to open or close the contact of
+a micro load circuit may result in faulty contact." Its silver-contact SS-5 lists a minimum load of 5 VDC 160 mA,
+its gold-alloy SS-01 5 VDC 1 mA (reference values). A hub digital input, 3.3 V through a pull-up, is such a micro
+load, and a switch rated 6 A at 250 VAC very likely has power contacts (inferred). goBILDA's contact material is
+unknown, so the switch must run thousands of presses on a hub input with no dropout before the robot relies on it.
+
+**Wiring it to a hub digital port** (REV's [5 V sensors][rev5v] and [digital sensors][revdigital] pages, read
+2026-11-15):
+
+- "Limit switches ... require a custom wiring harness." "Each of the digital inputs on the Control and Expansion Hub
+  have a pull-up resistor", so an input reads high unless something pulls it to ground. REV gives no resistor value.
+- REV's wiring: the signal wire to COM, ground to NC, NO left unconnected. Not pressed, NC ties the signal to ground
+  and the code reads `FALSE`; pressed, it opens and reads `TRUE`.
+- REV warns: "Incorrect wiring of a limit switch to a digital input can create a conflict making the Control or
+  Expansion Hub unresponsive."
+- **With that wiring an open wire reads `TRUE`, the same as pressed** (inferred). For a "track full" switch that is
+  the safe direction: the robot stops intaking early.
+- Read it as a plain digital channel, where `getState()` is true when pressed. The REV Touch Sensor type would read it
+  inverted: SDK 12.0.0's `RevTouchSensor.isPressed()` returns `!getDigitalChannelState(...)` (source).
+- Each digital connector is a 4-pin JST PH with two channels: black ground, red 3.3 V, blue channel n (even), white
+  n+1 (odd). The 3.2 mm spades need a home-made harness; whether a standard 2.8 mm receptacle fits them is unknown.
+- How the hub reads a digital input: [`sdk-hub-findings.md`](sdk-hub-findings.md#digital-inputs). Where switches may
+  and may not plug in: [`wiring-findings.md`](wiring-findings.md#switches-and-onoff-sensors).
+
+**Still unknown:** everything goBILDA doesn't state (above), the lever's return speed, and how its contacts behave at
+a hub input's current. The tests are in [Still unknown](#still-unknown) and, in order, in
+[`transfer-findings.md`](transfer-findings.md#limit-switches).
+
 ## Brushland Laser Rangefinder
 
 Read on 2026-11-15 from Wayback Machine snapshots, since the live site refuses connections from here: the [product
@@ -368,6 +450,8 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 | Whether a Laser Rangefinder really ranges at a 10 ms budget (ST rates its chip at 20 ms or more) | Configure it with `timingBudgetMs` 10, roll a ball slowly through its beam and log the analog distance at every 10 ms poll; the trace moves in steps as long as the update period. Repeat at 20 ms and compare. |
 | The Color Rangefinder's output update rate, and whether its analog output steps or ramps | `new A values/s` can't show it: hub ADC noise changes the reading at almost every refresh ([`hub-bench-findings.md`](hub-bench-findings.md)). Instead drop a ball past the sensor, 35 mm from its face, so it passes at a known speed (falling from rest, speed = √(2 × 9.81 × height): 270 mm of fall gives 2.3 m/s, 115 mm gives 1.5 m/s). With pin 0 on distance, name the sensor as `upstreamSensorName` in Transfer Thread Count Test (`maxRangeMm` 100, `oneSensor` on) and count how many of 20 drops are counted; `Ball in front of the beam, last (ms)` against the ball's width ÷ speed shows how late the output follows. |
 | Whether a Pollen, a red and a blue ball read the same distance on the Color Rangefinder | Hold each at 35 mm from its face and read the distance line; then set one threshold that all three cross. |
+| The goBILDA limit switch's travel and force: where it clicks and releases, how far it can go, and how hard it pushes (goBILDA publishes none) | With calipers and a gram scale on one switch: the roller's released, click, release and bottom heights, and the force at the click and at the bottom. Check that the roller moves at most about 4.3 mm up before the lever meets the body. |
+| Whether the limit switch's contacts work at a hub input's tiny current | Wire it REV's way to a Control Hub digital port, read it at a 10 ms poll and run about 10,000 presses, logging any dropout. One dropout rules the part out. |
 
 [gb5000]: https://www.gobilda.com/5000-series-12vdc-motor-with-8mm-rex-pinion-shaft/
 [gb5000pdf]: https://www.gobilda.com/content/spec_sheets/5000-0002-4008_spec-sheet.pdf
@@ -398,3 +482,8 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 [vl53l1x]: https://www.makerguides.com/wp-content/uploads/2024/10/VL53L1X-Datasheet.pdf
 [revanalog]: https://docs.revrobotics.com/duo-control/sensors/analog
 [apds9999]: https://docs.broadcom.com/doc/APDS-9999-DS
+[gblimit]: https://www.gobilda.com/micro-limit-switch-roller-lever-2-pack/
+[gblimitstep]: https://www.gobilda.com/content/step_files/3103-0001-0001.zip
+[omronss]: https://omronfs.omron.com/en_US/ecb/products/pdf/en-ss.pdf
+[rev5v]: https://docs.revrobotics.com/duo-control/sensors/5v-sensors
+[revdigital]: https://docs.revrobotics.com/duo-control/sensors/digital
