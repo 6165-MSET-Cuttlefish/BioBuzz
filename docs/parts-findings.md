@@ -242,8 +242,14 @@ Configure Color Rangefinder writes it and Transfer Thread Count Test reads its h
   tell a pollen ball from no ball: use presence as well (the rangefinder count, or the sensor's own "within N mm"
   pin), or put a background of some other colour opposite the sensor. Transfer Thread Count Test's defaults are set
   from these: red 10-50°, blue 170-210°, pollen 70-89°; Configure Color Rangefinder's red and blue match.
-- **Distance**: 940 nm class 1 VCSEL laser, maximum range 100 mm (specifications). The laser rangefinders' SHORT mode
-  reaches 1.3 m (`vendor/brushland/LaserRangefinder.java`'s `DistanceMode`).
+- **Distance**: 940 nm class 1 VCSEL laser, maximum range 100 mm (specifications; the [product page][crfprod] gives
+  the same, re-read 2026-11-15). The laser rangefinders' SHORT mode reaches 1.3 m
+  (`vendor/brushland/LaserRangefinder.java`'s `DistanceMode`).
+- **The case**: 23.0 × 16.0 × 9.5 mm in the vendor's [CAD model][crfcad] (its STEP file, read 2026-11-15); the
+  [product page][crfprod] says 23 × 16 × 10 mm, with M4 holes 8 mm apart. One reading of the model puts a sensing
+  window of about 6 × 8 mm on a 23 × 16 mm face, about 0.8 mm off centre along the 23 mm side, with the APDS-9999
+  under it; nobody has re-derived that placement. One solid in the model also reaches 9.4 mm past one long
+  side in its lower half, which nobody could explain.
 - **Its distance is the strength of reflected light, not time of flight.** The vendor's [full docs text][crfllms]
   (read 2026-11-15) says the sensor emits an IR laser and measures "the amount of reflected light", and that an
   onboard microcontroller turns that into distance with pre-calibrated constants and does the threshold checks. So
@@ -288,13 +294,23 @@ Configure Color Rangefinder writes it and Transfer Thread Count Test reads its h
 **For the transfer** (inferred, untested): distance mode reads only to 100 mm; at spots A and B the ball is 35 to
 41 mm from the sensor face and the far plate 117.5 mm, so its range fits. But A to E count only balls leaving, and
 whether it is fast enough to count, and whether all three ball colours read alike, is unknown until it is measured:
-[`transfer-findings.md`](transfer-findings.md#the-sensor). Where it goes for reading Nectar colour:
-[`transfer-findings.md`](transfer-findings.md#counting-balls-coming-in).
+[`transfer-findings.md`](transfer-findings.md#the-sensor). For reading Nectar colour near the intake
+([`transfer-findings.md`](transfer-findings.md#colour-the-color-rangefinder-on-the-x-guide-flange)):
 
-**Not documented by the vendor:** the update rate or response time of the analog, digital and I2C outputs, distance
-accuracy or noise, which hub channel of a two-channel analog or digital connector each pin reaches (a pin 1 digital
-output on the analog channel would read only about 0 or 3.3 V: an inference), what the analog hue reads with nothing
-in front, and how many thresholds a pin holds.
+- At the CAD's C1 (s 25), on the +x guide's flange: the Nectar at 19.7 mm, nothing nearer than 109.8 mm when empty,
+  and a passing Pollen in view from about 55 mm (CAD, 2026-11-15).
+- The same mount at s 32 to 35, which keeps a passing Pollen out of a 15° view: a passing Nectar 19.65 mm from the
+  face, the resting 3rd Nectar 21 to 25 mm, the nearest empty return 121.9 to 122.5 mm for a 15° cone, but at 27°
+  2% of rays end 8.4 mm out (inferred from the CAD). Either spot works; the transfer page gives the trade.
+- At the CAD's C2 (s 60, −x plate): the Nectar at 14.7 mm, the far plate at 117.5 mm (CAD).
+
+All of these depend on the field of view, which Brushland doesn't publish.
+
+**Not documented by the vendor:** the field of view, a minimum range, the update rate or response time of the analog,
+digital and I2C outputs, distance accuracy or noise, which hub channel of a two-channel analog or digital connector
+each pin reaches (a pin 1 digital output on the analog channel would read only about 0 or 3.3 V: an inference), what
+the analog hue reads with nothing in front, and how many thresholds a pin holds. The product page, re-read on
+2026-11-15, also doesn't name the chip.
 
 ## Brushland Laser Rangefinder
 
@@ -331,7 +347,9 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
   centre along the 19.7 mm side and 3 mm apart along the 14 mm side. The two M4 holes, 8 mm apart, run through the
   14 mm side, parallel to the window face and 6.4 mm below it, so the case can't be screwed flat to a plate it looks
   through. The JST PH plug enters from one 14 mm end.
-- **Not on Brushland's pages:** a minimum range, and the analog output's own update rate and delay.
+- **Not on Brushland's pages:** a minimum range, and the analog output's own update rate and delay. The live product
+  page, re-read on 2026-11-15, gives the same 20 × 14 × 10 mm, 15° to 27°, 4 m, up to 100 Hz at 3 m, a 16 × 16 region
+  and M4 holes 8 mm apart, and no minimum range or chip.
 
 ## Still unknown
 
@@ -345,7 +363,8 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 | Whether hub ports 0 and 3 count 614,400 counts/s without loss (no rating found) | Spin one Through Bore into a hub port and the OctoQuad at once; compare positions after a long run. |
 | How much each ball's hue varies on the Color Rangefinder (one reading each so far), and what the empty chute reads at the real mount | In HUE mode, graph Transfer Thread Count Test's `Hue (deg)` for several balls of each colour at the mount's distance and under event lighting, then with nothing there. |
 | Which hub analog channel the Color Rangefinder's pin 0 reaches | In HUE mode on Control Hub analog connector 2-3 with nothing else on it, read `colorRangefinder` (analog 2) and `backRangefinder` (analog 3). |
-| How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35 and 40 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). |
+| How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35, 40 and 45 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). For the low Pollen beam over the floor plate (P66), repeat with a plate 6 mm below the beam, which enters a 15° field 45 mm out and a 27° field 25 mm out, and with a Pollen 35 to 40 mm out filling most of the field. |
+| The Color Rangefinder's field of view (unpublished; whether a passing Pollen shows at the colour spot depends on it) | Slide a ball sideways past the window at 20 mm and at 50 mm and note where hue and distance start to change. |
 | Whether a Laser Rangefinder really ranges at a 10 ms budget (ST rates its chip at 20 ms or more) | Configure it with `timingBudgetMs` 10, roll a ball slowly through its beam and log the analog distance at every 10 ms poll; the trace moves in steps as long as the update period. Repeat at 20 ms and compare. |
 | The Color Rangefinder's output update rate, and whether its analog output steps or ramps | `new A values/s` can't show it: hub ADC noise changes the reading at almost every refresh ([`hub-bench-findings.md`](hub-bench-findings.md)). Instead drop a ball past the sensor, 35 mm from its face, so it passes at a known speed (falling from rest, speed = √(2 × 9.81 × height): 270 mm of fall gives 2.3 m/s, 115 mm gives 1.5 m/s). With pin 0 on distance, name the sensor as `upstreamSensorName` in Transfer Thread Count Test (`maxRangeMm` 100, `oneSensor` on) and count how many of 20 drops are counted; `Ball in front of the beam, last (ms)` against the ball's width ÷ speed shows how late the output follows. |
 | Whether a Pollen, a red and a blue ball read the same distance on the Color Rangefinder | Hold each at 35 mm from its face and read the distance line; then set one threshold that all three cross. |

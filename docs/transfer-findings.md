@@ -6,7 +6,12 @@ counts or times balls, or trusting a feed rate in a shooter simulation.
 
 **Nothing on this page has been run on the robot.** Each number says how it is known:
 
-- **(CAD)**: measured on the team's CAD as of the evening of 2026-11-14 (about 23:00 PST). The CAD was still changing.
+- **(CAD)**: measured on the team's CAD as of the evening of 2026-11-14 (about 23:00 PST), and, for the paddles,
+  where balls rest and everything near the intake, as of 13:13 PST on 2026-11-15 with both turrets placed on the
+  transfer. The CAD was still changing: the transfer's part shapes are from the evening of 2026-11-14 and lack
+  pockets cut on 2026-11-15, the assembly that places the turrets uses an older version of the transfer that nobody
+  compared with the current one, and every number near the intake shifts 1:1 with the transfer's front-to-back
+  placement, which is known to only a few mm.
 - **(vendor)**: from the vendor page or chip datasheet linked under [Sources](#sources), read on 2026-11-15 unless it
   says otherwise.
 - **(manual)**: the Competition Manual, read on 2026-11-15 ([Sources](#sources)).
@@ -20,20 +25,46 @@ counts or times balls, or trusting a feed rate in a shooter simulation.
   balls, the queue stops on or short of them, so they see only the first one or two balls of a load. They suit
   counting balls leaving toward the turrets, and the timing measurement below
   ([Rangefinder spots](#rangefinder-spots)).
-- **No spot for counting balls coming in has been checked in the CAD.** Don't build the two-laser direction pair at
-  the intake hand-off: the two ball types share a surface only on the field tile in front of the plates, where nothing
-  fixed can carry a sensor. The best-supported plan is one Laser Rangefinder per track, counting arrivals, with
-  direction taken from the motor's commanded direction, and the Color Rangefinder on the Nectar ramp
+- **Count balls coming in with one beam per track, at two spots behind the intake, and treat a beam that stays
+  covered as "that track is full".** Pollen: a low beam at (y 66, z 16), 6 mm above the floor plate, through the
+  −x side plate and the floor plate's −x cheek. Nectar: a beam at (y 33.0, z 106.6), in front of and above the
+  Nectar's path where it climbs the ramp, through the −x side plate. Each sees only its own ball type, and together
+  they count every mix of up to 4 balls right, including a 4th ball stopped under the intake (inferred from the CAD's
+  geometry; neither spot was checked in the CAD itself and nothing was tested). That holds only while the Nectar
+  paddle can't close; if hardware makes it close, the plan must change
+  ([The plan](#the-plan)). What could kill it: the cheek may not be solid enough to drill; the lasers read the ball
+  at 30 to 35 mm, inside ST's 40 mm minimum; the plan needs the narrow 15° field at a 10 ms budget, and Brushland
+  says the narrow field is noisier and needs a longer budget (vendor); and at a 10 ms update a laser counts 4
+  touching balls right in only 87 to 92% of runs at 2.3 m/s and 62% at 3.5 m/s, at ST's 20 ms in 0% (Pollen) and
+  65% (Nectar) at 2.3 m/s. Break-beams read every 5 ms count all of them (simulated)
   ([Counting balls coming in](#counting-balls-coming-in)).
+- **Don't count with the CAD's own spots 1 and 4 as a Pollen and a Nectar counter (spot 1 alone is only a fallback),
+  and don't build a two-laser direction pair at the hand-off.** Both spots see both ball types, so read that way they
+  count most balls twice (inferred); touching Nectars leave only 1.2 mm between them at spot 4; and spot 1 never sees
+  a 4th ball that stops under the intake behind 3 Nectars. No pair of beams 16 to 17 mm apart fits anywhere there
+  (CAD).
+- **Read Nectar colour with the Color Rangefinder on the +x side, on the guide's flange, at the CAD's spot C1 (s 25)
+  or at s 32 to 35.** It sees every Nectar pass and the last Nectar in at rest, though at free speed only 52 to 83% of
+  passing Nectars get one whole colour reading (simulated). C1 gets the most passing readings and the earliest colour,
+  and the CAD checked it; at s 32 to 35 a passing Pollen stays out of a 15° view, where at C1 it fills up to 15%. A
+  bench test with a Pollen in view decides (C1 is CAD, s 32 to 35 inferred)
+  ([Colour](#colour-the-color-rangefinder-on-the-x-guide-flange)).
+- **Stop the intake at a count of 4, or as soon as either track reads full, and don't reverse it then.** With 3
+  Nectars in, a 4th ball of either type stops under the intake, where no sensor sees it and it already counts as
+  CONTROLLED (CAD + manual). Reversing the intake would also throw out the 3rd Nectar, which only the intake holds;
+  reverse only for a suspected 5th ball.
+- **Only the Pollen paddle can close as drawn** (CAD, 2026-11-15). Two brackets stop the Nectar paddle long before
+  it reaches a ball. Ask hardware where it is meant to sit
+  ([Path, capacity and the blocker](#path-capacity-and-the-blocker)).
 - **Take the one measurement below before trusting any speed here.** It tells which part of the transfer sets the
   ball rate, and it needs only one rangefinder and Transfer Thread Count Test.
 - **The transfer's continuous servo `melonbotics` is a Melonbotics Super Servo Plus** (CAD). It sits on the lower
   rear Pollen roller shaft. The only Axon MAX in the CAD turns the front sweeper bar's hinge
   ([Parts](parts-findings.md#servos)).
-- **Bench-test a Laser Rangefinder at 15 to 40 mm, in SHORT mode at a 10 ms timing budget, before anyone drills a
+- **Bench-test a Laser Rangefinder at 15 to 45 mm, in SHORT mode at a 10 ms timing budget, before anyone drills a
   hole for one.** Its chip is an ST VL53L1X, and ST's datasheet promises accurate distances only from 40 mm and a
-  timing budget no shorter than 20 ms; Brushland lists 10 ms ([The sensor](#the-sensor)). Every spot below has the
-  ball 15 to 41 mm from the sensor face.
+  timing budget no shorter than 20 ms; Brushland lists 10 ms ([The sensor](#the-sensor)). Every spot on this page
+  has the ball 15 to 44 mm from the sensor face.
 - **Try a 10 ms timing budget (SHORT mode) for any transfer rangefinder, but don't count on it.** At 20 ms no spot
   sees the gap between touching Pollen balls for two readings, even with the transfer motor loaded. At 10 ms, A and B
   see it only while the train is slowed (motor loaded, or the servo roller metering), and maybe not even then (the
@@ -131,21 +162,33 @@ vendor), turns its roller 16T:16T by belt. The Super Servo Plus is drawn coaxial
 shaft, with an adapter, hub and mount plate, but the shaft stops 5.3 mm short of the hub, so as drawn nothing turns
 that shaft (CAD).
 
-Speeds in mm/s, free / loaded. s is mm along the ball's path from the front edge of the transfer floor plate.
+Speeds in mm/s, free / loaded.
+
+**s**, used everywhere on this page, is mm along each ball's own centre path, 0 where the centre crosses y 46.9,
+the side plates' lowest front edge. The floor plate's own front face is at y 49.86 between the cheeks, so s 0 is
+about 3 mm ahead of it (CAD, 2026-11-15). Each ball type has its own path, so the same s is a different place for a
+Pollen and a Nectar. In the transfer frame ([Where they go](#where-they-go)): on the tile, Pollen s = y − 49.5 and
+Nectar s = y − 55.4; on the floor plate, Pollen s = y − 47.0 up to s 40; the Nectar's centre (y, z) is (47.0, 67.8)
+at s 0, (61.2, 81.8) at s 20, (73.4, 97.6) at s 40, (83.4, 114.9) at s 60 and (91.1, 133.3) at s 80 (CAD). Beams
+near the intake are given as (y, z) as well, since one beam sits at a different s on each path.
 
 | where | what touches the ball | surface | ball centre | contact (s) |
 |---|---|---|---|---|
-| Intake, on the floor | three 2 in compliant wheels, r 25.4 (CAD), at 1620 rpm | 4309 / no figure | Pollen 2304, Nectar 2238 / no figure (no intake current known) | before s 0 |
-| Pollen side rollers | two vertical 2 in compliant wheels on the left, ball pinched against a fixed guide (CAD) | 3058 / 1606 | 1529 / 803 | 49–55, 99–108 |
-| Pollen ramp | nothing in the CAD: the servo's 2 in roller misses the ball by 0.9 mm, and the next roller, an unbelted idler, grazes it at s 232 (CAD) | | moves only when pushed | 109–280 |
-| Servo roller, if a real compliant wheel touches | Super Servo Plus at 1000 rpm; 833 or 800 rpm if it runs at 5 or 4.8 V (inferred, below) | 2659 | 1329; 1107; 1064 | within 109–280 |
+| Intake, on the floor | three 2 in compliant wheels, r 25.4 (CAD), at 1620 rpm | 4309 / no figure | Pollen 2304, Nectar 2238 / no figure (no intake current known) | at the drawn arm pose, Pollen −99.5 to −3.0, Nectar −124.5 to +18.5 (CAD); with the arm up, less ([below](#the-intake-hand-off)) |
+| Pollen side rollers V1 and V2 | two vertical 2 in compliant wheels on the −x side, ball pinched against a fixed guide (CAD) | 3058 / 1606 | 1529 / 803 | V1 46.8–57.8, V2 97–110 where they touch at all; 49–55 and 99–108 with at least 0.2 mm of overlap (CAD) |
+| Pollen ramp | nothing in the CAD: the servo's 2 in roller misses the ball by 0.9 mm, and the next roller, an unbelted idler, grazes it at s 232 (CAD) | | moves only when pushed | 111–280 |
+| Servo roller, if a real compliant wheel touches | Super Servo Plus at 1000 rpm; 833 or 800 rpm if it runs at 5 or 4.8 V (inferred, below) | 2659 | 1329; 1107; 1064 | within 111–280 |
 | Pollen spokes | surgical-tube spokes on the two upper rear shafts, 2 lower, 1 upper (team; not in the CAD), tip r 33.2 (team's "about 28 mm" tubes + a 5.2 mm base, assumed) | 3998 / 2100 at the tip | at most 1999 / 1050 (one side against the rear wall) | 280–416 |
 | Nectar ramp | leaving the intake | | 1610 free (inferred, 0.374 × the intake surface) | |
 | Nectar spokes | tubes on the two front shafts, the lower coaxial with the motor (team), the upper 1:1 by belt (CAD), tip r 42.7 (team's 37.5 mm tubes) | 5142 / 2701 at the tip | 0.363 to 0.5 × tip: 1867–2571 / 980–1350 (inferred: the ball rolls in a trough that fits it) | 29–202 |
 
 - Spokes push in pulses, 4 per turn per spoke: 77 per second free, 40 loaded (inferred).
-- The intake arm floats and the CAD has no stop for it, so its resting height is unknown. If it rests 15° or more
-  above the drawn pose, its wheels miss a Pollen ball completely (CAD + inferred).
+- The intake arm floats and nothing in the CAD fixes where it rests, so its resting height is unknown. A wedge drawn
+  loose under the intake's wheel hubs would stop it about 2° to 3° above the drawn pose, if it is real and sits where it
+  is drawn (CAD, 2026-11-14). The CAD gives 49° above the drawn pose as its up-stop, which nobody rechecked. At the
+  drawn pose its wheels overlap a Pollen on the tile by 6 to 16 mm and a Nectar by 19 to 29 mm, so the arm lifts for
+  every ball. At 15° above it they clear a Pollen by 0.8 to 7.8 mm, only just missing it, and still overlap a Nectar by
+  8 to 18 mm (CAD).
 - **The servo's speed.** The vendor gives 1000 rpm free with no voltage, next to "6 W at 6 V". 2.3 kgf·cm × 1000 rpm
   ÷ 4 = 5.9 W, the peak power of a motor with that stall torque and free speed, which matches 6 W, so 1000 rpm is
   very likely at 6 V (inferred). 833 rpm at 5 V and 800 rpm at 4.8 V assume speed scales with voltage (inferred). The
@@ -158,8 +201,10 @@ Speeds in mm/s, free / loaded. s is mm along the ball's path from the front edge
 
 Balls arriving touching (inferred from the speeds above):
 
-- **Intake to side rollers (Pollen):** 2304 to 1529, ratio 0.66, so the balls bunch with no gap. 44 to 107 mm are
-  undriven between them, depending on the intake arm's height (CAD + inferred).
+- **Intake to side rollers (Pollen):** 2304 to 1529, ratio 0.66, so the balls bunch with no gap. From where the
+  intake stops touching a Pollen to V1 (s 46.8), 49.8 mm are undriven with the arm at its drawn pose, 63.8 mm with
+  it 5° up and 82.8 mm with it 10° up (CAD contacts, inferred lengths). A lone Pollen that stops there can rest
+  anywhere in s −0.5 to 46, touched by nothing (CAD).
 - **Side rollers to the servo roller:** ratio 1329 ÷ 1529 = 0.87 or less, so if the servo roller touches, it meters
   the train.
 - **Into the Pollen spokes:** ratio 1999 ÷ 1529 = 1.31. A faster driver pulls a gap of D × (ratio − 1) = 21.9 mm,
@@ -185,27 +230,60 @@ In balls per second, a touching train is 21.5 free and 11.3 loaded on Pollen, 15
 From the CAD:
 
 - From the intake hand-off to the turret plate: Pollen 422.8 mm, Nectar 202 to 203 mm.
-- Touching balls counted back from the turret: Pollen 6, centres at s 423, 350, 277, 205, 132 and 60; Nectar 3, at
-  s 202, 110 and 17. A Nectar ball blocks the Pollen path while its centre is at s 72 or less.
+- A Nectar ball blocks the Pollen path while its centre is at s 72.5 or less (CAD, 2026-11-15).
+- **Where balls stop** (ball centres in s; CAD, 2026-11-15; each arriving ball stops against the one before it):
+
+| case | Pollen | Nectar |
+|---|---|---|
+| paddles open | 422.8, 350.6, 278.6, 206.6, 133.9, 62.8; a 7th and 8th at −8.6 and −81.4 | 202.3, 110.5, 17.7; a 4th at −81.0 |
+| Pollen paddle closed | 240.55, 168.6, 97.3, 26.3; a 5th and 6th at −46.5 and −117.6 | as with the paddles open: the Nectar paddle can't close (below) |
+| behind a Nectar resting at s 17.7 (3 Nectars in) | −58.5 | −81.0 |
+| behind a Pollen at about s 61 (the 6th, paddles open) / at about s 26 (the 4th, paddle closed) | | −27.8 / −64.5 |
+| pinched under a stopped intake at its drawn pose | −100 (−92 to −93 with the arm 10° to 15° up) | −124.5 (−117.5 with the arm 20° up) |
+| alone, nothing driving it | anywhere in −0.5 to 46, 59 to 96 or 111 to 161.5 | not in 18.5 to 29.3, between the intake and the spokes: it rolls back (inferred) |
+
+- The third Nectar at s 17.7 sits below where the front Nectar spokes first touch (s 29.3), so only the intake
+  wheels hold it, and it stays at s 17.7 only while the arm rests within about 1° of the drawn pose (their contact
+  reaches s 18.3 to 18.5 there). With the arm higher it rolls back to where the wheels' contact ends: about s 15 at
+  2° to 3° up, s 12 at 5° and s 3 to 4.5 at 10° (inferred from the CAD's contacts).
+- **With the paddles open, only a stopped shooter wheel holds the top ball** (CAD). Pollen: the shooter's side
+  plates graze it by 0.9 to 2.0 mm, a 1 in. wheel and a hood each overlap it by about 1.5 mm, and a wheel ring
+  overlaps it by 6.5 mm once it is 40 mm past the turret plate.
+  Nectar: the Stealth Wheel overlaps it by 1.4 to 6.1 mm, and the flywheel ring by 13.3 mm at 50 mm past. With the
+  flywheel spinning the ball is shot; with it stopped, the top ball may rise up to about 40 mm and the whole queue
+  with it (inferred).
+- A lone Pollen pushed only by the side rollers at loaded speed stalls on the undriven ramp at about s 210 to 220
+  and rolls back to s 161.5 or less; at free speed it only just reaches the Pollen spokes (inferred).
 - The CAD draws no part named blocker. What it has: each turret tab holds a part named "[LS] Pulley HTD5 20T", a 20T
   pulley with a flat 77 mm paddle on a vertical pivot hanging under the turret plate.
-  - **Pollen paddle**, at z 120 to 123: swung 75° to 135° from its drawn pose it crosses the Pollen path at s 264 to
-    294 and holds the first ball at s 242; 4 balls then queue, at s 242, 170, 98 and 27. Past about 138° it hits a
-    side plate. In its drawn pose (0°) it is clear of the path, so that pose reads as open.
-  - **Nectar paddle**, at z 241 to 244. In the assembly the team added on 2026-11-15 that places both turrets on
-    the transfer, its post sits just outside the right plate at the Nectar column (x 39.6 to 47.6, y 94.9 to 101.9),
-    so it is as plausible as the Pollen one (CAD, 2026-11-15). On the 2026-11-14 CAD, where the turret was drawn at
-    another angle, it held a ball at s 143 with one more at s 50; those two positions have not been worked out again
-    for the new placement, so don't rely on them.
+  - **Pollen paddle**, at z 120 to 123 (CAD, 2026-11-15). In its drawn pose (0°) it is clear of the path, so that pose
+    reads as open. It closes anticlockwise seen from above, rear end first. It swings freely from 61° clockwise to 116°
+    anticlockwise, and the end of a transfer shaft stops it at 62° clockwise. It touches a ball, clear of the walls,
+    from 117° to 183° anticlockwise, and the +x plate stops it at 183° to 184°. It closes the path (reaches at least
+    21.55 mm into it) only from 138° to 183°, and reaches furthest (35.55 mm) at 156° to 168°. It holds the first ball
+    at s 240.5 to 243.5 from 156° to 183°, and at s 255 at 138°; the queue behind it is in the table above. It crosses
+    the Pollen path at about s 264 to 294 (CAD, 2026-11-14; not rechecked for the 2026-11-15 placement).
+  - **Nectar paddle**, at z 241.35 to 243.85, pivot at x 43.57, y 98.36. Its post sits just outside the +x plate at the
+    Nectar column (x 39.6 to 47.6, y 94.9 to 101.9), a sensible place, but **as drawn it can't close** (CAD, 2026-11-15,
+    by two independent methods). It swings freely only from 40° clockwise to 57° anticlockwise of its drawn pose: two
+    brackets (CAD part 1204-0002-0001), at x 27.9 to 70.9 and z 209.9 to 252.9, one at y 45 to 53 and one at y 165 to
+    173, sit in its plane and stop it from 58° anticlockwise and from 41° clockwise, and the +x plate from 89°. It would
+    touch a ball only from 123° to 196° anticlockwise, which it can't reach from either side. If it could close it would
+    hold balls at s 143.3, 50.6 and −45.1. The transfer's part shapes measured here are from the evening of 2026-11-14
+    and lack pockets cut on 2026-11-15, so ask hardware whether those brackets are pocketed or the paddle is meant to
+    sit elsewhere.
   - **A goBILDA 2000-0025-0504 five-turn servo** with a hub and a matching 20T pulley sits unmated in the Pollen turret
     tab, far from the paddle. Very probably the blocker's servo, with the belt not drawn (inferred). As parked, its
     output axis is horizontal and the paddle's is vertical, so no belt could join them in that pose.
   - **Code range to angle** (inferred): Basic Tele and Intake Transfer Shooter Test move `blocker` between 0.53
     (closed) and 0.60 (open), and nothing calls `setPwmRange` on it, so the SDK's default 600–2400 µs applies:
     0.07 × 1800 µs = 126 µs, × 0.90°/µs on this servo (vendor: 1800° over 500–2500 µs) = 113°. That is only the size
-    of the swing. If 0.60 put the paddle at its drawn open pose, 113° would land it inside the 75° to 135° that holds
-    a ball, but the CAD doesn't model where the servo's zero sits against the paddle, so nothing here says where 0.53
-    and 0.60 put it.
+    of the swing. Measured from the drawn open pose, 113° falls short of the 117° where the paddle first touches a
+    ball and of the 138° it needs to close the path. It closes the path only if the servo's open position sits 25° to
+    70° anticlockwise of the drawn pose, and the paddle would still be clear there, since it touches nothing up to
+    116°. The CAD models neither the servo's zero nor how the paddle is driven, so nothing here says where 0.53 and
+    0.60 put it. In Basic Tele the blocker sits at 0.6 (open) only while a flywheel is on and at 0.53 (closed)
+    otherwise (`BioBuzzBasicTele.java`).
   - **The code disagrees with itself:** `biobuzz/modules/Shooter.java` calls 0.6 BLOCKED and 0.3 UNBLOCKED
     (`ShooterHardstopState`), where Basic Tele calls 0.6 open. On this servo 0.3 apart is 486° (inferred), far past
     the paddle's swing.
@@ -216,10 +294,92 @@ What the docs already said about the blocker: it is "the blocker before the shoo
 
 Questions for hardware:
 
-- Which paddles exist on the robot: Pollen, Nectar or both? The code has one `blocker` port for two drawn paddles.
+- Which paddles exist on the robot: Pollen, Nectar or both? The code has one `blocker` port for two drawn paddles,
+  and as drawn only the Pollen one can close.
+- Where is the Nectar paddle meant to sit, and are the two brackets in its swing pocketed?
 - Which servo drives each, through what belt, and which `blocker` position is closed?
 - Can the turrets turn at all with the paddle posts there? Each post hangs 76 to 81 mm from its turret's axis, so
   most turret angles would run it into the side plates (CAD + inferred).
+
+## The intake hand-off
+
+The two ball types share a rolling surface only on the field tile in front of the side plates, where nothing fixed
+can carry a sensor. From the floor plate's front edge they part: the Pollen rolls flat on the floor plate and the
+Nectar rides up the plate's two cheeks. So a low beam over the floor plate, far enough back that the Nectar has
+climbed clear of it, sees only Pollen, and a beam on the Nectar ramp, in front of and above the Pollen path, sees
+only Nectar ([Counting balls coming in](#counting-balls-coming-in)). All of this is CAD, 2026-11-15, unless
+marked; every number in it shifts 1:1 with the transfer's front-to-back placement, known to a few mm.
+
+**Surfaces**
+
+- The floor plate's front face is at y 49.86 across x −70 to +5, and slopes forward to y 46.9 only over the outer
+  20 mm or so at each side plate. It is a square edge with its top at z 10.05 over a tile at z 0.05, so a 10 mm step;
+  the plate is 5 mm thick (z 5.05 to 10.05) with an open 5 mm slot under it.
+- A Pollen rolls on the tile until s −24.2 (centre y 25.25), 21.65 mm before y 46.9 and 24.6 mm before the floor
+  plate's face (inferred from the CAD's positions). It then pivots on the plate's edge (y 49.9, z 10.05) until about
+  s +3, and rolls flat on the plate from there, centre z 45.6.
+- A Nectar leaves the tile at s −33.8 (centre y 21.5), 25.4 mm before y 46.9 and 28.4 mm before the face (inferred).
+  It is on the −x cheek's front corner by s −25 to −20 and rides both cheek crests from about s 0, where its centre is
+  at (y 47.0, z 67.8) and its bottom 22.1 mm up.
+- The Nectar leaves the low band early. Its bottom is at z 5.5 at y 30, 8.7 at y 33, 12.6 at y 36 and 15.5 at y 39,
+  where the Pollen's is 7.7 at y 37. The Nectar's bottom is above the Pollen's by 0 up to y 22, 2.6 mm at y 25,
+  10.6 at y 45, 24.7 at y 60 and 52.6 at y 80. So a fixed low beam at y 30 to 47 sees a Nectar only along a short
+  chord, or misses it.
+- The cheeks are the floor plate's ramp sides. Their inner faces are at x −70.53 and +5.67 (76.2 mm apart), and from
+  y 49.6 they fill the strip inside each side plate: 19.07 and 19.03 mm wide at those faces, 19.94 mm at z 16, where
+  the −x inner face is at x −69.66. Whether they are solid or hollow is unknown. Their front corners are uneven: −x
+  37.9 mm high, +x 30.6; the +x crest stays flat at about z 31 from y 49.5 to 55, then rises 12 mm by y 57. The
+  crests reach z 120.2 at y 113.
+
+**Beside the path**
+
+- Side plates: inner faces at x −89.6 and +24.7 (114.3 mm apart), bottoms at z 5.05. Their front edge is at y 46.9
+  below z 49, y 40.9 from z 49 to 69, y 11.9 from z 69 to 182, slopes from z 182 to 202, and is at y −43.1 above
+  z 202.
+- Both plates are open behind y 69 from z 38 to 92, and behind y 81 from z 13 to 107. So at ball-centre heights the
+  only plate material behind the hand-off is a strip 22 to 28 mm long, from y 46.9 (40.9 above z 49) to y 69. The
+  side-roller mount (CAD name Part 1 <8>) with V1 fills the −x opening; a fixed guide (Part 1 <15>) fills the +x one.
+- The funnels (y 31.4 to 56, z 5 to 53) sit entirely outside the plates (x −92.75 and below, 27.9 and above), so they
+  catch only balls wider than the 114.3 mm opening.
+- On the tile nothing fixed centres a ball: only the intake wheels touch it, and the centre line falls in the 36 mm
+  gap between two of them. Fixed width at the Pollen centre's height: none up to s −20; 187 mm, funnel to funnel, at
+  s −10; 114.3 mm from s 0 (21.6 mm of play each side); the cheeks' 76.2 mm only from y 59.7, s 12.7 (2.55 mm each
+  side). A Nectar has the plates' 114.3 mm from s 0 (11.45 mm each side), and the two cheek crests centre it: left
+  free it settles within about 1 mm of the centre path.
+- A ball 20 mm off centre is pushed inward: a Pollen by a cheek's front corner, which it meets with its centre at
+  y 19.25 to 20.25 (the contact's sideways component is 0.5), and a Nectar by a plate's front edge at (y 11.9, z 69),
+  which it meets with its centre at about y −1 (0.81). Whether that Pollen is turned inward or rides up the corner
+  is unknown. From y 58.9 the guide's face at x 2.9 pushes the Pollen onto V1.
+- The intake's wheels touch a Pollen from s −99.5 to −3.0 and a Nectar from −124.5 to +18.5 at the drawn arm pose.
+  With the arm 5° up a Pollen is touched from −97 to −17, 10° up from −93 to −36; a Nectar from −126.5 to +4.5 at
+  10° up and from −117.5 to −38.5 at 20° up. The arm's rest angle is unknown, and it moves every number near the
+  intake by 3 to 25 mm.
+- The sweeper bar's drawn pose would block balls coming in (35 mm of overlap with a Pollen), so its working pose is
+  unknown, and Basic Tele never commands its servo, `ruler` (code). Nothing in the transfer, the funnels or the
+  wedges stops a ball at the front.
+
+**Nectar-only stretch**
+
+- From s 19.5 to 29.3 the Nectar's centre runs from (60.9, 81.5) to (67.1, 88.8): above the top of any Pollen
+  (z 81.15) and short of where the front Nectar spokes first touch it (s 29.3). A Pollen passes directly underneath.
+- A beam across through the Nectar's centre there meets solid side plate on both sides (y 60.5 to 66.8), 57.1 and
+  57.2 mm from the centre. The colour spot past s 29.3 is in
+  [Colour](#colour-the-color-rangefinder-on-the-x-guide-flange).
+
+**Reversing the transfer motor** (CAD; how the balls move is inferred)
+
+- Every driven surface reverses, all 1:1. Each track is single file, so balls come out last in, first out: the last
+  Nectar in leaves first.
+- Pollen: V1 (s 46.8 to 57.8) and V2 (s 97 to 110) push it toward the front. On the undriven ramp (s 111 to 280) it
+  only rolls back by gravity. Above a closed paddle, where a Pollen gets only after a shot, the reversed Pollen
+  spokes trap it on the paddle at s 319 to 325.
+  A lone Pollen at s 0 to 46 is touched by nothing.
+- Nectar: the spokes push the whole column down. A returning Nectar meets any Pollen centred at s 61 to 65 or less
+  and shoves it out ahead of itself.
+- The intake has its own motor. If it keeps running forward, the balls stay in: a Pollen bounces between the intake
+  (contact to s −3) and V1 (from s 46.8), a Nectar between the intake (to s 18.5) and the front spokes (from 29.3).
+  Reversed, it ejects at about 2.3 m/s. Stopped, its FLOAT wheels on a floating arm let balls push out under them.
+- In Basic Tele, LT reverses the intake, the transfer motor and `melonbotics` together (`BioBuzzBasicTele.java`).
 
 ## What the CAD cannot tell
 
@@ -232,7 +392,13 @@ Questions for hardware:
   and about 13 mm into the Control Hub's outline (inferred from the CAD's placement, good to a few mm). Is there a
   cut-out, or is it mounted elsewhere?
 - The intake's loaded speed and resting height; how far the tubes bend; how the Nectar ball rolls in its trough.
-- Which blocker paddles and servo exist; the Nectar turret's rotation range.
+- Which blocker paddles and servo exist; where the Nectar paddle is meant to sit; the Nectar turret's rotation range.
+- Near the intake ([above](#the-intake-hand-off)): the sweeper bar's working pose, whether the floor plate's cheeks
+  are solid, how a ball hops on the square 10 mm step at about 2.3 m/s, whether the foam tile sags, and whether a
+  Pollen 20 mm off centre is turned inward by a cheek's corner or rides up it. The spokes aren't modelled: their
+  42.7 mm tip radius is the team's figure and their planes are assumed.
+- Ball mass and rolling resistance, which with the tubes' bending decide which stalls are real and which ball type
+  leaves first when the transfer reverses.
 
 The measurement [above](#the-measurement-that-settles-most-of-it) settles the first two, and the free or loaded
 state.
@@ -242,8 +408,8 @@ state.
 ### What to tell hardware
 
 - **Spots A to E count only balls leaving toward the turrets.** For the possession count the sensors go at the
-  intake end of each track, where no spot has been checked in CAD yet: don't drill A to E for that count
-  ([Counting balls coming in](#counting-balls-coming-in)).
+  intake end of each track, at the two spots in [Counting balls coming in](#counting-balls-coming-in): don't drill
+  A to E for that count.
 - **The case can't be screwed flat behind a plate** (vendor CAD). Its two M4 holes, 8 mm apart, run through the
   14 mm side, parallel to the face with the windows and 6.4 mm below it. The two 2 mm windows sit 2.5 mm off the
   case's centre along its 20 mm side and 3 mm apart along its 14 mm side. The plug (JST PH, side entry) comes out of
@@ -260,13 +426,14 @@ state.
   use B with C instead (36.5 mm apart, fits; C sees a gap of only about 2 to 4 ms at free speed, so C tells only which
   way a ball moved). Place the hole on the windows (above), not on the case's centre. Use the narrow 15° field of
   view.
-- **Bench-test one rangefinder at 15 to 40 mm, in SHORT at a 10 ms budget, first.** If it can't read that close, the
+- **Bench-test one rangefinder at 15 to 45 mm, in SHORT at a 10 ms budget, first.** If it can't read that close, the
   sensor has to stand back from the plate on spacers. For ST's 40 mm minimum ([below](#the-sensor)) that
   is about 5 mm at A and B, 12 to 14 mm at C and 21 to 22 mm at D and E (40 minus the nearest face-to-ball distance;
   inferred). Each mm of stand-back puts the body 1 mm farther out behind the plate and widens the hole the cone
   needs (below). Behind the plate at A, the body is already only 4 to 5 mm from a standoff of the servo mount, and
   nobody has checked for 21 mm of room behind D and E: check in CAD before drilling.
-- **Never in s 266 to 298**: the Pollen paddle swings through the beam there.
+- **Never in s 266 to 298**: at every beam spot tried there, the Pollen paddle swings through the cone (it crosses
+  the path at s 264 to 294).
 - **Nectar: spots D and E**, both on the same plate as A and B; the spot at s 150 only once the Nectar turret's
   rotation range is known. No Nectar spot passes at a 20 ms update. D and E are 16 mm apart along the path and
   18.1 mm in a straight line, so their bodies leave only about 2 to 4 mm between them: check the fit. The Nectar turret
@@ -284,9 +451,12 @@ The sensor face sits on the outer face of its plate (x −92.75), looking throug
 between the two plates' inner faces is 114.3 mm wide. Face to ball is the distance from the sensor face to the ball
 along the beam (CAD).
 
-To mark a hole on the plate: **back** = y − 46.9, how far behind the front edge of the transfer floor plate (that
-edge is at y 46.9 and is where s = 0); **up** = z − 5.0, how far above the side plate's bottom edge (the plates' bottoms
-are at z 5.0, 5.0 mm above the floor; CAD). That assumes the bottom edge is straight, which nobody checked.
+To mark a hole on the plate, measure from the plate's front bottom corner: **back** = y − 46.9, how far behind the
+side plate's front edge at its bottom (y 46.9, below z 49); **up** = z − 5.0, how far above the side plate's bottom
+edge (the plates' bottoms are at z 5.05 and the tile's top at z 0.05; CAD). Higher up the front edge steps forward,
+to y 40.9 from z 49 to 69 and y 11.9 from z 69 to 182 ([The intake hand-off](#the-intake-hand-off)), so measuring
+from the edge at the hole's own height would put a hole at A to E about 35 mm off. A negative back is in front of
+the bottom corner. Back is a straight y distance, not s. Both assume the edges are straight, which nobody checked.
 
 | spot | s | (y, z) | back, up | beam vs ball centre line | face to ball | empty channel reads |
 |---|---|---|---|---|---|---|
@@ -310,21 +480,21 @@ the plate.
   D–E is longer than its 16 mm, which a straight vertical column can't give: D's offset from its centre beam is
   (20.9, −2.1) where E's is (21.0, 0), so D's z looks about 2 mm low. Recheck D in CAD.
 - A and B: nothing moving is in a 15° cone. At the 27° setting a compliant wheel takes 1.6% of A's cone and 3.0% of
-  B's, so use 15°. A is 76 mm and B 56 mm before the ball held by a closed Pollen paddle (s 242), 257 and 237 mm
-  before the turret. Body clearance: A is 4 to 5 mm from a servo-mount standoff, B 10 to 14 mm from anything.
+  B's, so use 15°. A is 74.5 mm and B 54.5 mm before the ball held by a closed Pollen paddle (s 240.55), 256.8 and
+  236.8 mm before the turret. Body clearance: A is 4 to 5 mm from a servo-mount standoff, B 10 to 14 mm from anything.
 - **A to E cannot count balls coming in while a paddle holds them** (CAD queue positions; distances from the CAD
-  path). With the Pollen paddle closed the queue's centres are s 242, 170, 98 and 27, and a fifth ball would stop at
-  about s −46, under the intake. The first ball stops on C. The second stops on both A and B: its centre is 30 mm from
-  A's beam and 33.5 mm from B's, both inside its 35.55 mm radius. The third (69 mm from A) and fourth never reach A.
-  `TransferCounter` counts only when A clears while B is still covered, so the second ball is never counted. For
-  Nectar, a ball held by the Nectar paddle (s 143 on the 2026-11-14 CAD) covers both D and E, and a second (s 50)
-  never reaches D; the hold position is not yet worked out for the paddle's 2026-11-15 placement
-  ([above](#path-capacity-and-the-blocker)). With the paddle open a full column parks at s 202, 110 and 18, and the second ball again covers D and E while the third never reaches D. So
-  spots on the tracks suit counting balls as they leave toward the turrets, not as they come in.
-- A and B are on the undriven ramp: a lone ball at loaded speed may not climb it and can roll back, so use the pair
-  to tell direction (inferred).
-- D and E: the spokes are 40 mm clear. D is 25 mm before the Nectar paddle's hold position on the 2026-11-14 CAD (s 143); the
-  turret is at s 202.
+  path, inferred). With the Pollen paddle closed the queue's centres are s 240.55, 168.6, 97.3 and 26.3, and a fifth
+  ball stops at s −46.5, under the intake. The first ball stops on C (20.3 mm from its beam). The second stops on both
+  A and B: its centre is 30.1 mm from A's beam and 33.9 mm from B's, both inside its 35.55 mm radius. The third
+  (69.8 mm from A) and fourth never reach A. `TransferCounter` counts only when A clears while B is still covered, so
+  the second ball is never counted. The Nectar paddle can't close as drawn, so the only Nectar column is the open
+  one, at s 202.3, 110.5 and 17.7 ([above](#path-capacity-and-the-blocker)): the second ball covers D and E (its
+  centre 22.2 and 32.4 mm from their beams, inside its 45.7 mm radius) and the third never reaches D (106.7 mm
+  away). So spots on the tracks suit counting balls as they leave toward the turrets, not as they come in.
+- A and B are on the undriven ramp: a lone Pollen at loaded speed stalls at about s 210 to 220, past both, and rolls
+  back to s 161.5 or less, so use the pair to tell direction (inferred).
+- D and E: the spokes are 40 mm clear. D is 25.3 mm before where a closed Nectar paddle would hold a ball (s 143.3),
+  but that paddle can't close as drawn; the turret is at s 202.
 - Rejected (CAD): s 266 to 298 (the Pollen paddle swings through the beam), s 306 (2 mm from the paddle and the tubes),
   s 394, and an earlier pair at s 282, 290 and 306.
 
@@ -392,8 +562,9 @@ of view, up to 4 m, "up to 100Hz", M4 holes 8 mm apart; SHORT mode at a 10 ms bu
   budget at 100 Hz goes beyond what the chip's maker rates, every spot on this page is inside the 4 cm, and both
   hold only if the bench test shows them. Brushland also says smaller regions (the 4 × 4 that gives 15°) are noisier
   and need a longer budget.
-- Every spot above is 15 to 41 mm from the ball, so bench-test at 15 to 40 mm in SHORT at 10 ms before drilling, and
-  leave room for spacers. To try 10 ms: Configure Laser Rangefinder with `timingBudgetMs` 10 (its default is 20).
+- Every spot on this page is 15 to 44 mm from the ball, so bench-test at 15 to 45 mm in SHORT at 10 ms before
+  drilling, and leave room for spacers. To try 10 ms: Configure Laser Rangefinder with `timingBudgetMs` 10 (its
+  default is 20).
 - **No sensor update rate on this page has been measured.** Every bench run so far had the lasers at 20 ms
   ([`hub-bench-findings.md`](hub-bench-findings.md)). "A reading every 10 ms" is the poller's rate, not a new
   distance every 10 ms. Three clocks run one after another, each on its own: the sensor's update, the hub's ADC
@@ -434,82 +605,274 @@ within the possession limit, and each Nectar ball's colour, to get rid of an opp
   the pattern the rule names.
 
 So (inferred): an undercount is the costly error, and an overcount only stops the robot early, so every counter
-should err toward counting too many. Stop intaking at a count of 4 and reverse within well under 3 s, since with
-balls arriving touching a fifth can be under the intake before any sensor sees it: with the Pollen paddle closed it
-stops at about s −46, inside the intake. Keep opponent Nectar out with the camera and the driver; the colour sensor
-is the backstop. Balls that are shot pass no intake sensor, so the code must subtract shots.
+should err toward counting too many. Stop the intake at a count of 4, or as soon as either track reads full
+(below); if a 5th ball may be in, reverse within well under 3 s, which also puts out a 3rd Nectar resting at s 17.7.
+With balls arriving touching, a ball can be under the intake before any sensor sees it: with the Pollen paddle
+closed a fifth Pollen stops at s −46.5, inside the intake's reach (s −99.5 to −3.0). And once 3 Nectars are in, the
+third resting at s 17.7, a 4th ball stops at s −58.5 (Pollen) or −81.0 (Nectar), under the intake and in front of
+every beam on this page (CAD). That ball is CONTROLLED, so the count must already read 4 when the third Nectar comes
+to rest: stopping at 4 balls seen would stop one ball late. With a ball pinched under a stopped intake, no beam
+anywhere in s −100 to +80 is clear of every ball (CAD). Keep opponent Nectar out with the camera and the driver; the
+colour sensor is the backstop. Balls that are shot pass no intake sensor, so the code must subtract shots.
 
-**Why not a sensor pair at the hand-off** (CAD):
+#### The plan
 
-- Both types roll on one surface only on the field tile under the intake, until about 28 mm in front of the floor
-  plate's front edge (Pollen s −29, Nectar s −37, CAD path). By s 0 the Pollen ball sits on the 10 mm floor plate
-  (centre 45 mm above the floor) and the Nectar ball rides the cheek edges (centre 68 mm, bottom 22 mm up).
-- Nothing fixed can carry a low beam there. The side plates have no material in front of y 11.5 (35 mm before the
-  floor plate's edge), only above z 69.5 from there to y 41, and only above z 49.5 from y 42 to the edge at y 46.9.
-  From s 0 the floor plate's 18.5 mm solid cheeks stand between a low side beam and the Pollen ball.
-- Above the cheeks, between s 0 and about s 11, a beam sees at most 6 to 7 mm between touching balls of both types.
-- At the 66 mm height of a beam 30 mm above the Pollen centre line, two touching Nectar balls leave a 9.1 mm gap
-  (chord 82.3 mm). Read as covered or clear by two beams 17 mm apart, a touching Nectar train reads as forward, back,
-  forward and counts as one ball (inferred, and simulated below).
-- On the tile in front of the plate, side play is 29 to 85 mm for a Pollen ball and 27 to 45 mm for a Nectar ball,
-  set by the funnels and the intake, not by the 114.3 mm channel. From about s −20 a Nectar ball rides the cheek
-  edges within about ±0.75 mm; a Pollen ball is held within about ±9 mm at s −15, narrowing to about ±3 mm from s 5
-  (CAD path table).
+One beam per track, each where only its own ball type passes, and the Color Rangefinder for colour: the team's two
+Laser Rangefinders and one Color Rangefinder. The spots were worked out for this page from the CAD's paths and
+meshes (inferred); the CAD itself checked neither counting spot, and nothing has been tested.
 
-**The best-supported layout** (inferred; mounting room not checked in CAD):
+| beam | (y, z) | back, up | covered at s: Pollen / Nectar | what it sees | to make |
+|---|---|---|---|---|---|
+| P66, Pollen counter | (66, 16) | 19.1, 11.0 | −0.9 to 38.8 / never | every Pollen; never a Nectar (at most 9% of its cone) | a 3.2 mm hole through the −x plate and a tunnel through the −x cheek (about 20 mm; 23.1 mm with the plate), wide enough for the cone all the way; the laser body outside the −x plate, its 14 mm side along y |
+| N20, Nectar counter | (33.0, 106.6) | −13.9, 101.6 | never / −10.2 to 50.1 | every Nectar; never a Pollen. The beam is square to the Nectar's path at s 20, 37.5 mm in front of and above its centre | a 3.2 mm hole through the −x plate, solid there (21.1 mm behind its front edge at that height) |
+| Color Rangefinder | C1: (64.6, 86.4); or (68.7, 91.1) to (70.5, 93.5) | C1: 17.7, 81.4; or 21.8, 86.1 to 23.6, 88.5 | never / C1: −20.1 to 71.7; s 32 to 35: −13.8 to 80.9 | every Nectar, its beam through the ball's centre at s 25 (C1) or s 32 to 35 ([Colour](#colour-the-color-rangefinder-on-the-x-guide-flange)) | a hole through the +x guide's flange and plate |
 
-- **One Laser Rangefinder per track**, where only that type passes, and early enough that every ball of a full load
-  crosses its beam. Count +1 each time the beam goes from clear to covered, or −1 instead while that track's motor is
-  commanded in reverse. Wrong counts then fall on the high side. Each track carries one type, so the beam height can
-  suit it: about 30 mm off the Pollen centre line (gap 33.0 mm on a straight stretch, 35.6 mm at the best offset of
-  30.8 mm), 35 to 40 mm off the Nectar centre line (gap 32.6 to 47.2 mm).
-- **Nectar:** on the ramp near s 20 to 30, the beam 35 to 40 mm off the centre line toward the front and up, away
-  from the Pollen path (62 mm or more from it). The side plate is solid there (CAD). A full column's third ball parks
-  at s 18 and its edge still reaches such a beam. The intake arm swings close by: check in CAD.
-- **Pollen: no spot found yet.** A beam 30 mm above the Pollen centre line meets the Nectar path until about s 70,
-  but with the paddle closed the fourth ball parks at s 27 and its edge reaches no further than about s 46 at that
-  height. So the Pollen beam has to run below the centre line, 5 to 10 mm above the floor plate's top (gap 32 to
-  22 mm), between s 0 and about s 46: that means a pocket through the floor plate's cheek, and the plate's surface
-  would sit inside the sensor's field of view (at 5 mm up it enters about 40 mm out, about where the ball is), which
-  may read as a target. Both need a CAD change and a bench check.
-- **Color Rangefinder:** through the Nectar's centre on the ramp at s 20 to 28 (transfer y 61 to 66, z 82 to 88).
-  It is the only stretch where a centre beam crosses only Nectar: earlier, every Pollen ball crosses it too (hue still
-  tells yellow from red and blue). The hole goes through the plate and the outer part fixed to it, 8.2 mm in all; the
-  ball is 19.6 mm from the face, and an empty beam ends on the far plate 117.5 to 122.5 mm away, beyond the sensor's
-  100 mm range. Pollen balls pass 0.9 to 7.2 mm below the beam's axis, so they may graze its field of view, which
-  Brushland doesn't publish.
-- Shooting is first in, first out, so reading colours anywhere every Nectar passes gives their order. Reading early
-  only means fewer balls move when one is put back out. Reversing the transfer motor to put a Nectar back out also
-  moves the Pollen (every transfer shaft turns 1:1 off that motor); reversing the intake alone reaches only a ball
-  the intake wheels still touch.
-- **Colour timing.** The ball passes the colour beam in about 57 ms if the intake still drives it there (1610 mm/s
-  free). The intake arm probably can't drop fast enough to follow it, so it likely coasts at about 1.2 to 1.5 m/s
-  (62 to 77 ms; inferred from the arm's length and gravity alone, its mass and any spring unknown). At the chip's
-  fastest colour rate, 25 ms, one or two readings fall wholly on the ball (two or three at the slow end), assuming
-  each reading averages the whole 25 ms, as the 16-bit colour Brushland lists suggests; at the chip's 100 ms default,
-  possibly none. The next touching Nectar arrives 57 ms or more later, so the colour can
-  arrive after it.
+"Covered at s" is the stretch of a ball's own path, in s, over which the ball cuts the beam's axis (inferred from the
+CAD's paths); a cone stays covered a little longer.
+
+- **Count +1 on each clear-to-covered edge. While the intake runs in reverse with the transfer stopped or reversed,
+  count −1 on each covered-to-clear edge instead, and nothing on clear-to-covered.** That takes off a ball that was
+  resting in the beam when reversing started, such as the 3rd Nectar, as well as one that passes back through. With
+  the intake still forward, a ball bounces between the intake and the transfer's first driven surface, across the
+  beam each way ([Reversing the transfer motor](#the-intake-hand-off)), so subtracting then would undercount. A ball
+  that leaves from in front of every beam is never taken off, which leaves the count high, the safe error. Basic
+  Tele's LT reverses the intake and the transfer together.
+- **Treat a beam that stays covered while intaking as "that track is full": count at least 4 and stop the intake.**
+  Reverse only for a suspected 5th ball; reversing the intake also puts out the resting 3rd Nectar. The resting 4th
+  Pollen (paddle closed, s 26.3) covers P66, and the resting 3rd Nectar (s 17.7) covers N20 and the Color
+  Rangefinder. "Stays covered" means longer than a passing ball takes; set it on the bench. Either resting ball closes
+  the other track too: the 3rd Nectar blocks the Pollen path, and the 4th Pollen the Nectar path (CAD).
+- **In geometry this counts every mix of up to 4 balls right**, in any order, with the Pollen paddle open or closed,
+  including 3 Nectars then a 4th ball, which stops under the intake. The one error is reading 4 with only 3 Nectars
+  in, when no further ball can reach the transfer anyway (inferred: every arrival order played through the CAD's
+  rest positions).
+- **That holds only while the Nectar paddle can't close.** If hardware makes it close, it holds the 1st Nectar
+  at s 143.3 and the 2nd at s 50.6, just past where it cuts N20's axis (it fills 46% of N20's cone), and the next
+  ball stops unseen in front of both beams, under the intake: a Pollen at about s −17.5 or a Nectar at −45.1 (CAD).
+  Played through every order, 10 of the 30 mixes of up to 4 balls then read 1 or 2 low (inferred). The plan would
+  then have to change, for example by taking "Nectar full" from the Color Rangefinder, whose beam the resting 2nd
+  Nectar still cuts, and reading 4 from then on.
+- **P66, more.** Touching Pollen leave 31.5 to 33.5 mm of travel clear at the beam (19.3 at spot 1, below). Empty, 82%
+  of a 15° cone ends on the floor plate at 46 to 108 mm, 15% on the far plate at 118 mm and 4% on the drivetrain at
+  204 mm; only 3% of rays end within 50 mm, against a ball 35.2 mm from the face. That needs the 15° field: at 27°
+  the floor plate is in view from 25 mm and 19% of rays end within 50 mm, nearer than the ball, and Brushland says
+  the 15° region is noisier and needs a longer budget (vendor). The intake doesn't enter the cone anywhere from 0° to
+  49° (inferred: cone cast on the CAD meshes, tunnel drilled wide). Keep the beam at about z 16: at z 18 the laser
+  body comes within 1.1 mm of the side-roller mount. The windows sit 2.5 mm off the case's centre along its 20 mm
+  side, which is vertical here, so with the body above the beam it is 0.6 mm from that mount, and below it 3.45 mm
+  above the tile: check which way it goes and where the plug comes out (inferred, CAD meshes). P66 lies where a lone
+  Pollen can stop untouched (s −0.5 to 46); one that stops on the beam reads as "Pollen full" and stops intaking
+  early, the safe error.
+- **N20, more.** Touching Nectars leave 30 to 35 mm of travel clear. Empty, a 15° cone ends 100% on the far plate at
+  117 to 118 mm with the intake at 0°, 15°, 30° and 49° (inferred, cone cast on the CAD meshes). The ball comes
+  29.7 mm from the face. The front spokes' disc passes 15.1 mm from the axis, against a 15° cone whose radius is 5.8
+  to 10.0 mm at the disc's planes (10.6 to 18.3 mm at 27°, so a 27° field may see the spokes), but the spokes aren't
+  modelled. Nobody has checked the sweeper bar against this beam. A second spot at (37.7, 108.3), back −9.2, up 103.3
+  (Nectar s 25, 35 mm off centre), also fits, but touching Nectars leave only 20.5 to 25.5 mm there.
+- **Speed is the weak point** (simulated). At 2.3 m/s P66 sees a ball for 17.1 ms and the gap for 13.7 ms, N20
+  26.3 ms and 13.0 ms, so no gap lasts two 10 ms readings
+  ([the rule](#ball-and-gap-times-and-which-sampling-rate-works)). Share of runs that counted 4 touching balls as 4,
+  by speed in m/s:
+
+| beam and reader | 1.53 | 2.3 | 2.8 | 3.1 | 3.5 |
+|---|---|---|---|---|---|
+| P66, laser at a 10 ms update | 100% | 87% | 78% | 75% | 62% |
+| P66, laser at a 20 ms update | 100% | 0% | 0% | 0% | 0% |
+| P66, break-beam read every 10 ms | 100% | 100% | 100% | 100% | 85% |
+| P66, break-beam read every 5 ms | 100% | 100% | 100% | 100% | 100% |
+| N20, laser at a 10 ms update | 100% | 92% | 89% | 86% | 62% |
+| N20, laser at a 20 ms update | 100% | 65% | 0% | 0% | 0% |
+| N20, break-beam read every 10 ms | 100% | 100% | 100% | 93% | 71% |
+| N20, break-beam read every 5 ms | 100% | 100% | 100% | 100% | 100% |
+
+- 2.3 m/s is the intake's free speed with the robot still, 3.1 to 3.7 m/s with it driving at 1.85 m/s (the table stops
+  at 3.5), and 1.53 m/s a touching Pollen train the side rollers set (speeds inferred, below). Only 3 Nectars fit, so
+  the N20 rows are conservative. Model: covered travel from the CAD paths, a part-filled cone counted as covered from
+  50%; a laser takes a snapshot every 10 or 20 ms at a random phase, read through the hub's ADC (refreshing every 9.7 to
+  11.1 ms, measured) by a 10 ms poll; a break-beam is a thin beam whose state is read every 5 or 10 ms.
+- **So use break-beams if they are legal** and a 5 to 10 ms poll reads fresh digital values; otherwise the two
+  lasers at a 10 ms budget in the same spots. A break-beam pair needs the same tunnel through the +x cheek and plate
+  at P66, and a hole through the +x plate at N20; Adafruit 2167 halves fit on both sides at both spots (inferred). If
+  break-beams carry the count, the lasers can still give the "track full" signals.
 - **Speeds at the intake** (inferred, no slip assumed): on the tile a pinched ball moves at 2.2 to 2.8 m/s with the
   robot standing still. Driving adds about 0.47 × the robot's speed (0.465 Pollen, 0.481 Nectar, with the wheel above
   the ball): at 1.85 m/s, the only drive speed in the repo (`BioBuzzConstants`, still the Betta bot's value), that is
-  about 3.1 to 3.5 m/s. On the plate and the ramp most of that gain is lost. All intake-derived speeds scale with the
+  about 3.1 to 3.7 m/s. On the plate and the ramp most of that gain is lost. All intake-derived speeds scale with the
   intake's real loaded speed, which is unknown, and with battery voltage, since the intake runs at power 1.0 with no
   voltage compensation. The side rollers' 1529 / 803 mm/s come from the transfer motor and don't change with driving.
 
+#### Spots considered
+
+| spot | (y, z) | back, up | covered at s: Pollen / Nectar | verdict |
+|---|---|---|---|---|
+| 1, low over the floor plate's edge (the CAD's best counter) | (51, 16) | 4.1, 11.0 | −28.2 to 23.8 / −39.0 to −13.7 | fallback only: sees both types, the resting 4th Pollen fills 39% of its cone, part of its empty view returns at the ball's distance, and it never sees a 4th ball stopped behind 3 Nectars |
+| 4, high, just behind the plate's edge | (45, 76) | −1.9, 71.0 | −13.0 to 16.5 / −44.6 to 50.6 | rejected: sees both types; touching Nectars leave 1.2 mm; the resting 3rd Nectar fills its whole cone |
+| 5, partner for 4 | (61.5, 76) | 14.6, 71.0 | | rejected: starts inside the side-roller mount |
+| 2, low on the tile | y 34.5 | | | rejected: nothing to fix it to (the body cuts the funnel); 34 to 41% of the cone sees the tile and up to 15% leaves the robot |
+| 3, low, from the drivetrain's inner plate | y 24 | | | rejected: 39% of the rays leave the robot |
+| 6, 66 mm up, in front of the plates | z 66 | | | rejected: the intake is in the cone and touches the body |
+| 7, looking down from a new cross bracket | y 10 to 30, face at z 108 | | | rejected: every Nectar runs into the body (by up to 5.1 mm, over s −5.4 to 43.1); moved to y 0 to 20 it clears a Nectar by 2.2 mm, but the intake wheel's rim reaches it at 15° to 25° of lift |
+| 8, looking up through the floor plate | | | | rejected: the ball rolls on the sensor's face, and there is no room under the 5 mm plate |
+| any pair 16 to 17 mm apart, low or high | | | | none fits |
+
+The verdicts are CAD; back and up are worked out from (y, z), and the covered ranges from the CAD's paths, as in
+[The plan](#the-plan).
+
+- **Spot 1** (CAD): the beam runs 6 mm above the plate top. The body sits outside the −x plate behind the funnel's
+  flange, at x −106 to −96, y 46 to 60, z 6 to 26, which clears the funnel but, with the windows 3 mm apart about the
+  centre of its 14 mm side, puts the beam at about y 53; the figures here are for y 51. The +x mirror still touches the
+  other funnel. The beam needs a 26.4 mm tunnel: funnel flange 3.2, plate 3.2 and cheek 20; whether the cheek is solid
+  and whether the flange may be drilled are unknown. Its axis is 43.6 mm from a Pollen and 43.8 mm from a Nectar, and
+  ends on the far cheek at 100.8 mm. 15.2% of a 15° cone (19.4% at 27°) ends on the plate top or the cheek's fillet at
+  36 to 44 mm, the same range as the ball; 25.8% runs past the cheek to the far funnel at 124 to 208 mm. A Pollen covers
+  the axis for 51.8 mm of travel and touching Pollen leave 19.3 mm, 8.4 ms at 2.3 m/s; a Nectar only grazes it, 4.5 mm
+  deep for 25.4 mm, as it lifts away up the step. The resting 4th Pollen (s 26.3) clears the axis by 1.5 mm but fills
+  39% of the 15° cone at 48 to 66 mm, so with 3 Pollen inside it may read "ball" all the time; how the sensor reads a
+  part-filled field is unknown. Also in the beam at rest: the 7th Pollen with the paddles open, a Nectar stopped behind
+  a Pollen at s 61, any ball under a stopped intake, and a lone Pollen coasting to a stop in s −0.5 to 46 (inferred).
+  The intake and the sweeper clear it. As an all-ball counter it got 4 touching Pollen right in 74% of runs at 2.3 m/s
+  with a laser at a 10 ms update (simulated).
+- **Spot 4** (CAD): a 3.2 mm hole through the −x plate; the body fits. 92% of the 15° cone ends on the far plate at
+  117.5 mm. A Nectar passes 15 mm from the face, right through its centre, and covers the beam for 95 mm of travel;
+  a Pollen covers it for 29.3 mm, 5 mm deep. That is about 13 ms for a Pollen and 42 to 59 ms for a Nectar at the
+  intake's free speed (inferred).
+- **Spots 1 and 4 together** see every ball of a 4-ball mix once each, 4 edges apiece, so read as a Pollen and a
+  Nectar counter they count most balls twice (inferred).
+- **A beam pair 30 mm above the Pollen centre line**, at about z 76, can't count Nectars: touching Nectars leave at
+  most 9.1 mm there (chord 82.3 mm), and only 1.2 mm at spot 4. Read as covered or clear by two beams 17 mm apart, a
+  touching Nectar train counts as one ball (inferred, and simulated below).
+
+#### Colour: the Color Rangefinder on the +x guide flange
+
+Put it on the +x side, on the guide's flange, its beam through the Nectar's centre, at the CAD's spot C1 or 7 to
+10 mm further along the Nectar path with the same mount: C1 is s 25 at (64.6, 86.4), back 17.7, up 81.4; s 32 is at
+(68.7, 91.1), back 21.8, up 86.1; s 35 at (70.5, 93.5), back 23.6, up 88.5 (the CAD checked C1 only; s 32 to 35 is
+inferred from the CAD). They trade. C1 gets more passing readings (62 and 83% against 55 and 80% at s 32, table
+below), the colour sooner (the ball at s 48 to 117 against 54 to 128 for s 35) and a nearer resting 3rd Nectar
+(20.1 to 20.9 mm against 21.3 to 23.2 at s 32). But a passing Pollen fills up to 15% of C1's 15° cone from 54.7 mm,
+where at s 32 to 35 it fills none. Step 5 under
+[What would settle it](#other-counting-options-and-what-would-settle-it) decides.
+
+- **Mount.** The side-roller mount fills the −x side there. On the +x side the case's face sits on the outer face of the
+  guide's flange at x 32.9, looking −x: drill the flange (5.0 mm) and the +x plate (3.2 mm) where the plate is there,
+  since the plate's opening starts at y 69 below z 92, right at this spot. For a 6 × 8 mm window the hole needs to be
+  12.2 mm across for a 15° field, 13.9 mm for 27° and 16.0 mm for 40° (inferred). Nothing comes within 8 mm of the case
+  from s 19.5 to 35, either way up; with its 23 mm side along y it spans z 85.5 to 101.5 at s 35, where the flange tops
+  out at about z 99.1, so take s 32 if the case must sit wholly on the flange. From s 38, with the 23 mm side vertical,
+  the intake motor comes within 6 to 7.5 mm. Nobody has checked that the flange is solid behind the case (inferred, CAD
+  meshes at their drawn poses).
+- **Distance.** A passing Nectar is 19.65 mm from the face, at the edge of Brushland's "accurate down to 0.1mm
+  within the first 20mm" (vendor); the resting 3rd Nectar 21 to 25 mm. Empty, the nearest return is 121.9 to
+  122.5 mm for a 15° cone and about 116 mm for 27°, beyond the 100 mm range (vendor), so it should read nothing in
+  range; what the output reads with no target is unpublished. At 27°, 2% of rays end 8.4 mm out, just past the
+  8.2 mm-deep hole, inside the 100 mm range, and 4 to 6% (C1 to s 35) end on a turning bevel gear's clamping pin at
+  119 to 146 mm, beyond it (inferred, CAD meshes).
+  Some rays reach robot parts and the field through the plates' windows, so never trust hue without a distance gate.
+- **Pollen.** A passing Pollen fills none of a 15° cone at s 32 or 35, 6 to 12% of a 27° one and 16 to 20% of a
+  40° one. At C1 it is in up to 15% of a 15° cone (27% at 27°) from 54.7 mm (CAD), since there the beam passes only
+  4.4 to 5.2 mm above the Pollen's top, against 9.9 mm at s 32 and 12.3 mm at s 35. Brushland doesn't publish the
+  field of view, so these use the Laser Rangefinder's cone angles, and 40°.
+- **The last Nectar in, at rest.** The 3rd Nectar (s 17.7) fills 100% of the cone at every angle tried, with nothing
+  else in view: a still read of its colour, and a second "Nectar full" signal. With 1 or 2 Nectars in, nothing rests
+  in the beam. The 3rd stays at s 17.7 only while the arm rests within about 1° of the drawn pose, and higher it
+  settles nearer the intake (about s 12 at 5° up, s 3 to 4.5 at 10°, s −9 at 15°; inferred from the CAD's contacts).
+  The beam still sees it fully with its centre anywhere from s −14 for C1, −7 for s 32 or −4 for s 35, so at s 32
+  to 35 up to about 10° of arm lift, and at C1 15° as well (inferred).
+- **Passing Nectars.** Share of runs with at least one 25 ms colour reading taken wholly while the ball fills 95% or
+  more of a 15° cone (simulated, speeds inferred):
+
+| spot | free, ball at 0.5 × spoke tip | free, ball at 0.363 × spoke tip | arm lags (coasting at 1.2 m/s), or loaded |
+|---|---|---|---|
+| s 32 | 55% | 80% | 100% |
+| s 35 | 52% | 79% | 100% |
+| C1, s 25 | 62% | 83% | 100% |
+| C2, s 60 | 31% | 73% | 80% coasting, 100% loaded |
+
+- At the chip's 100 ms default no reading falls wholly on a passing ball at any spot, so passing reads need the
+  25 ms rate, which Brushland's "Color resolution: 16-bit" only suggests
+  ([Parts](parts-findings.md#brushland-color-rangefinder)). The code learns the hue after the first whole reading,
+  the hub's ADC refresh (up to 11.1 ms), the 10 ms poll and the board's unpublished delay; by then the ball's centre
+  is at s 54 to 128 for the s 35 spot, 48 to 117 for C1 and 69 to 153 for C2. So the 1st and 2nd Nectar's colour
+  arrives after the ball is in the spokes (inferred). If the intake still drives the ball there (1570 to
+  1610 mm/s), it passes C1 in 57 to 58 ms (CAD). If the intake arm can't drop fast enough to follow the ball, it
+  coasts at about 1.2 to 1.5 m/s instead (inferred from the arm's length and gravity alone; its mass and any spring
+  are unknown). Neither speed is measured.
+- **Mixed views.** While a Nectar fills 95% of the cone at s 35, a Pollen covers at most 1% of it (4% at 40°). A
+  Pollen alone reads yellow or empty (86° and 93° on the one bench reading of each), outside the red 10 to 50° and
+  blue 170 to 210° ranges, and a red or blue Nectar mixed with a Pollen most likely lands between ranges and reads
+  "unknown" rather than the wrong colour (inferred, not measured).
+- **Its distance output as a Nectar counter.** With hue on pin 0, pin 1's digital "within about 30 mm" marks Nectar
+  arrivals: two touching Nectars show 26 to 44 ms with less than half the cone within 30 mm at s 35. That is enough
+  at the chip's 6.25 or 12.5 ms proximity rates, marginal at 25 ms and too slow at its 100 ms default; the real rate
+  is unpublished. A lone Pollen never comes nearer than 51 mm there. It needs the splitter cable, and it never sees a
+  Pollen or a ball under the intake, so it is a cross-check for N20 only (inferred).
+- **C2, a third option** (CAD): the −x plate at s 60, beam (83.4, 114.9), back 36.5, up 109.9, through a 3.2 mm
+  hole. No Pollen is ever in view; 87 to 89% of rays end on the far plate at 117.5 mm; a passing Nectar is 14.7 mm
+  from the face; the spokes clear by 24.5 mm (15°) and 15.5 mm (27°); the body clears its neighbours by 3.9 to
+  5.4 mm. But the resting 3rd Nectar cuts its axis by 3.6 mm and fills 74% of the 15° cone, and the 2nd fills another
+  15% (inferred), so a still read mixes two Nectars' colours. The axis clears both resting Nectars only at s 63.4 to
+  64.8, (85.0, 117.9) to (85.5, 119.2), back 38.1 to 38.6, up 112.9 to 114.2, where the cone still takes 43 to 45%
+  of each (inferred) and nobody has checked the body's fit. It also gives the fewest passing reads and the latest
+  verdict.
+
+#### Putting a wrong-colour Nectar back out
+
+Shooting is first in, first out, so reading colours anywhere every Nectar passes gives their order. Reversing the
+transfer motor also moves the Pollen, since every transfer shaft turns 1:1 off it
+([Reversing the transfer motor](#the-intake-hand-off)). Sequences (inferred from the CAD's contacts and the speeds
+above; nothing tested):
+
+- **The wrong Nectar is the 3rd, at rest at s 17.7 and read still.** Keep the transfer stopped and reverse only the
+  intake, for at least 64 to 89 ms (s 18.5 to −124.5 at 2238 or 1610 mm/s). Only balls under the intake in front of
+  it leave with it (a Pollen stopped at s −58.5 or a 4th Nectar at −81.0); nothing in the transfer moves, and no
+  Pollen can be at s 0 to 72 then. It needs the intake wheels to reach the ball: at the drawn arm pose they touch a
+  Nectar up to s 18.5, with the arm 10° up only to s 4.5. N20 sees the Nectar leave, which takes it off the count
+  ([The plan](#the-plan)).
+- **It is the 1st or 2nd Nectar and was the last ball in.** Reverse the transfer and the intake together, as LT
+  does, stop the transfer as soon as the colour sensor sees that Nectar pass back down, and keep the intake reversed
+  for at least another 64 to 89 ms. Down to s 18.5 takes 36 to 49 ms free (68 to 94 loaded) from the 2nd's rest at
+  s 110.5, and 71 to 98 ms free (136 to 188 loaded) from the 1st's at 202.3. Any Pollen that V1 or V2 touches is
+  driven toward the front: with the paddle closed the 3rd Pollen (s 97.3) likely ends in the untouched stretch at
+  s 0 to 46, where the returning Nectar shoves it out ahead of itself.
+- **Another Nectar came in after it**, the usual case with touching arrivals: the next arrives 57 ms or more later,
+  and the verdict comes later than that. Both come out, the good one first, plus any Pollen above; then take the good
+  one in again. To avoid it, pause the intake after each Nectar edge until its hue is known, at a cost of about one
+  hue reading per Nectar. A ball coming back passes the sensor again: a second read of one that read "unknown".
+- **Rules.** Each ejection takes tenths of a second, well inside G407's MOMENTARY, but G408 has no momentary allowance
+  and repeated instances are likely strategic, so ejecting is a rare backstop: alert the driver each time. A Pollen
+  that leaves unseen leaves the count too high, the safe error.
+
+#### Other counting options and what would settle it
+
 **Alternatives worth knowing:**
 
+- **Spot 1 as an all-ball counter**, if P66 can't be built: weaker (above), it needs a 20 mm tunnel through the same
+  cheek, and it needs the Color Rangefinder's "Nectar full" signal to count a 4th ball stopped behind 3 Nectars.
 - **A two-laser direction pair, if used anyway:** read as covered or clear, the spacing must be below both the gap
   and the chord the beams see (the next ball reaching A before the last one leaves B reads as backward), and half the
   smaller of the two makes the shortest step longest. `TransferCounter` is not such a reader: it counts when A clears
   while B is still covered, can't tell direction, and counts a ball going backward as another ball. It does best with
-  the beams about as far apart as the gap (34 to 38 mm for a beam 5 to 6 mm up; simulated).
+  the beams about as far apart as the gap (34 to 38 mm for a beam 5 to 6 mm up; simulated). No such pair fits at
+  z 16: a beam that far in front of spot 1 lands on the tile or in the funnel mouth (spots 2 and 3), and one that far
+  behind it is where the resting 4th Pollen covers it, which a beam at z 16 escapes only at y 52.3 or less (inferred).
 - **Digital outputs.** The Laser Rangefinder can output a distance threshold as a digital pin (vendor). The Control
   Hub's 8 digital ports are all unused in `biobuzz.xml`, and a digital pin skips the hub's 10 ms ADC refresh
   (inferred). How often the hub samples digital inputs is unmeasured.
-- **Break-beam sensors** on Control Hub digital ports: Adafruit's 2167 lists "Response Time: <2 ms" (vendor). Not
-  checked against the robot rules.
-- **Occupancy where balls rest** (a beam at a queue position) gives a cross-check that brings the count back in line
-  after a miss. Motor current can't count a touching train: it is one continuous load (inferred).
+- **Break-beam sensors** on Control Hub digital ports: Adafruit's 2167 lists "Response Time: <2 ms", "20mm x 10mm x
+  8mm", a sensing distance of "Approx 25cm", "3.3 - 5.5VDC" and an "open collector transistor output" (vendor), so
+  it needs a pull-up; whether a hub digital port gives one is unchecked, and so is whether the robot rules allow it.
+  A thin on/off beam has no plate-top return and no minimum range. The halves fit at P66 and N20 but hit the funnels
+  at spot 1 (inferred). How fresh a digital read is at a 5 ms poll is unmeasured; a 5 ms poller added 6.6 ms to an
+  OctoQuad driving loop, against 3.0 ms at 10 ms ([`hub-bench-findings.md`](hub-bench-findings.md)).
+- **Occupancy where balls rest** is a cross-check only (inferred). Even six beams at rest positions can't tell 3
+  Pollen and a Nectar from 2 Pollen and a Nectar with the paddle closed, and with it open they read the same for 1 to
+  3 Pollen; where the 3rd Pollen rests (s 97.3) the plate is open, so no sensor fits there. Take the count as the
+  larger of the passing count and what occupancy proves; the two "track full" signals matter most.
+- **Motor current can't count**: a touching train is one continuous load, and the transfer draws 4.5 A with no
+  balls (team). From the CAD's contacts (inferred): the transfer motor is loaded by the Nectar spokes from 2 Nectars
+  and by V2 from 3 Pollen (barely: that ball rests at s 97.3 and V2 reaches from 97); the intake only by a resting
+  3rd Nectar (0.8 mm inside its reach) or a ball in the mouth; loads of up to 2 Pollen and at most 1 Nectar load
+  nothing. Log it as a jam and full alarm.
 
 **Simulated** (a model written for this page, not in the repo; nothing tested on a sensor). Highest speed at which
 99% of runs count right, in m/s:
@@ -525,28 +888,44 @@ is the backstop. Balls that are shot pass no intake sensor, so the code must sub
 - At 2.3 m/s a single ball is counted wrong 2 to 3% of the time by the order reader and 33 to 37% by
   `TransferCounter` at 16 to 17 mm spacing, and no extra space between balls removes that. No height or spacing
   reached 99% for touching trains above 1.7 m/s.
-- One beam per track, counting arrivals: 4 touching Pollen at 1529 mm/s were counted right in 75 to 100% of runs,
-  4 touching Nectar at 1610 mm/s (beam 40 mm off centre) in 98 to 100%. The low ends are the pessimistic cases for
-  the field of view and for how a part-covered reading reads.
+- These pairs assume balls in line on a flat surface; the one-beam-per-track figures in [The plan](#the-plan) use
+  the CAD's paths instead.
 - Assumptions: balls in line, at constant speed, touching or as stated, no slip or bounce, on a flat surface; a
   thin beam unless a cone is named; each sensor updating every 10 or 20 ms at a random phase; the hub's ADC refreshing
   every 9.7 to 11.1 ms (measured, [`hub-bench-findings.md`](hub-bench-findings.md)); a 10 ms poll with 0.3 ms
   jitter; at least 2000 runs per case. The order reader takes ±1 per covered/clear step; `TransferCounter` uses its
-  defaults (threshold 25 mm, hysteresis 10 mm). The 6 mm pair can't be built at the hand-off (above).
+  defaults (threshold 25 mm, hysteresis 10 mm). Neither pair can be built at the hand-off (above).
 - How the sensor reads a ball that half fills its field during one ranging window decides most of this and is
   unknown.
 
 **What would settle it:**
 
-1. Bench: one Laser Rangefinder at a 10 ms budget: does it range at all, and does it read a Pollen ball correctly at
-   15 to 40 mm ([Parts](parts-findings.md#still-unknown)). Run two side by side for crosstalk.
-2. Hardware: which paddles exist, and where a per-track sensor for each type can mount.
-3. With a temporary bracket at the chosen Pollen spot, the sensor in SHORT at 10 ms and Transfer Thread Count Test
-   with `oneSensor` on, run 5 touching Pollen balls 20 times and 3 touching Nectar balls 20 times through the real
-   intake at full power, and record the count each run. If fewer than 99% of runs are right, try break-beams.
-4. A slow-motion video of the intake arm as balls pass: whether the wheels follow a ball or let it coast.
-5. Colour: hue for several balls of each colour at the mount's distance, and with nothing there
-   ([Parts](parts-findings.md#still-unknown)).
+1. Bench, one Laser Rangefinder in SHORT at a 10 ms budget: does it range at all, and does it read a Pollen right at
+   15 to 45 mm ([Parts](parts-findings.md#still-unknown)). For P66: a Pollen about 35 mm out with a plate 6 mm below
+   the beam, read empty and with the ball, with the 15° and with the 27° field; if the empty reading falls in the
+   ball's band, a laser can't use a low beam. P66 needs 15° to range cleanly at 10 ms (at 27° the plate is nearer
+   than the ball). For N20: a Nectar about 30 mm out with a plate at 117.5 mm. Run two side by side for crosstalk.
+2. Hardware or CAD: is the floor plate's −x cheek solid, and can it take a tunnel at (y 66, z 16)? Is there room for
+   the laser bodies outside the −x plate at both spots, and does the sweeper bar clear N20's beam? Where does the
+   intake arm rest? Will the Nectar paddle ever close (the plan changes if it does)? Are break-beams legal, and does
+   a Control Hub digital port pull their output up?
+3. Still: load balls one at a time with the paddle closed and read each sensor at rest. Does P66 read covered with
+   the 4th Pollen at rest, and do N20 and the Color Rangefinder (at about 20 mm) with the 3rd Nectar?
+4. With temporary brackets at P66 and N20 and Transfer Thread Count Test with `oneSensor` on, run 4 touching Pollen
+   20 times and 3 touching Nectars 20 times through the real intake at full power, and record each count. If fewer
+   than 99% are right, try break-beams polled every 5 and every 10 ms.
+5. Colour, on the bench: the Color Rangefinder's hue and distance for red, blue and Pollen balls at 15, 20, 25, 35,
+   50 and 60 mm; with only a plate at 120 mm; through 8.2 mm-deep tubes of 12, 14 and 16 mm bore; a ball slid
+   sideways at 20 and 50 mm to map its field of view; and a Nectar at 20 mm with a Pollen part in view at 50 mm. Then
+   the drop test ([Parts](parts-findings.md#still-unknown)): Nectars past the window at about 20 mm, dropped from 51,
+   73, 130, 270 and 345 mm (1.0, 1.2, 1.6, 2.3 and 2.6 m/s), logging hue and pin 1 at every poll.
+6. Colour, on the robot at the spot step 5 picks: 20 runs of 3 mixed-colour Nectars at full intake power, reading the
+   1st and 2nd as they pass and the 3rd at rest, with pin 1's arrival count; then the putting-out sequences above,
+   counting what else leaves.
+7. Log intake and transfer current and encoder speed while feeding 1 to 4 balls with the paddle closed: a step when
+   the 2nd Nectar comes to rest or the mouth jams would make a jam and full alarm.
+8. A slow-motion video of the intake arm as balls pass: whether the wheels follow a ball or let it coast, and where
+   the arm rests.
 
 ## The 10.9 balls per second figure
 
@@ -574,4 +953,6 @@ so 92 ms stays a fair feed interval to simulate, but not a known limit.
 - Competition Manual (G407, G408, CONTROL, MOMENTARY): <https://ftc-resources.firstinspires.org/ftc/game/cm-html>,
   read 2026-11-15.
 - Adafruit 2167 break-beam sensor: <https://www.adafruit.com/product/2167>, read 2026-11-15.
-- The CAD numbers: the team's CAD as of about 23:00 PST on 2026-11-14.
+- The CAD numbers: the team's CAD as of about 23:00 PST on 2026-11-14, and as of 13:13 PST on 2026-11-15 for the
+  paddles, where balls rest and everything near the intake, with both turrets placed on the transfer.
+- The code facts: `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/opmodes/tele/BioBuzzBasicTele.java`.

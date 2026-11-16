@@ -78,9 +78,9 @@ shooter has one flywheel motor and a servo hood that sets the launch angle.
   cameras share a USB hub with its own power bank.
 - One transfer channel on the centreline carries both ball sizes and exits under each turret. Its ball speeds, the
   blocker paddles the CAD draws and where rangefinders can see the balls are in
-  [`transfer-findings.md`](transfer-findings.md) (CAD as of 2026-11-14): a touching Pollen train passes a point every
-  46.5 ms free to 88.5 ms loaded (inferred). The earlier estimate of 10.9 balls per second has no recorded basis
-  ([why it matters](transfer-findings.md#the-109-balls-per-second-figure)).
+  [`transfer-findings.md`](transfer-findings.md) (CAD as of 2026-11-14 and 2026-11-15): a touching Pollen train passes
+  a point every 46.5 ms free to 88.5 ms loaded (inferred). The earlier estimate of 10.9 balls per second has no
+  recorded basis ([why it matters](transfer-findings.md#the-109-balls-per-second-figure)).
 - Mass 14.6 to 17.6 kg depending on plate material (inferred). The frame is 16.25 in wide over the outer side plates
   and 15.48 in long, 16.74 in over the widest fixed brackets (read from the CAD, 2026-11-11). With the intake arm
   deployed the robot is about 20.9 in long (measured on a render); no retracted pose is modelled.
