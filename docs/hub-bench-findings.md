@@ -368,6 +368,12 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 - **Floodgate:** an unwired floodgate pin reads 0.001 V, so Drivetrain's current limiter stays at 1.0.
 - **Ivy timeout:** `PathCommands.timeout(15000)` ended 15.008 s (2026-10-09) and 15.006 s (2026-10-24) after START.
 - **Config baseline:** slothboard's config baseline lists every `@Config` class.
+- **Outputs come back after a hub fail-safe** (Bench: Write Recovery, 2026-11-14, over USB, 7 fail-safes): `EnhancedMotor`
+  and `EnhancedServo` reached the hub again within 273.3 ms at worst, against a limit of 287.2 ms (`WriteCache`'s
+  250 ms re-send period plus 2 loops at the run's 18.6 ms p95). A raw motor and a raw servo were back within one loop
+  (41.5 ms at worst). None stayed off.
+- **`adb shell getprop ro.serialno` names a Control Hub** (2026-11-14, over USB): the session read the hub's serial
+  from it at its start, so `scripts/bench/session.py` can tell one hub from another by it.
 
 ## Known problems in the bench code
 
@@ -456,11 +462,6 @@ Not run on either date (they need `--interactive`):
   scripts/bench/run_bench.py --rangefinders --interactive --ports-empty`: a fast target's level steps with a 20 ms
   control on sensor A, and the still, flex and swap phases
   ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-rangefinders)).
-- **Whether `adb shell getprop ro.serialno` names a Control Hub:** `scripts/bench/session.py` tells the hub from
-  another by it, and over Wi-Fi refuses to start where it reads empty. The SDK reads the same property when
-  `Build.getSerial()` gives nothing (`Device.getSerialNumber`), and a Control Hub names its Wi-Fi from that serial
-  (`ControlHubDeviceNameManager.handleFactoryReset`; SDK 12.0.0 decompiled, read 2026-11-12), so it is very likely
-  set. Test: start the session on a hub and read the `ro.serialno` in its console's `Control Hub ...` line.
 - **Whether adb's server reconnects a dropped `adb connect` device by itself:** its help text (platform-tools 37.0.1)
   doesn't say. If it does, over Wi-Fi an adb command a runner sends between two `ensure_connected` calls could reach
   another hub the Mac joined, before the next call reads `ro.serialno` (`--hub-serialno`, which `session.py` passes) and
@@ -495,10 +496,9 @@ Not run on either date (they need `--interactive`):
   at 20 and 10 ms budgets and compare the spread and the mean.
 - **A plan's time from request to done inside a collection OpMode's own loop:** Bench: Hub and Bench: Planner Stop
   time it in their own loops (above); no bench times it in an `EnhancedOpMode`.
-- **How long `EnhancedMotor` and `EnhancedServo` stay off after a fail-safe that lands just after a write:** both
-  dates' single trial landed just before a re-send. Bench: Write Recovery fails safe seven times, 0–235 ms after a
-  write, and judges each against `WriteCache`'s re-send period plus 2 loops; run it, and Bench: Write Recovery Photon
-  with `--photon`.
+- **How long `EnhancedMotor` and `EnhancedServo` stay off after a fail-safe under Photon:** Bench: Write Recovery
+  passed without Photon on 2026-11-14 ([Confirmed on the hub](#confirmed-on-the-hub-dont-fix-these-back)); Bench: Write
+  Recovery Photon has not run. Run it with `--photon`.
 - **`GuardedOctoQuadLocalizer` with an OctoQuad plugged in:** read cost, valid reads after the first RUNNING, the
   start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`. START before the first
   RUNNING, the cable plugged in during INIT, and the same pull under Pedro's `OctoQuadLocalizer` as the control:

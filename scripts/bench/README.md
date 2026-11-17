@@ -395,8 +395,10 @@ Control Hub alone the phase doesn't run and the summary says why. Offline:
 
 Whether the dashboard's Enable/Disable switch really stops everything R704(D) could object to, whether off survives
 an app restart, a reboot and a reinstall, and whether the adb recovery brings it back without a Driver Station
-([`docs/dashboard-findings.md`](../../docs/dashboard-findings.md)). It hasn't run on a hub yet, and a failed recovery
-leaves the hub's dashboard off, so it runs only with its own flag, last.
+([`docs/dashboard-findings.md`](../../docs/dashboard-findings.md)). It first ran on a hub on 2026-11-14 (results on
+that page): off held through an app restart and a reboot, and the reinstall phase never ran because one `adb install`
+hung. A failed recovery leaves the hub's dashboard off, so it runs
+only with its own flag, last.
 
 **Setup.** A bare Control Hub on 12 V with the Run button's debuggable build (the runner needs `run-as`: while off,
 the dashboard ignores every command but status), the Mac on its Wi-Fi with auto-join on for that network (the hub
