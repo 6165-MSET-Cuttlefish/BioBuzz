@@ -24,6 +24,9 @@ PHOTON_USB_EH = 6.20 / 6                    # E from M LT: same bench, Expansion
 VOLTAGE_EVERY = 50
 BURSTS_PER_S = 1.0
 POLLER_BULK_MS = (2.0, 2.7)                 # M HB: the 10 ms poller's own bulk read under load
+EH_BULK_HOP = (4.01 - 2.47, 4.67 - 3.26)    # M HB, RS485: EH minus CH bulk read, one run; the other gives 1.52, 1.41
+I2C_COMMANDS = (2, 3)                       # E, low / high: write-read + status query (PhotonI2c.rawRead), + a busy retry
+USB_HOP = 2.65 - 1.56                       # E from M LT 2026-10-28: Photon-off USB EH write minus CH write
 
 MOTORS = ('flywheel', 'drive', 'intake', 'transfer')
 EVERY_LOOP = {
@@ -58,6 +61,7 @@ NECTAR_SERVOS_ON_EH = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'E
                               transfer_servo=['EH'], flower=['EH'], light=['CH', 'EH'])
 PLAN_BEFORE_CAD = devices(flywheel=['CH', 'CH'], drive=['CH', 'CH', 'EH', 'EH'], turret=['CH'] * 4,
                           hood=['CH'] * 2, blocker=['EH'], intake=['EH'], transfer=['EH'], flower=['EH'])
+SWAPPED = [(group, 'EH' if hub == 'CH' else 'CH') for group, hub in MAP]
 
 
 def command(base, hub, q):
@@ -72,10 +76,18 @@ def write(group, hub, q, photon):
     return command(CH_MOTOR if group in MOTORS else CH_SERVO, hub, q)
 
 
+def eh_bulk_hop(bound, q, photon):  # E on USB: low = the write hop, high = the RS485 bulk-read hop
+    return (USB_HOP, EH_BULK_HOP[q])[bound] if photon == 'usb' else EH_BULK_HOP[q]
+
+
 def budget(devs, situation, q=0, drive_fraction=1.0, octoquad_encoders=False, eh_input=False,
-           voltage_every_loop=False, photon=None, ivy_drive=False, dashboard_off=False):
-    io = CH_BULK[q] + (EH_BULK_EXTRA[q] if eh_input else 0.0)
-    io += OQ_COMBINED[q] if octoquad_encoders else OQ_LOCALIZER[q]
+           voltage_every_loop=False, photon=None, ivy_drive=False, dashboard_off=False, swap_bound=None):
+    if swap_bound is None:
+        io = CH_BULK[q] + (EH_BULK_EXTRA[q] if eh_input else 0.0)
+        io += OQ_COMBINED[q] if octoquad_encoders else OQ_LOCALIZER[q]
+    else:
+        io = CH_BULK[q] + eh_bulk_hop(swap_bound, q, photon) + OQ_LOCALIZER[q]
+        io += I2C_COMMANDS[swap_bound] * (USB_HOP if photon == 'usb' else RS485_HOP[q])
     io += VOLTAGE[q] if voltage_every_loop else VOLTAGE[q] / VOLTAGE_EVERY
     refresh = edges = edge_loop = 0.0
     for group, hub in devs:
@@ -102,8 +114,8 @@ def budget(devs, situation, q=0, drive_fraction=1.0, octoquad_encoders=False, eh
                 period=base / (1 - (refresh + edges) / 500.0))
 
 
-def overlapping(devs, situation, drive_fraction=1.0):  # E: full overlap is the unmeasured best case
-    b = budget(devs, situation, photon='usb', drive_fraction=drive_fraction)
+def overlapping(devs, situation, drive_fraction=1.0, **kw):  # E: full overlap is the unmeasured best case
+    b = budget(devs, situation, photon='usb', drive_fraction=drive_fraction, **kw)
     per_hub = {'CH': 0.0, 'EH': 0.0}
     for group, hub in devs:
         if group in EVERY_LOOP[situation]:
@@ -121,8 +133,8 @@ def row(name, devs, **kw):
     print(f"{name:52s} " + "  ".join(cells))
 
 
-def with_poller(devs, situation, poll_ms):
-    b = budget(devs, situation)
+def with_poller(devs, situation, poll_ms, **kw):
+    b = budget(devs, situation, **kw)
     period = b['period']
     link_busy = (b['io'] + b['refresh'] / 500.0 * period) / period
     t = period
@@ -177,3 +189,32 @@ if __name__ == '__main__':
     for poll_ms in POLLER_BULK_MS:
         print(f"10 ms poller on the shared link, {poll_ms} ms per poll: driving "
               f"{budget(MAP, 'driving')['period']:.1f} -> {with_poller(MAP, 'driving', poll_ms):.1f} ms")
+    print()
+    print("Every hub-port device swapped between the hubs: low / high bound on the OctoQuad's I2C commands"
+          " (and on USB, the EH bulk read's hop)")
+    for name, kw in (("RS485, no Photon", {}), ("  drive writes in 50%", dict(drive_fraction=0.5)),
+                     ("  dashboard off", dict(dashboard_off=True)),
+                     ("  dashboard off, drive writes in 50%", dict(dashboard_off=True, drive_fraction=0.5)),
+                     ("Photon on CH, EH on RS485", dict(photon='rs485')),
+                     ("Photon on both, EH on USB", dict(photon='usb')),
+                     ("  Photon USB, drive writes in 50%", dict(photon='usb', drive_fraction=0.5))):
+        row(f"{name}: the map", MAP, **kw)
+        for k, bound in enumerate(('low', 'high')):
+            row(f"{name}: swapped, {bound}", SWAPPED, swap_bound=k, **kw)
+    row("  Photon USB: swapped, EH reads as cheap as CH", SWAPPED, photon='usb')
+    for k, bound in enumerate(('low', 'high')):
+        adds = [budget(SWAPPED, s, photon='usb', swap_bound=k)['period'] for s in ('parked', 'driving')]
+        over = [overlapping(SWAPPED, s, swap_bound=k) for s in ('parked', 'driving')]
+        print(f"  Photon USB, swapped, {bound}, add up then overlap: {adds[0]:5.1f} / {adds[1]:5.1f}"
+              f"    {over[0]:5.1f} / {over[1]:5.1f}")
+    for situation in ('parked', 'driving', 'firing'):
+        for k, bound in enumerate(('low', 'high')):
+            b = budget(SWAPPED, situation, swap_bound=k)
+            print(f"  swapped, {bound:4s} {situation:8s} hub commands {b['io']:5.2f}  refresh {b['refresh']:.1f} ms"
+                  f" per 0.5 s  shot-start loop +{b['edge_loop']:.2f}")
+    for k in (0, 1):
+        for poll_ms in POLLER_BULK_MS:
+            poll_eh = poll_ms + EH_BULK_HOP[0]
+            print(f"10 ms poller bulk-reading the EH, {poll_eh:.2f} ms per poll: driving swapped, {('low', 'high')[k]} "
+                  f"{budget(SWAPPED, 'driving', swap_bound=k)['period']:.1f} -> "
+                  f"{with_poller(SWAPPED, 'driving', poll_eh, swap_bound=k):.1f} ms")
