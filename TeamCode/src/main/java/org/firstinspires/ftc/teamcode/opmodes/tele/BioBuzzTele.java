@@ -1,29 +1,65 @@
 package org.firstinspires.ftc.teamcode.opmodes.tele;
 
 import com.acmerobotics.dashboard.config.Config;
+import com.pedropathing.ivy.Scheduler;
+import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
+import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
+import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.architecture.input.GamepadPresses;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.biobuzz.ShotTuning;
+import org.firstinspires.ftc.teamcode.biobuzz.WaypointDrive;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
 
 @Config("BioBuzz Tele")
 @TeleOp(name = "BioBuzz Tele", group = "A")
 public class BioBuzzTele extends BioBuzzOpMode {
 
+    // RED's coordinates; Tele can't take the Auto's pose yet.
+    public static double startX = 30;
+    public static double startY = 30;
+    public static double startHeadingDeg = 90;
+    public static WaypointDrive.Settings waypoint = new WaypointDrive.Settings();
+    public static double takeoverStick = 0.2;
+    public static int saveRumbleMs = 300;
     public static boolean cellTip = true;
+    public static double rpmStep = 25;
+    // About 1° of hood: one unit of hood position is about 31.5° (docs/shot-calculation-findings.md).
+    public static double hoodStep = 0.03;
+    public static double stickPress = 0.5;
+    public static int layerRumbleMs = 150;
+    public static long rumbleCooldownMs = 250;
 
     private static final double SLOW_MULTIPLIER = 0.75;
 
     private ActionLayer d1Layer = ActionLayer.TELE;
-    private ActionLayer d2Layer = ActionLayer.TELE;
+    private ActionLayer d2Layer = ActionLayer.MIXED;
     private double slowMultiplier = 1.0;
+    private long lastGamepad1RumbleNs;
+    private long lastGamepad2RumbleNs;
+
+    private Pose shotWaypoint;
+    private WaypointDrive waypointDrive;
+    private boolean driverCancelled;
+    private String waypointNote = "A saves one";
+
+    private EdgeBooleanSupplier d2RsUp, d2RsDown, d2RsRight, d2RsLeft;
+    private EdgeBooleanSupplier d2LsUp, d2LsDown, d2LsRight, d2LsLeft;
 
     @Override
     protected void initialize() {
+        robot.follower.setPose(FieldPose.forAlliance(startX, startY, Math.toRadians(startHeadingDeg)));
         disableBallVision();
         applyCellTipFlag();
+        setupStickPresses();
+    }
+
+    @Override
+    protected void initializeLoop() {
+        invalidateStickPresses();
     }
 
     @Override
@@ -45,7 +81,7 @@ public class BioBuzzTele extends BioBuzzOpMode {
     @Override
     protected void gameLoop() {
         updateInputs();
-        drive();
+        if (d1Layer == ActionLayer.TELE) drive();
     }
 
     private void setBothLayers(ActionLayer layer) {
@@ -57,38 +93,188 @@ public class BioBuzzTele extends BioBuzzOpMode {
         if (layer == d1Layer) return;
         d1Layer = layer;
         GamepadPresses.clear(gamepad1);
+        rumbleGamepad1(layerRumbleMs);
     }
 
     private void setD2Layer(ActionLayer layer) {
         if (layer == d2Layer) return;
         d2Layer = layer;
         GamepadPresses.clear(gamepad2);
+        rumbleGamepad2(layerRumbleMs);
     }
 
     private void updateInputs() {
+        invalidateStickPresses();
+
         switch (d1Layer) {
             case TELE:
                 d1TeleControls();
                 break;
+            case WAYPOINT_DRIVE:
+                d1WaypointDriveControls();
+                break;
+            default:
+                throw new IllegalStateException("D1 has no controls for layer " + d1Layer);
         }
         switch (d2Layer) {
-            case TELE:
-                d2TeleControls();
+            case POLLEN_ONLY:
+                d2PollenOnlyControls();
                 break;
+            case MIXED:
+                d2MixedControls();
+                break;
+            default:
+                throw new IllegalStateException("D2 has no controls for layer " + d2Layer);
         }
     }
 
     private void d1TeleControls() {
-        if (gamepad1.leftTriggerWasPressed()) {
+        if (gamepad1.leftStickButtonWasPressed()) {
             slowMultiplier = slowMultiplier == SLOW_MULTIPLIER ? 1.0 : SLOW_MULTIPLIER;
         }
         if (gamepad1.leftBumperWasPressed()) {
             if (robot.drivetrain.isHeadingLocked()) robot.drivetrain.unlockHeading();
             else robot.drivetrain.lockHeading();
         }
+        if (gamepad1.aWasPressed()) saveShotWaypoint();
+        // Last: starting a drive switches layers, which clears the presses still unread.
+        if (gamepad1.leftTriggerWasPressed()) startWaypointDrive();
     }
 
-    private void d2TeleControls() {
+    private void d1WaypointDriveControls() {
+        if (Scheduler.isScheduled(waypointDrive)) {
+            if (gamepad1.leftTriggerWasPressed()) cancelWaypointDrive("cancelled with LT");
+            else if (sticksMoved()) cancelWaypointDrive("a stick moved");
+        }
+        if (!Scheduler.isScheduled(waypointDrive)) endWaypointDrive();
+    }
+
+    private void saveShotWaypoint() {
+        Pose pose = robot.follower.pose();
+        String problem = WaypointDrive.poseProblem(pose, waypoint);
+        if (problem != null) {
+            waypointNote = "not saved: " + problem;
+            gamepad1.rumbleBlips(3);
+            return;
+        }
+        shotWaypoint = pose;
+        waypointNote = "saved";
+        rumbleGamepad1(saveRumbleMs);
+    }
+
+    private void startWaypointDrive() {
+        if (shotWaypoint == null) {
+            waypointNote = "none saved: A saves one";
+            gamepad1.rumbleBlips(3);
+            return;
+        }
+        waypointDrive = robot.actions.driveTo(shotWaypoint, waypoint);
+        driverCancelled = false;
+        Scheduler.schedule(waypointDrive);
+        if (!Scheduler.isScheduled(waypointDrive)) {
+            throw new IllegalStateException("the waypoint drive wasn't scheduled: another command holds the follower or drivetrain");
+        }
+        setD1Layer(ActionLayer.WAYPOINT_DRIVE);
+    }
+
+    private void cancelWaypointDrive(String reason) {
+        driverCancelled = true;
+        waypointDrive.cancel(reason);
+    }
+
+    private void endWaypointDrive() {
+        // The lock's old heading would turn the robot off the waypoint's.
+        if (robot.drivetrain.isHeadingLocked()) robot.drivetrain.lockHeading();
+        setD1Layer(ActionLayer.TELE);
+        switch (waypointDrive.status()) {
+            case DONE:
+                waypointNote = "arrived";
+                break;
+            case REFUSED:
+                waypointNote = "refused: " + waypointDrive.detail();
+                break;
+            default:
+                waypointNote = "stopped: " + waypointDrive.detail();
+                break;
+        }
+        if (!driverCancelled && waypointDrive.status() != WaypointDrive.Status.DONE) gamepad1.rumbleBlips(3);
+    }
+
+    private boolean sticksMoved() {
+        return Math.abs(gamepad1.left_stick_x) > takeoverStick || Math.abs(gamepad1.left_stick_y) > takeoverStick
+                || Math.abs(gamepad1.right_stick_x) > takeoverStick || Math.abs(gamepad1.right_stick_y) > takeoverStick;
+    }
+
+    private void d2PollenOnlyControls() {
+        if (gamepad2.rightBumperWasPressed()) {
+            setD2Layer(ActionLayer.MIXED);
+            return;
+        }
+        trimPollen();
+    }
+
+    private void d2MixedControls() {
+        if (gamepad2.leftBumperWasPressed()) {
+            setD2Layer(ActionLayer.POLLEN_ONLY);
+            return;
+        }
+        trimPollen();
+        trimNectar();
+    }
+
+    private void trimPollen() {
+        trim(ShotTuning.pollenShooter, d2RsUp, d2RsDown, d2RsRight, d2RsLeft);
+    }
+
+    private void trimNectar() {
+        trim(ShotTuning.nectarShooter, d2LsUp, d2LsDown, d2LsRight, d2LsLeft);
+    }
+
+    private static void trim(ShotTuning.ShooterTuning shooter, EdgeBooleanSupplier rpmUp, EdgeBooleanSupplier rpmDown,
+                             EdgeBooleanSupplier hoodUp, EdgeBooleanSupplier hoodDown) {
+        if (rpmUp.wasJustPressed()) shooter.rpmTrim += rpmStep;
+        if (rpmDown.wasJustPressed()) shooter.rpmTrim -= rpmStep;
+        if (hoodUp.wasJustPressed()) shooter.hoodTrim += hoodStep;
+        if (hoodDown.wasJustPressed()) shooter.hoodTrim -= hoodStep;
+    }
+
+    private void setupStickPresses() {
+        d2RsUp = new EdgeBooleanSupplier(() -> gamepad2.right_stick_y < -stickPress);
+        d2RsDown = new EdgeBooleanSupplier(() -> gamepad2.right_stick_y > stickPress);
+        d2RsRight = new EdgeBooleanSupplier(() -> gamepad2.right_stick_x > stickPress);
+        d2RsLeft = new EdgeBooleanSupplier(() -> gamepad2.right_stick_x < -stickPress);
+        d2LsUp = new EdgeBooleanSupplier(() -> gamepad2.left_stick_y < -stickPress);
+        d2LsDown = new EdgeBooleanSupplier(() -> gamepad2.left_stick_y > stickPress);
+        d2LsRight = new EdgeBooleanSupplier(() -> gamepad2.left_stick_x > stickPress);
+        d2LsLeft = new EdgeBooleanSupplier(() -> gamepad2.left_stick_x < -stickPress);
+    }
+
+    // Every loop, read or not, so a stick held in a layer that ignores it doesn't fire once its layer reads it again.
+    private void invalidateStickPresses() {
+        d2RsUp.invalidate();
+        d2RsDown.invalidate();
+        d2RsRight.invalidate();
+        d2RsLeft.invalidate();
+        d2LsUp.invalidate();
+        d2LsDown.invalidate();
+        d2LsRight.invalidate();
+        d2LsLeft.invalidate();
+    }
+
+    private void rumbleGamepad1(int durationMs) {
+        long now = System.nanoTime();
+        if (now - lastGamepad1RumbleNs >= rumbleCooldownMs * 1_000_000L) {
+            gamepad1.rumble(durationMs);
+            lastGamepad1RumbleNs = now;
+        }
+    }
+
+    private void rumbleGamepad2(int durationMs) {
+        long now = System.nanoTime();
+        if (now - lastGamepad2RumbleNs >= rumbleCooldownMs * 1_000_000L) {
+            gamepad2.rumble(durationMs);
+            lastGamepad2RumbleNs = now;
+        }
     }
 
     private void drive() {
@@ -104,5 +290,20 @@ public class BioBuzzTele extends BioBuzzOpMode {
         telemetry.addData("D2 Layer", d2Layer);
         telemetry.addData("Slow Mode", slowMultiplier < 1.0 ? "75%" : "OFF");
         telemetry.addData("Heading Lock", robot.drivetrain.isHeadingLocked() ? "ON" : "OFF");
+        if (shotWaypoint == null) {
+            telemetry.addData("Shot Waypoint", "none");
+        } else {
+            telemetry.addData("Shot Waypoint", "(%.1f, %.1f) facing %.0f deg",
+                    shotWaypoint.x(), shotWaypoint.y(), Math.toDegrees(shotWaypoint.heading()));
+        }
+        if (d1Layer == ActionLayer.WAYPOINT_DRIVE) {
+            telemetry.addData("Waypoint Drive", "%s %s", waypointDrive.status(), waypointDrive.phase());
+        } else {
+            telemetry.addData("Waypoint Drive", waypointNote);
+        }
+        telemetry.addData("Pollen Trim", "%+.0f RPM, hood %+.3f",
+                ShotTuning.pollenShooter.rpmTrim, ShotTuning.pollenShooter.hoodTrim);
+        telemetry.addData("Nectar Trim", "%+.0f RPM, hood %+.3f",
+                ShotTuning.nectarShooter.rpmTrim, ShotTuning.nectarShooter.hoodTrim);
     }
 }

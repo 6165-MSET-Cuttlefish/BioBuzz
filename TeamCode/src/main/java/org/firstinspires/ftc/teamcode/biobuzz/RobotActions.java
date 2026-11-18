@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.biobuzz;
 import com.pedropathing.ivy.Command;
 import com.pedropathing.ivy.CommandBuilder;
 import com.pedropathing.ivy.groups.Groups;
+import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.teamcode.architecture.command.PathCommands;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
@@ -27,5 +28,10 @@ public class RobotActions {
     /** Plans from the balls in view each time it starts; wrap it in a timeout like any auto step. */
     public BallCollection collectBalls(BallCollection.Settings settings) {
         return new BallCollection(robot.follower, robot.drivetrain, robot.camera, settings);
+    }
+
+    /** Plans from where the robot is when it starts; one per drive. */
+    public WaypointDrive driveTo(Pose target, WaypointDrive.Settings settings) {
+        return new WaypointDrive(robot.follower, robot.drivetrain, target, settings);
     }
 }

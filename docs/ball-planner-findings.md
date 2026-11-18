@@ -2,8 +2,8 @@
 
 What the ball route planner (`architecture/planner/`) will never collect, when it counts a ball as collected, how to
 plan 4 balls without restarting the app at STOP, and how to test it. Read it before changing the planner, ball
-selection or the ball count. Planner callers: `RobotActions.collectBalls` (Ball Collection Auto), Ball Collection and
-Vision Ball Collection. Planning times and STOP measurements are in [`hub-bench-findings.md`](hub-bench-findings.md)
+selection or the ball count. Planner callers: `RobotActions.collectBalls` (Ball Collection Auto), Ball Collection,
+Vision Ball Collection and `RobotActions.driveTo` (BioBuzz Tele's shot waypoint, no balls). Planning times and STOP measurements are in [`hub-bench-findings.md`](hub-bench-findings.md)
 (Route planner).
 
 Java paths below are under `TeamCode/src/main/java/org/firstinspires/ftc/teamcode/`, other paths from the repository
@@ -136,10 +136,38 @@ How it plans now (read from source):
   [`hub-bench-findings.md`](hub-bench-findings.md)); planning in the same script would slow it further (reasoning,
   not measured).
 
+## Driving to a waypoint (no balls)
+
+BioBuzz Tele's shot waypoint (`biobuzz/WaypointDrive.java`) runs `RouteOptimizer.search` with no balls, so its plan
+is only the return leg: a straight line turning evenly to the waypoint's heading, else a spline through
+`VisibilityGraphPlanner`'s detour points, else straight hops with turns in place at the joins. Probed on 2026-11-17
+in a desktop unit test on RED's half, with the Betta bot's 16 × 15 in footprint (`RobotGeometry`, not yet the
+BIOBUZZ robot's) and 1 in wall and rail gaps:
+
+| start → waypoint (RED inches, heading °) | `boundaryMarginIn` 1.5 (default) | 3.5 | 5 |
+|---|---|---|---|
+| (30, 30, 90) → (30, 115, 90), west of our rail | straight | straight | straight |
+| (60, 30, 90) → (60, 115, 90), under the HIVE | straight | straight | straight |
+| (30, 71, 0) → (60, 105, 0), round the rail's rear end | hops, 6 steps | hops, 4 steps | hops, 6 steps |
+| (20, 20, 0) → (58, 110, 180), across the rail, ending back to the HIVE | no route | spline | spline |
+| (30, 71, 0 or 90) → (60, 71, same), into the slot between our rail and the centre line | no route | no route | no route |
+| (60, 71, 0) → (30, 110, 0), out of that slot | no route | no route | no route |
+
+- **Why the corners fail:** the detour graph keeps the robot's centre `width / 2 + railGapIn` (8.5 in) plus
+  `boundaryMarginIn` from each rail corner, 10 in at the default, but a 16 × 15 in rectangle's corner reaches
+  10.96 in from its centre, so the footprint check fails at the corner points whatever the heading.
+- **Why the slot fails:** a turn in place needs 11.96 in of room all round, and the slot between our rail and the
+  centre line is 21.75 in wide.
+- **What the driver sees:** `refused: no drivable path ...` on the DS and three rumble blips; drive it by hand.
+- **Not changed:** raising `boundaryMarginIn` reaches more drives round a rail, but it widens every ball-collection
+  detour too, untested there, so the default stays 1.5. Rerun the table once `RobotGeometry` holds the BIOBUZZ
+  robot's size.
+
 ## Testing the planner
 
 - No automated test checks a plan's geometry. `PlannerWorkloadTest` (`TeamCode/src/test`) checks only how a search
-  slices its work and that slicing doesn't change the route. Bench: Hub and Bench: Planner Stop time plans and STOP on
+  slices its work and that slicing doesn't change the route; `WaypointDriveTest` only which kind of leg a no-ball
+  drive gets and that an unreachable one is reported rather than thrown. Bench: Hub and Bench: Planner Stop time plans and STOP on
   a hub but don't check a plan's geometry either.
 - Before changing the planner, add a unit test (`./gradlew :TeamCode:testDebugUnitTest`) that walks every
   `Plan.steps` drive and turn over many layouts and checks, with its own footprint and distance maths rather than
