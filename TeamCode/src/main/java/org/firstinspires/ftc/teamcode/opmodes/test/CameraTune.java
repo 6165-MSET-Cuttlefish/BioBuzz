@@ -22,7 +22,7 @@ public class CameraTune extends LinearOpMode {
             while (opModeInInit()) pump();
             while (opModeIsActive()) pump();
         } finally {
-            session.close();
+            session.closeAfterOpMode();
         }
     }
 

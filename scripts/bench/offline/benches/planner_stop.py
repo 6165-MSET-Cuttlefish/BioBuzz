@@ -99,7 +99,8 @@ def key(name):
     if name.startswith("planner stop unsliced control"):
         return "control", None
     if name.startswith("planner stop with the webcam: "):
-        kind = ("restart" if "never restarts" in name else "idle" if "reaching idle" in name
+        kind = ("restart" if "never restarts" in name else "idle" if "reaching onEnd()" in name
+                else "stop" if "CellTipCamera.stop() under" in name else "back" if "event loop came back" in name
                 else "worst" if "worst case" in name else name)
         return kind, "webcam"
     return name, None
@@ -159,12 +160,13 @@ SLICED_CASES = [
 
 
 def camera_trial(kind, delay, repeat, **kw):
-    """A webcam trial: STOP idle 700 ms after it by the hub's clock, a 560 ms webcam close for the worst case."""
+    """A webcam trial: a 1 ms CellTipCamera.stop(), onEnd() 40 ms after STOP (80 for the worst case, which STOPs before
+    the first frame) and '***STOP - OPMODE***' at 700 ms, after EasyOpenCV's close, by the hub's clock."""
     worst = kind == "worst"
-    t = trial(4, delay, kind=kind, repeat=repeat, hubStopToIdleMs=700.0, framesAtStop=0 if worst else 30,
-              framesAtStart=0 if worst else None, cellTipStopMs=560.0 if worst else 250.0,
-              sliceAfterStopMs=45.0 if worst else 12.0, tailMs=5.0, stopPassToOnEndMs=575.0 if worst else 260.0,
-              startToFirstSliceMs=4.0 if worst else None)
+    t = trial(4, delay, kind=kind, repeat=repeat, hubStopToIdleMs=700.0, hubStopToOnEndMs=80.0 if worst else 40.0,
+              framesAtStop=0 if worst else 30, framesAtStart=0 if worst else None,
+              cellTipStopMs=2.0 if worst else 1.0, sliceAfterStopMs=45.0 if worst else 12.0, tailMs=5.0,
+              stopPassToOnEndMs=25.0 if worst else 20.0, startToFirstSliceMs=4.0 if worst else None)
     if worst:
         t.update(initSeenS=0.15, startSentS=0.2, stopSentS=0.25)
     t.update(kw)
@@ -193,54 +195,71 @@ def every(trials, kind, **kw):
     return trials
 
 
+ALL_COMPLETE = (("restart", "webcam"), ("idle", "webcam"), ("stop", "webcam"), ("back", "webcam"))
+
 CAMERA_CASES = [
-    ("20 webcam trials idle at 700 ms with the worst case reproduced: all pass",
+    ("20 webcam trials with onEnd() 40-80 ms after STOP and the worst case reproduced: all pass",
      lambda: (good_trials(), [], camera_trials()), lambda c: only_fails(c)),
-    ("one trial at 905 ms fails the idle check alone",
-     lambda: (good_trials(), [], camera_changed(camera_trials(), "init", 2, hubStopToIdleMs=905.0)),
+    ("one trial reaching onEnd() at 905 ms fails the window check alone",
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "init", 2, hubStopToOnEndMs=905.0)),
      lambda c: only_fails(c, ("idle", "webcam"))),
     ("one at 899 ms passes",
-     lambda: (good_trials(), [], camera_changed(camera_trials(), "worst", 3, hubStopToIdleMs=899.0)),
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "worst", 3, hubStopToOnEndMs=899.0)),
      lambda c: only_fails(c)),
-    ("a STOP with no idle line fails the idle check",
-     lambda: (good_trials(), [], camera_changed(camera_trials(), "replan", 1, hubStopToIdleMs=None)),
+    ("a STOP with no onEnd line fails the window check",
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "replan", 1, hubStopToOnEndMs=None)),
      lambda c: only_fails(c, ("idle", "webcam"))),
+    ("EasyOpenCV's close after the window taking STOP to idle to 1500 ms isn't judged",
+     lambda: (good_trials(), [], every(camera_trials(), "init", hubStopToIdleMs=1500.0)), lambda c: only_fails(c)),
+    ("a STOP with no '***STOP - OPMODE***' line fails the event-loop check alone",
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "replan", 3, hubStopToIdleMs=None)),
+     lambda c: only_fails(c, ("back", "webcam"))),
+    ("a 100 ms CellTipCamera.stop() fails the stop() check alone",
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "init", 2, cellTipStopMs=100.0)),
+     lambda c: only_fails(c, ("stop", "webcam"))),
+    ("one of 99 ms passes",
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "replan", 2, cellTipStopMs=99.0)),
+     lambda c: only_fails(c)),
+    ("a trial with no stop() time fails the stop() check",
+     lambda: (good_trials(), [], camera_changed(camera_trials(), "worst", 4, cellTipStopMs=None)),
+     lambda c: only_fails(c, ("stop", "webcam"))),
+    ("the old close inside stop() (783 ms, onEnd() at 1084 ms) fails the stop() and window checks",
+     lambda: (good_trials(), [], every(camera_trials(), "worst", cellTipStopMs=783.0, hubStopToOnEndMs=1084.0,
+                                       hubStopToIdleMs=1100.0)),
+     lambda c: only_fails(c, ("idle", "webcam"), ("stop", "webcam"))),
     ("an app restart fails the restart check",
      lambda: (good_trials(), [], camera_changed(camera_trials(), "replan", 2, restarted=True, pidAfter=4001)),
      lambda c: only_fails(c, ("restart", "webcam"))),
     ("a stuck-in-stop marker fails it too",
      lambda: (good_trials(), [], camera_changed(camera_trials(), "init", 1, markers=["was stuck in stop()"])),
      lambda c: only_fails(c, ("restart", "webcam"))),
-    ("a trial that didn't finish fails the restart and idle checks",
+    ("a trial that didn't finish fails the four checks that count trials",
      lambda: (good_trials(), [], [t if (t["kind"], t["repeat"], t["delay"]) != ("init", 1, 0.3)
                                   else {"kind": "init", "repeat": 1, "delay": 0.3, "balls": 4, "failed": "x"}
                                   for t in camera_trials()]),
-     lambda c: only_fails(c, ("restart", "webcam"), ("idle", "webcam"))),
-    ("fewer trials than planned fail the restart and idle checks",
+     lambda c: only_fails(c, *ALL_COMPLETE)),
+    ("fewer trials than planned fail them too",
      lambda: (good_trials(), [], camera_trials()[:-6] + camera_trials()[-5:]),
-     lambda c: only_fails(c, ("restart", "webcam"), ("idle", "webcam"))),
-    ("worst-case closes of 300 ms: not reproduced, which fails",
-     lambda: (good_trials(), [], every(camera_trials(), "worst", cellTipStopMs=300.0)),
+     lambda c: only_fails(c, *ALL_COMPLETE)),
+    ("worst-case STOPs after the first frame: not reproduced, which fails",
+     lambda: (good_trials(), [], every(camera_trials(), "worst", framesAtStop=3)),
      lambda c: only_fails(c, ("worst", "webcam"))),
-    ("one worst-case close of 500 ms is enough",
-     lambda: (good_trials(), [], camera_changed(every(camera_trials(), "worst", cellTipStopMs=300.0), "worst", 5,
-                                                cellTipStopMs=500.0)), lambda c: only_fails(c)),
-    ("one of 499 ms isn't",
-     lambda: (good_trials(), [], camera_changed(every(camera_trials(), "worst", cellTipStopMs=300.0), "worst", 5,
-                                                cellTipStopMs=499.0)), lambda c: only_fails(c, ("worst", "webcam"))),
-    ("a long close with no planner slice to wait for: not reproduced",
+    ("one worst-case STOP before the first frame is enough",
+     lambda: (good_trials(), [], camera_changed(every(camera_trials(), "worst", framesAtStop=3), "worst", 5,
+                                                framesAtStop=0)), lambda c: only_fails(c)),
+    ("a STOP before the first frame with no planner slice to wait for: not reproduced",
      lambda: (good_trials(), [], every(camera_trials(), "worst", sliceAfterStopMs=0.0)),
      lambda c: only_fails(c, ("worst", "webcam"))),
     ("a slice begun after STOP in the same loop counts as waited for",
      lambda: (good_trials(), [], every(camera_trials(), "worst", inSlice=False, sliceLeftMs=None,
                                        sliceAfterStopMs=21.0)), lambda c: only_fails(c)),
-    ("a long close and a slice in an INIT trial don't stand in for the worst case",
-     lambda: (good_trials(), [], camera_changed(every(camera_trials(), "worst", cellTipStopMs=300.0), "init", 1,
-                                                cellTipStopMs=580.0, sliceAfterStopMs=40.0)),
+    ("an INIT trial with no frame and a slice doesn't stand in for the worst case",
+     lambda: (good_trials(), [], camera_changed(every(camera_trials(), "worst", framesAtStop=3), "init", 1,
+                                                framesAtStop=0, sliceAfterStopMs=40.0)),
      lambda c: only_fails(c, ("worst", "webcam"))),
     ("worst-case trials that didn't finish don't reproduce it",
      lambda: (good_trials(), [], [t if t["kind"] != "worst" else dict(t, failed="x") for t in camera_trials()]),
-     lambda c: only_fails(c, ("restart", "webcam"), ("idle", "webcam"), ("worst", "webcam"))),
+     lambda c: only_fails(c, *ALL_COMPLETE, ("worst", "webcam"))),
     ("without webcam trials there is no webcam check", lambda: (good_trials(), [], []),
      lambda c: not [n for n, *_ in c if "webcam" in n]),
 ]
@@ -302,21 +321,25 @@ def verdict_cases():
     expect("webcam trials: the plan's count, 9 replanning, 6 INIT and 5 worst-case",
            rb.planner_camera_expected() == 20 == len(camera_trials()))
     checks = rb.planner_stop_checks(good_trials(), [], camera_changed(camera_trials(), "worst", 2,
-                                                                       hubStopToIdleMs=845.0))
-    expect("webcam idle check: the margin against the 830-855 ms estimate is printed",
-           "slowest 845 ms, 55 ms inside the 900 ms window (the estimate: about 830 ms, up to about 855, 45-70 ms "
-           "inside it)" in detail(checks, ("idle", "webcam")))
-    expect("webcam FAIL means: move the webcam close out of stop()",
-           "Move the webcam close out of stop()" in next(m for n, ok, d, m in checks if key(n) == ("idle", "webcam")))
+                                                                       hubStopToOnEndMs=845.0))
+    means = {key(n): m for n, ok, d, m in checks}
+    expect("webcam window check: the margin to the 900 ms window is printed",
+           "slowest 845 ms, 55 ms inside the 900 ms window" in detail(checks, ("idle", "webcam")))
+    expect("webcam event-loop check: EasyOpenCV's close after the OpMode is printed per trial, not judged",
+           "(onEnd() to '***STOP - OPMODE***', not judged) [660.0, " in detail(checks, ("back", "webcam")))
+    expect("webcam FAIL means: a slow stop() puts the close back inside the window; a hung close leaves no INIT",
+           "back inside the SDK's 900 ms stop window" in means[("stop", "webcam")]
+           and "If CellTipCamera.stop() is slow too" in means[("idle", "webcam")]
+           and "Restart Robot" in means[("back", "webcam")])
     text = "\n".join(rb.planner_stop_summary(good_trials(), [], camera_trials()))
-    expect("summary: a webcam table row per trial with the close, the slice waited for and the margin",
+    expect("summary: a webcam table row per trial with stop(), STOP to onEnd, the margin and EasyOpenCV's close",
            text.count("| INIT + ") == 6 and text.count("| START at INIT + 0.2 s, STOP 0.05 s later, #") == 5
-           and "| 30 | in plan 4, 80 ms into it, 10 ms into a slice | 12 | 5 | 250 | 260 | 700 | 200 | False (4000 to "
-               "4000) | 0 |" in text)
-    expect("summary: each worst-case trial's timing from INIT, and the estimate's case reproduced",
+           and "| 30 | in plan 4, 80 ms into it, 10 ms into a slice | 12 | 5 | 1 | 20 | 40 | 860 | 660 | 700 | False "
+               "(4000 to 4000) | 0 |" in text)
+    expect("summary: each worst-case trial's timing from INIT, and the worst case reproduced",
            "INIT seen 0.15 s after it was sent, START sent at 0.2 s, STOP at 0.25 s; webcam frames at START 0" in text
            and "reproduced in 5 of 5 worst-case trials" in text)
-    text = "\n".join(rb.planner_stop_summary(good_trials(), [], every(camera_trials(), "worst", cellTipStopMs=300.0)))
+    text = "\n".join(rb.planner_stop_summary(good_trials(), [], every(camera_trials(), "worst", framesAtStop=3)))
     expect("summary: not reproduced is said so", "not reproduced, so the STOP checks with the webcam don't cover it"
            in text)
     names = [c[0] for c in rb.planner_stop_checks(good_trials())]
@@ -386,19 +409,31 @@ CONTROL_MUTATIONS = [
 
 CAMERA_MUTATIONS = [
     ("the webcam stop window is raised out of reach",
-     "is not None and t[\"hubStopToIdleMs\"] < SDK_STOP_WINDOW_MS)]", "is not None and t[\"hubStopToIdleMs\"] < 1e9)]"),
+     "for t in ran\n            if not (t.get(\"hubStopToOnEndMs\") is not None and t[\"hubStopToOnEndMs\"] < "
+     "SDK_STOP_WINDOW_MS)]",
+     "for t in ran\n            if not (t.get(\"hubStopToOnEndMs\") is not None and t[\"hubStopToOnEndMs\"] < 1e9)]"),
+    ("the webcam window is judged on STOP to idle again",
+     "for t in ran\n            if not (t.get(\"hubStopToOnEndMs\") is not None and t[\"hubStopToOnEndMs\"] <",
+     "for t in ran\n            if not (t.get(\"hubStopToIdleMs\") is not None and t[\"hubStopToIdleMs\"] <"),
     ("webcam restarts aren't looked at",
      "restarted = [planner_camera_label(t) for t in ran if t.get(\"restarted\") or t.get(\"markers\")]",
      "restarted = []"),
     ("unfinished webcam trials aren't counted", "complete = len(ran) == expected", "complete = True"),
+    ("the stop() limit is raised out of reach", "t[\"cellTipStopMs\"] < PLANNER_CAMERA_STOP_MS)]",
+     "t[\"cellTipStopMs\"] < 1e9)]"),
+    ("a missing stop() time passes", "if not (t.get(\"cellTipStopMs\") is not None and t[\"cellTipStopMs\"] < "
+     "PLANNER_CAMERA_STOP_MS)]", "if not (t.get(\"cellTipStopMs\") is None or t[\"cellTipStopMs\"] < "
+     "PLANNER_CAMERA_STOP_MS)]"),
+    ("a missing '***STOP - OPMODE***' passes",
+     "no_idle = [planner_camera_label(t) for t in ran if t.get(\"hubStopToIdleMs\") is None]", "no_idle = []"),
     ("the worst case needs no planner slice", "and waited is not None\n            and waited > 0)", ")"),
-    ("the worst case needs no long close", "close >= PLANNER_CAMERA_CLOSE_MS", "close >= 0"),
+    ("the worst case needs no STOP before the first frame", "t.get(\"framesAtStop\") == 0 and waited", "waited"),
     ("any trial stands in for the worst case",
      "    worst = [t for t in camera if t.get(\"kind\") == \"worst\"]\n    reproduced", "    worst = list(camera)\n    reproduced"),
-    ("an unfinished worst-case trial counts", "return (\"failed\" not in t and close is not None",
-     "return (close is not None"),
-    ("the worst-case check always passes", "f\"webcam close of {PLANNER_CAMERA_CLOSE_MS} ms or more)\", bool(reproduced),",
-     "f\"webcam close of {PLANNER_CAMERA_CLOSE_MS} ms or more)\", True,"),
+    ("an unfinished worst-case trial counts", "return (\"failed\" not in t and t.get(\"framesAtStop\")",
+     "return (t.get(\"framesAtStop\")"),
+    ("the worst-case check always passes", "\"the webcam was still opening)\", bool(reproduced),",
+     "\"the webcam was still opening)\", True,"),
 ]
 
 
@@ -414,14 +449,17 @@ def mutation_cases(mutations, cases):
 
 class PlannerHub(fake_hub.Hub):
     """fake_hub's Control Hub running a fake Bench: Planner Stop: it reports plans while INITed (from START with
-    planFrom=start), and on STOP it writes its result file and logs 'auto-stopping' and '***STOP - OPMODE***' on the
-    hub's clock, idle_ms(run_id) apart; restarts(run_id) makes that STOP restart the app instead. webcam=True: Bench:
-    Probe finds a webcam, and a camera=1 trial closes it in close_ms(run_id)."""
+    planFrom=start), and on STOP it writes its result file and logs 'auto-stopping', the bench's onEnd line
+    on_end_ms(run_id) later and '***STOP - OPMODE***' idle_ms(run_id) after STOP, on the hub's clock; restarts(run_id)
+    makes that STOP restart the app instead. webcam=True: Bench: Probe finds a webcam, a camera=1 trial's
+    CellTipCamera.stop() takes close_ms(run_id), and a worst-case trial (from START, no frames to wait for) STOPs
+    before the first frame."""
 
-    def __init__(self, idle_ms=lambda run_id: 300.0, restarts=lambda run_id: False, close_ms=lambda run_id: 560.0,
-                 webcam=False, no_frames=False, **kw):
+    def __init__(self, idle_ms=lambda run_id: 300.0, restarts=lambda run_id: False, close_ms=lambda run_id: 1.0,
+                 webcam=False, no_frames=False, on_end_ms=lambda run_id: 40.0, **kw):
         super().__init__(**kw)
         self.idle_ms, self.restarts, self.close_ms, self.no_frames = idle_ms, restarts, close_ms, no_frames
+        self.on_end_ms = on_end_ms
         if webcam:
             self.probe["webcams"] = [{"attached": True, "serial": "UC762"}]
         self.runs, self.messages, self.init_configs = [], [], []
@@ -473,7 +511,8 @@ class PlannerHub(fake_hub.Hub):
             close = self.close_ms(run_id)
             start = params.get("planFrom") == "start"
             frames = params.get("framesBeforePlanning", 0)
-            out["camera"] = {"framesAtStart": frames if start else None, "framesAtStop": frames + 31 if start else 31,
+            out["camera"] = {"framesAtStart": frames if start else None,
+                             "framesAtStop": (frames + 31 if frames else 0) if start else 31,
                              "framesAtFirstPlan": frames, "cellTipStopMs": close}
             out["stop"].update(stopPassToOnEndMs=close + 6.0)
             if start:
@@ -508,6 +547,7 @@ class PlannerHub(fake_hub.Hub):
                     self.log_ms("OpMode was stuck in stop(); restarting", 1006, "OpModeManager")
                     self.restart_app()
                     return
+                self.log_ms(f"planner_stop {run_id} onEnd", self.on_end_ms(run_id), "BENCH")
                 self.log_ms("******************** STOP - OPMODE /sdcard/FIRST/matchlogs/x.txt ********************",
                             self.idle_ms(run_id), "RobotCore")
         super().on_message(session, msg)
@@ -664,21 +704,24 @@ def camera_on_the_fake_hub():
     expect("with a webcam: every webcam trial ran on bench_main, which names the probe's webcam aprilTagDetector",
            set(hub.init_configs[NAMED_BEFORE_CAMERA:]) == {rb.CONFIG_MAIN}
            and 'Webcam name="aprilTagDetector" serialNumber="UC762"' in (out / "logs" / "bench_main.xml").read_text())
-    expect("with a webcam: its three checks pass, the worst case reproduced by 560 ms closes",
+    expect("with a webcam: its five checks pass, the worst case reproduced by STOPs before the first frame",
            all(check_line(text, f"planner stop with the webcam: {w}").startswith("- PASS")
-               for w in ("STOP never restarts", "the hub logs every STOP", "the worst case was reproduced"))
+               for w in ("STOP never restarts", "the hub logs every STOP", "CellTipCamera.stop() under",
+                         "every STOP logs '***STOP - OPMODE***'", "the worst case was reproduced"))
            and "reproduced in 5 of 5 worst-case trials" in text)
     worst = (results.get("planner_stop_camera_worst_1") or {}).get("runner") or {}
     expect("record, worst case: START at INIT + 0.2 s or later, STOP 0.05 s after it, the close, frames at START, "
            "the slice waited for and the pid before and after",
            worst.get("startSentS", 0) >= 0.2 and worst.get("stopSentS", 0) - worst.get("startSentS", 9) >= 0.05
-           and worst.get("cellTipStopMs") == 560.0 and worst.get("framesAtStart") == 0
+           and worst.get("cellTipStopMs") == 1.0 and worst.get("framesAtStart") == 0 and worst.get("framesAtStop") == 0
+           and worst.get("hubStopToOnEndMs") == 40.0
            and worst.get("sliceAfterStopMs") == 12.0 and worst.get("startToFirstSliceMs") == 4.0
            and worst.get("pidBefore") == worst.get("pidAfter") is not None and worst.get("hubStopToIdleMs") == 700.0)
     init = (results.get("planner_stop_camera_init_d300_1") or {}).get("runner") or {}
-    expect("record, INIT trial: STOP 0.3 s after INIT was seen, the hub's STOP to idle and the loop's tail",
+    expect("record, INIT trial: STOP 0.3 s after INIT was seen, the hub's STOP to onEnd and to idle, the loop's tail",
            init.get("stopSentS", 0) - init.get("initSeenS", 9) >= 0.3 and init.get("tailMs") == 3.0
-           and init.get("hubStopToIdleMs") == 700.0 and "startSentS" not in init)
+           and init.get("hubStopToIdleMs") == 700.0 and init.get("hubStopToOnEndMs") == 40.0
+           and "startSentS" not in init)
     expect("with a webcam: the run ends with the config put back", put_back(hub))
 
     hub = PlannerHub(webcam=True, no_frames=True, idle_ms=lambda run_id: 1200.0 if run_id.startswith("unsliced") else
@@ -700,17 +743,19 @@ def camera_on_the_fake_hub():
            and put_back(hub))
 
     hub = PlannerHub(webcam=True, close_ms=lambda run_id: 300.0,
-                     idle_ms=lambda run_id: 905.0 if run_id == "camera_init_d300_2" else
+                     on_end_ms=lambda run_id: 905.0 if run_id == "camera_init_d300_2" else 40.0,
+                     idle_ms=lambda run_id: 1600.0 if run_id == "camera_init_d300_2" else
                      1200.0 if run_id.startswith("unsliced") else 700.0)
     code, out = dry_run(["--planner-stop"], hub)
     text = (out / "summary.md").read_text()
-    idle = check_line(text, "planner stop with the webcam: the hub logs every STOP")
-    expect("a 905 ms webcam STOP: the idle check fails naming the trial, and says to move the webcam close out of stop()",
-           idle.startswith("- FAIL") and "INIT + 0.3 s, #2" in idle and "Move the webcam close out of stop()" in idle
-           and code == 1)
-    expect("300 ms closes: the worst case wasn't reproduced, which fails, and the summary says so",
-           check_line(text, "the worst case was reproduced").startswith("- FAIL")
-           and "not reproduced, so the STOP checks with the webcam don't cover it" in text and put_back(hub))
+    window = check_line(text, "planner stop with the webcam: the hub logs every STOP")
+    expect("onEnd() 905 ms after a webcam STOP: the window check fails naming the trial, and the run exits 1",
+           window.startswith("- FAIL") and "INIT + 0.3 s, #2" in window and "If CellTipCamera.stop() is slow too"
+           in window and code == 1)
+    expect("300 ms stop() calls: the stop() check fails, saying the close is back inside the window",
+           check_line(text, "CellTipCamera.stop() under 100 ms").startswith("- FAIL")
+           and "back inside the SDK's 900 ms stop window" in check_line(text, "CellTipCamera.stop() under 100 ms")
+           and check_line(text, "event loop came back").startswith("- PASS") and put_back(hub))
 
     hub = PlannerHub(idle_ms=lambda run_id: 1200.0 if run_id.startswith("unsliced") else 300.0)
     code, out = dry_run(["--planner-stop"], hub)

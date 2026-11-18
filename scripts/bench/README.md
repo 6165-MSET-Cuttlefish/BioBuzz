@@ -464,8 +464,10 @@ than a second of planning is left. These STOPs are meant to overrun, so expect a
 | 4 balls: every slice under 300 ms | a step took 300 ms or more, or a trial recorded none |
 | the unsliced control (named only) | none of its three STOPs took 900 ms or more or restarted the app: the bench can't show a slow STOP on this hub, so the 4-ball STOP checks say "unproven on this layout" |
 | with the webcam (named only): no app restart | a STOP restarted the app or the hub logged a stuck-in-stop marker, or a trial didn't finish |
-| with the webcam: STOP to idle within 900 ms | one took 900 ms or more by the hub's clock, or one is missing. Then move the webcam close out of `CellTipCamera.stop()`. The detail gives the slowest and its margin against the estimate of about 830 ms (up to about 855) |
-| with the webcam: the worst case reproduced | no worst-case trial had a STOP that waited for a planner slice and then a webcam close of 500 ms or more. The 830-855 ms case is then "not reproduced", and the two webcam checks above don't cover it |
+| with the webcam: STOP to onEnd within 900 ms | 'auto-stopping' to the bench's `planner_stop <run> onEnd` line took 900 ms or more by the hub's clock, or one is missing. That is the span the SDK's stop watchdog covers. The detail gives the slowest and its margin |
+| with the webcam: `CellTipCamera.stop()` under 100 ms at every STOP | one took 100 ms or more, or one is missing: `stop()` closes the webcam itself again (up to 783 ms on the hub) instead of leaving the close to EasyOpenCV after the OpMode |
+| with the webcam: every STOP logs '***STOP - OPMODE***' | one is missing. The SDK logs it on its event loop thread after EasyOpenCV's webcam close, which has no watchdog; a missing line can mean the close hung, and then no INIT works until Restart Robot. The detail gives EasyOpenCV's close after the OpMode per trial (onEnd to '***STOP - OPMODE***'), not judged |
+| with the webcam: the worst case reproduced | no worst-case trial had a STOP that waited for a planner slice while the webcam was still opening (no frame yet). The case is then "not reproduced", and the webcam checks above don't cover it |
 
 The webcam trials open `CellTipCamera` as Ball Collection Auto's robot does, on `bench_main` (which names the plugged
 webcam `aprilTagDetector`), and plan the 4-ball layout. Twenty trials:
@@ -478,12 +480,15 @@ webcam `aprilTagDetector`), and plan the 4-ball layout. Twenty trials:
   webcam still opening, plans from START as Ball Collection Auto does, STOP 0.05 s after START, in the first plan.
 
 The tables in `summary.md` give, per trial, where STOP landed (plan, slice and ms into it), the planner time the STOP
-waited for, the loop's tail, `CellTipCamera.stop()` (the webcam close), the whole `stop()` pass, the hub's STOP to
-idle and its margin, the pid before and after, and how long a restarted app took to run again.
+waited for, the loop's tail, `CellTipCamera.stop()`, the whole `stop()` pass, the hub's STOP to onEnd and its margin,
+EasyOpenCV's close after the OpMode (onEnd to '***STOP - OPMODE***'), the hub's STOP to idle, the pid before and
+after, and how long a restarted app took to run again. `CellTipCamera.stop()` only ends the session and stops the
+dashboard stream; EasyOpenCV closes the webcam after the OpMode, on the SDK's event loop thread, outside the 900 ms
+window, before the next INIT can start.
 
 Only a hub shows: the real slice lengths and plan times, where a STOP lands, the hub's STOP-to-idle times, whether
-a whole plan in one step still overruns STOP on that hub, how long the real webcam takes to close while it opens and
-while it streams, and whether a STOP 50 ms after START lands inside a slice (network timing decides). Offline:
+a whole plan in one step still overruns STOP on that hub, how long EasyOpenCV takes to close the real webcam after
+the OpMode while it opens and while it streams, and whether a STOP 50 ms after START lands inside a slice (network timing decides). Offline:
 `python3 -I scripts/bench/offline/benches/planner_stop.py`, and `PlannerWorkloadTest` in
 `./gradlew -Pbench :TeamCode:testDebugUnitTest` (with no slice limit a plan takes one step; with a 0 ms slice each
 step does one piece of the search; with 20 ms each step ends once its 20 ms are up).
@@ -1098,10 +1103,10 @@ the message names (a Control Hub has no Configure Robot screen without a Driver 
 | Bench: Limelight Hung | nothing | the real Camera against a fake Limelight that serves results and never answers a POST: the `Limelight` fault raised in INIT within the 15 s POST timeout + 2 s, INIT and the loop keep running, one POST and no retry; STOP during a hung POST isn't held up; the next INIT doesn't wait for it, its POSTs never overlap the old one (`reinit` reuses the stopped run's worker; only `reinit_fresh`, with a second worker on the shared blackboard semaphore as a reloaded LimelightSync would use, tests the shared sender), and its sync completes once the fake answers |
 | Bench: Webcam Stop (absent) | nothing | INIT fails with CellTipCamera's "failed to open" |
 | Bench: Webcam | a webcam | open/close times, per-frame and stream costs, frame age against `CellTipCamera.maxStalenessMs`; out-of-range and refused exposure, gain and white balance through the real CellTipCamera (see Bench: Webcam's clamped and refused settings above) |
-| Bench: Webcam Stop | a webcam | STOP at several points with the webcam open |
+| Bench: Webcam Stop | a webcam | STOP at INIT + 0, 0.3, 1 and 2.5 s and 3 s after START, each followed by another INIT: `CellTipCamera.stop()` under 100 ms, 'auto-stopping' to the bench's onEnd line within 900 ms, '***STOP - OPMODE***' logged after EasyOpenCV's webcam close (that close's time reported, not judged), and a fresh verdict within 3 s of each next INIT's `createRobot()` |
 | Bench: Webcam Thread Failure | a webcam | a camera-thread exception reaches the Error line within 2 s |
 | Bench: Limelight | the Limelight, 4 balls in view | slothboard's proxy, `LimelightSync` time (upload and switch only), INIT to first frame, POST costs, frame rate and latency; ball-frame staleness, still-ball jitter and a pipeline change mid-run (see Bench: Limelight's ball phases above) |
-| Bench: Planner Stop | nothing | STOP during 4- and 5-ball sliced plans: no app restart, hub-side STOP to idle within 900 ms, every 4-ball slice under 300 ms; with `--planner-stop`, an unsliced control that must overrun the stop window at least once in three STOPs and, with a webcam, the same STOP limits with CellTipCamera open (20 trials, the worst case reproduced) |
+| Bench: Planner Stop | nothing | STOP during 4- and 5-ball sliced plans: no app restart, hub-side STOP to idle within 900 ms, every 4-ball slice under 300 ms; with `--planner-stop`, an unsliced control that must overrun the stop window at least once in three STOPs and, with a webcam, CellTipCamera open (20 trials): no restart, STOP to onEnd within 900 ms, `CellTipCamera.stop()` under 100 ms, '***STOP - OPMODE***' after EasyOpenCV's close, the worst case reproduced |
 | Bench: Overlay NaN | nothing | a NaN in a field overlay doesn't kill dashboard telemetry |
 | (config by name, Bench: Probe) | run-as | a shipped config saved with another shipped config's resource id loads its own XML; a name the build doesn't ship loads no config (both FAIL on a build without re-resolving by name at robot setup) |
 | Bench: Freeze Dump | nothing | slothboard ignores a config switch during INIT; SET (3 runs), WRITE and DELETE from idle each restart the robot in the same process: no SDK `deadline expired ... EventLoop`, no Control Hub `Relaunching the RC`; thread dumps every 2 s from 3.5 s without an RC alive broadcast, a SIGQUIT and ART's dump of the frozen pid (runs last) |

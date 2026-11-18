@@ -311,8 +311,9 @@ public class WebcamBench extends LinearOpMode {
         long[] delays = {0, 50, 200, 500, 1000, -1, 3000};
         List<Object> runs = new ArrayList<>();
         Map<String, Object> r = new LinkedHashMap<>();
-        r.put("what", "new CellTipPipeline + new WebcamSession, wait, then CellTipCamera.stop()'s close path: session.close() "
-                + "then pipeline.release(); delay -1 waits for the first frame; 3000 is closing while streaming");
+        r.put("what", "new CellTipPipeline + new WebcamSession, wait, then WebcamSession.close() (the closeCameraDevice "
+                + "EasyOpenCV runs after the OpMode) then pipeline.release(); delay -1 waits for the first frame; 3000 is "
+                + "closing while streaming");
         r.put("runs", runs);
         try {
             for (long delay : delays) {
@@ -463,7 +464,13 @@ public class WebcamBench extends LinearOpMode {
             reject(camera, controls, webcam, found, baseline);
         } finally {
             try {
-                camera.stop();
+                // closeAtDelays opens this webcam again in the same OpMode, so the device can't wait for EasyOpenCV.
+                WebcamSession s = camera.session();
+                try {
+                    if (s != null) s.close();
+                } finally {
+                    camera.stop();
+                }
             } finally {
                 Faults.clear(CellTipCamera.FAULT_KEY);
             }

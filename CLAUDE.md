@@ -82,7 +82,7 @@ Pedro Pathing 3:
 
 **Limelight faults.** A failed sync isn't retried and nothing switches the Limelight back mid-OpMode: after a failed INIT sync, or with the Limelight left on another pipeline (e.g. a web-UI switch), re-INIT.
 
-**Cell tip** (`CellTipCamera`): mount the webcam image-upright, facing the launch direction (an upright tag shows roll ≈ 0 on the stream overlay). Turn it off with `VisionState.DISABLED`, never `stop()`: that closes the webcam for good.
+**Cell tip** (`CellTipCamera`): mount the webcam image-upright, facing the launch direction (an upright tag shows roll ≈ 0 on the stream overlay). Turn it off with `VisionState.DISABLED`, never `stop()`: that ends the session for the rest of the OpMode (the next `read()` throws), yet the webcam keeps streaming until EasyOpenCV closes it after the OpMode. Code that reopens the webcam in the same OpMode calls `WebcamSession.close()` first.
 
 ## OpMode lifecycle
 

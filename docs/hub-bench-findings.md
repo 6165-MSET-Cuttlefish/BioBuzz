@@ -11,9 +11,13 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 ## Design around these
 
 - **Route planner: one `RouteOptimizer.Search.step()` per loop. Its longest step on a hub is 325 ms. Bench: Planner
-  Stop's webcam trials, which close the webcam as Ball Collection Auto does, took up to 839 ms of the 900 ms window
-  in 20 trials, and Ball Collection Auto's worst case, added up from the measured parts, is over the window: don't
-  trust a STOP during its 4-ball plan until steps are shorter or the webcam closes after the window.** Ball
+  Stop's webcam trials, which closed the webcam inside `stop()` as Ball Collection Auto then did, took up to 839 ms
+  of the 900 ms window in 20 trials, and that worst case, added up from the measured parts, was over the window.
+  Main now leaves the webcam close to EasyOpenCV after the OpMode, outside the window (from the code). That close was
+  tried on a hub on 2026-11-17 at 18:50, in the bench build: `stop()` took 0.26–2.3 ms, the stop pass at most 26 ms,
+  the next INIT saw a frame in about 1 s, nothing restarted (five STOPs, no planner). Main's own change hasn't run
+  on a hub: don't trust a STOP during Ball Collection Auto's 4-ball plan until Bench: Planner Stop's webcam trials
+  pass on main's build.** Ball
   Collection Auto, Vision Ball Collection and Ball Collection plan 4 balls (`BallCollection.BALLS`) on the OpMode thread, one step per loop. A step shapes visit
   orders for `VisibilityGraphPlanner.routeSearchSliceMs` (20 ms) and overruns it by at most one `shape()` call
   (`architecture/planner/RouteOptimizer.java:143-154`), so STOP waits for one step, not a plan
@@ -64,16 +68,19 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
       of slice and a 667–683 ms close.
     - The webcam close in `stop()` took 50–137 ms while replanning with frames coming in, 437–654 ms with STOP 0.3 s
       after INIT, and 667–729 ms with STOP right after INIT or START when it landed in a plan (45–52 ms when it landed
-      between plans).
-    - The bench build's `CellTipCamera` closes the webcam in `stop()` as main's does (from the code: its close option
-      was left at the default, a plain `close()`); its planner code differs from main's only in comments.
+      between plans). Later that evening Bench: Webcam Close measured a close in `stop()` of 783 ms with STOP 0.6 s
+      into INIT, before the first frame, more than 729, and 90–151 ms at its other four STOPs (below).
+    - The bench build's `CellTipCamera` closed the webcam in `stop()` as main's did then (from the code: its close
+      option was left at the default, a plain `close()`); its planner code differs from main's only in comments.
   - What it means for STOP: in Vision Ball Collection and Ball Collection, which close no webcam, the longest step
-    plus the loop's tail is about 350 ms, well inside the window (inferred). For Ball Collection Auto no
-    webcam trial met the longest step and the slowest close at once: 325 ms of step, about 30 ms of tail (the most
-    measured) and a 729 ms close add up to about 1084 ms, over the window (inferred). The trials passed because the
-    slow closes came with planner waits of 56 ms or less. The earlier estimates were too low: about 917 ms on this
-    page (321 + 15 + 581), 830–855 ms in the bench (`PLANNER_CAMERA_ESTIMATE_MS` in `scripts/bench/run_bench.py`).
-    One fix (untried on a hub) is to close the webcam after the window (below).
+    plus the loop's tail is about 350 ms, well inside the window (inferred). For Ball Collection Auto with the close
+    inside `stop()`, no webcam trial met the longest step and the slowest close at once: 325 ms of step, about 30 ms
+    of tail (the most measured) and a 783 ms close add up to about 1138 ms, over the window (inferred). The trials
+    passed because the slow closes came with planner waits of 56 ms or less. The earlier estimates were too low:
+    about 917 ms on this page (321 + 15 + 581), 830–855 ms in the bench's old texts. With the close after the window,
+    as main now does, it is 325 + 30 + at most 2.3 ms of `stop()`, about 360 ms, or about 380 ms counting the whole
+    26 ms stop pass (inferred from the 18:50 run's postStop STOPs). That fix was tried on a hub on 2026-11-17 in
+    Bench: Webcam Close (below), not yet with the planner running.
   - The estimate (simulated: a desktop replay of the 2026-10-24 layouts that drops the same balls as the hub and ran
     28–35× faster, median 32×, scaled back by that): the longest step about 110 ms (100–115) for random 4-ball
     layouts and about 240 ms (210–260) for the 4-ball Planner Stop layout; in an `EnhancedOpMode`, a 4-ball plan
@@ -151,21 +158,51 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     `setThrowOnNetworkLockAcquisition(true)`; `MessageKeyedLock.acquire` throws). An iterative OpMode sees STOP
     mid-loop only through STOP's gate, `OpModeManagerImpl.shouldPreventDangerousHardwareAccess()`, raised as STOP
     begins: Bench: OctoQuad's bank phase checks it before each read.
-  - Webcam close during STOP: `CellTipCamera.stop()` took 574–581 ms when STOP came right after INIT, and 61–319 ms
-    later in the run. On 2026-11-17 it took up to 729 ms right after INIT or START (Bench: Planner Stop's webcam
-    trials, above).
+  - Webcam close during STOP, when `stop()` closed it (main before this change): `CellTipCamera.stop()` took
+    574–581 ms when STOP came right after INIT, and 61–319 ms later in the run. On 2026-11-17 it took up to 729 ms
+    right after INIT or START (Bench: Planner Stop's webcam trials, above), and 783 ms with STOP 0.6 s into INIT,
+    before the first frame (Bench: Webcam Close, below).
   - A raw `WebcamSession.close()` made 200 ms after opening took 685 ms.
   - So webcam teardown can use most of the window.
-  - It doesn't have to be in the window (read from source, untried on a hub). SDK 12's
+  - It doesn't have to be in the window (from the source, and one hub run on 2026-11-17). SDK 12's
     `OpModeManagerImpl.callActiveOpModeStop` fail-safes the hubs, runs `stop()` under the 900 ms watchdog, then
-    calls the post-stop listeners with no watchdog. EasyOpenCV 1.7.3 (SDK 12 Vision's dependency) registers every
-    camera when it's built and closes it from that post-stop call (`OpenCvCameraBase`). `CellTipCamera.stop()`
-    (`biobuzz/modules/CellTipCamera.java:88-94`) closes it inside the window instead, through
-    `WebcamSession.close()` (`biobuzz/modules/vision/WebcamSession.java:104-112`). To win the time back, leave the
-    close to EasyOpenCV or use `closeCameraDeviceAsync`, keeping the dashboard `stopCameraStream()`. The
-    `CellTipPipeline.release()` call can stay in `stop()`: it frees only the native AprilTag detector, under the lock
-    `processFrame` holds, so a frame that arrives after it skips detection
-    (`biobuzz/modules/vision/CellTipPipeline.java:90-91` and `:157-163`).
+    calls the post-stop listeners with no watchdog, on the event loop thread. EasyOpenCV 1.7.3 (SDK 12 Vision's
+    dependency) registers every camera when it's built and closes it from that post-stop call (`OpenCvCameraBase`).
+    The SDK starts the next INIT only after that call returns, so the next OpMode never opens the webcam while the
+    old close runs.
+  - What main does now (from the code): `CellTipCamera.stop()` (`biobuzz/modules/CellTipCamera.java:88-94`) calls
+    `WebcamSession.closeAfterOpMode()`, which ends the session (the next `update()` throws) and stops the dashboard
+    stream, and leaves the device to EasyOpenCV. `CellTipPipeline.release()` stays in `stop()`: it frees only the
+    native AprilTag detector, under the lock `processFrame` holds, so a frame that still arrives skips detection
+    (`biobuzz/modules/vision/CellTipPipeline.java:90-91` and `:157-163`). `WebcamSession.close()` still closes at
+    once, for code that must free the device before the OpMode ends (Bench: Webcam). CameraTune, which never
+    reopens the webcam, leaves its close to EasyOpenCV too.
+  - Measured on a hub: Bench: Webcam Close, 2026-11-17, 18:50 to 18:56, in the bench build, whose `CellTipCamera`
+    picks a close by its `closeMode`: in `stop()` (sync), on another thread with `closeCameraDeviceAsync` (async), or
+    left to EasyOpenCV after the OpMode (postStop, what main now does). STOP at INIT + 0, 0.3, 1 and 2.5 s and 3 s
+    after START, each followed at once by another INIT. Five STOPs per mode, once each:
+
+    | | sync | async | postStop |
+    |---|---|---|---|
+    | `CellTipCamera.stop()` (ms) | 90–783 | 0.8–4.3 | 0.26–2.3 |
+    | stop pass, first module's `stop()` to `onEnd()` (ms) | 112–814 | 21–41.5 | 19–26 |
+    | hub STOP to '***STOP - OPMODE***' (ms) | 122–831 | 68–507 | 72–495 |
+    | next INIT, `createRobot()` to the first fresh verdict (ms) | 971–1060 | 964–992 | 950–978 |
+
+    - No STOP restarted the app or left a force-stop or stuck marker, in any mode.
+    - The 783 ms and the 495–507 ms came from the STOP 0.6 s into INIT, before the first frame.
+    - The hub's STOP to '***STOP - OPMODE***' still holds the close: the SDK logs that line after the post-stop
+      listeners (from the code). The close moved past `stop()`, it didn't vanish (inferred). With async, EasyOpenCV's
+      own post-stop close waits for the async thread's lock, so it holds the event loop too (from the code).
+    - Five STOPs can't separate async from postStop. postStop's `stop()` was shorter and needs no extra thread, so
+      main uses it.
+    - It doesn't show: more than five STOPs per mode; a STOP while the planner runs; main's code (the bench build's); how long
+      the close after the OpMode takes on its own (that build logs no `onEnd()` line); that the post-stop call really
+      has no watchdog (still from the source); Ball Collection Auto itself.
+  - The close after the OpMode has no watchdog (from the code). EasyOpenCV's `stopStreaming()` waits in a loop for a
+    first frame and ignores interrupts (`OpenCvWebcamImpl`), so a webcam that started streaming and never sent a
+    frame, e.g. unplugged right then, would hang the event loop with no app restart: no INIT works until Restart
+    Robot. Not seen on a hub.
 - **deploySloth: wait for the `Processed Sloth Load` toast before INIT ([`CLAUDE.md`](../CLAUDE.md), Build &
   deploy); without the toast, allow 12 s, not 5 or 6.** A hot load took about 9 s on 2026-11-14, and INIT sent during
   it restarts the app or is dropped.
@@ -426,12 +463,6 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   most 300 ms for it and report it as pending at STOP otherwise; dropping the restore isn't a fix, since the next
   synced INIT selects the ball pipeline, not the one the runner saved.
 
-- **Bench: Planner Stop's texts still carry the old webcam numbers.** Its slice check explains a FAIL with a webcam
-  close of "up to 581 ms" (`scripts/bench/run_bench.py:476`), and its webcam check prints an estimate of 830–855 ms
-  (`PLANNER_CAMERA_ESTIMATE_MS`, `:489`). On 2026-11-17 the close took up to 729 ms and the slowest STOP 839 ms
-  ([Design around these](#design-around-these)). Only the texts are out of date; the checks judge measured times.
-  Update both with the next bench change and delete this entry.
-
 ## Setup
 
 Runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one through `scripts/bench/bare_hub.sh`, the
@@ -487,7 +518,7 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
   read 13.11 V at the first run's start and 12.79 V when the second run's benches ended (12.74 V at 18:11, its
   put-back; the runner logs voltage only, no current). No new install: the bench build of 2026-11-14 was still on the
   hub. Its robot code is older than main's; its planner code matches main's apart from comments, and its Photon
-  sources are main's. Two runs:
+  sources are main's. The runs:
   - `run_bench.py --usb --planner-stop --ports-empty`, 16:23 to 16:34: an Arducam OV9782 plugged straight into the
     Control Hub's USB 3.0 port, no USB hub and no power bank, nothing else plugged in. Results under Route planner
     above. It put the hub's config back and removed its adb forward.
@@ -497,6 +528,10 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
     on any motor or servo port. Results in [`photon-bench.md`](photon-bench.md). The benches ended at 17:44; the run
     then waited at its last prompt (put the Pinpoint back) until 18:10, put the hub's config back
     (`laser_rangefinder_i2c`), deleted the bench configs and removed its adb forward.
+  - Later, `run_bench.py --usb --webcam-close --ports-empty`, 18:50 to 18:56: Bench: Webcam Close, the Arducam
+    straight in the Control Hub's USB 3.0 port, the battery at 12.69 V at its start and 12.67 V at its end. The
+    bench build on the hub had `CellTipCamera`'s three close modes (each result names its mode). Results under The
+    SDK's stop window above.
   - The hub's logcat clock ran about 10 minutes ahead of the Mac's (the runner's log at 17:33 quotes hub lines from
     17:43): line up the two by events, not by time.
   - Expected noise (inferred): with `laser_rangefinder_i2c` active and no laser on I2C bus 1, the SDK logs I2C errors
@@ -553,6 +588,14 @@ Not run on any of these dates (they need `--interactive`):
   start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`. START before the first
   RUNNING, the cable plugged in during INIT, and the same pull under Pedro's `OctoQuadLocalizer` as the control:
   `python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`.
-- **Whether closing the webcam after the stop window works on a hub** (the fix for Ball Collection Auto's STOP,
-  [Design around these](#design-around-these)): move the close out of `CellTipCamera.stop()`,
-  run Bench: Webcam Stop, and check `stop()`'s time and that the next INIT opens the webcam.
+- **Whether main's close after the OpMode holds with the planner running and over many STOPs** (the fix for Ball
+  Collection Auto's STOP, [Design around these](#design-around-these)): Bench: Webcam Close answered it once, for the
+  bench build's version, with no planner (2026-11-17). Test on main's bench build: Bench: Planner Stop's webcam
+  trials, `python3 scripts/bench/run_bench.py --usb --planner-stop --ports-empty` (STOP to `onEnd()` within 900 ms,
+  `stop()` under 100 ms, '***STOP - OPMODE***' after EasyOpenCV's close, the worst case), and Bench: Webcam Stop,
+  `python3 scripts/bench/run_bench.py --usb --webcam --ports-empty` (each STOP followed by an INIT that must see a
+  frame within 3 s); run each more than once.
+- **What a webcam unplugged at STOP, or between `startStreaming` and its first frame, does to the close after the
+  OpMode:** from the code it can hang the event loop with no watchdog (above). Test: pull the webcam's cable right
+  at STOP in Bench: Webcam Stop, then INIT. Also untried: Restart Robot or a config switch while a slow close runs
+  (the SDK's `stopEventLoop` waits up to 10 s, [`dashboard-findings.md`](dashboard-findings.md)).

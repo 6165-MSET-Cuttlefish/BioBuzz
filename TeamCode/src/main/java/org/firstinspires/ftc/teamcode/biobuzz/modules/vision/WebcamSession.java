@@ -51,7 +51,7 @@ public final class WebcamSession {
 
         webcam.openCameraDeviceAsync(new OpenCvCamera.AsyncCameraOpenListener() {
             @Override public void onOpened() {
-                // close() ran before the open finished and found nothing to close, so the camera would stay held.
+                // Closed before the open finished: don't start streaming, and free the device now.
                 if (closed) {
                     webcam.closeCameraDevice();
                     return;
@@ -60,7 +60,9 @@ public final class WebcamSession {
                     // OV9782 only offers 640x480 in MJPEG, not the default uncompressed YUY2.
                     webcam.startStreaming(WIDTH, HEIGHT, OpenCvCameraRotation.UPRIGHT,
                             OpenCvWebcam.StreamFormat.MJPEG);
-                    if (cameraStreamEnabled) FtcDashboard.getInstance().startCameraStream(frames, DASHBOARD_FPS);
+                    synchronized (WebcamSession.this) {
+                        if (!closed && cameraStreamEnabled) FtcDashboard.getInstance().startCameraStream(frames, DASHBOARD_FPS);
+                    }
                     controls = new WebcamControls(webcam);
                 } catch (RuntimeException e) {
                     fail(e);
@@ -93,14 +95,14 @@ public final class WebcamSession {
     }
 
     /** Stream rendering runs inside each frame callback, so it counts toward getOverheadTimeMs(). */
-    public void setCameraStreamEnabled(boolean enabled) {
+    public synchronized void setCameraStreamEnabled(boolean enabled) {
         if (enabled == cameraStreamEnabled) return;
         cameraStreamEnabled = enabled;
         if (enabled) FtcDashboard.getInstance().startCameraStream(frames, DASHBOARD_FPS);
         else FtcDashboard.getInstance().stopCameraStream();
     }
 
-    /** Blocks until the camera has stopped streaming, so the pipeline's native resources are free to release. */
+    /** Only for code that must free the device before the OpMode ends; blocks until the camera has stopped streaming. */
     public void close() {
         closed = true;
         try {
@@ -109,6 +111,12 @@ public final class WebcamSession {
         } finally {
             FtcDashboard.getInstance().stopCameraStream();
         }
+    }
+
+    /** Ends the session at once; EasyOpenCV closes the device once the OpMode has stopped. */
+    public synchronized void closeAfterOpMode() {
+        closed = true;
+        FtcDashboard.getInstance().stopCameraStream();
     }
 
     private void fail(RuntimeException e) {

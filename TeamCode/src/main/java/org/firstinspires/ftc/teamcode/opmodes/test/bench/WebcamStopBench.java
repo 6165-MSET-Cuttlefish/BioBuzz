@@ -63,6 +63,7 @@ public class WebcamStopBench extends EnhancedOpMode {
     private final StopHook clock = new StopHook(this::stopPassStarted);
     private final long constructedNs = System.nanoTime();
     final Map<String, Object> results = new LinkedHashMap<>();
+    private String runId;
     private String fileName;
     private BenchReport report;
     volatile long lastLoopNs;
@@ -71,7 +72,7 @@ public class WebcamStopBench extends EnhancedOpMode {
 
     @Override
     protected Robot createRobot() {
-        String runId = BenchIO.param(BenchIO.params(), "runId", "manual");
+        runId = BenchIO.param(BenchIO.params(), "runId", "manual");
         fileName = "webcam_stop_" + runId;
         report = new BenchReport("Webcam Stop", fileName + "_live");
         results.put("runId", runId);
@@ -151,6 +152,7 @@ public class WebcamStopBench extends EnhancedOpMode {
     @Override
     protected void onEnd() {
         mark("onEndMs", System.nanoTime());
+        BenchIO.log("webcam_stop %s onEnd", runId);
         results.put("onEndReached", true);
         save();
     }

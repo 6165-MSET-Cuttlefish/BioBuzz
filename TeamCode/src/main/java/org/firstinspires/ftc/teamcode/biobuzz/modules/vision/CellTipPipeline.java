@@ -63,7 +63,7 @@ public class CellTipPipeline extends TimestampedOpenCvPipeline {
     // Never write into input: it is EasyOpenCV's persistent decode buffer.
     private final Mat display = new Mat();
     private final MatOfPoint quad = new MatOfPoint();
-    // Guards detector: release() can run while a frame is mid-detection if closing the camera failed.
+    // Guards detector: release() runs while EasyOpenCV is still streaming, so a frame can be mid-detection.
     private final Object detectorLock = new Object();
     private long detector;
     private float appliedDecimation;

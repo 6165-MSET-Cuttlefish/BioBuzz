@@ -1,6 +1,7 @@
 """Bench: Webcam's clamped and rejected settings offline: the clamp and reject verdicts on synthetic update() traces
 (one write passes, a retry fails, no refused value says the fault path is unexercised; each check fails when
-weakened), then run_webcam end to end on fake_hub.py with a webcam: its checks and summary from a served result, the
+weakened), Bench: Webcam Stop's verdicts (CellTipCamera.stop()'s time, STOP to onEnd(), the STOP line after
+EasyOpenCV's close and a frame in the next INIT; each fails when weakened), then run_webcam end to end on fake_hub.py with a webcam: its checks and summary from a served result, the
 same params as before, no prompt, the skip without a webcam and Ctrl-C putting the config back. No hub, no adb, no
 network. Run with: python3 -I scripts/bench/offline/benches/webcam.py
 """
@@ -369,6 +370,96 @@ def on_the_fake_hub():
            "no bench config left", raised is not None and restored(hub) and hub.status["activeOpMode"] == rb.IDLE_OPMODE)
 
 
+def stop_trial(run_id, **kw):
+    """A Bench: Webcam Stop trial: a 1 ms CellTipCamera.stop(), onEnd() 25 ms after STOP, '***STOP - OPMODE***' after
+    EasyOpenCV's close at 500 ms, and the next INIT's first fresh verdict 970 ms after createRobot()."""
+    t = {"runId": run_id, "cellTipStopMs": 1.0, "hubStopToOnEndMs": 25.0, "hubStopToIdleMs": 500.0,
+         "next": {"createRobotMs": 30.0, "firstFreshVerdictMs": 1000.0}}
+    t.update(kw)
+    return t
+
+
+def stop_trials(**changes):
+    ids = ("init_0ms", "init_300ms", "init_1000ms", "init_2500ms", "started_3s")
+    return [stop_trial(i, **changes.get(i, {})) for i in ids]
+
+
+def stop_kind(name):
+    return ("stop" if "CellTipCamera.stop() under" in name else "window" if "reaching onEnd()" in name
+            else "back" if "event loop came back" in name else "next" if "fresh verdict" in name else name)
+
+
+def stop_fails(checks):
+    return {stop_kind(n) for n, ok, _, _ in checks if not ok}
+
+
+STOP_CASES = [
+    ("five STOPs with a 1 ms stop(), onEnd() at 25 ms and a frame 970 ms into the next INIT: all pass", stop_trials,
+     set()),
+    ("a 100 ms stop() fails the stop() check alone", lambda: stop_trials(init_300ms={"cellTipStopMs": 100.0}),
+     {"stop"}),
+    ("99 ms passes", lambda: stop_trials(init_300ms={"cellTipStopMs": 99.0}), set()),
+    ("no stop() time fails it", lambda: stop_trials(started_3s={"cellTipStopMs": None}), {"stop"}),
+    ("onEnd() at 900 ms fails the window check alone", lambda: stop_trials(init_0ms={"hubStopToOnEndMs": 900.0}),
+     {"window"}),
+    ("no onEnd line fails it", lambda: stop_trials(init_0ms={"hubStopToOnEndMs": None}), {"window"}),
+    ("EasyOpenCV's close taking STOP to idle to 1500 ms isn't judged",
+     lambda: stop_trials(init_0ms={"hubStopToIdleMs": 1500.0}), set()),
+    ("no '***STOP - OPMODE***' line fails the event-loop check alone",
+     lambda: stop_trials(init_1000ms={"hubStopToIdleMs": None}), {"back"}),
+    ("a next INIT's first verdict at 3001 ms fails the next-INIT check alone",
+     lambda: stop_trials(init_2500ms={"next": {"createRobotMs": 0.0, "firstFreshVerdictMs": 3001.0}}), {"next"}),
+    ("3000 ms passes", lambda: stop_trials(init_2500ms={"next": {"createRobotMs": 0.0, "firstFreshVerdictMs": 3000.0}}),
+     set()),
+    ("a next INIT that never saw a verdict fails it", lambda: stop_trials(init_0ms={"next": {"createRobotMs": 30.0}}),
+     {"next"}),
+    ("no trial at all fails every check", lambda: [], {"stop", "window", "back", "next"}),
+]
+
+STOP_MUTATIONS = [
+    ("the stop() limit is raised out of reach", "t[\"cellTipStopMs\"] < WEBCAM_STOP_FAST_MS)]",
+     "t[\"cellTipStopMs\"] < 1e9)]"),
+    ("the window is judged on STOP to idle",
+     "if not (t.get(\"hubStopToOnEndMs\") is not None and t[\"hubStopToOnEndMs\"] < SDK_STOP_WINDOW_MS)]\n    no_idle",
+     "if not (t.get(\"hubStopToIdleMs\") is not None and t[\"hubStopToIdleMs\"] < SDK_STOP_WINDOW_MS)]\n    no_idle"),
+    ("a missing '***STOP - OPMODE***' passes",
+     "no_idle = [t[\"runId\"] for t in trials if t.get(\"hubStopToIdleMs\") is None]", "no_idle = []"),
+    ("the next INIT gets 10 s", "ms <= WEBCAM_NEXT_FRAME_MS)]", "ms <= 10000)]"),
+    ("a next INIT with no verdict passes", "if not (ms is not None and ms <= WEBCAM_NEXT_FRAME_MS)]",
+     "if not (ms is None or ms <= WEBCAM_NEXT_FRAME_MS)]"),
+]
+
+
+def stop_cases(checks_fn):
+    results = []
+    for label, make, want in STOP_CASES:
+        try:
+            got = stop_fails(checks_fn(make()))
+            results.append((label if got == want else f"{label} (failed {sorted(got)}, wanted {sorted(want)})",
+                            got == want))
+        except Exception as e:
+            results.append((f"{label} ({type(e).__name__}: {e})", False))
+    return results
+
+
+def webcam_stop_verdicts():
+    for label, ok in stop_cases(rb.webcam_stop_checks):
+        expect(f"webcam stop verdict: {label}", ok)
+    means = {stop_kind(n): m for n, _, _, m in rb.webcam_stop_checks(stop_trials())}
+    expect("webcam stop FAIL means: a slow stop() puts the close back inside the window; a hung close leaves no INIT",
+           "back inside the SDK's 900 ms stop window" in means["stop"] and "Restart Robot" in means["back"])
+    text = RUNNER.read_text()
+    for label, old, new in STOP_MUTATIONS:
+        if text.count(old) != 1:
+            expect(f"webcam stop weakened: {label}: the text to weaken is in run_bench.py once", False)
+            continue
+        module = type(sys)("run_bench_mutant")
+        module.__file__ = str(RUNNER)
+        exec(compile(text.replace(old, new), str(RUNNER), "exec"), module.__dict__)
+        caught = [case for case, ok in stop_cases(module.webcam_stop_checks) if not ok]
+        expect(f"webcam stop weakened: {label}: a verdict case fails ({caught[:1]})", bool(caught))
+
+
 def selection():
     r = object.__new__(rb.Runner)
     r.args = rb.parse_args([])
@@ -378,7 +469,7 @@ def selection():
 
 
 def main():
-    for section in (verdict_cases, mutation_cases, on_the_fake_hub, selection):
+    for section in (verdict_cases, mutation_cases, webcam_stop_verdicts, on_the_fake_hub, selection):
         try:
             section()
         except Exception as e:

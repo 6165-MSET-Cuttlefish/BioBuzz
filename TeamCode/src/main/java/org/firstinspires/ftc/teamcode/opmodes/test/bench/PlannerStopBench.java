@@ -332,6 +332,7 @@ public class PlannerStopBench extends EnhancedOpMode {
     protected void onEnd() {
         long now = System.nanoTime();
         mark("onEndMs", now);
+        BenchIO.log("planner_stop %s onEnd", runId);
         if (stopPassNs != 0) stopResult.put("stopPassToOnEndMs", (now - stopPassNs) / 1e6);
         save();
     }

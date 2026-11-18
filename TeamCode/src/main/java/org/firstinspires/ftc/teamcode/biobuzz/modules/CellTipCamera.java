@@ -87,7 +87,7 @@ public class CellTipCamera extends Module {
     @Override
     public void stop() {
         try {
-            if (session != null) session.close();
+            if (session != null) session.closeAfterOpMode();
         } finally {
             if (pipeline != null) pipeline.release();
         }

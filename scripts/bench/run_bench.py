@@ -463,6 +463,21 @@ PLANNER_SLICE_MAX_MS = 300
 PLANNER_AUTO_STOPPING = "auto-stopping OpMode 'Bench: Planner Stop'"
 PLANNER_STOPPED_LINE = "STOP - OPMODE"
 PLANNER_RUNNING_LINE = re.compile(r"Robot Status: running\s*$")
+WEBCAM_STOP_AUTO_STOPPING = "auto-stopping OpMode 'Bench: Webcam Stop'"
+WEBCAM_STOP_FAST_MS = 100
+WEBCAM_NEXT_FRAME_MS = 3000
+WEBCAM_NEXT_WAIT_S = 15
+WEBCAM_STOP_FAST_MEANS = (f"CellTipCamera.stop() took {WEBCAM_STOP_FAST_MS} ms or more: it no longer leaves the webcam "
+                          "close to EasyOpenCV after the OpMode, so the close (up to 783 ms on the hub) is back inside "
+                          f"the SDK's {SDK_STOP_WINDOW_MS} ms stop window")
+WEBCAM_STOP_WINDOW_MEANS = (f"STOP to onEnd() took {SDK_STOP_WINDOW_MS} ms or more by the hub's clock, or onEnd() never "
+                            "logged: the stop pass no longer fits the SDK's stop window, and past it the SDK restarts "
+                            "the app")
+WEBCAM_STOP_IDLE_MEANS = ("a STOP never logged '***STOP - OPMODE***': the SDK logs it on its event loop thread once "
+                          "EasyOpenCV's webcam close after the OpMode returns, with no watchdog, so the close may have "
+                          "hung and no INIT works until Restart Robot")
+WEBCAM_NEXT_MEANS = (f"an INIT after a STOP didn't get a fresh webcam verdict within {WEBCAM_NEXT_FRAME_MS / 1000:.0f} "
+                     "s: EasyOpenCV's close after the OpMode held the device, so the next OpMode would start blind")
 PLANNER_STOP_PENDING = ("regression: a STOP during route planning restarted the Robot Controller app, losing dashboard "
                         "@Config edits and the alliance: the planner slice running at STOP plus stop() outlasted the "
                         f"SDK's {SDK_STOP_WINDOW_MS} ms stop window, so RouteOptimizer.Search.step() ran far past its "
@@ -472,8 +487,8 @@ PLANNER_STOP_IDLE_PENDING = (f"the hub took {SDK_STOP_WINDOW_MS} ms or more from
                              "and stop() no longer fit the SDK's stop window, and past it the SDK restarts the app")
 PLANNER_SLICE_PENDING = (f"a RouteOptimizer.Search.step() ran {PLANNER_SLICE_MAX_MS} ms or more: one shape() past the "
                          "slice got slower, or VisibilityGraphPlanner.routeSearchSliceMs was raised. A STOP waits for "
-                         f"that step, which then leaves stop() less of the SDK's {SDK_STOP_WINDOW_MS} ms than Ball "
-                         "Collection Auto's webcam close can take (up to 581 ms)")
+                         f"that step, which then leaves the loop's tail and the stop() pass less of the SDK's "
+                         f"{SDK_STOP_WINDOW_MS} ms stop window")
 PLANNER_UNSLICED_BALLS = 4
 PLANNER_UNSLICED_DELAYS_S = (0.05, 0.15, 0.3)
 PLANNER_CONTROL_WORDS = {"fired": "fired", "not fired": "didn't fire", "not finished": "didn't finish"}
@@ -485,17 +500,23 @@ PLANNER_CAMERA_INIT_DELAYS_S = (0.0, 0.3)
 PLANNER_CAMERA_WORST_TRIALS = 5
 PLANNER_CAMERA_WORST_START_S = 0.2
 PLANNER_CAMERA_WORST_STOP_S = 0.05
-PLANNER_CAMERA_CLOSE_MS = 500
-PLANNER_CAMERA_ESTIMATE_MS = (830, 855)
-PLANNER_CAMERA_PENDING = ("with Ball Collection Auto's webcam open, a STOP during planning ran past the SDK's "
-                          f"{SDK_STOP_WINDOW_MS} ms stop window or restarted the app: the planner slice running at STOP, "
-                          "the loop's tail and CellTipCamera.stop()'s webcam close no longer fit in it. Move the webcam "
-                          "close out of stop() (leave it to EasyOpenCV's close after stop(), or use "
-                          "closeCameraDeviceAsync), as docs/hub-bench-findings.md describes")
-PLANNER_WORST_PENDING = ("not reproduced: no worst-case trial had a STOP that waited for a planner slice and then a "
-                         f"webcam close of {PLANNER_CAMERA_CLOSE_MS} ms or more, so the STOP checks with the webcam "
-                         f"don't cover the {PLANNER_CAMERA_ESTIMATE_MS[0]}-{PLANNER_CAMERA_ESTIMATE_MS[1]} ms case; "
-                         "where a STOP lands is down to network timing, so run --planner-stop again")
+PLANNER_CAMERA_STOP_MS = 100
+PLANNER_CAMERA_PENDING = ("with Ball Collection Auto's webcam open, a STOP during planning took the SDK's "
+                          f"{SDK_STOP_WINDOW_MS} ms stop window or more from 'auto-stopping' to onEnd() (the span its "
+                          "stop watchdog covers) or restarted the app: the planner slice running at STOP, the loop's "
+                          "tail and the stop() pass no longer fit in it. If CellTipCamera.stop() is slow too (its own "
+                          "check), the webcam close is back inside stop(); otherwise something else in the stop pass grew")
+PLANNER_CAMERA_STOP_PENDING = (f"CellTipCamera.stop() took {PLANNER_CAMERA_STOP_MS} ms or more at a STOP: it no longer "
+                               "leaves the webcam close to EasyOpenCV after the OpMode, so the close (up to 783 ms on "
+                               f"the hub) is back inside the SDK's {SDK_STOP_WINDOW_MS} ms stop window")
+PLANNER_CAMERA_IDLE_PENDING = ("a STOP with the webcam open never logged '***STOP - OPMODE***'. The SDK logs it on its "
+                               "event loop thread once the post-stop listeners return, EasyOpenCV's webcam close among "
+                               "them, with no watchdog: without the line the close may have hung (EasyOpenCV's "
+                               "stopStreaming() waits for a first frame forever), and then no INIT works until Restart "
+                               "Robot")
+PLANNER_WORST_PENDING = ("not reproduced: no worst-case trial had a STOP that waited for a planner slice while the "
+                         "webcam was still opening (no frame yet), so the STOP checks with the webcam don't cover that "
+                         "case; where a STOP lands is down to network timing, so run --planner-stop again")
 PLANNER_CONTROL_PENDING = ("the negative control didn't fire: with each plan made in one step, as before the search was "
                            f"sliced, every STOP still reached idle within {SDK_STOP_WINDOW_MS} ms with no restart, so "
                            "this hub and layout can't show a slow STOP and the sliced STOP checks are unproven on them")
@@ -5075,10 +5096,16 @@ def planner_camera_expected():
 
 
 def planner_worst_reproduced(t):
-    """Whether a worst-case trial's STOP waited for a planner slice, then for a webcam close of 500 ms or more."""
-    close, waited = t.get("cellTipStopMs"), t.get("sliceAfterStopMs")
-    return ("failed" not in t and close is not None and close >= PLANNER_CAMERA_CLOSE_MS and waited is not None
+    """Whether a worst-case trial's STOP waited for a planner slice while the webcam was still opening (no frame yet)."""
+    waited = t.get("sliceAfterStopMs")
+    return ("failed" not in t and t.get("framesAtStop") == 0 and waited is not None
             and waited > 0)
+
+
+def planner_close_after_stop_ms(t):
+    """EasyOpenCV's webcam close after the OpMode, on the hub's clock: onEnd() to '***STOP - OPMODE***'."""
+    idle, end = t.get("hubStopToIdleMs"), t.get("hubStopToOnEndMs")
+    return round(idle - end, 1) if idle is not None and end is not None else None
 
 
 def planner_camera_checks(camera):
@@ -5088,31 +5115,83 @@ def planner_camera_checks(camera):
     unfinished = [planner_camera_label(t) for t in camera if "failed" in t]
     restarted = [planner_camera_label(t) for t in ran if t.get("restarted") or t.get("markers")]
     slow = [planner_camera_label(t) for t in ran
-            if not (t.get("hubStopToIdleMs") is not None and t["hubStopToIdleMs"] < SDK_STOP_WINDOW_MS)]
-    logged = [t["hubStopToIdleMs"] for t in ran if t.get("hubStopToIdleMs") is not None]
-    low, high = PLANNER_CAMERA_ESTIMATE_MS
+            if not (t.get("hubStopToOnEndMs") is not None and t["hubStopToOnEndMs"] < SDK_STOP_WINDOW_MS)]
+    logged = [t["hubStopToOnEndMs"] for t in ran if t.get("hubStopToOnEndMs") is not None]
     margin = (f"slowest {max(logged):.0f} ms, {SDK_STOP_WINDOW_MS - max(logged):.0f} ms inside the "
-              f"{SDK_STOP_WINDOW_MS} ms window (the estimate: about {low} ms, up to about {high}, "
-              f"{SDK_STOP_WINDOW_MS - high}-{SDK_STOP_WINDOW_MS - low} ms inside it)" if logged
-              else "no STOP to idle logged")
+              f"{SDK_STOP_WINDOW_MS} ms window" if logged else "no onEnd() logged after STOP")
+    stops = [t.get("cellTipStopMs") for t in ran]
+    long_stops = [planner_camera_label(t) for t in ran
+                  if not (t.get("cellTipStopMs") is not None and t["cellTipStopMs"] < PLANNER_CAMERA_STOP_MS)]
+    no_idle = [planner_camera_label(t) for t in ran if t.get("hubStopToIdleMs") is None]
+    closes = [planner_close_after_stop_ms(t) for t in ran]
     gone = f"; didn't finish: {unfinished}" if unfinished else ""
     complete = len(ran) == expected
     worst = [t for t in camera if t.get("kind") == "worst"]
     reproduced = [t for t in worst if planner_worst_reproduced(t)]
-    per_worst = [tuple(None if t.get(k) is None else round(t[k]) for k in ("sliceAfterStopMs", "cellTipStopMs",
-                                                                          "hubStopToIdleMs")) for t in worst]
+    per_worst = [tuple(None if t.get(k) is None else round(t[k]) for k in ("sliceAfterStopMs", "framesAtStop",
+                                                                          "hubStopToOnEndMs")) for t in worst]
+    unfinished_means = "a trial didn't finish (see the table), so not every STOP was {}"
     return [
         ("planner stop with the webcam: STOP never restarts the app", complete and not restarted,
          f"{len(ran)} of {expected} trials ran; restarts or stuck markers after STOP at {restarted or 'none'}{gone}",
-         PLANNER_CAMERA_PENDING if complete else "a trial didn't finish (see the table), so not every STOP was tried"),
-        (f"planner stop with the webcam: the hub logs every STOP reaching idle within {SDK_STOP_WINDOW_MS} ms "
-         "('auto-stopping' to '***STOP - OPMODE***')", complete and not slow,
+         PLANNER_CAMERA_PENDING if complete else unfinished_means.format("tried")),
+        (f"planner stop with the webcam: the hub logs every STOP reaching onEnd() within {SDK_STOP_WINDOW_MS} ms "
+         "('auto-stopping' to the bench's onEnd line, the span the SDK's stop watchdog covers)", complete and not slow,
          f"{margin}; at or over {SDK_STOP_WINDOW_MS} ms or missing at {slow or 'none'}{gone}",
-         PLANNER_CAMERA_PENDING if complete else "a trial didn't finish (see the table), so not every STOP was timed"),
-        (f"planner stop with the webcam: the worst case was reproduced (a STOP that waited for a planner slice, then a "
-         f"webcam close of {PLANNER_CAMERA_CLOSE_MS} ms or more)", bool(reproduced),
-         f"{len(reproduced)} of {len(worst)} worst-case trials; per trial, planner ms the STOP waited, webcam close ms "
-         f"and hub STOP to idle ms: {per_worst}", PLANNER_WORST_PENDING),
+         PLANNER_CAMERA_PENDING if complete else unfinished_means.format("timed")),
+        (f"planner stop with the webcam: CellTipCamera.stop() under {PLANNER_CAMERA_STOP_MS} ms at every STOP",
+         complete and not long_stops, f"stop() ms {stops}; at or over {PLANNER_CAMERA_STOP_MS} ms or missing at "
+         f"{long_stops or 'none'}{gone}",
+         PLANNER_CAMERA_STOP_PENDING if complete else unfinished_means.format("timed")),
+        ("planner stop with the webcam: every STOP logs '***STOP - OPMODE***' after EasyOpenCV's webcam close (the "
+         "event loop came back)", complete and not no_idle,
+         f"EasyOpenCV's close after the OpMode (onEnd() to '***STOP - OPMODE***', not judged) {closes} ms; no "
+         f"'***STOP - OPMODE***' at {no_idle or 'none'}{gone}",
+         PLANNER_CAMERA_IDLE_PENDING if complete else unfinished_means.format("tried")),
+        ("planner stop with the webcam: the worst case was reproduced (a STOP that waited for a planner slice while "
+         "the webcam was still opening)", bool(reproduced),
+         f"{len(reproduced)} of {len(worst)} worst-case trials; per trial, planner ms the STOP waited, webcam frames "
+         f"at STOP and hub STOP to onEnd() ms: {per_worst}", PLANNER_WORST_PENDING),
+    ]
+
+
+def webcam_close_after_stop_ms(t):
+    """EasyOpenCV's webcam close after Bench: Webcam Stop, on the hub's clock: onEnd() to '***STOP - OPMODE***'."""
+    idle, end = t.get("hubStopToIdleMs"), t.get("hubStopToOnEndMs")
+    return round(idle - end, 1) if idle is not None and end is not None else None
+
+
+def webcam_first_verdict_ms(t):
+    """From createRobot() to the first fresh cell-tip verdict in a Bench: Webcam Stop run."""
+    a, b = t.get("firstFreshVerdictMs"), t.get("createRobotMs")
+    return round(a - b, 1) if isinstance(a, (int, float)) and isinstance(b, (int, float)) else None
+
+
+def webcam_stop_checks(trials):
+    """(name, ok, detail, fail_means) for Bench: Webcam Stop's STOPs, each followed by an INIT that must see a frame."""
+    stops = [t.get("cellTipStopMs") for t in trials]
+    slow_stops = [t["runId"] for t in trials
+                  if not (isinstance(t.get("cellTipStopMs"), (int, float)) and t["cellTipStopMs"] < WEBCAM_STOP_FAST_MS)]
+    ends = [t.get("hubStopToOnEndMs") for t in trials]
+    late = [t["runId"] for t in trials
+            if not (t.get("hubStopToOnEndMs") is not None and t["hubStopToOnEndMs"] < SDK_STOP_WINDOW_MS)]
+    no_idle = [t["runId"] for t in trials if t.get("hubStopToIdleMs") is None]
+    firsts = [webcam_first_verdict_ms(t.get("next") or {}) for t in trials]
+    blind = [t["runId"] for t, ms in zip(trials, firsts) if not (ms is not None and ms <= WEBCAM_NEXT_FRAME_MS)]
+    return [
+        (f"webcam stop: CellTipCamera.stop() under {WEBCAM_STOP_FAST_MS} ms at every STOP",
+         bool(trials) and not slow_stops, f"stop() ms {stops}; at or over or missing at {slow_stops or 'none'}",
+         WEBCAM_STOP_FAST_MEANS),
+        (f"webcam stop: the hub logs every STOP reaching onEnd() within {SDK_STOP_WINDOW_MS} ms ('auto-stopping' to "
+         "the bench's onEnd line)", bool(trials) and not late,
+         f"hub STOP to onEnd() {ends} ms; at or over or missing at {late or 'none'}", WEBCAM_STOP_WINDOW_MEANS),
+        ("webcam stop: every STOP logs '***STOP - OPMODE***' after EasyOpenCV's webcam close (the event loop came back)",
+         bool(trials) and not no_idle,
+         f"EasyOpenCV's close after the OpMode (not judged) {[webcam_close_after_stop_ms(t) for t in trials]} ms; no "
+         f"'***STOP - OPMODE***' at {no_idle or 'none'}", WEBCAM_STOP_IDLE_MEANS),
+        (f"webcam stop: every INIT after a STOP saw a fresh verdict within {WEBCAM_NEXT_FRAME_MS / 1000:.0f} s",
+         bool(trials) and not blind, f"first fresh verdict ms after createRobot() {firsts}; late or missing after "
+         f"{blind or 'none'}", WEBCAM_NEXT_MEANS),
     ]
 
 
@@ -5229,7 +5308,8 @@ def planner_stop_summary(trials, unsliced=(), camera=(), notes=()):
              "the runner sees a plan finish. Hub STOP to idle is 'auto-stopping' to '***STOP - OPMODE***' and STOP "
              "to running again is 'auto-stopping' to 'Robot Status: running', both on the hub's logcat clock; the "
              f"SDK gives STOP {SDK_STOP_WINDOW_MS} ms (+100) to finish the running init_loop() and stop() before it "
-             "restarts the app.\n")
+             "restarts the app. '***STOP - OPMODE***' comes after the SDK's post-stop listeners, which that window "
+             "doesn't cover; without the webcam nothing slow runs there.\n")
     if unsliced:
         s += planner_control_summary(unsliced)
     if camera:
@@ -5240,27 +5320,30 @@ def planner_stop_summary(trials, unsliced=(), camera=(), notes=()):
 
 def planner_camera_summary(camera):
     s = ["### With the webcam open (CellTipCamera, as Ball Collection Auto's robot opens it)\n",
-         "| trial | webcam frames at STOP | STOP landed | planner ms the STOP waited | loop tail (ms) | webcam close "
-         "(ms) | stop() pass (ms) | hub STOP to idle (ms) | left of the 900 ms (ms) | app restarted (pid before to "
-         "after) | stuck markers |",
-         "|---|---|---|---|---|---|---|---|---|---|---|"]
+         "| trial | webcam frames at STOP | STOP landed | planner ms the STOP waited | loop tail (ms) | "
+         "CellTipCamera.stop() (ms) | stop() pass (ms) | hub STOP to onEnd (ms) | left of the 900 ms (ms) | EasyOpenCV "
+         "close after the OpMode (ms) | hub STOP to idle (ms) | app restarted (pid before to after) | stuck markers |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for t in camera:
         if "failed" in t:
-            s.append(f"| {planner_camera_label(t)} | FAILED: {t['failed']} | | | | | | | | | |")
+            s.append(f"| {planner_camera_label(t)} | FAILED: {t['failed']} | | | | | | | | | | | |")
             continue
-        idle = t.get("hubStopToIdleMs")
+        end = t.get("hubStopToOnEndMs")
         s.append(f"| {planner_camera_label(t)} | {t.get('framesAtStop')} | {planner_stop_landed(t)} | "
                  f"{planner_ms(t.get('sliceAfterStopMs'))} | {planner_ms(t.get('tailMs'))} | "
-                 f"{planner_ms(t.get('cellTipStopMs'))} | {planner_ms(t.get('stopPassToOnEndMs'))} | {planner_ms(idle)} | "
-                 f"{'' if idle is None else planner_ms(SDK_STOP_WINDOW_MS - idle)} | {t['restarted']} "
-                 f"({t.get('pidBefore')} to {t.get('pidAfter')}) | {len(t['markers'])} |")
+                 f"{planner_ms(t.get('cellTipStopMs'))} | {planner_ms(t.get('stopPassToOnEndMs'))} | {planner_ms(end)} | "
+                 f"{'' if end is None else planner_ms(SDK_STOP_WINDOW_MS - end)} | "
+                 f"{planner_ms(planner_close_after_stop_ms(t))} | {planner_ms(t.get('hubStopToIdleMs'))} | "
+                 f"{t['restarted']} ({t.get('pidBefore')} to {t.get('pidAfter')}) | {len(t['markers'])} |")
     s.append("")
     s.append(f"- Replanning trials wait for {PLANNER_CAMERA_FRAMES} fresh webcam frames, then plan the "
              f"{PLANNER_CAMERA_BALLS}-ball layout back to back in INIT. INIT trials plan from the first init_loop() while "
              "the webcam opens. Worst-case trials plan from START, sent while the webcam is still opening, as Ball "
              "Collection Auto plans from START. Planner ms the STOP waited: the rest of the slice running at STOP, or "
              "a whole slice begun after STOP in the same loop. Loop tail: from then to stop(). stop() pass: from the "
-             "first module's stop() to onEnd(), the webcam close included.")
+             "first module's stop() to onEnd(). CellTipCamera.stop() only ends the session; EasyOpenCV closes the "
+             "webcam after the OpMode, on the SDK's event loop thread and outside the stop window: that is onEnd() to "
+             "'***STOP - OPMODE***' on the hub's clock.")
     worst = [t for t in camera if t.get("kind") == "worst"]
     for t in worst:
         if "failed" in t:
@@ -5269,8 +5352,7 @@ def planner_camera_summary(camera):
                  f"{t.get('startSentS')} s, STOP at {t.get('stopSentS')} s; webcam frames at START "
                  f"{t.get('framesAtStart')}; first slice {t.get('startToFirstSliceMs')} ms after START")
     reproduced = [t for t in worst if planner_worst_reproduced(t)]
-    s.append(f"- The {PLANNER_CAMERA_ESTIMATE_MS[0]}-{PLANNER_CAMERA_ESTIMATE_MS[1]} ms case (a planner slice, the "
-             "loop's tail and a webcam close right after INIT, in one STOP): "
+    s.append("- The worst case (a STOP that waits for a planner slice while the webcam is still opening): "
              + (f"reproduced in {len(reproduced)} of {len(worst)} worst-case trials.\n" if reproduced
                 else "not reproduced, so the STOP checks with the webcam don't cover it.\n"))
     return s
@@ -7604,7 +7686,7 @@ class Runner:
         rec.update(planner_stop_extras(res))
         log_file = self.out / "logs" / f"{step}.log"
         log_text = log_file.read_text() if log_file.exists() else ""
-        rec.update(self._planner_stop_hub_times(log_text, step, rec["restarted"]))
+        rec.update(self._planner_stop_hub_times(log_text, step, rec["restarted"], f"planner_stop {run_id} onEnd"))
         if not stop.get("stopSeen"):
             for m in PLANNER_STOP_SEEN.finditer(log_text):
                 if m.group(1) == run_id:
@@ -7612,13 +7694,14 @@ class Runner:
                                msIntoPlan=float(m.group(2)) if m.group(2) else None)
 
     @staticmethod
-    def _planner_stop_hub_times(log_text, step, restarted):
-        """STOP to idle, and after a restart STOP to running again, from the step's logcat on the hub's clock."""
+    def _planner_stop_hub_times(log_text, step, restarted, on_end, stopping=PLANNER_AUTO_STOPPING):
+        """STOP to the bench's onEnd line (the span the SDK's stop watchdog covers), STOP to idle, and after a restart
+        STOP to running again, from the step's logcat on the hub's clock."""
         lines = log_text.splitlines()
         begin = next((i for i, line in enumerate(lines) if "BENCH_RUNNER" in line and f"begin {step}" in line), 0)
-        stop = next((i for i in range(begin, len(lines)) if PLANNER_AUTO_STOPPING in lines[i]), None)
+        stop = next((i for i in range(begin, len(lines)) if stopping in lines[i]), None)
         if stop is None:
-            return {"hubStopToIdleMs": None}
+            return {"hubStopToIdleMs": None, "hubStopToOnEndMs": None}
 
         def hub_ms(end):
             a, b = logcat_time(lines[stop]), logcat_time(lines[end])
@@ -7628,7 +7711,9 @@ class Runner:
             return round(ms + 366 * 86400 * 1000 if ms < -180 * 86400 * 1000 else ms, 1)
 
         idle = next((i for i in range(stop, len(lines)) if PLANNER_STOPPED_LINE in lines[i]), None)
-        out = {"hubStopToIdleMs": hub_ms(idle) if idle is not None else None}
+        end = next((i for i in range(stop, len(lines)) if lines[i].rstrip().endswith(on_end)), None)
+        out = {"hubStopToIdleMs": hub_ms(idle) if idle is not None else None,
+               "hubStopToOnEndMs": hub_ms(end) if end is not None else None}
         if restarted:
             running = next((i for i in range(stop, len(lines)) if PLANNER_RUNNING_LINE.search(lines[i])), None)
             back = hub_ms(running) if running is not None else None
@@ -7950,13 +8035,22 @@ class Runner:
 
     def run_webcam_stops(self):
         s = ["## Bench: Webcam Stop (the real framework stop path)\n",
-             "| run | STOP after | cellTip stop ms | stop pass → onEnd | runner-side stop s | stuck/restart markers | app restarted |",
-             "|---|---|---|---|---|---|---|"]
+             "| run | STOP after | cellTip stop ms | stop pass → onEnd | hub STOP to onEnd ms | EasyOpenCV close after "
+             "the OpMode ms | runner-side stop s | next INIT first verdict ms | stuck/restart markers | app restarted |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
+        trials = []
         for delay in (0.0, 0.3, 1.0, 2.5):
             run_id = f"init_{int(delay * 1000)}ms"
-            self._webcam_stop(run_id, lambda d=delay: time.sleep(d), f"INIT + {delay} s", s)
-        self._webcam_stop("started_3s", self._start_after_fresh, "START after frames, + 3 s", s)
+            trials.append(self._webcam_stop_then_next(run_id, lambda d=delay: time.sleep(d), f"INIT + {delay} s", s))
+        trials.append(self._webcam_stop_then_next("started_3s", self._start_after_fresh, "START after frames, + 3 s",
+                                                  s))
+        for check in webcam_stop_checks(trials):
+            self.check(*check)
         s.append("")
+        s.append("- Hub STOP to onEnd is 'auto-stopping' to the bench's onEnd line, the span the SDK's 900 ms stop "
+                 "watchdog covers. EasyOpenCV closes the webcam after the OpMode, on the SDK's event loop thread with no "
+                 "watchdog: onEnd to '***STOP - OPMODE***'. Next INIT first verdict: the INIT after each STOP, from "
+                 "createRobot() to the first fresh cell-tip verdict.\n")
         self.summary += s
 
     def _start_after_fresh(self):
@@ -7964,12 +8058,23 @@ class Runner:
         self.dash.send({"type": "START_OP_MODE"})
         time.sleep(3)
 
-    def _webcam_stop(self, run_id, wait, label, s):
+    def _webcam_stop_then_next(self, run_id, wait, label, s):
+        trial = self._webcam_stop(run_id, wait, settle=False)
+        trial["next"] = self._webcam_stop(f"{run_id}_next", lambda: self.wait_or_crash(
+            lambda: str(self.dash.data.get("Bench fresh")) == "true", WEBCAM_NEXT_WAIT_S))
+        s.append(f"| {run_id} | {label} | {trial.get('cellTipStopMs')} | {trial.get('stopPassMs')} | "
+                 f"{trial.get('hubStopToOnEndMs')} | {webcam_close_after_stop_ms(trial)} | "
+                 f"{trial.get('stopSecondsRunnerSide', 0):.2f} | {webcam_first_verdict_ms(trial['next'])} | "
+                 f"{len(trial['logMarkers'])} | {trial['appRestarted']} |")
+        return trial
+
+    def _webcam_stop(self, run_id, wait, settle=True):
         self.wait_idle()
         name = f"webcam_stop_{run_id}"
         self.adb.bench_shell(f"rm -f {self.adb.bench_dir()}/{name}.json")
         self.adb.push_json({"runId": run_id}, "params.json", self.out / "logs" / "params.json")
         hub_t0 = self.adb.hub_time()
+        self.adb.mark(f"begin {name}")
         outcome = {"step": name, "opmode": "Bench: Webcam Stop", "pidBefore": self.step_pid()}
         self.begin_watch("Bench: Webcam Stop", hub_t0)
         self.dash.reset_telemetry()
@@ -7989,12 +8094,19 @@ class Runner:
         self.check(f"webcam stop {run_id}: no force-stop, restart or error", ok,
                    f"markers {outcome['logMarkers'][:3]}, restarted {outcome['appRestarted']}, "
                    f"error {outcome.get('errorMessage')!r}")
-        pass_ms = None
+        trial = {"runId": run_id, "crashed": crashed, "appRestarted": outcome["appRestarted"],
+                 "logMarkers": outcome["logMarkers"], "stopSecondsRunnerSide": outcome.get("stopSecondsRunnerSide", 0),
+                 "cellTipStopMs": res.get("cellTipStopMs"), "createRobotMs": res.get("createRobotMs"),
+                 "firstFreshVerdictMs": res.get("firstFreshVerdictMs"), "stopPassMs": None}
         if "onEndMs" in res and "moduleStopsStartMs" in res:
-            pass_ms = round(res["onEndMs"] - res["moduleStopsStartMs"], 1)
-        s.append(f"| {run_id} | {label} | {res.get('cellTipStopMs')} | {pass_ms} | "
-                 f"{outcome.get('stopSecondsRunnerSide', 0):.2f} | {len(outcome['logMarkers'])} | {outcome['appRestarted']} |")
-        time.sleep(1.5)
+            trial["stopPassMs"] = round(res["onEndMs"] - res["moduleStopsStartMs"], 1)
+        log_file = self.out / "logs" / f"{name}.log"
+        trial.update(self._planner_stop_hub_times(log_file.read_text() if log_file.exists() else "", name,
+                                                  outcome["appRestarted"], f"webcam_stop {run_id} onEnd",
+                                                  WEBCAM_STOP_AUTO_STOPPING))
+        if settle:
+            time.sleep(1.5)
+        return trial
 
     def run_absent(self):
         self.activate_config(CONFIG_NO_WEBCAM, self.main_config(webcam=FAKE_WEBCAM_SERIAL))
