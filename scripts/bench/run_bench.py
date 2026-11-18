@@ -704,9 +704,9 @@ EDGE_RUN_HOLD_S = 2.0
 EDGE_SETUP_MEANS = ("the runner's LB hold didn't reach the OpMode unbroken from INIT through START (or LB was already "
                     "down when the suppliers were built), so the edge checks prove nothing; not a robot problem by itself")
 EDGE_START_MEANS = ("BioBuzz Tele's invalidate() in its INIT loop doesn't spend a press held through START: a driver "
-                    "holding gamepad1 LB (heading lock) or LT (slow mode) at START gets that toggle on the first loop")
+                    "holding a gamepad2 stick past stickPress (a shot trim) at START gets that trim step on the first loop")
 EDGE_PRESS_MEANS = ("after the INIT invalidate, a normal press in the match gives zero or two edges, so BioBuzz Tele's "
-                    "toggles miss or double a press")
+                    "stick trims miss or double a press")
 EDGE_CONTROL_MEANS = ("an EdgeBooleanSupplier read only after START gives zero or two edges for one press: edge "
                       "detection itself is broken, not just the START case")
 
