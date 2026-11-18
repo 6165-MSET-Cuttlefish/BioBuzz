@@ -6,7 +6,8 @@ Run: python3 -I scripts/looptimes/wiring_budget.py
 
 SDK = (1.42, 1.69)                          # M HB: iterative OpMode with an empty loop(), p50 and p95
 CH_BULK = (2.22, 2.97)                      # M HB: Control Hub bulk read; 2.10 and 2.47 in other runs
-EH_BULK_EXTRA = (5.72 - 2.10, 6.27 - 2.43)  # M HB: both hubs' bulk reads minus the Control Hub alone
+EH_BULK_EXTRA = (5.72 - 2.10, 6.27 - 2.43)  # M HB, RS485: both hubs' bulk reads minus the Control Hub alone
+EH_BULK_EXTRA_USB = (2.89, 3.25)            # M HB 2026-11-17, Photon off, EH on USB: the same; 3.19, 3.55 in a second run
 OQ_LOCALIZER = (3.20, 3.77)                 # M HB: OctoQuad readLocalizerData
 OQ_COMBINED = (6.58, 8.51)                  # M HB: OctoQuad readLocalizerDataAndAllEncoderData
 VOLTAGE = (1.30, 1.56)                      # M HB: getVoltage on the Control Hub
@@ -26,7 +27,8 @@ BURSTS_PER_S = 1.0
 POLLER_BULK_MS = (2.0, 2.7)                 # M HB: the 10 ms poller's own bulk read under load
 EH_BULK_HOP = (4.01 - 2.47, 4.67 - 3.26)    # M HB, RS485: EH minus CH bulk read, one run; the other gives 1.52, 1.41
 I2C_COMMANDS = (2, 3)                       # E, low / high: write-read + status query (PhotonI2c.rawRead), + a busy retry
-USB_HOP = 2.65 - 1.56                       # E from M LT 2026-10-28: Photon-off USB EH write minus CH write
+EH_BULK_HOP_USB = (0.74, 1.29)              # M HB 2026-11-17, Photon off: USB EH minus CH bulk read; 0.83, 1.33 next run
+OQ_HOP_USB = (2.25, 2.34)                   # M HB 2026-11-17, Photon off: OctoQuad localizer read, USB EH minus CH
 
 MOTORS = ('flywheel', 'drive', 'intake', 'transfer')
 EVERY_LOOP = {
@@ -76,18 +78,17 @@ def write(group, hub, q, photon):
     return command(CH_MOTOR if group in MOTORS else CH_SERVO, hub, q)
 
 
-def eh_bulk_hop(bound, q, photon):  # E on USB: low = the write hop, high = the RS485 bulk-read hop
-    return (USB_HOP, EH_BULK_HOP[q])[bound] if photon == 'usb' else EH_BULK_HOP[q]
-
-
 def budget(devs, situation, q=0, drive_fraction=1.0, octoquad_encoders=False, eh_input=False,
            voltage_every_loop=False, photon=None, ivy_drive=False, dashboard_off=False, swap_bound=None):
     if swap_bound is None:
-        io = CH_BULK[q] + (EH_BULK_EXTRA[q] if eh_input else 0.0)
+        io = CH_BULK[q] + ((EH_BULK_EXTRA_USB if photon == 'usb' else EH_BULK_EXTRA)[q] if eh_input else 0.0)
         io += OQ_COMBINED[q] if octoquad_encoders else OQ_LOCALIZER[q]
     else:
-        io = CH_BULK[q] + eh_bulk_hop(swap_bound, q, photon) + OQ_LOCALIZER[q]
-        io += I2C_COMMANDS[swap_bound] * (USB_HOP if photon == 'usb' else RS485_HOP[q])
+        io = CH_BULK[q] + OQ_LOCALIZER[q]
+        if photon == 'usb':
+            io += EH_BULK_HOP_USB[q] + OQ_HOP_USB[q]
+        else:
+            io += EH_BULK_HOP[q] + I2C_COMMANDS[swap_bound] * RS485_HOP[q]
     io += VOLTAGE[q] if voltage_every_loop else VOLTAGE[q] / VOLTAGE_EVERY
     refresh = edges = edge_loop = 0.0
     for group, hub in devs:
@@ -167,6 +168,7 @@ if __name__ == '__main__':
     print()
     row("Photon on the Control Hub, Expansion Hub on RS485", MAP, photon='rs485')
     row("Photon on both hubs, Expansion Hub on USB", MAP, photon='usb')
+    row("  Photon, usb: any input on the Expansion Hub", MAP, photon='usb', eh_input=True)
     for mode in ('rs485', 'usb'):
         for name, devs in (("flywheels on the EH, 4 drive on CH", FLYWHEELS_ON_EH),
                            ("intake and transfer on CH, 4 drive on EH", ALL_DRIVE_ON_EH),
@@ -191,23 +193,24 @@ if __name__ == '__main__':
         print(f"10 ms poller on the shared link, {poll_ms} ms per poll: driving "
               f"{budget(MAP, 'driving')['period']:.1f} -> {with_poller(MAP, 'driving', poll_ms):.1f} ms")
     print()
-    print("Every hub-port device swapped between the hubs: low / high bound on the OctoQuad's I2C commands"
-          " (and on USB, the EH bulk read's hop)")
+    print("Every hub-port device swapped between the hubs: on RS485, low / high bound on the OctoQuad's I2C commands;"
+          " on USB, the EH's read costs as measured")
     for name, kw in (("RS485, no Photon", {}), ("  drive writes in 50%", dict(drive_fraction=0.5)),
                      ("  dashboard off", dict(dashboard_off=True)),
                      ("  dashboard off, drive writes in 50%", dict(dashboard_off=True, drive_fraction=0.5)),
-                     ("Photon on CH, EH on RS485", dict(photon='rs485')),
-                     ("Photon on both, EH on USB", dict(photon='usb')),
-                     ("  Photon USB, drive writes in 50%", dict(photon='usb', drive_fraction=0.5))):
+                     ("Photon on CH, EH on RS485", dict(photon='rs485'))):
         row(f"{name}: the map", MAP, **kw)
         for k, bound in enumerate(('low', 'high')):
             row(f"{name}: swapped, {bound}", SWAPPED, swap_bound=k, **kw)
+    for name, kw in (("Photon on both, EH on USB", dict(photon='usb')),
+                     ("  Photon USB, drive writes in 50%", dict(photon='usb', drive_fraction=0.5))):
+        row(f"{name}: the map", MAP, **kw)
+        row(f"{name}: swapped", SWAPPED, swap_bound=0, **kw)
     row("  Photon USB: swapped, EH reads as cheap as CH", SWAPPED, photon='usb')
-    for k, bound in enumerate(('low', 'high')):
-        adds = [budget(SWAPPED, s, photon='usb', swap_bound=k)['period'] for s in ('parked', 'driving')]
-        over = [overlapping(SWAPPED, s, swap_bound=k) for s in ('parked', 'driving')]
-        print(f"  Photon USB, swapped, {bound}, add up, then overlap (overlap didn't hold):"
-              f" {adds[0]:5.1f} / {adds[1]:5.1f}    {over[0]:5.1f} / {over[1]:5.1f}")
+    adds = [budget(SWAPPED, s, photon='usb', swap_bound=0)['period'] for s in ('parked', 'driving')]
+    over = [overlapping(SWAPPED, s, swap_bound=0) for s in ('parked', 'driving')]
+    print(f"  Photon USB, swapped, add up, then overlap (overlap didn't hold):"
+          f" {adds[0]:5.1f} / {adds[1]:5.1f}    {over[0]:5.1f} / {over[1]:5.1f}")
     for situation in ('parked', 'driving', 'firing'):
         for k, bound in enumerate(('low', 'high')):
             b = budget(SWAPPED, situation, swap_bound=k)

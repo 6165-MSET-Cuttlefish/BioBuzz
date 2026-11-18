@@ -17,7 +17,9 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 
 - **Wire to [the map](#the-map).** Three rules decide most of it:
   1. Nothing that is read goes on the Expansion Hub: no encoder, analog, digital or I2C device. One input there adds
-     that hub's bulk read to every loop, about 3.6 ms.
+     that hub's bulk read to every loop: about 3.6 ms on RS485, 2.9 to 3.2 ms with the hub on its own USB link
+     (both measured, Photon off; on USB straight in the Control Hub's USB 3.0 port, not behind the camera hub the
+     map plans).
   2. Outputs that change every loop go on the Control Hub: both flywheels, the three turret servos, both hoods, and
      the two drive motors that still fit.
   3. Each flywheel's Through Bore goes on Control Hub encoder port 0 or 3, the same number as its motor.
@@ -42,11 +44,11 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 - **`TeamCode/src/main/res/xml/biobuzz.xml` follows the map's ports (2026-11-13), with the Expansion Hub on RS485 for
   now**: module 2 under the Control Hub Portal, because the robot's first assembled run on 2026-11-13 used the RS485
   cable. When the robot moves to the USB link the map plans, the Expansion Hub block goes under its own USB portal
-  with that hub's serial (read it in the REV Hardware Client; `DQ8P0FJB` is the bench hub from the Photon USB runs of
-  2026-10-28 and 2026-10-29, and nothing ties it to this robot). A hub that is missing on RS485 leaves its devices
-  out of the hardware map, so INIT stops; on USB with the wrong serial the SDK only warns and hands out devices that
-  ignore every write. Check the robot's Arducam serial too: `UC852` is the bench Arducam's (it may be the same on
-  every unit, unverified), and a webcam with another serial fails to open, which stops everything built on
+  with that hub's serial (read it in the REV Hardware Client; the bench hub's serial from the Photon USB runs of
+  2026-10-28 and 2026-10-29 is not this robot's). A hub that is missing on RS485 leaves its devices out of the
+  hardware map, so INIT stops; on USB with the wrong serial the SDK only warns and hands out devices that ignore every
+  write. Check the robot's Arducam serial too: `UC852` is the bench Arducam's (it may be the same on every unit,
+  unverified), and a webcam with another serial fails to open, which stops everything built on
   `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s analog inputs `sensorLeft` and `sensorRight` (no port; nothing builds `Intran`,
   and it only looks them up, so nothing says which rangefinder either would be). The follower reads the OctoQuad
   ([`odometry-tuning.md`](odometry-tuning.md)), so every OpMode built on `BioBuzzRobot` finds its odometry here; the
@@ -139,8 +141,10 @@ swapped between the hubs, see [If the two hubs swapped devices](#if-the-two-hubs
 | the layout planned before the CAD existed | 18.3 | 37.4 | 37.8 |
 
 - **No inputs on the Expansion Hub.** With manual bulk caching a hub's bulk read runs only if something on it is
-  read. Both hubs' bulk reads cost 5.72 ms against 2.10 ms for the Control Hub alone (measured). Things that would
-  start it without anyone noticing: `Drivetrain.encoderTelemetry` (`biobuzz/modules/Drivetrain.java:263-269`),
+  read. Both hubs' bulk reads cost 5.72 ms against 2.10 ms for the Control Hub alone on RS485, and 4.98 against
+  2.08 ms with the Expansion Hub on USB (measured, the USB figures on 2026-11-17 with Photon off). Under Photon on
+  USB an input there makes the map 19.3 / 27.4 ms instead of 16.0 / 24.2 (modelled). Things that would start it
+  without anyone noticing: `Drivetrain.encoderTelemetry` (`biobuzz/modules/Drivetrain.java:263-269`),
   `isOverCurrent()` on an Expansion Hub motor, or an analog input mapped there.
 - **Flywheels on Control Hub motors 0 and 3.** Their power changes every loop in closed loop, parked or driving. A
   Control Hub motor write is 1.64 ms (measured); over RS485 it is about 2.5 ms (estimated: the 0.9 ms hop is measured
@@ -175,8 +179,10 @@ swapped between the hubs, see [If the two hubs swapped devices](#if-the-two-hubs
   encoder port 2 has no zero of its own and the CAD has no hard stop to home against; one read of the absolute
   output at INIT gives it one, and every loop then has the true angle for nothing. Reading the absolute output
   every loop instead is an alternative under [Open choices](#open-choices), at +3.4 ms in every loop.
-- **OctoQuad on Control Hub I2C bus 2.** Every I2C read is several hub commands, and each is assumed to pay the RS485
-  hop on the Expansion Hub (not measured there). Bus 0 is the built-in IMU's. Bus 2 is where the bench measured it.
+- **OctoQuad on Control Hub I2C bus 2.** Every I2C read is several hub commands, and each pays the Expansion Hub's
+  hop. On a USB Expansion Hub its read took 5.71 ms against 3.47 ms on the Control Hub, +2.25 ms (measured
+  2026-11-17, Photon off); on RS485 it is still estimated. Bus 0 is the built-in IMU's. Bus 2 is where the bench
+  measured it.
 - **Prism on its own bus.** That separates its data lines from the OctoQuad's. It does not separate power: all of a
   hub's I2C ports share one 3.3 V supply (500 mA total, REV's specifications).
 - **Analog on the Control Hub, read in the loop.** `Drivetrain.read()` reads the Floodgate after every driving loop
@@ -268,15 +274,17 @@ Expansion Hub, and the reverse. The Limelight, the Arducam, the built-in IMU and
 stay on the Control Hub.
 
 **No: every loop gets longer, by about 6 to 7 ms parked and 11 to 12 ms driving and aiming on today's RS485 link
-(25.0 to 26.1 / 47.4 to 48.4 against 18.7 / 36.6 ms), and by about 4 to 6 / 6 to 8 ms with Photon over USB (20.4 to
-22.2 / 29.9 to 31.7 against 16.0 / 24.2 ms), modelled.** Losing the Expansion Hub or its link would then stop the
-whole robot. The Expansion Hub is slower for every command, and the swap puts on it everything the code talks to
-every loop except two drive motors: the bulk read, the OctoQuad, both flywheels, the three turret servos and both
+(25.0 to 26.1 / 47.4 to 48.4 against 18.7 / 36.6 ms), and by about 4.1 / 5.4 ms with Photon over USB (20.1 / 29.6
+against 16.0 / 24.2 ms), modelled.** Losing the Expansion Hub or its link would then stop the whole robot. The
+Expansion Hub is slower for every command, and the swap puts on it everything the code talks to every loop except two
+drive motors: the bulk read, the OctoQuad, both flywheels, the three turret servos and both
 hoods.
 
-Loop period in ms, parked / driving and aiming, p50 costs unless marked (modelled by the script). The swapped figures
-are a range because the OctoQuad was never read on the Expansion Hub (2 or 3 hub commands a read, each paying the
-hop), and on USB the bulk read's hop was not measured either (below).
+Loop period in ms, parked / driving and aiming, p50 costs unless marked (modelled by the script). On RS485 the swapped
+figures are a range because the OctoQuad has never been read on an RS485 Expansion Hub (2 or 3 hub commands a read,
+each paying the hop). On USB they are not: the OctoQuad's read and the bulk read were measured on a USB Expansion Hub
+on 2026-11-17 (below), with the Expansion Hub straight in the Control Hub's USB 3.0 port, Photon off, one run (two
+for the bulk read); behind the camera hub, as the map plans, not measured.
 
 | case | the map | swapped |
 |---|---|---|
@@ -284,10 +292,11 @@ hop), and on USB the bulk read's hop was not measured either (below).
 | RS485, no Photon, p95 costs | 22.4 / 45.1 | 29.3 to 30.5 / 57.1 to 58.2 |
 | RS485, no Photon, dashboard off, drive writes in half the loops | 16.2 / 29.6 | 22.5 to 23.5 / 40.6 to 41.6 |
 | Photon on the Control Hub only, Expansion Hub on RS485 | 16.4 / 28.1 | 24.6 to 25.7 / 44.9 to 46.0 |
-| Photon on both hubs, Expansion Hub on USB (the plan) | 16.0 / 24.2 | 20.4 to 22.2 / 29.9 to 31.7 |
-| Photon on both, USB, p95 costs | 18.3 / 26.6 | 22.8 to 24.5 / 32.5 to 34.1 |
-| Photon on both, USB, the two hubs' writes overlap fully (not seen in one run on 2026-11-17: they added up) | 16.0 / 21.8 | 20.4 to 22.2 / 28.2 to 29.9 |
-| Photon on both, USB, an Expansion Hub read as cheap as a Control Hub one (a floor, not measured) | 16.0 / 24.2 | 16.6 / 26.2 |
+| Photon on both hubs, Expansion Hub on USB (the plan) | 16.0 / 24.2 | 20.1 / 29.6 |
+| Photon on both, USB, p95 costs | 18.3 / 26.6 | 23.2 / 32.9 |
+| Photon on both, USB, drive writes in half the loops | 16.0 / 22.2 | 20.1 / 27.7 |
+| Photon on both, USB, the two hubs' writes overlap fully (not seen in one run on 2026-11-17: they added up) | 16.0 / 21.8 | 20.1 / 27.8 |
+| Photon on both, USB, an Expansion Hub read as cheap as a Control Hub one (a floor: the measured reads cost about 3.5 ms more) | 16.0 / 24.2 | 16.6 / 26.2 |
 
 Where the extra 11 to 12 ms comes from on today's link while driving (hub commands per loop go from 24.84 ms to
 34.48-35.38 ms, modelled; the period adds about 15% on top for the 500 ms refresh):
@@ -298,14 +307,17 @@ Where the extra 11 to 12 ms comes from on today's link while driving (hub comman
   bench of 2026-10-29.
 - **The OctoQuad's read crosses the link.** One I2C read is two hub commands, a write-read and a status query, and
   the query is repeated while the hub's I2C is busy (`opmodes/test/bench/PhotonI2c.java:165-183`, which mirrors the
-  SDK's read). Each pays the hop: +1.8 to +2.7 ms on RS485, +2.2 to +3.3 ms on USB (estimated, on top of 3.20 ms
-  measured on the Control Hub).
-- **The one bulk read runs on the slower hub:** +1.5 ms on RS485, so about 3.8 ms instead of 2.22 (the hop measured
-  in both runs of 2026-10-09: 4.01 against 2.47 ms, and 5.72 − 2.10 = 3.62 against 2.10 ms,
-  [`hub-bench-findings.md`](hub-bench-findings.md)); +1.1 to +1.5 ms on USB (estimated). Only one bulk read still
-  runs, because nothing left on the Control Hub is read. The battery voltage is its own command, read 1 loop in 50
-  on whichever hub the SDK returns ([What the code must do](#what-the-code-must-do)); the difference is under
-  0.02 ms a loop.
+  SDK's read). Each pays the hop: +1.8 to +2.7 ms on RS485 (estimated, on top of 3.20 ms measured on the Control
+  Hub). On USB, +2.25 ms (measured 2026-11-17, Photon off: 5.71 against 3.47 ms, p95 +2.34). That is about 1.1 ms a
+  command at 2 commands a read, close to the USB hop on one ADC read in that run (+1.11 and +1.33 ms): consistent
+  with 2 commands a read and few busy retries (inferred).
+- **The one bulk read runs on the slower hub:** +1.5 ms on RS485, so about 3.8 ms instead of 2.22 (the hop measured in
+  both runs of 2026-10-09: 4.01 against 2.47 ms, and 5.72 − 2.10 = 3.62 against 2.10 ms,
+  [`hub-bench-findings.md`](hub-bench-findings.md)); +0.74 ms on USB (measured 2026-11-17, Photon off: 3.12 against
+  2.38 ms, p95 +1.29; +0.83 in a second run). On USB a bulk read pays less than on RS485, though a single ADC read
+  pays more (+1.11 against +0.89 ms). Only one bulk read still runs, because nothing left on the Control Hub is read.
+  The battery voltage is its own command, read 1 loop in 50 on whichever hub the SDK returns ([What the code must
+  do](#what-the-code-must-do)); the difference is under 0.02 ms a loop.
 - The drive motors stay 2 + 2, so they cost the same. Photon on the Control Hub alone suffers most: driving, it saves
   2.4 to 2.5 ms swapped against 8.5 ms on the map, and the gap grows to 17 to 18 ms (44.9 to 46.0 against 28.1).
 - The extra cost of the loop that starts a shot drops from +7.4 to +4.7 ms, since the blocker, transfer motor and
@@ -341,24 +353,24 @@ What else gets worse:
 
 Not measured, and what the script assumes instead:
 
-- The OctoQuad on the Expansion Hub, on either link: the bench's "odometry moved to the Expansion Hub" step never
-  ran. Taken as 3.20 ms plus 2 (low) or 3 (high) hops. The Photon run of 2026-11-17 timed I2C reads of constant
-  registers, two threads per device every 10 ms while every channel was written, p50 / p95 / max: a Pinpoint on the
-  USB Expansion Hub's I2C port 1, 10.1 / 30.1 / 76.8 ms Photon off and 8.6 / 18.8 / 38.6 at 8 parallel; the OctoQuad
-  on Control Hub I2C port 2, 4.4 / 11.8 / 27.5 and 3.7 / 8.2 / 19.5 ms. Different devices, reads and load from the
-  localizer read, so the script keeps its assumption. They are consistent with a read on the USB Expansion Hub costing
-  more than one on the Control Hub (inferred: different devices and registers; the driver thread's figures).
-- The Expansion Hub's bulk read over USB: its hop taken as 1.09 ms (low: the USB hop measured on writes without
-  Photon, 2.65 − 1.56 ms, [`loop-time-findings.md`](loop-time-findings.md#photon), 2026-10-28) to 1.54 ms (high: the
-  RS485 bulk-read hop).
+- The OctoQuad on an RS485 Expansion Hub: taken as 3.20 ms plus 2 (low) or 3 (high) RS485 hops. Over USB it was
+  measured, and the script uses that (above).
+- Reads under Photon. The USB read costs were measured with Photon off, on a bench hub, with no pods on the OctoQuad;
+  the script assumes Photon doesn't change them. If anything that is on the safe side: the Photon run of the same day
+  timed I2C reads of constant registers, two threads per device every 10 ms while every channel was written, and they
+  were faster with Photon on. p50 / p95 / max: a Pinpoint on the USB Expansion Hub's I2C port 1, 10.1 / 30.1 / 76.8 ms
+  Photon off and 8.6 / 18.8 / 38.6 at 8 parallel; the OctoQuad on Control Hub I2C port 2, 4.4 / 11.8 / 27.5 and
+  3.7 / 8.2 / 19.5 ms ([`photon-bench.md`](photon-bench.md#what-else-the-2026-11-17-run-measured)). Other reads and
+  load than the localizer read's, so the script doesn't use them.
 - Any write on an RS485 Expansion Hub ([Still unknown](#still-unknown)). The script also charges the SDK's refresh
   commands to the Expansion Hub the RS485 hop on USB, in both layouts (under 0.2 ms here).
 
 None of these could close the gap. Even if an Expansion Hub read over USB cost what a Control Hub read does, the swap
 is still about 0.6 ms longer parked and 2 ms longer driving (the table's last row), from Photon's measured write
-costs; the rest of the USB gap rests on read costs nobody has measured. A swap could still be a stopgap for a damaged
-Control Hub port or a cable that won't reach. For packaging, put the Control Hub in the bay without the battery
-instead ([Where the hubs sit](#where-the-hubs-sit-and-the-usb-cable-between-them)).
+costs. The rest of the USB gap, about 3.5 ms (20.1 / 29.6 against 16.6 / 26.2), is the Expansion Hub's read costs
+measured on 2026-11-17. A swap could still be a stopgap for a damaged Control Hub port or a cable that won't reach.
+For packaging, put the Control Hub in the bay without the battery instead ([Where the hubs
+sit](#where-the-hubs-sit-and-the-usb-cable-between-them)).
 
 ## Open choices
 

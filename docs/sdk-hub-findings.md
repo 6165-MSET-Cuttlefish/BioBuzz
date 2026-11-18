@@ -121,8 +121,9 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
 - In code, `BulkData.isFake()` is the only sign, and only `LynxModule.getBulkData()` hands out a `BulkData`. To check
   it, call `hub.getBulkData()` at the start of the loop instead of `clearBulkCache()`: it clears, reads once and fills
   the cache the motor and sensor reads then use, for the same single bulk read. Do it only on hubs whose inputs the
-  loop reads, since it always reads: an unneeded Expansion Hub bulk read adds about 3.6 ms to every loop (both hubs'
-  bulk reads 5.72 ms p50 against 2.10 ms for the Control Hub alone, [`hub-bench-findings.md`](hub-bench-findings.md)).
+  loop reads, since it always reads: an unneeded Expansion Hub bulk read adds about 3.6 ms to every loop on RS485
+  (both hubs' bulk reads 5.72 ms p50 against 2.10 ms for the Control Hub alone) and 2.9 to 3.2 ms with the hub on its
+  own USB link (4.98 against 2.08 ms, 2026-11-17, Photon off; [`hub-bench-findings.md`](hub-bench-findings.md)).
   `EnhancedOpMode` clears (`architecture/core/EnhancedOpMode.java:404`) and never checks.
 
 ## Digital inputs

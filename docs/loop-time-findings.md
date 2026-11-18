@@ -92,7 +92,8 @@ changes; a skipped (cached) write costs about 0.
 - The Expansion Hub write is not measured. It is the Control Hub write plus the 0.9 ms RS485 hop measured on ADC and
   bulk reads. On USB, an Expansion Hub write measured about 2.6 ms ([Photon](#photon), Photon off).
 - With manual bulk caching a hub's bulk read runs only in loops where one of its inputs is read: any input on the
-  Expansion Hub adds its bulk read to every loop (both hubs together 5.7 ms against 2.1 ms for the Control Hub alone).
+  Expansion Hub adds its bulk read to every loop (both hubs together 5.7 ms against 2.1 ms for the Control Hub alone
+  on RS485; 5.0 against 2.1 ms with the Expansion Hub on USB, 2026-11-17, Photon off).
 - Where each device of the BIOBUZZ robot should plug in, and the loop period that gives, is in
   [`wiring-findings.md`](wiring-findings.md): about 19 ms parked and 28 to 37 ms driving and aiming (estimated).
   `python3 -I scripts/looptimes/wiring_budget.py` adds the costs up.

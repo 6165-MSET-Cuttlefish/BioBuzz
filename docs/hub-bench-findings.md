@@ -238,22 +238,48 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     responding, and every command to it fails at once until it sends something back. User code never sees the
     dropped write; logcat shows `timeout: abandoning waiting 250ms for` (read from SDK 12.0.0 source:
     `LynxRespondable.awaitAndRetransmit`, `LynxCommExceptionHandler`).
-- **Expansion Hub: every command costs more, not just encoders.** The RS485 hop added about 0.9 ms to each ADC read
-  sent to the Expansion Hub, and 1.5 ms to a bulk read. Every Lynx command crosses the same link, so expect the same
-  on motor and servo writes and on each command of an I2C transaction; those were not measured over RS485.
+- **Expansion Hub: every command costs more, not just encoders. Keep odometry and other per-loop I2C sensors on the
+  Control Hub: on a USB Expansion Hub the OctoQuad's read cost 2.25 ms more.** Over RS485 the hop added about 0.9 ms
+  to each ADC read sent to the Expansion Hub, and 1.5 ms to a bulk read. On its own USB link (2026-11-17, straight in
+  the Control Hub's USB 3.0 port, Photon off; behind the camera hub, as the map plans, not measured) a single command
+  paid more, about 1.1 to 1.3 ms, and a bulk read less, 0.74 ms. Every Lynx command crosses the same link, so expect
+  the same on motor and servo writes and on each command of an I2C transaction; writes were not measured over RS485.
 
-  | command | Control Hub | Expansion Hub |
-  |---|---|---|
-  | input voltage (ADC) | 1.72 / 2.37 / 7.47 | 2.61 / 3.32 / 8.69 |
-  | current (ADC) | 1.69 / 2.43 / 4.58 | 2.61 / 3.49 / 5.75 |
-  | bulk read | 2.47 / 3.26 / 11.87 | 4.01 / 4.67 / 7.64 |
+  | command | Control Hub, RS485 run | Expansion Hub, RS485 | Control Hub, USB run | Expansion Hub, USB |
+  |---|---|---|---|---|
+  | input voltage (ADC) | 1.72 / 2.37 / 7.47 | 2.61 / 3.32 / 8.69 | 1.63 / 2.10 / 2.54 | 2.74 / 3.56 / 4.76 |
+  | current (ADC) | 1.69 / 2.43 / 4.58 | 2.61 / 3.49 / 5.75 | 1.53 / 2.15 / 4.45 | 2.85 / 3.44 / 4.02 |
+  | bulk read | 2.47 / 3.26 / 11.87 | 4.01 / 4.67 / 7.64 | 2.38 / 2.84 / 5.10 | 3.12 / 4.13 / 6.53 |
 
+  - The RS485 columns are 2026-10-09; the USB ones are Bench: Expansion Hub on USB, 2026-11-17, on another Control
+    Hub, 300 reads each, bulk caching off ([Setup](#setup)). Each pair of columns is one run, so compare the
+    differences, not hub against hub. USB p50 differences: +1.11, +1.33 and +0.74 ms. A second USB run 40 minutes
+    later, with the OctoQuad moved to the Expansion Hub, gave +1.05, +1.34 and +0.83.
   - With manual bulk caching, using any Expansion Hub input means one more bulk read per loop:
-    - Control Hub bulk read alone: 2.10 / 2.43 / 4.21.
-    - Both hubs' bulk reads: 5.72 / 6.27 / 7.08.
-    - Both hubs plus the Pinpoint and OctoQuad reads: 14.62 / 17.33 / 22.35.
-  - An I2C read takes several Lynx commands, so I2C devices pay the hop several times per read. The Pinpoint and
-    OctoQuad weren't measured on the Expansion Hub. Keep odometry and other per-loop I2C sensors on the Control Hub.
+
+    | one loop's reads | RS485 | USB | USB, OctoQuad moved to the Expansion Hub |
+    |---|---|---|---|
+    | Control Hub bulk read alone | 2.10 / 2.43 / 4.21 | 2.08 / 2.52 / 4.48 | 2.13 / 2.59 / 3.39 |
+    | both hubs' bulk reads | 5.72 / 6.27 / 7.08 | 4.98 / 5.77 / 9.31 | 5.32 / 6.13 / 7.81 |
+    | both hubs plus the Pinpoint and OctoQuad reads | 14.62 / 17.33 / 22.35 | 14.86 / 17.06 / 19.07 | 17.14 / 20.01 / 25.03 |
+
+    - What the Expansion Hub's bulk read adds to a loop: 3.62 ms p50 on RS485; 2.89 ms p50 / 3.25 p95 on USB, and
+      3.19 / 3.55 in the second USB run (differences of the raw values).
+    - The last row doesn't compare across links: on USB the Pinpoint was on the Expansion Hub in both runs, on RS485
+      on the Control Hub. Moving the OctoQuad over cost that row +2.28 ms p50, +2.95 p95.
+  - An I2C read takes several Lynx commands, so I2C devices pay the hop several times per read. Over USB (the same
+    runs, each device read 300 times; the OctoQuad's `readLocalizerData`, the Pinpoint's `update()`):
+
+    | read | before the move | after the move | p50 difference |
+    |---|---|---|---|
+    | OctoQuad | Control Hub I2C bus 2: 3.47 / 4.06 / 5.06 | Expansion Hub I2C bus 2: 5.71 / 6.40 / 7.98 | +2.25 (p95 +2.34) |
+    | Pinpoint | Expansion Hub I2C bus 1: 5.89 / 8.69 / 10.88 | Expansion Hub I2C bus 1: 6.04 / 8.63 / 11.04 | +0.15, not moved |
+
+    - The Pinpoint never ran on this run's Control Hub, so the run gives it no hop. Don't subtract the 5.79 ms
+      Control Hub figure below: another hub, another link and pods attached.
+    - Neither device has been read on an RS485 Expansion Hub.
+    - Reads only, with no pods on either device, and no Photon, webcam or Limelight. The bus and hub each device
+      reported (its `connectionInfo`) match the cabling.
 - **Odometry, measured on the Control Hub:**
 
   | | Pinpoint | OctoQuad MK2 |
@@ -514,11 +540,11 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
     for the runner's 600 s timeout, so its three reinstall checks read FAIL as not run
     ([`toolchain-findings.md`](toolchain-findings.md#laptop-and-adb)). It left `bench_octoquad_absent` active too. None
     of these runs did the session's put-back.
-- **2026-11-17:** the 2026-11-14 hub (same firmware, 1.8.2), over a USB cable from a Mac, on one 12 V battery that
-  read 13.11 V at the first run's start and 12.79 V when the second run's benches ended (12.74 V at 18:11, its
-  put-back; the runner logs voltage only, no current). No new install: the bench build of 2026-11-14 was still on the
-  hub. Its robot code is older than main's; its planner code matches main's apart from comments, and its Photon
-  sources are main's. The runs:
+- **2026-11-17:** the 2026-11-14 hub (same firmware, 1.8.2), over a USB cable from a Mac. The first three runs were
+  on one 12 V battery that read 13.11 V at the first run's start and 12.79 V when the second run's benches ended
+  (12.74 V at 18:11, its put-back; the runner logs voltage only, no current); the fourth on a second battery. No new
+  install: the bench build of 2026-11-14 was still on the hub. Its robot code is older than main's; its planner code
+  matches main's apart from comments, and its Photon sources are main's. The runs:
   - `run_bench.py --usb --planner-stop --ports-empty`, 16:23 to 16:34: an Arducam OV9782 plugged straight into the
     Control Hub's USB 3.0 port, no USB hub and no power bank, nothing else plugged in. Results under Route planner
     above. It put the hub's config back and removed its adb forward.
@@ -532,6 +558,18 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
     straight in the Control Hub's USB 3.0 port, the battery at 12.69 V at its start and 12.67 V at its end. The
     bench build on the hub had `CellTipCamera`'s three close modes (each result names its mode). Results under The
     SDK's stop window above.
+  - Then `run_bench.py --usb --expansion-usb --interactive --s3-ports`, 19:44 to 22:02: Bench: Expansion Hub on USB,
+    a bench on the bench branches, not on main (main's Bench: Expansion Hub takes whichever USB parent the hardware
+    map lists last as the Control Hub, and an Expansion Hub on its own cable is a parent too:
+    `opmodes/test/bench/ExpansionHubBench.java:57`). The Expansion Hub on its own Mini-B USB cable in the Control
+    Hub's USB 3.0 port, powered from the Control Hub's second XT30 port, no RS485 cable; the OctoQuad (no pods) in
+    Control Hub I2C port 2, then moved to Expansion Hub I2C port 2 at a prompt; the Pinpoint (no pods) in Expansion
+    Hub I2C port 1 throughout; no Photon, webcam or Limelight; nothing on any motor or servo port. The port, the power
+    and the missing RS485 cable are the account of the person who wired it; the results name the Expansion Hub by its
+    USB serial and each device's hub and bus. A second, freshly charged battery: 14.13 V at the start, about
+    14.04 V at the first measurement (19:46), 13.27 to 13.24 V at the second (20:25 to 20:26), and 12.70 to 12.69 V
+    at the end, after the run had waited at its prompts for over two hours in all. Results under Expansion Hub in
+    [Design around these](#design-around-these).
   - The hub's logcat clock ran about 10 minutes ahead of the Mac's (the runner's log at 17:33 quotes hub lines from
     17:43): line up the two by events, not by time.
   - Expected noise (inferred): with `laser_rangefinder_i2c` active and no laser on I2C bus 1, the SDK logs I2C errors
@@ -539,7 +577,7 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
 
 Not run on any of these dates (they need `--interactive`):
 - Pinpoint, OctoQuad and Limelight unplug/replug;
-- odometry moved to the Expansion Hub;
+- odometry moved to an RS485 Expansion Hub (the OctoQuad moved to a USB one on 2026-11-17, above);
 - driving the Gamepad view by hand.
 
 ## Still unknown

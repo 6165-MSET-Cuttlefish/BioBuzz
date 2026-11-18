@@ -53,9 +53,10 @@ SDK 12 source (`LynxRespondable.awaitAndRetransmit`); no Control Hub command tim
 
 ### The 2026-11-17 blockers
 
-The run and its hardware: [`hub-bench-findings.md`, Setup](hub-bench-findings.md#setup). Results are in
-`bench-results/2026-11-17_165837` on the laptop that ran it. Neither blocker is explained yet: make the bench changes
-in [Next runs, step 0](#0-two-bench-changes-before-any-more-hub-time) before the next Photon run.
+The run and its hardware: [`hub-bench-findings.md`, Setup](hub-bench-findings.md#setup). Results are from the 16:58
+run, on the laptop that ran it. Neither blocker is explained yet. The bench changes that can explain them were made
+the same evening, on the bench build only, not on main ([Next runs, step
+0](#0-two-bench-changes-made-on-the-bench-build)); the runs that use them are next.
 
 **1. Lost writes at depth, Control Hub: 1 of 104 trials failed on time, not on handling.**
 
@@ -64,7 +65,7 @@ in [Next runs, step 0](#0-two-bench-changes-before-any-more-hub-time) before the
   nothing was left in flight, and the counters showed only this give-up and its one fallback to the SDK's path. What
   failed: while it waited, the bench wrote the other 5 Control Hub channels 225 times, and one of those calls took
   22.36 ms, over the bench's 20 ms limit
-  (`PHOTON_WRITE_CALL_LIMIT_MS`, `scripts/bench/run_bench.py:2903`). The next slowest was 4.75 ms, p99 3.49.
+  (`PHOTON_WRITE_CALL_LIMIT_MS`, `scripts/bench/run_bench.py:2924`). The next slowest was 4.75 ms, p99 3.49.
 - Measured, all 208 trials: each trial's slowest neighbouring write was 2.63 to 11.39 ms on the Control Hub (p50
   4.67) apart from this one, and 3.99 to 10.10 ms on the Expansion Hub. So 1 call in about 26,000 on the Control Hub
   (42,500 across both hubs) went over 20 ms.
@@ -87,8 +88,8 @@ in [Next runs, step 0](#0-two-bench-changes-before-any-more-hub-time) before the
   normal value).
 - The give-up-call reading isn't ruled out: 7 ms after the give-up, logcat shows only a mode-query reply (`0x9009`)
   on the SDK's receive thread that the SDK couldn't match to a command, and such unmatched replies appear 26 times in
-  that trial set's log, in Expansion Hub trials too. No reading is proven: the bench records neither when each
-  neighbouring write started nor which path it took.
+  that trial set's log, in Expansion Hub trials too. No reading is proven: the bench that ran recorded neither when
+  each neighbouring write started nor which path it took. The bench build records both now (step 0).
 - On the robot, if real (inferred): only after an ACK is really lost, one loop stalls by about 15 to 35 ms while every
   motor on that hub pays two SDK round trips. Nothing is lost or left on (seen on the bench's RUN_WITHOUT_ENCODER
   motors; see the next point for RUN_USING_ENCODER).
@@ -96,7 +97,8 @@ in [Next runs, step 0](#0-two-bench-changes-before-any-more-hub-time) before the
   marked not responding, the SDK returns a placeholder RUN_WITHOUT_ENCODER (`internalGetPublicMotorMode`), so a motor in
   RUN_USING_ENCODER, such as a flywheel, would get a constant power instead of a velocity target, and the SDK's cache
   can then skip an unchanged `setPower` after it. What the hub does with a constant power in velocity mode isn't known.
-  The bench can't see it: its motors run without encoders (`opmodes/test/bench/PhotonRig.java`).
+  Main's bench can't see it: its motors run without encoders (`opmodes/test/bench/PhotonRig.java`). The bench build's
+  RUN_USING_ENCODER trials look for it (step 0).
 - Coverage gap (measured): depths 0 to 7 were asked for, but at most 5 writes on the Control Hub and 4 on the Expansion
   Hub were really in flight before a lost write.
 
@@ -239,10 +241,12 @@ between 4 and 11 on 10 cores, all five passed and mutants said 16 of 16
 
 ## Before every run
 
-**Install.** Full install from Android Studio (TeamCode configuration, Run button), from the same checkout you run the
-runner in, and again after any change to `architecture/hardware/photon/`. deploySloth never reloads Photon's `@Pinned`
-classes; the block's first check compares the hub's Photon with your sources and fails on a mismatch. Run from a
-committed tree: the summary records the git hash.
+**Install.** Put the stamped bench build on the hub with `scripts/bench/bare_hub.sh`, from the same checkout you run
+the runner in, and again after any change to `architecture/hardware/photon/`. `--build --usb` (online) builds and
+stamps it. `--install-only bench-results/<folder> --usb` checks the stamp, backs up the hub's app and configs,
+installs, starts the app, waits for `INIT FINISH` and prints the command that puts the old app back. It is a full
+install: deploySloth never reloads Photon's `@Pinned` classes, and the block's first check compares the hub's Photon
+with your sources and fails on a mismatch. Run from a committed tree: the summary records the git hash.
 
 **Wiring.** Unplug everything not in this table.
 
@@ -261,15 +265,21 @@ committed tree: the summary records the git hash.
   without it the runner refuses to start while any hardware config on the hub names a device there; with it, in a
   terminal, it asks you to confirm. Either way, Bench: Photon Stock drives each motor port at 0.1 for 0.2 s and stops
   the run if one draws over 0.3 A. Servo ports can't be probed: check them by eye.
+- With `--ports-empty` the bench build also runs RUN_USING_ENCODER trials on motor ports 2-3 of each USB hub. With no
+  encoder there a velocity target can wind a port up to full power, so a motor plugged in there could run at full
+  power. `--ports-empty` is the guard; the bench also stops if either port draws over 0.3 A after a trial (the bench
+  build's `scripts/bench/README.md`, The Photon block).
 - An empty motor port reads current while driven, so the probe's limit sits above that, and a free-spinning motor can
   pass it. Two runs on 2026-11-11 with every bench port empty read the same at 0.1 power, to the milliamp: Control Hub
   ports 0-3 at 0.054, 0.003, 0.000 and 0.142 A, the USB Expansion Hub's at 0.003, 0.003, 0.000 and 0.014 A. The old
   0.1 A limit stopped both runs on Control Hub port 3. One Control Hub and one Expansion Hub, so another hub may read
   higher.
 
-**Connect.** Join the Control Hub's Wi-Fi: the runner drives the hub through the dashboard over it, even with adb on a
-cable. Connect adb to the Control Hub with Wi-Fi ADB (the runner's default, [Run it](../scripts/bench/README.md#run-it)
-step 2) or a USB cable; on a cable, add `--serial <serial>` to every command, with the serial `adb devices` lists.
+**Connect.** Over a USB cable to the Control Hub's USB-C port, as on 2026-11-17, add `--usb` to every command (the
+commands below have it): adb and the dashboard both go over the cable, the Mac stays on its own network and doesn't
+join the hub's Wi-Fi ([Over a USB cable](../scripts/bench/README.md#over-a-usb-cable)). `--serial <serial>` is needed
+only when adb lists more than one USB device. Over Wi-Fi instead, leave out `--usb`, join the Control Hub's Wi-Fi and
+connect adb with Wi-Fi ADB (the runner's default, [Run it](../scripts/bench/README.md#run-it) step 2).
 
 **Then:**
 
@@ -283,42 +293,104 @@ step 2) or a USB cable; on a cable, add `--serial <serial>` to every command, wi
 
 Each from the repo root.
 
-### 0. Two bench changes, before any more hub time
+### 0. Two bench changes, made on the bench build
 
-Neither 2026-11-17 blocker can be settled from what the bench records
-([The 2026-11-17 blockers](#the-2026-11-17-blockers)). Make these changes, pass them offline in
-[`scripts/bench/photon-offline/`](../scripts/bench/photon-offline/README.md), do a full install, then run step 1
-again.
+Done on 2026-11-17, on the bench build only, not on main: main's runner has neither new flag. The changes passed the
+offline suites in [`scripts/bench/photon-offline/`](../scripts/bench/photon-offline/README.md), and both bench builds
+were rebuilt and re-stamped that night. Photon's own sources didn't change, so the Photon hash the summary checks is
+still `6aea840d`. They were made because neither 2026-11-17 blocker can be settled from what the old bench records
+([The 2026-11-17 blockers](#the-2026-11-17-blockers)).
 
-- **Lost writes:** for each neighbouring write, record when it started and which path it took (parallel, SDK
-  fallback, SDK mode query, SDK enable), and mark the call that did the give-up. Have `LinkTap` log each SDK-path
-  command's time from send to reply. Add trials with the bench motors in RUN_USING_ENCODER that read back the hub's
-  target velocity after each give-up. Let a short run use the soak's 25 trials per depth (`PHOTON_SOAK_DEPTH_REPS`;
-  today only `--photon-soak` sets it, `scripts/bench/run_bench.py:7121`). What the answers mean:
-  - slow calls that are SDK round trips with a late reply: the hub or link is slow and Photon's forgetting the
-    caches exposes it; fix Photon to keep the mode and enable caches on a give-up;
-  - slow calls that are always the call doing the give-up: move the give-up to Photon's sweeper thread;
-  - replies on time but a slow call, on any kind of call: the hub's thread scheduling; then write down a reason for
-    the 20 ms limit or pick a new one, never just to make the run pass;
-  - a wrong velocity target after a give-up: a blocker for the robot, whatever the timing shows.
-- **STOP:** make Bench: Photon Stop Race leave the enable cache stale before the write it races
-  (`opmodes/test/bench/PhotonStopRaceBench.java:46`: `sleep(20)` to `sleep(600)`). Have the tap record any motor
-  enable sent after the gate, and whether the fail-safe was queued before the power write's ACK. Run it Photon off and
-  on, 6 trials each, on a bare Control Hub, then with the USB Expansion Hub. If the reading above is right, Photon off
-  shows an enable after the gate and the motor on at 0.25 whenever the fail-safe was queued first, and today's 20 ms
-  version stays clean. If not, look next at the forgotten-cache and firmware readings. The bench sends the fail-safe
-  from a new thread, so a clean trial in which the fail-safe was queued late proves nothing. Also make the sampler flag
-  a motor that is on again before its first all-safe sweep. `--photon-stop-trials 200` measures the rate, not the
-  cause.
+What the bench build now does (from its code and its README):
 
-### 1. USB block (about 55 min)
+- **Lost writes:** every timed write call gets a row: when it started, how long it took, its hub and role, its path
+  (`parallel`, `fallback:<counter>`, `sdk`, or `mixed`) and whether a give-up happened during it. A trace on each
+  hub's USB link records every frame and reply, so the runner can say which SDK commands each call sent (a mode query,
+  a motor enable) and how long each waited for its reply. The runner reads from logcat which thread logged each
+  give-up.
+- **RUN_USING_ENCODER trials** (only with `--ports-empty`): motor ports 2-3 of each USB hub go to RUN_USING_ENCODER at
+  0.2 and 0.25, a control read 1 s later, then a lost write; the moment Photon gives up, both are written, and their
+  mode, target velocity, constant-power register and enable are read back.
+- **STOP race:** besides the 3 trials with the enable written 20 ms before the raced write (unchanged, no trace), 6
+  trials per hub and Photon mode with it written 600 ms before, so the SDK's enable cache has expired. Those trace the
+  link from before the write until the fail-safe is done: the power write's ACK, the fail-safe frame and any motor
+  enable after STOP's gate. The raced hub is fail-safed first.
+- **Sampler:** a motor that is on again before the first all-safe sweep now counts as a STOP violation, and the STOP
+  line says when the fail-safe reached each hub. Replayed on the 2026-11-17 results it flags the trial that failed
+  and, as it should, the negative control that switches a motor back on on purpose; nothing else.
+
+New runner flags:
+
+- `--photon-stop-race-only`: the port probe, then only the STOP race, Photon on8 then off, 3 + 6 trials per hub and
+  mode: 18 on a bare Control Hub, 36 with `--usb-expansion`. No Photon verdict. It needs `--ports-empty` and no other
+  bench flag, and refuses `--photon-soak`, `--photon-extras`, `--photon-pulls-first`, `--photon-soak-last`,
+  `--photon-i2c` and `--photon-depth-reps`.
+- `--photon-depth-reps N` (1 to 64): lost writes per in-flight depth on each USB hub, and with `--ports-empty` the
+  number of RUN_USING_ENCODER trials per hub. Default 13, or 25 with `--photon-soak`. Before, only `--photon-soak`
+  set it.
+
+New lines in `summary.md`:
+
+- **Lost writes, timing reading** (record only). It reads (b) if a call over 20 ms was the call that gave up; "no
+  reading" if such a call saw a give-up that no log line explains; else (a) if one was an SDK-path call whose reply
+  came late; else (c) if any call passed 20 ms with its replies on time; else "no slow call".
+- **Lost writes, velocity reading** (record only): (d) if a RUN_USING_ENCODER target went wrong after a give-up in k
+  of n trials; "no RUN_USING_ENCODER motor went wrong in n trials"; or "not run" without `--ports-empty`.
+- Judged: **every lost-write trial recorded each neighbouring write's start, length and path**. A FAIL here means the
+  bench missed something (a row, a trace file, a trace past its 8192 frames, a `mixed` path), not that Photon did.
+- Judged: **RUN_USING_ENCODER motors keep their velocity target through a give-up**, the velocity reading's twin.
+  NOT JUDGED when no velocity write went out while the hub was marked not responding, or without `--ports-empty`.
+- Judged, per Photon mode: **enable cache stale: the motor stays off when STOP lands inside its write**. On the SDK's
+  path (Photon off) the SDK sends that enable today, so this line reads FAIL whenever a trial hits the window, and NOT
+  JUDGED when none does; it can pass only once nothing sends an enable after STOP's gate. A FAIL there is the answer
+  to blocker 2, not a bench fault. But it counts as a blocker in the verdict, so the go run's gate would refuse to
+  start ([Still unknown](#still-unknown)).
+
+What the answers mean:
+
+- slow calls that are SDK round trips with a late reply: the hub or link is slow and Photon's forgetting the
+  caches exposes it; fix Photon to keep the mode and enable caches on a give-up;
+- slow calls that are always the call doing the give-up: move the give-up to Photon's sweeper thread;
+- replies on time but a slow call, on any kind of call: the hub's thread scheduling; then write down a reason for
+  the 20 ms limit or pick a new one, never just to make the run pass;
+- a wrong velocity target after a give-up: a blocker for the robot, whatever the timing shows.
+
+In the timing reading these are (a), (b) and (c); the last is the velocity reading's (d). For the STOP race: if the
+reading in blocker 2 is right, Photon off shows an enable after the gate and the motor on at 0.25 whenever the
+fail-safe was queued first, and the 20 ms trials stay clean. If not, look next at the forgotten-cache and firmware
+readings. `--photon-stop-trials 200` measures the rate, not the cause.
+
+### Before step 1: put the new build on the hub and run the STOP race alone (about 5 min plus the install)
+
+From the bench build's checkout, over the cable:
 
 ```bash
-python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty
+scripts/bench/bare_hub.sh --install-only bench-results/<folder> --usb
+python3 scripts/bench/run_bench.py --usb --photon-stop-race-only --ports-empty
 ```
 
-In a terminal it asks twice at the start (ports empty; plug in the Pinpoint and OctoQuad) and once at the end (move
-the Pinpoint to Control Hub I2C port 1). A short run says **PASSED THIS RUN, NOT YET SAFE** at best.
+The first installs the re-stamped build ([Install](#before-every-run)). The second is the race on a bare Control Hub
+(about 2 min, 18 trials, one typed confirmation). Then plug in the Expansion Hub's mini-USB cable, no RS485 cable,
+its 12 V from the Control Hub's second XT30 port, and run it again with the Expansion Hub (about 3 min, 36 trials):
+
+```bash
+python3 scripts/bench/run_bench.py --usb --photon-stop-race-only --usb-expansion --ports-empty
+```
+
+Motor ports 0-3 and servo ports 0-1 empty on both hubs, as for the block. Read the **enable cache stale** line for
+each Photon mode.
+
+### 1. USB block (about 60 min)
+
+```bash
+python3 scripts/bench/run_bench.py --usb --photon --usb-expansion --photon-i2c --ports-empty --photon-depth-reps 25
+```
+
+About 58 min at the default 13 lost writes per depth, 60 with the soak's 25 (the bench build's README; estimated from
+the 2026-11-17 Faults step and the added trials). Motor ports 0-3 and servo ports 0-1 empty on both hubs. In a
+terminal it asks twice at the start (ports empty; plug in the Pinpoint and OctoQuad) and once at the end (move the
+Pinpoint to Control Hub I2C port 1). A short run says **PASSED THIS RUN, NOT YET SAFE** at best. Read the **Lost
+writes, timing reading** and **velocity reading** lines first.
 
 On USB wiring Bench: Photon ends with the two-hubs-at-once phase (about 3 min, no prompts). On 2026-11-17 (one run) it
 measured that Photon's writes to the two hubs add up ([`wiring-findings.md`](wiring-findings.md#estimated-loop-period)).
@@ -328,13 +400,13 @@ hubs, and 3 + 3, 5 + 1 and 1 + 5, 300 loops each, each timed until the calls ret
 not a check, and never changes the verdict; the phase's read-backs and in-flight counts are judged like every
 other phase's.
 
-### 2. RS485 block (about 50 min)
+### 2. RS485 block (about 52 min)
 
 Recable the Expansion Hub to RS485 only (no USB cable), address 2, or add `--expansion-address N`. The runner asks for
 the Pinpoint back in Expansion Hub I2C port 1.
 
 ```bash
-python3 scripts/bench/run_bench.py --photon --photon-rs485 --photon-i2c --ports-empty
+python3 scripts/bench/run_bench.py --usb --photon --photon-rs485 --photon-i2c --ports-empty
 ```
 
 On RS485, Photon speeds up only the Control Hub's writes: the Expansion Hub's stay on the SDK's path, and this run
@@ -346,7 +418,7 @@ Only this run, for the wiring the robot will use, can say SAFE. USB wiring (reca
 first):
 
 ```bash
-python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-soak --photon-i2c --interactive --ports-empty
+python3 scripts/bench/run_bench.py --usb --photon --usb-expansion --photon-soak --photon-i2c --interactive --ports-empty
 ```
 
 The RS485 go command is in the README's [run table](../scripts/bench/README.md#the-photon-block) (no `--interactive`:
@@ -462,13 +534,22 @@ before relying on any of these.
 ## Still unknown
 
 - **What made one Control Hub write take 22.36 ms after a give-up, and whether that is Photon's.** Test: the
-  lost-writes bench change in [step 0](#0-two-bench-changes-before-any-more-hub-time), then step 1.
+  **Lost writes, timing reading** line of [step 1](#1-usb-block-about-60-min), with the new build installed.
 - **Whether a give-up can leave a RUN_USING_ENCODER motor on a constant power** (from the code, not seen on a hub;
-  [The 2026-11-17 blockers](#the-2026-11-17-blockers)). Test: the RUN_USING_ENCODER trials in step 0.
+  [The 2026-11-17 blockers](#the-2026-11-17-blockers)). Test: the **Lost writes, velocity reading** line and its
+  judged twin in step 1 (it needs `--ports-empty`).
 - **Whether Photon should forget the SDK's cached motor and servo values when it gives up on a write**, as it does
   now, or only mark the hub not responding, as the SDK's own timeout does. Decide after the lost-writes test.
-- **What switched the motor back on after STOP, and whether stock SDK 12 does the same.** Test: the STOP race change
-  in step 0, Photon off; it runs the SDK's path, so it answers for stock too.
+- **What switched the motor back on after STOP, and whether stock SDK 12 does the same.** Test: the STOP race alone
+  ([before step 1](#before-step-1-put-the-new-build-on-the-hub-and-run-the-stop-race-alone-about-5-min-plus-the-install)), its
+  **enable cache stale** line with Photon off; that runs the SDK's path, so it answers for stock too.
+- **Whether a FAIL on the SDK path's stale-race line should block Photon.** As coded it does: the line feeds the
+  verdict's blockers, and the go run starts only after a USB and an RS485 block that PASSED. If the reading in blocker 2
+  is right, the Photon-off line fails whenever a trial hits the window, however Photon behaves, so the go run would
+  probably never start.
+  Decide before step 3.
+- **What the lost-write tracing costs.** Its added work is a few array writes per frame, against the 20 ms limit
+  (from the code); not measured on a hub.
 - **Whether a crash with writes in flight without Photon reaches the fail-safe as fast.** On 2026-10-29 a crash took
   539-542 ms to reach it with Photon on, on 2026-11-17 27-39 ms. Test: Bench: Photon Crash with Photon left off, same
   sampler; it always enables Photon at 8 parallel today, so it needs a Photon-off option first.
