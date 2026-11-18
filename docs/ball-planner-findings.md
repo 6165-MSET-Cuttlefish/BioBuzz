@@ -16,10 +16,12 @@ root. Everything is read from source on 2026-11-10 unless marked otherwise.
 2. **A ball half outside the intake counts as collected.** The planner compares the ball's centre with half the
    intake's width. Subtract the ball's radius, or a capture margin measured on the intake, in both checks.
 3. **Plan 4 balls, one search slice per loop** (team decision, 2026-10-24): `RouteOptimizer.search(...)`, then one
-   `Search.step()` per loop until it returns true. Don't cap at 3 to fix STOP. On a hub its longest step was 321 ms
-   (Bench: Planner Stop, 2026-11-14), and no STOP during a sliced plan restarted the app without a webcam, but Ball
-   Collection Auto's webcam close puts its STOP at an estimated 917 ms, over the 900 ms window: shorten the steps or
-   close the webcam after the window before trusting a STOP during its 4-ball plan.
+   `Search.step()` per loop until it returns true. Don't cap at 3 to fix STOP. On a hub its longest step was 325 ms
+   (Bench: Planner Stop, 2026-11-17), and no STOP during a sliced plan restarted the app, with or without the webcam.
+   But Bench: Planner Stop's webcam trials, which close the webcam as Ball Collection Auto does, took up to 839 ms,
+   and Ball Collection Auto's worst case, the longest step plus the slowest webcam close, adds up to about 1084 ms,
+   over the 900 ms window (inferred): shorten the steps or close the webcam after the window before trusting a STOP
+   during its 4-ball plan.
 4. **Keep planning on the hub, never on the Limelight.**
 5. **Add an independent geometry check as a unit test before changing the planner**, and sample compound paths just
    before each join, not on it.
@@ -112,11 +114,11 @@ How it plans now (read from source):
   passed, so it overruns the slice by at most one `shape()` call or the final Pedro path build
   (`RouteOptimizer.java:143-154`). STOP then waits for one step, not a plan.
 - Budget: the longest step + the loop's tail + `stop()` under 900 ms. Ball Collection Auto's `stop()` also closes the
-  cell-tip webcam (up to 581 ms in [`hub-bench-findings.md`](hub-bench-findings.md)), which leaves about 300 ms. The
-  longest step on a hub was 321 ms (4 balls on both sides of the HIVE rail, Bench: Planner Stop, 2026-11-14; Bench:
-  Hub's longest on that layout was 273 ms), over that before the loop's tail. Without a webcam the hub logged every
-  STOP reaching idle in at most 282 ms. Not yet measured with the webcam; test:
-  `scripts/bench/run_bench.py --planner-stop --ports-empty` with a webcam plugged in.
+  cell-tip webcam (up to 729 ms in [`hub-bench-findings.md`](hub-bench-findings.md)), which leaves about 170 ms. The
+  longest step on a hub was 325 ms (4 balls on both sides of the HIVE rail, Bench: Planner Stop, 2026-11-17; Bench:
+  Hub's longest on that layout was 273 ms), well over that before the loop's tail. Without a webcam the hub logged
+  every STOP reaching idle in at most 282 ms (2026-11-14) and 118 ms (2026-11-17); with the webcam, in at most 839 ms
+  over 20 trials, none of which met the longest step and the slowest close at once (2026-11-17).
 - Vision Ball Collection checks for a changed request every `replanIntervalMs` (250 ms) and keeps showing the last
   finished plan meanwhile; a running search is replaced only when the settings change or the robot moves, not when
   the balls do, or churning vision would never let a 4-ball plan finish (`VisionBallCollectionTest.java:249-276`).

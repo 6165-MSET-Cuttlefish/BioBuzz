@@ -27,7 +27,8 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
   go run on this wiring ([`photon-bench.md`](photon-bench.md)), so route one RS485 cable as well and leave it
   unplugged at the Expansion Hub: it is the way back. Never connect both: only USB alone has been benched.
 - **Expect about 16 ms parked and 22 to 24 ms while driving and aiming** with Photon on both hubs, about 2 ms less
-  with the dashboard off (estimated from the Photon bench of 2026-10-29). On the fallback, RS485 without Photon:
+  with the dashboard off (estimated from the Photon bench of 2026-10-29; its writes were faster on 2026-11-17, so
+  these are on the safe side, inferred from the write term only). On the fallback, RS485 without Photon:
   19 ms and 28 to 37 ms ([Estimated loop period](#estimated-loop-period)). The wiring cannot fix the rest: 11
   outputs change every loop and each costs a hub command.
 - **Run the bench tests in [Open choices](#open-choices) before the wiring is final.** Two placements rest on an
@@ -232,15 +233,33 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
   The map stays the shortest of the layouts modelled under Photon: with all four drive motors on the Control Hub
   the same two figures are 20.4 / 28.1 on RS485 and 16.5 / 24.2 on USB, and with the turret servos on the
   Expansion Hub 16.5 / 33.7 and 16.0 / 25.1. With Photon on both hubs every layout is within 1 ms of the map.
-- **Two swaps could still shorten it under Photon on USB** (estimated 2026-11-11, same model, parked / driving):
-  - The pollen turret pair on one port through a Y-cable: 15.9 / 23.2 ms, 1.0 ms less while aiming. It costs the
-    per-servo offset ([Open choices](#open-choices)).
-  - The nectar turret and nectar hood servos on Expansion Hub servo ports 3 and 5, a 7 + 4 split of the every-loop
-    writes: 16.1 / 24.8 ms if the two hubs' write times add up, as modelled, and 16.1 / 20.2 ms if they overlap
-    fully, against 16.0 / 21.8 ms for the map in that case. Which it is has not been measured
-    ([Still unknown](#still-unknown)). Until it is, wire the map and leave those two signal leads long enough to
-    reach either hub; each servo stays on its own injector either way.
+- **One swap could still shorten it under Photon on USB** (estimated 2026-11-11, same model, parked / driving): the
+  pollen turret pair on one port through a Y-cable, 15.9 / 23.2 ms, 1.0 ms less while aiming. It costs the per-servo
+  offset ([Open choices](#open-choices)).
+- **Splitting the every-loop writes more evenly between the hubs gains nothing: Photon's writes to the two hubs add
+  up** (measured in one run, 2026-11-17, below). The nectar turret and nectar hood servos on the Expansion Hub would
+  give 16.1 / 24.8 ms against the map's 16.0 / 24.2, so keep them on the Control Hub, as the map has them. The
+  script's "overlap fully" figures (16.1 / 20.2 for that split, 16.0 / 21.8 for the map) are the case that didn't
+  hold.
 - **Not counted:** the shot solver's CPU time (unmeasured) and garbage collection (about 5% on the Betta bot, retired 2026-11-13).
+
+**Photon's writes to the two hubs add up** (one run: Bench: Photon's two-hubs-at-once phase, 2026-11-17, the
+Expansion Hub on USB, 300 loops per set; p50 ms until every write is acknowledged):
+
+| changed writes in one loop | Photon off | 8 parallel | 4 parallel | 2 parallel |
+|---|---|---|---|---|
+| 6 on the Control Hub | 9.03 | 4.03 | 4.03 | 4.86 |
+| 6 on the Expansion Hub | 15.44 | 6.86 | 6.86 | 7.75 |
+| 12, the Control Hub's then the Expansion Hub's | 24.98 | 10.75 | 10.85 | 12.86 |
+| 12, hubs alternating | 26.51 | 10.87 | 11.67 | 11.84 |
+| 12 ÷ (6 + 6), hub by hub | 1.02 | 0.99 | 1.00 | 1.02 |
+| 12 ÷ (6 + 6), alternating | 1.08 | 1.00 | 1.07 | 0.94 |
+
+1.00 means the two hubs' times add up; full overlap would read about 0.63. Photon off is the control, since each call
+waits for its ACK. The runner reads it at 8 parallel (0.99 hub by hub, 1.00 alternating); the lowest ratio, 0.94
+alternating at 2 parallel, still hides only a little. Timed until the calls return instead, the ratios were 1.01 to
+1.22, never under 1. So the figures in this section that add the hubs' write times apply, as the script models them;
+the "overlap fully" ones did not hold in this run.
 
 ### If the two hubs swapped devices
 
@@ -267,7 +286,7 @@ hop), and on USB the bulk read's hop was not measured either (below).
 | Photon on the Control Hub only, Expansion Hub on RS485 | 16.4 / 28.1 | 24.6 to 25.7 / 44.9 to 46.0 |
 | Photon on both hubs, Expansion Hub on USB (the plan) | 16.0 / 24.2 | 20.4 to 22.2 / 29.9 to 31.7 |
 | Photon on both, USB, p95 costs | 18.3 / 26.6 | 22.8 to 24.5 / 32.5 to 34.1 |
-| Photon on both, USB, the two hubs' writes overlap fully (not measured) | 16.0 / 21.8 | 20.4 to 22.2 / 28.2 to 29.9 |
+| Photon on both, USB, the two hubs' writes overlap fully (not seen in one run on 2026-11-17: they added up) | 16.0 / 21.8 | 20.4 to 22.2 / 28.2 to 29.9 |
 | Photon on both, USB, an Expansion Hub read as cheap as a Control Hub one (a floor, not measured) | 16.0 / 24.2 | 16.6 / 26.2 |
 
 Where the extra 11 to 12 ms comes from on today's link while driving (hub commands per loop go from 24.84 ms to
@@ -323,15 +342,17 @@ What else gets worse:
 Not measured, and what the script assumes instead:
 
 - The OctoQuad on the Expansion Hub, on either link: the bench's "odometry moved to the Expansion Hub" step never
-  ran. Taken as 3.20 ms plus 2 (low) or 3 (high) hops. The Photon run of 2026-11-11 read a Pinpoint on Expansion Hub
-  I2C port 1 and recorded per-read times, but they are on the laptop that ran it, not in the repo, and were not
-  analysed here.
+  ran. Taken as 3.20 ms plus 2 (low) or 3 (high) hops. The Photon run of 2026-11-17 timed I2C reads of constant
+  registers, two threads per device every 10 ms while every channel was written, p50 / p95 / max: a Pinpoint on the
+  USB Expansion Hub's I2C port 1, 10.1 / 30.1 / 76.8 ms Photon off and 8.6 / 18.8 / 38.6 at 8 parallel; the OctoQuad
+  on Control Hub I2C port 2, 4.4 / 11.8 / 27.5 and 3.7 / 8.2 / 19.5 ms. Different devices, reads and load from the
+  localizer read, so the script keeps its assumption. They are consistent with a read on the USB Expansion Hub costing
+  more than one on the Control Hub (inferred: different devices and registers; the driver thread's figures).
 - The Expansion Hub's bulk read over USB: its hop taken as 1.09 ms (low: the USB hop measured on writes without
   Photon, 2.65 − 1.56 ms, [`loop-time-findings.md`](loop-time-findings.md#photon), 2026-10-28) to 1.54 ms (high: the
   RS485 bulk-read hop).
-- Any write on an RS485 Expansion Hub ([Still unknown](#still-unknown)), and whether Photon overlaps writes to the
-  two hubs. The script also charges the SDK's refresh commands to the Expansion Hub the RS485 hop on USB, in both
-  layouts (under 0.2 ms here).
+- Any write on an RS485 Expansion Hub ([Still unknown](#still-unknown)). The script also charges the SDK's refresh
+  commands to the Expansion Hub the RS485 hop on USB, in both layouts (under 0.2 ms here).
 
 None of these could close the gap. Even if an Expansion Hub read over USB cost what a Control Hub read does, the swap
 is still about 0.6 ms longer parked and 2 ms longer driving (the table's last row), from Photon's measured write
@@ -697,14 +718,6 @@ fetched 2026-11-10:
   on reads. Test: time 1000 changed `setPower` calls on each hub in one OpMode.
 - **Whether the hubs tolerate USB and RS485 connected at once.** Only USB alone has been benched. Test: on bench
   hubs, connect both and read the hub list the SDK builds at INIT.
-- **Whether Photon overlaps writes to two hubs on USB.** The model adds the two hubs' write times, as the bench's
-  blocks did (4.66 + 6.20 ms for 6 writes on each). If writes to different hubs overlap, splitting the every-loop
-  outputs more evenly would beat the map's 9 on the Control Hub and 2 on the Expansion Hub by up to 1.6 ms per
-  driving loop ([Estimated loop period](#estimated-loop-period)). Test: the two-hubs-at-once
-  phase at the end of Bench: Photon, in the Photon block's USB run
-  (`python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports-empty`). It times 6 writes on
-  each hub alone, all 12 in one loop (hub by hub and alternating) and the 3 + 3, 5 + 1 and 1 + 5 splits, and the
-  **Two hubs at once** line in `summary.md` says whether the hubs' times add up or overlap.
 - **How often the drive motors really write** in TeleOp shoot-on-the-move. Test: a per-loop write counter in SOTM
   Test.
 - **Whether the flywheel power changes every loop** once its RPM reading is clean; if not, parked loops are shorter.

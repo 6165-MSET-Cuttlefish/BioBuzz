@@ -2,9 +2,9 @@
 
 Photon (`architecture/hardware/photon/`) is the team's fork of SolversLib Photon. It sends motor and servo writes
 without waiting for each one's ACK (the hub's acknowledgement), which on the bench cut a loop with 12 changing writes
-from 30.7 ms to 16.0 ms. No robot OpMode uses it yet, and none may until the hub bench's Photon block says **SAFE TO
-TRY ON THE ROBOT** for the robot's wiring. This page is where that stands, how to run the rest, and what the one hub
-run of the fork measured. How the block works and what each check proves:
+from 31.4 ms to 13.8 ms (2026-11-17). No robot OpMode uses it yet, and none may until the hub bench's Photon block
+says **SAFE TO TRY ON THE ROBOT** for the robot's wiring. This page is where that stands, how to run the rest, and
+what the fork measured on hubs. How the block works and what each check proves:
 [`scripts/bench/README.md`, The Photon block](../scripts/bench/README.md#the-photon-block).
 
 ## Why a fork
@@ -49,6 +49,136 @@ SDK 12 source (`LynxRespondable.awaitAndRetransmit`); no Control Hub command tim
 | 2026-10-28 | stock SolversLib Photon 0.3.6 | USB | speed only, earlier bench | none | write block 25.9 to 6.0 ms p50 at 8 parallel, loop 31.8 to 11.5 ms; showed the misrouted replies |
 | 2026-10-29 | `c825493` | USB | short, no I2C | NOT SAFE YET | 3 problems, all fixed since (below); write block 24.96 to 10.84 ms p50, loop 30.7 to 16.0 ms; other timings [below](#how-the-fork-behaved-on-a-hub-2026-10-29) |
 | 2026-11-11 | `709f1cf` | USB | short, with I2C | NOT SAFE YET | 3 failed checks: 2 bench bugs, fixed since, and 1 unexplained read-back (below); write block 22.62 to 7.75 ms p50; soak 26,070 writes per hub in 60 s |
+| 2026-11-17 | the 2026-11-14 bench build, not on main (Photon sources the same as `709f1cf`'s and main's) | USB | short, with I2C | NOT SAFE YET | 2 blockers, one failed trial each, neither explained yet (below); write block 24.19 to 7.82 ms p50, loop 31.38 to 13.76 ms; soak 24,138 writes per hub in 60 s |
+
+### The 2026-11-17 blockers
+
+The run and its hardware: [`hub-bench-findings.md`, Setup](hub-bench-findings.md#setup). Results are in
+`bench-results/2026-11-17_165837` on the laptop that ran it. Neither blocker is explained yet: make the bench changes
+in [Next runs, step 0](#0-two-bench-changes-before-any-more-hub-time) before the next Photon run.
+
+**1. Lost writes at depth, Control Hub: 1 of 104 trials failed on time, not on handling.**
+
+- Measured (`raw/photon_faults.json`, the depth-2 trial on motor `bl`): the lost write was handled correctly. It was
+  sent again at 105.9 and 207.1 ms and given up at 285.7 ms, its call took 0.84 ms, the next write to it landed,
+  nothing was left in flight, and the counters showed only this give-up and its one fallback to the SDK's path. What
+  failed: while it waited, the bench wrote the other 5 Control Hub channels 225 times, and one of those calls took
+  22.36 ms, over the bench's 20 ms limit
+  (`PHOTON_WRITE_CALL_LIMIT_MS`, `scripts/bench/run_bench.py:2903`). The next slowest was 4.75 ms, p99 3.49.
+- Measured, all 208 trials: each trial's slowest neighbouring write was 2.63 to 11.39 ms on the Control Hub (p50
+  4.67) apart from this one, and 3.99 to 10.10 ms on the Expansion Hub. So 1 call in about 26,000 on the Control Hub
+  (42,500 across both hubs) went over 20 ms.
+- Not the 2026-11-11 tap bug (measured): the tap swallowed exactly one message, sent 3 times under the same number,
+  and Photon gave up on exactly one write.
+- Measured in logcat: right after the give-up came the SDK's `Control Hub is currently unresponsive` warning, a
+  telemetry warning and a sound. The same lines came in several other Control Hub trials whose writes all stayed
+  under 11.4 ms, so they don't explain it alone.
+- From the code: when Photon gives up on a write, it marks the hub not responding and also forgets the SDK's cached
+  motor and servo values (`PhotonLynxModule.abandon`, `forgetLastKnown()`). The SDK's own 250 ms timeout only marks the
+  hub (SDK 12 `LynxRespondable.awaitAndRetransmit`). So after a give-up, each motor's next `setPower` first asks the hub
+  for the motor's mode and then sends a motor enable, both on the SDK's path, each waiting for its ACK
+  (`LynxDcMotorController.internalSetMotorPower`, `internalGetPublicMotorMode`). The SDK alone would have blocked the
+  lost write's own call for the whole 250 ms instead.
+- Inferred, the likeliest reading (about 45%): the slow call was one of those SDK-path round trips after the give-up,
+  slowed by a late ACK or a stalled thread. A plain Photon write takes about 0.5 ms (p50 0.53), so the few 2 to 5 ms
+  writes in each trial are probably those round trips too, and the 20 ms limit is in effect judging the SDK's path. Less
+  likely: a random stall of any call on the hub (about 25%), the call doing the give-up itself (about 20%), or a limit
+  set too tight (about 10%: it came in with the bench with no reason written down, but it is about twice the worst
+  normal value).
+- The give-up-call reading isn't ruled out: 7 ms after the give-up, logcat shows only a mode-query reply (`0x9009`)
+  on the SDK's receive thread that the SDK couldn't match to a command, and such unmatched replies appear 26 times in
+  that trial set's log, in Expansion Hub trials too. No reading is proven: the bench records neither when each
+  neighbouring write started nor which path it took.
+- On the robot, if real (inferred): only after an ACK is really lost, one loop stalls by about 15 to 35 ms while every
+  motor on that hub pays two SDK round trips. Nothing is lost or left on (seen on the bench's RUN_WITHOUT_ENCODER
+  motors; see the next point for RUN_USING_ENCODER).
+- A second risk follows from the code and hasn't been seen on a hub: if that mode query is refused while the hub is
+  marked not responding, the SDK returns a placeholder RUN_WITHOUT_ENCODER (`internalGetPublicMotorMode`), so a motor in
+  RUN_USING_ENCODER, such as a flywheel, would get a constant power instead of a velocity target, and the SDK's cache
+  can then skip an unchanged `setPower` after it. What the hub does with a constant power in velocity mode isn't known.
+  The bench can't see it: its motors run without encoders (`opmodes/test/bench/PhotonRig.java`).
+- Coverage gap (measured): depths 0 to 7 were asked for, but at most 5 writes on the Control Hub and 4 on the Expansion
+  Hub were really in flight before a lost write.
+
+**2. STOP, iterative, Photon off: 1 of 40 trials switched a motor back on after STOP's fail-safe.**
+
+- Measured (`raw/photon_stop_iter_off_028.json` and that trial's logcat): STOP's gate rose 46.5 ms into a 50 ms loop.
+  Photon was disabled (all its counters 0), so every command took the SDK's path on Photon's hub objects. The Expansion
+  Hub's fail-safe arrived: `efr`, `ebl`, `ebr` and both servos read disabled. But `efl` read enabled at raw −6553 (this
+  loop's 0.2 power; the other three still held the last loop's −8191) in every sampler sweep from 30 ms after the gate,
+  and in `stop()`'s own read, until `stop()` set it to 0 about 151 to 166 ms after the gate. So it stayed at 20%
+  until 151 to 166 ms after the gate, about 121 to 174 ms after the fail-safe reached the other channels (in the
+  sweep from −7.8 to 30.1 ms). Logcat has no warning.
+- No other STOP trial had it: none of the other 159 on this date (iterative and linear, Photon on and off), none on
+  2026-10-29 or 2026-11-11.
+- From the code (SDK 12): `setPower` sends the power command, then a motor enable whenever the cached enable has
+  expired, 500 ms after it was last set (`LynxDcMotorController.internalSetMotorPower`, `LastKnown`). A motor enable
+  isn't a dangerous command, so STOP's gate lets it through
+  ([`sdk-hub-findings.md`](sdk-hub-findings.md#opmode-lifecycle)). STOP raises the gate, then fail-safes each hub
+  (`OpModeManagerImpl.callActiveOpModeStop`), and the fail-safe waits for the hub's link lock, which `efl`'s power write
+  held until its ACK.
+- Inferred, likeliest (about 70 to 80%): the fail-safe went out between `efl`'s power write and its enable, and the
+  enable switched `efl` back on at the power still in its register. The sampler's reads on the same link widen that
+  window. Two other readings aren't ruled out: the fail-safe made the SDK forget the cached enable (that needs the
+  OpMode thread to stall for a whole fail-safe round trip, so unlikely), or the hub's firmware left `efl` enabled
+  (unlikely, since the same fail-safe disabled the other three; nothing logs the enable).
+- Nothing in that path is Photon's: with Photon off, its hub objects call the SDK's own methods. So stock SDK 12 is
+  probably exposed the same way (inferred; the stock baseline runs no STOP trials). Photon on had 0 of 40, but 0
+  against 1 in 40 shows nothing (one-sided Fisher p 0.5): don't count Photon as protection.
+- The USB Expansion Hub is probably the more exposed hub (inferred): the sampler's sweeps of the same 6 channels took
+  14 to 24 ms there against 8 to 12 ms on the Control Hub, so each command holds its link about twice as long.
+- On the robot (inferred): a motor whose last write is in flight when STOP comes, with its enable due, keeps its last
+  power until something sets it to 0: our modules' `stop()` in `EnhancedOpMode`'s stop pass, or else the SDK's
+  `$Stop$Robot$` after `stop()` returns, up to 0.9 s later. So keep zeroing every motor in `stop()` with
+  `EnhancedMotor.stop()` ([`CLAUDE.md`](../CLAUDE.md), Module pattern).
+- Why the other checks missed it (from the code): Bench: Photon Stop Race enables the motor 20 ms before the write it
+  races (`opmodes/test/bench/PhotonStopRaceBench.java:44-46`), so no enable follows that write, and its 6 of 6 passes
+  can't see this case. The sampler counts only sweeps after its first all-safe one, so it can't see a motor switched
+  back on before then; only `stop()`'s read caught this one. The summary's "fail-safe seen 1-166 ms" is this trial's
+  zeroing, not a late fail-safe: without it the fail-safe was seen 1 to 28 ms after the gate on the Expansion Hub.
+
+### What else the 2026-11-17 run measured
+
+Passed (measured, `summary.md`):
+
+- The installed Photon matched the sources; no motor port drew over 0.3 A; the stock baseline ran on the SDK's own hub
+  objects with every read-back exact.
+- Every write lands: 0 wrong read-backs and 0 retransmits in every phase. Interleave off read 1200 of 1200 right, so
+  the 2026-11-11 read-back didn't recur. Framework Loop with Photon ran to the end.
+- Routing over 8 restarts in both swap orders, consecutive OpModes, a crash with writes in flight, deploySloth.
+- I2C: 58,823 byte-exact reads. With Photon on, reads were faster: p95 0.59 to 0.69 times Photon off's.
+- The other lost-write checks: 12 single lost writes, a full limit of 4, 10 + 10 superseded writes, a USB write that
+  throws, and the Expansion Hub's 104 trials at depth.
+- STOP: iterative on8 40 of 40, linear on8 and linear off 40 of 40 each, every negative control 5 of 5, STOP inside a
+  write 6 of 6 off and on. The SDK's lock leaked at a linear STOP in 1 of 40 on8 trials and 4 of 40 off (Fisher p
+  0.973).
+- Write storm, two writer threads, hub reset, Write Recovery with Photon, the soak (0 lost of 24,138 per hub) and every
+  SDK-warnings check.
+
+Changed since 2026-10-29 (measured; the 2026-10-29 figures are [below](#how-the-fork-behaved-on-a-hub-2026-10-29)):
+
+| | 2026-10-29 | 2026-11-17 |
+|---|---|---|
+| write block, both hubs, p50: stock / 8 parallel | 24.96 / 10.84 ms | 24.19 / 7.82 ms |
+| loop period, p50: stock / 8 parallel | 30.7 / 16.0 ms | 31.38 / 13.76 ms |
+| write block at 2 / 4 / 8 parallel | 10.96 / 10.66 / 10.84 ms: all equal | 9.71 / 7.65 / 7.82 ms: 2 is slower |
+| single lost write: resent, resent, given up, call | 101-106, 203-210, 253-296, 0.58-1.13 ms | 101.4-106.3, 202.4-209.3, 258.1-301.5, 0.41-1.50 ms |
+| full limit of lost writes: next writes, given up | up to 6.7 ms CH, 8.1 ms EH; about 264 ms | up to 6.86 ms CH, 8.45 ms EH; 263 and 259 ms |
+| write storm, longest stall | 6.8 ms | 7.36 ms |
+| hub reset, slowest output, off / on8 | CH 194.7 / 198.8, EH 197.2 / 189.7 ms | CH 195.0 / 195.2, EH 200.1 / 199.8 ms |
+| crash with 4 writes in flight, fail-safe seen | 539-542 ms | 26.5 ms CH, 38.8 ms EH |
+| iterative STOP, fail-safe seen | 0-37 ms (on and off) | 0-33 ms on8, 1-29 ms off (without the failed trial) |
+| `WriteCache` after `failSafe()` with Photon | servo 1.9 ms, motor 232.8 ms (1 trial) | both 271.9 ms at worst, together every time (7) |
+| soak, writes per hub in 60 s | 30,510 (no I2C) | 24,138 (with I2C; 26,070 on 2026-11-11) |
+
+- The write path's own steps are now measured on a hub (`timing on8 profiled`, p50): the USB write 112.5 µs on the
+  Control Hub and 507.5 µs on the Expansion Hub, the whole parallel send 332.5 and 692.5 µs.
+- Writes to the two hubs add up, not overlap (the **Two hubs at once** line, one run, 300 loops per set): drained, 12
+  together took 0.99 (hub by hub) and 1.00 (alternating) times 6 + 6 alone at 8 parallel; the lowest ratio in the
+  table was 0.94, alternating at 2 parallel. The table and what it means for the wiring:
+  [`wiring-findings.md`](wiring-findings.md#estimated-loop-period).
+
+### Earlier runs
 
 The 2026-11-11 failures (`bench-results/2026-11-11_205238` on the laptop that ran it):
 
@@ -95,8 +225,8 @@ Also changed since that run:
 - Per-step write profiling (`timing on8 profiled` in the summary).
 - The bench reads the Pinpoint and the OctoQuad over I2C on both hubs (`--photon-i2c`).
 
-All of it ran on a hub on 2026-11-11 (the table above) except the tap, sampler and re-read changes made after that
-run. Offline it passes the suite in
+All of it ran on a hub on 2026-11-11 (the status table under [Where it stands](#where-it-stands)), and the tap,
+sampler and re-read changes made after that run ran on 2026-11-17. Offline it passes the suite in
 [`scripts/bench/photon-offline/`](../scripts/bench/photon-offline/README.md).
 
 Run the mutants suite on an idle machine. On 2026-11-12, on a Mac at load average 40 to 140, the harness (108),
@@ -153,6 +283,34 @@ step 2) or a USB cable; on a cable, add `--serial <serial>` to every command, wi
 
 Each from the repo root.
 
+### 0. Two bench changes, before any more hub time
+
+Neither 2026-11-17 blocker can be settled from what the bench records
+([The 2026-11-17 blockers](#the-2026-11-17-blockers)). Make these changes, pass them offline in
+[`scripts/bench/photon-offline/`](../scripts/bench/photon-offline/README.md), do a full install, then run step 1
+again.
+
+- **Lost writes:** for each neighbouring write, record when it started and which path it took (parallel, SDK
+  fallback, SDK mode query, SDK enable), and mark the call that did the give-up. Have `LinkTap` log each SDK-path
+  command's time from send to reply. Add trials with the bench motors in RUN_USING_ENCODER that read back the hub's
+  target velocity after each give-up. Let a short run use the soak's 25 trials per depth (`PHOTON_SOAK_DEPTH_REPS`;
+  today only `--photon-soak` sets it, `scripts/bench/run_bench.py:7121`). What the answers mean:
+  - slow calls that are SDK round trips with a late reply: the hub or link is slow and Photon's forgetting the
+    caches exposes it; fix Photon to keep the mode and enable caches on a give-up;
+  - slow calls that are always the call doing the give-up: move the give-up to Photon's sweeper thread;
+  - replies on time but a slow call, on any kind of call: the hub's thread scheduling; then write down a reason for
+    the 20 ms limit or pick a new one, never just to make the run pass;
+  - a wrong velocity target after a give-up: a blocker for the robot, whatever the timing shows.
+- **STOP:** make Bench: Photon Stop Race leave the enable cache stale before the write it races
+  (`opmodes/test/bench/PhotonStopRaceBench.java:46`: `sleep(20)` to `sleep(600)`). Have the tap record any motor
+  enable sent after the gate, and whether the fail-safe was queued before the power write's ACK. Run it Photon off and
+  on, 6 trials each, on a bare Control Hub, then with the USB Expansion Hub. If the reading above is right, Photon off
+  shows an enable after the gate and the motor on at 0.25 whenever the fail-safe was queued first, and today's 20 ms
+  version stays clean. If not, look next at the forgotten-cache and firmware readings. The bench sends the fail-safe
+  from a new thread, so a clean trial in which the fail-safe was queued late proves nothing. Also make the sampler flag
+  a motor that is on again before its first all-safe sweep. `--photon-stop-trials 200` measures the rate, not the
+  cause.
+
 ### 1. USB block (about 55 min)
 
 ```bash
@@ -162,10 +320,10 @@ python3 scripts/bench/run_bench.py --photon --usb-expansion --photon-i2c --ports
 In a terminal it asks twice at the start (ports empty; plug in the Pinpoint and OctoQuad) and once at the end (move
 the Pinpoint to Control Hub I2C port 1). A short run says **PASSED THIS RUN, NOT YET SAFE** at best.
 
-On USB wiring Bench: Photon ends with the two-hubs-at-once phase (about 3 min, no prompts), which settles whether
-Photon's writes to the two hubs overlap ([`wiring-findings.md`](wiring-findings.md#still-unknown)): Photon off and
-at 8, 4 and 2 parallel, 6 changed writes on each hub alone, all 12 hub by hub and alternating hubs, and 3 + 3,
-5 + 1 and 1 + 5, 300 loops each, each timed until the calls return and until every write is acknowledged. The
+On USB wiring Bench: Photon ends with the two-hubs-at-once phase (about 3 min, no prompts). On 2026-11-17 (one run) it
+measured that Photon's writes to the two hubs add up ([`wiring-findings.md`](wiring-findings.md#estimated-loop-period)).
+It runs Photon off and at 8, 4 and 2 parallel, 6 changed writes on each hub alone, all 12 hub by hub and alternating
+hubs, and 3 + 3, 5 + 1 and 1 + 5, 300 loops each, each timed until the calls return and until every write is acknowledged. The
 **Two hubs at once** line in `summary.md` reads it at 8 parallel: adds up, in between or overlaps. It is a record,
 not a check, and never changes the verdict; the phase's read-backs and in-flight counts are judged like every
 other phase's.
@@ -198,10 +356,10 @@ the cable pulls are USB only).
 needs 6,818,182 writes per hub: about 474 a second for 4 hours. The short run for the same wiring soaks for 60 s with
 the same I2C readers: in its `summary.md`, **Write soak** gives `writes per hub`. Under about 28,400 there, that rate
 can't reach the bound in 4 hours, so the go run would end NOT SAFE however well Photon behaves: record it and don't
-start the go run. The only soak on a hub so far (2026-10-29, USB, no I2C) did 30,510 in 60.01 s, about 508 a second
-per hub, 7% above what the bound needs: the bound in about 3.7 h, 16 minutes inside the cap. The `--photon-i2c`
-readers keep running through the soak, and on RS485 the Expansion Hub's writes go the SDK's way at about 2.5 ms each,
-so expect both go runs to fall short.
+start the go run. With the I2C readers it already falls short on USB: 26,070 on 2026-11-11 and 24,138 in 60.03 s on
+2026-11-17, about 402 a second per hub, so the bound would take about 4.7 h. Only the 2026-10-29 soak, with no I2C
+(30,510 in 60.01 s, about 508 a second), was fast enough. On RS485 the Expansion Hub's writes go the SDK's way at
+about 2.5 ms each, so expect that go run to fall short too.
 
 Whether to raise `PHOTON_SOAK_MAX_S` or re-derive the loss target from a measured loop rate is not decided. Settle it
 before the first go run, not after one fails. Where the numbers come from (`scripts/bench/run_bench.py`):
@@ -249,9 +407,9 @@ Record every run:
   line, the wiring, the run, the verdict, and the blockers or anything odd;
 - the stock, off and on8 rows of the summary's **Write block per loop** table, dated and with the wiring, in the Photon
   section of [`docs/loop-time-findings.md`](loop-time-findings.md#photon);
-- on USB wiring, the **Two hubs at once** table and line, dated, in
-  [`wiring-findings.md`](wiring-findings.md#estimated-loop-period), taking the question out of its Still unknown
-  list, and the wiring map's split rechecked if the times overlap.
+- on USB wiring, the **Two hubs at once** line, dated, in
+  [`wiring-findings.md`](wiring-findings.md#estimated-loop-period), and the wiring map's split rechecked if it ever
+  reads anything but "adds up" (2026-11-17 read adds up).
 
 ## After SAFE
 
@@ -269,9 +427,10 @@ only when Photon goes on the robot for that wiring.
 ## How the fork behaved on a hub (2026-10-29)
 
 The write-block and loop numbers are in [`loop-time-findings.md`](loop-time-findings.md#photon); these are the rest.
-Measured on 2026-10-29: Control Hub plus an Expansion Hub on USB, both firmware 1.8.2, SDK 12.0.0, nothing on the
-ports, no I2C devices, 4 motors and 2 servos changing on each hub every loop, Photon at `c825493`. Photon has changed
-since (above), so rerun before relying on any of these.
+What changed by 2026-11-17 is in [the table above](#what-else-the-2026-11-17-run-measured). Measured on 2026-10-29:
+Control Hub plus an Expansion Hub on USB, both firmware 1.8.2, SDK 12.0.0, nothing on the ports, no I2C devices, 4
+motors and 2 servos changing on each hub every loop, Photon at `c825493`. Photon has changed since (above), so rerun
+before relying on any of these.
 
 - **Parallel limit:** write block p50 for both hubs was 10.96 ms at 2 parallel, 10.66 at 4 and 10.84 at 8, loop period
   about 16 ms at each: with 6 writes per hub per loop, more than 2 in flight gained nothing. Installed but disabled:
@@ -291,23 +450,28 @@ since (above), so rerun before relying on any of these.
   motor and servo came back in the same loop, 1.9 ms after `failSafe()` on 2026-10-09 and 21.5 ms after on 2026-10-24.
   `WriteCache` sends an unchanged value again only once 250 ms have passed since its last send
   (`architecture/hardware/WriteCache.java`), so up to 250 ms plus a loop is expected with or without Photon
-  ([`hub-bench-findings.md`](hub-bench-findings.md#design-around-these)); the motor lagging the servo is not.
+  ([`hub-bench-findings.md`](hub-bench-findings.md#design-around-these)); the motor lagging the servo is not. On
+  2026-11-17 (7 fail-safes) the motor and servo came back together every time.
 - **STOP and crashes:** after an iterative STOP, the hub's fail-safe was seen 0-37 ms after STOP's gate rose, Photon
   off or at 8 parallel. After a crash with 4 parallel writes in flight, none of them ever acknowledged, it was seen
-  539-542 ms after the gate; every output was off, and the next INIT started with nothing in flight. The bench's
+  539-542 ms after the gate (26.5 and 38.8 ms on 2026-11-17); every output was off, and the next INIT started with
+  nothing in flight. The bench's
   sampler reads every channel of a hub every 8-12 ms (Control Hub) or 14-24 ms (Expansion Hub), which limits how
   finely these are timed.
 
 ## Still unknown
 
-- **Whether Photon delays a motor's recovery after `failSafe()`.** In the one trial above, written in the same loop, the
-  wrapped motor came back 231 ms after the wrapped servo with Photon on. Bench: Write Recovery and Bench: Write
-  Recovery Photon each fail safe seven times, 0–235 ms after a write of every device, and the Photon block judges
-  its run against `WriteCache`'s re-send period plus 2 loops, as Bench: Write Recovery does. Test: run both with the
-  current fork; if the motor still lags, log per loop whether each wrapped write went to the hub or was skipped by
-  `WriteCache`.
-- **Whether a crash takes about 540 ms to reach the hub's fail-safe without Photon too.** Test: Bench: Photon Crash
-  with Photon left off, same sampler. It always enables Photon at 8 parallel today, so it needs a Photon-off option
-  first.
-- **Whether the go run's soak can reach the loss bound** with `--photon-i2c`, and on RS485. Test: the short run's
-  **Write soak** rate for that wiring (see [Check the soak rate first](#3-go-run-6-7-h-only-after-1-and-2-pass)).
+- **What made one Control Hub write take 22.36 ms after a give-up, and whether that is Photon's.** Test: the
+  lost-writes bench change in [step 0](#0-two-bench-changes-before-any-more-hub-time), then step 1.
+- **Whether a give-up can leave a RUN_USING_ENCODER motor on a constant power** (from the code, not seen on a hub;
+  [The 2026-11-17 blockers](#the-2026-11-17-blockers)). Test: the RUN_USING_ENCODER trials in step 0.
+- **Whether Photon should forget the SDK's cached motor and servo values when it gives up on a write**, as it does
+  now, or only mark the hub not responding, as the SDK's own timeout does. Decide after the lost-writes test.
+- **What switched the motor back on after STOP, and whether stock SDK 12 does the same.** Test: the STOP race change
+  in step 0, Photon off; it runs the SDK's path, so it answers for stock too.
+- **Whether a crash with writes in flight without Photon reaches the fail-safe as fast.** On 2026-10-29 a crash took
+  539-542 ms to reach it with Photon on, on 2026-11-17 27-39 ms. Test: Bench: Photon Crash with Photon left off, same
+  sampler; it always enables Photon at 8 parallel today, so it needs a Photon-off option first.
+- **How the go run's soak can reach the loss bound** with `--photon-i2c`: at 2026-11-17's rate it needs about 4.7 h
+  on USB, past the 4 h cap ([Check the soak rate first](#3-go-run-6-7-h-only-after-1-and-2-pass)). The RS485 rate isn't
+  measured yet: the RS485 short run's **Write soak** gives it.

@@ -114,7 +114,7 @@ def budget(devs, situation, q=0, drive_fraction=1.0, octoquad_encoders=False, eh
                 period=base / (1 - (refresh + edges) / 500.0))
 
 
-def overlapping(devs, situation, drive_fraction=1.0, **kw):  # E: full overlap is the unmeasured best case
+def overlapping(devs, situation, drive_fraction=1.0, **kw):  # E: full overlap; measured 2026-11-17 not to happen
     b = budget(devs, situation, photon='usb', drive_fraction=drive_fraction, **kw)
     per_hub = {'CH': 0.0, 'EH': 0.0}
     for group, hub in devs:
@@ -173,7 +173,8 @@ if __name__ == '__main__':
                            ("turret servos on the EH", TURRET_SERVOS_ON_EH)):
             row(f"  Photon, {mode}: {name}", devs, photon=mode)
     print()
-    print("Photon on USB, parked / driving: the two hubs' write times add up, then overlap fully")
+    print("Photon on USB, parked / driving: the two hubs' write times add up (measured),"
+          " then overlap fully (overlap didn't hold)")
     for name, devs in (("the map", MAP), ("pollen turret pair on a Y-cable", POLLEN_PAIR_ON_Y_CABLE),
                        ("nectar turret and hood servos on the EH", NECTAR_SERVOS_ON_EH)):
         adds = [budget(devs, s, photon='usb')['period'] for s in ('parked', 'driving')]
@@ -205,8 +206,8 @@ if __name__ == '__main__':
     for k, bound in enumerate(('low', 'high')):
         adds = [budget(SWAPPED, s, photon='usb', swap_bound=k)['period'] for s in ('parked', 'driving')]
         over = [overlapping(SWAPPED, s, swap_bound=k) for s in ('parked', 'driving')]
-        print(f"  Photon USB, swapped, {bound}, add up then overlap: {adds[0]:5.1f} / {adds[1]:5.1f}"
-              f"    {over[0]:5.1f} / {over[1]:5.1f}")
+        print(f"  Photon USB, swapped, {bound}, add up, then overlap (overlap didn't hold):"
+              f" {adds[0]:5.1f} / {adds[1]:5.1f}    {over[0]:5.1f} / {over[1]:5.1f}")
     for situation in ('parked', 'driving', 'firing'):
         for k, bound in enumerate(('low', 'high')):
             b = budget(SWAPPED, situation, swap_bound=k)

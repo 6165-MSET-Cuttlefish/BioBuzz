@@ -195,9 +195,28 @@ The fork as first committed, on the same hubs, 2026-10-29, same workload, p50 (p
 So the fork cut the write block 2.3x and the loop period from 30.7 to 16.0 ms, against 4.2x and 11.5 ms for stock
 Photon, which skips the fork's safety checks and is unsafe on the robot. Each parallel write cost the fork about 0.4 ms
 more than stock Photon (motor write p50 0.91 against 0.40 ms); a desktop comparison ranked its ping-timer reset on every
-write as the biggest part of that. The current tree resets it at most every 100 ms and can time each step of the write
-path (`timing on8 profiled` in the Photon block), but neither is measured on a hub yet; its write block also leaves out
-the bench's own bookkeeping, at most about 0.05 ms a write, so compare its numbers with these loosely.
+write as the biggest part of that. The fork has since reset it at most every 100 ms, and its write block now leaves
+out the bench's own bookkeeping, at most about 0.05 ms a write, so compare the later numbers with these loosely.
+
+The fork on 2026-11-17, Photon sources unchanged since 2026-11-11 (that run: 22.62 to 7.75 ms), the Control Hub of
+2026-11-14 with a USB Expansion Hub, a Pinpoint and an OctoQuad on I2C, nothing on the ports, same workload, p50 (p95):
+
+| | write block, both hubs | Expansion Hub | Control Hub | loop period |
+|---|---|---|---|---|
+| stock (an OpMode Photon never touched) | 24.19 (54.63) ms | 15.28 ms | 8.91 ms | 31.38 ms |
+| fork, off | 23.65 (35.60) ms | 14.60 ms | 8.69 ms | 29.91 ms |
+| fork, 8 parallel | 7.82 (16.06) ms | 4.84 ms | 2.89 ms | 13.76 ms |
+| fork, 4 parallel | 7.65 (14.71) ms | 4.83 ms | 2.64 ms | 13.44 ms |
+| fork, 2 parallel | 9.71 (16.17) ms | 5.90 ms | 3.52 ms | 15.83 ms |
+
+- The fork now cuts the write block 3.1x and the loop from 31.4 to 13.8 ms, against 2.3x and 16.0 ms on 2026-10-29.
+  Unlike then, 2 parallel is slower than 4 or 8.
+- Per write at 8 parallel: about 0.48 ms on the Control Hub and 0.81 ms on the Expansion Hub (the block ÷ 6), against
+  0.78 and 1.03 ms on 2026-10-29, which `scripts/looptimes/wiring_budget.py` still uses.
+- Each step of the write path, measured on a hub for the first time (`timing on8 profiled`, p50): the USB write
+  112.5 µs on the Control Hub and 507.5 µs on the Expansion Hub, the whole parallel send 332.5 and 692.5 µs.
+- Writes to the two hubs added up in this run; they didn't overlap (one run, 8 parallel: drained 0.99 hub by hub,
+  1.00 alternating; 0.94 alternating at 2 parallel; [`wiring-findings.md`](wiring-findings.md#estimated-loop-period)).
 
 Whether the fork may go on the robot: [`photon-bench.md`](photon-bench.md#where-it-stands).
 

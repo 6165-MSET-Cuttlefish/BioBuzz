@@ -10,10 +10,11 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
 
 ## Design around these
 
-- **Route planner: one `RouteOptimizer.Search.step()` per loop. Its longest step on a hub is 321 ms, so Ball
-  Collection Auto's STOP is estimated at about 917 ms, over the 900 ms window: don't trust a STOP during its 4-ball
-  plan until steps are shorter or the webcam closes after the window.** Ball Collection Auto, Vision Ball Collection
-  and Ball Collection plan 4 balls (`BallCollection.BALLS`) on the OpMode thread, one step per loop. A step shapes visit
+- **Route planner: one `RouteOptimizer.Search.step()` per loop. Its longest step on a hub is 325 ms. Bench: Planner
+  Stop's webcam trials, which close the webcam as Ball Collection Auto does, took up to 839 ms of the 900 ms window
+  in 20 trials, and Ball Collection Auto's worst case, added up from the measured parts, is over the window: don't
+  trust a STOP during its 4-ball plan until steps are shorter or the webcam closes after the window.** Ball
+  Collection Auto, Vision Ball Collection and Ball Collection plan 4 balls (`BallCollection.BALLS`) on the OpMode thread, one step per loop. A step shapes visit
   orders for `VisibilityGraphPlanner.routeSearchSliceMs` (20 ms) and overruns it by at most one `shape()` call
   (`architecture/planner/RouteOptimizer.java:143-154`), so STOP waits for one step, not a plan
   ([`ball-planner-findings.md`](ball-planner-findings.md)).
@@ -48,11 +49,31 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     - Plans from request to done: 4 balls 1527 / 1655 / 1767 (n=36), 5 balls 952 / 1013 / 1016 (n=37).
     - The unsliced control, each 4-ball plan in one step (longest 1448–1673 ms), overran the window on 3 of 3 STOPs:
       two restarted the app, the third reached idle 1030 ms after STOP.
-  - What it means for STOP (estimate: the longest step plus the desktop replay's loop tail of about 15 ms): about
-    336 ms in Vision Ball Collection and Ball Collection, well inside the window; in Ball Collection Auto, plus a webcam
-    close of up to 581 ms (below), about 917 ms, about 17 ms over the 900 ms window. That needs STOP to land as the
-    longest step begins and the slowest webcam close; the measured STOPs without a webcam, at most 282 ms, plus 581 ms
-    come to 863 ms. Bench: Planner Stop's webcam trials, which measure it, didn't run (no webcam plugged in).
+  - The same again, now with the webcam trials (Bench: Planner Stop, 2026-11-17, the same hub over USB, an Arducam
+    OV9782 straight in the Control Hub's USB 3.0 port; [Setup](#setup)). Measured:
+    - No sliced STOP restarted the app. The hub logged STOP to idle in 29–111 ms with 4 balls and 31–118 ms with 5.
+    - The longest step of each 4-ball trial was 292.3–325.4 ms, over 300 ms in 7 of 9 (the check FAILs again); steps
+      ran 68.9–70.6 ms at p50. With 5 balls the longest was 91.7–113.1 ms.
+    - Plans from request to done: 4 balls 1577 / 1759 / 1929 (n=36), 5 balls 991 / 1071 / 1089 (n=36), 3–9% slower
+      than on 2026-11-14.
+    - The unsliced control (longest step 1483–1728 ms) overran on 3 of 3 STOPs, and all three restarted the app.
+    - With the webcam open (`CellTipCamera` as Ball Collection Auto's robot opens it, 20 trials): no restart, every
+      STOP idle inside the window. The slowest took 839 ms, 61 ms inside it: STOP right after INIT, 56 ms waiting for
+      a slice, 16 ms of loop tail, then a 729 ms webcam close. The case the bench aims for, START while the webcam is
+      still opening and STOP 0.05 s later, landed in a slice in 3 of 5 trials: 771–782 ms to idle, each with 32–44 ms
+      of slice and a 667–683 ms close.
+    - The webcam close in `stop()` took 50–137 ms while replanning with frames coming in, 437–654 ms with STOP 0.3 s
+      after INIT, and 667–729 ms with STOP right after INIT or START when it landed in a plan (45–52 ms when it landed
+      between plans).
+    - The bench build's `CellTipCamera` closes the webcam in `stop()` as main's does (from the code: its close option
+      was left at the default, a plain `close()`); its planner code differs from main's only in comments.
+  - What it means for STOP: in Vision Ball Collection and Ball Collection, which close no webcam, the longest step
+    plus the loop's tail is about 350 ms, well inside the window (inferred). For Ball Collection Auto no
+    webcam trial met the longest step and the slowest close at once: 325 ms of step, about 30 ms of tail (the most
+    measured) and a 729 ms close add up to about 1084 ms, over the window (inferred). The trials passed because the
+    slow closes came with planner waits of 56 ms or less. The earlier estimates were too low: about 917 ms on this
+    page (321 + 15 + 581), 830–855 ms in the bench (`PLANNER_CAMERA_ESTIMATE_MS` in `scripts/bench/run_bench.py`).
+    One fix (untried on a hub) is to close the webcam after the window (below).
   - The estimate (simulated: a desktop replay of the 2026-10-24 layouts that drops the same balls as the hub and ran
     28–35× faster, median 32×, scaled back by that): the longest step about 110 ms (100–115) for random 4-ball
     layouts and about 240 ms (210–260) for the 4-ball Planner Stop layout; in an `EnhancedOpMode`, a 4-ball plan
@@ -82,7 +103,9 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     4-ball plan; `stop()` began 1068 ms after STOP, and the SDK logged `stuck in stop()` 1.006 s after
     `auto-stopping` and restarted the Robot Controller app. In the other 5, `stop()` began at most 744 ms after STOP.
   - A restart loses dashboard edits and the alliance. The dashboard answered again about 16 s after STOP, but no
-    OpMode could run until 44.9 s after it (`Robot Status: running` in logcat).
+    OpMode could run until 44.9 s after it (`Robot Status: running` in logcat). The unsliced controls' restarts took
+    longer: 47.6–47.7 s (2 restarts, 2026-11-14) and 47.7–48.0 s (3 restarts, 2026-11-17) from STOP to that line, on
+    the bigger bench build.
 - **A missing or faulting Pinpoint raises nothing.** The BIOBUZZ robot has no Pinpoint this year; if one goes back
   on, before any Pedro-driven run check that the status telemetry's
   `Robot Position` line reads the start pose after INIT: (0, 0, 0) means the Pinpoint isn't answering.
@@ -105,7 +128,8 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     and stop with an error naming it and its port, then check the status on every read, counting non-READY only after
     the first READY. The Pinpoint reported `FAULT_BAD_READ` right after the follower was built, then READY 71 ms
     later.
-- **Every app start takes 37–41 s; budget 40–45 s for a config switch or a STOP-time app restart at a match.**
+- **Every app start takes 37–41 s; budget 45 s for a config switch and 50 s for a STOP-time app restart at a match**
+  (the restarts after STOP above took up to 48.0 s).
   On 14 config switches on a bare hub (2026-10-24), process start to `INIT FINISH` in logcat took 37.1–38.1 s; on 9
   on the same hub with a bigger build (2026-11-14, 127 OpModes against 60), 38.8–39.4 s.
   - A config switch over adb, timed by the bench runner from the switch to the dashboard reporting the robot ready,
@@ -128,7 +152,8 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     mid-loop only through STOP's gate, `OpModeManagerImpl.shouldPreventDangerousHardwareAccess()`, raised as STOP
     begins: Bench: OctoQuad's bank phase checks it before each read.
   - Webcam close during STOP: `CellTipCamera.stop()` took 574–581 ms when STOP came right after INIT, and 61–319 ms
-    later in the run.
+    later in the run. On 2026-11-17 it took up to 729 ms right after INIT or START (Bench: Planner Stop's webcam
+    trials, above).
   - A raw `WebcamSession.close()` made 200 ms after opening took 685 ms.
   - So webcam teardown can use most of the window.
   - It doesn't have to be in the window (read from source, untried on a hub). SDK 12's
@@ -372,6 +397,10 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   and `EnhancedServo` reached the hub again within 273.3 ms at worst, against a limit of 287.2 ms (`WriteCache`'s
   250 ms re-send period plus 2 loops at the run's 18.6 ms p95). A raw motor and a raw servo were back within one loop
   (41.5 ms at worst). None stayed off.
+- **The same with Photon on** (Bench: Write Recovery Photon, 2026-11-17, over USB, 7 fail-safes): `EnhancedMotor` and
+  `EnhancedServo` reached the hub again within 271.9 ms at worst, against a limit of 288.9 ms, at the same moment after
+  every fail-safe, so the wrapped motor no longer lags the servo. The raw motor and servo were back within one loop
+  (38.6 ms at worst) ([`photon-bench.md`](photon-bench.md)).
 - **`adb shell getprop ro.serialno` names a Control Hub** (2026-11-14, over USB): the session read the hub's serial
   from it at its start, so `scripts/bench/session.py` can tell one hub from another by it.
 
@@ -397,11 +426,17 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   most 300 ms for it and report it as pending at STOP otherwise; dropping the restore isn't a fix, since the next
   synced INIT selects the ball pipeline, not the one the runner saved.
 
+- **Bench: Planner Stop's texts still carry the old webcam numbers.** Its slice check explains a FAIL with a webcam
+  close of "up to 581 ms" (`scripts/bench/run_bench.py:476`), and its webcam check prints an estimate of 830–855 ms
+  (`PLANNER_CAMERA_ESTIMATE_MS`, `:489`). On 2026-11-17 the close took up to 729 ms and the slowest STOP 839 ms
+  ([Design around these](#design-around-these)). Only the texts are out of date; the checks judge measured times.
+  Update both with the next bench change and delete this entry.
+
 ## Setup
 
-Three runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one through `scripts/bench/bare_hub.sh`, the
+Runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one through `scripts/bench/bare_hub.sh`, the
 2026-11-14 one through `scripts/bench/session.py --usb --install`, then `run_bench.py --usb` by itself for the benches
-that session didn't reach:
+that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
 
 - **2026-10-09:**
   - REV Control Hub, firmware 1.8.2, Android 7.1.2, FTC SDK 12.0.0, BNO055 IMU.
@@ -448,8 +483,26 @@ that session didn't reach:
     for the runner's 600 s timeout, so its three reinstall checks read FAIL as not run
     ([`toolchain-findings.md`](toolchain-findings.md#laptop-and-adb)). It left `bench_octoquad_absent` active too. None
     of these runs did the session's put-back.
+- **2026-11-17:** the 2026-11-14 hub (same firmware, 1.8.2), over a USB cable from a Mac, on one 12 V battery that
+  read 13.11 V at the first run's start and 12.79 V when the second run's benches ended (12.74 V at 18:11, its
+  put-back; the runner logs voltage only, no current). No new install: the bench build of 2026-11-14 was still on the
+  hub. Its robot code is older than main's; its planner code matches main's apart from comments, and its Photon
+  sources are main's. Two runs:
+  - `run_bench.py --usb --planner-stop --ports-empty`, 16:23 to 16:34: an Arducam OV9782 plugged straight into the
+    Control Hub's USB 3.0 port, no USB hub and no power bank, nothing else plugged in. Results under Route planner
+    above. It put the hub's config back and removed its adb forward.
+  - The Photon USB block, `run_bench.py --usb --photon --usb-expansion --photon-i2c --ports-empty`, 16:58 to 18:12:
+    an Expansion Hub powered from the Control Hub's second XT30 port and linked only by a mini-USB to USB-A cable (no
+    RS485), a goBILDA Pinpoint (no pods) on its I2C port 1, the OctoQuad (no pods) on Control Hub I2C port 2, nothing
+    on any motor or servo port. Results in [`photon-bench.md`](photon-bench.md). The benches ended at 17:44; the run
+    then waited at its last prompt (put the Pinpoint back) until 18:10, put the hub's config back
+    (`laser_rangefinder_i2c`), deleted the bench configs and removed its adb forward.
+  - The hub's logcat clock ran about 10 minutes ahead of the Mac's (the runner's log at 17:33 quotes hub lines from
+    17:43): line up the two by events, not by time.
+  - Expected noise (inferred): with `laser_rangefinder_i2c` active and no laser on I2C bus 1, the SDK logs I2C errors
+    for `Laser` at each app start; and one ANR per app start, as under [Design around these](#design-around-these).
 
-Not run on either date (they need `--interactive`):
+Not run on any of these dates (they need `--interactive`):
 - Pinpoint, OctoQuad and Limelight unplug/replug;
 - odometry moved to the Expansion Hub;
 - driving the Gamepad view by hand.
@@ -496,16 +549,10 @@ Not run on either date (they need `--interactive`):
   at 20 and 10 ms budgets and compare the spread and the mean.
 - **A plan's time from request to done inside a collection OpMode's own loop:** Bench: Hub and Bench: Planner Stop
   time it in their own loops (above); no bench times it in an `EnhancedOpMode`.
-- **How long `EnhancedMotor` and `EnhancedServo` stay off after a fail-safe under Photon:** Bench: Write Recovery
-  passed without Photon on 2026-11-14 ([Confirmed on the hub](#confirmed-on-the-hub-dont-fix-these-back)); Bench: Write
-  Recovery Photon has not run. Run it with `--photon`.
 - **`GuardedOctoQuadLocalizer` with an OctoQuad plugged in:** read cost, valid reads after the first RUNNING, the
   start pose through START, and a cable pull: run Bench: OctoQuad with `--interactive`. START before the first
   RUNNING, the cable plugged in during INIT, and the same pull under Pedro's `OctoQuadLocalizer` as the control:
   `python3 scripts/bench/run_bench.py --octoquad --octoquad-chain --interactive --ports-empty`.
-- **Whether Ball Collection Auto's STOP fits the stop window with the webcam open:** the about 917 ms above is an
-  estimate. Test: `scripts/bench/run_bench.py --planner-stop --ports-empty` with a UVC webcam on the
-  Control Hub's USB (Bench: Planner Stop's webcam trials: a planner slice, the loop's tail and `CellTipCamera.stop()`
-  in one STOP, the worst case included).
-- **Whether closing the webcam after the stop window works on a hub:** move the close out of `CellTipCamera.stop()`,
+- **Whether closing the webcam after the stop window works on a hub** (the fix for Ball Collection Auto's STOP,
+  [Design around these](#design-around-these)): move the close out of `CellTipCamera.stop()`,
   run Bench: Webcam Stop, and check `stop()`'s time and that the next INIT opens the webcam.

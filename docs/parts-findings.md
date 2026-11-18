@@ -422,6 +422,19 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
   Configure Laser Rangefinder's `roiSize` 4, its default, writes a 4 × 4 box centred on that optical centre
   (`opmodes/test/ConfigureLaserRangefinder.java`). What a new sensor ships with isn't stated. The transfer's
   entrance lasers need the 4 × 4 box ([`transfer-findings.md`](transfer-findings.md#the-plan)).
+- **What one spare laser held, read on 2026-11-17** (a spare, not one of the robot's two; measured on the Driver
+  Station screen). Configure Laser Rangefinder on `laser_rangefinder_i2c` reads every setting over I2C at INIT and
+  writes nothing before START (from the code: `ConfigureLaserRangefinder.java:29`, `:52-61`). At INIT it showed:
+  answering on I2C, both pins I2C (0), distance mode 1 (SHORT), timing [10, 0], ROI [6, 9, 9, 6], optical centre
+  [8, 8]. That ROI is exactly the 4 × 4 box the OpMode writes for a centre of (8, 8) (`:38-41`), so an earlier
+  configuration may have set it; whether the sensor shipped that way isn't known. After START it showed "Wrote analog
+  config; power-cycle the sensor and move it to an analog port", the same values, and both pins analog (1). Timing
+  still read [10, 0], though the OpMode's default is 20 (`:18`): either the dashboard field was set to 10, or the
+  timing write didn't take (inferred; nothing records which). Whether the second spare was configured isn't recorded.
+- **LED** (vendor's [full docs text][crfllms], read 2026-11-17): green is "Normal operation"; magenta is "Reset to
+  I2C": the sensor goes back to I2C when it is plugged in after the configuration OpMode was started and stopped
+  without it; blue means "Wrote configuration" (or, in digital mode, "At least one condition true"); red and orange
+  mean a configuration was rejected. The spare above was green when plugged in, as expected for a sensor not being reset.
 - **Wires** (vendor's [full docs text][crfllms], read 2026-11-15): "Pin0 is the white wire while Pin1 is the blue
   wire". REV's analog port page gives blue as channel n and white as n+1 ([REV][revanalog], read 2026-11-15), so on a
   straight cable pin 0 lands on the odd channel of a connector: analog 1 or 3 (inferred). Brushland states this only
@@ -457,7 +470,7 @@ page][lrfprod] (snapshot 2025-11-12), [ranging configuration][lrfrange] (2025-06
 | How much each ball's hue varies on the Color Rangefinder (one reading each so far), and what the empty chute reads at the real mount | In HUE mode, graph Transfer Thread Count Test's `Hue (deg)` for several balls of each colour at the mount's distance and under event lighting, then with nothing there. |
 | Which hub analog channel the Color Rangefinder's pin 0 reaches | In HUE mode on Control Hub analog connector 2-3 with nothing else on it, read `colorRangefinder` (analog 2) and `backRangefinder` (analog 3). |
 | How close a Laser Rangefinder (SHORT, 10 ms) and the Color Rangefinder read correctly | Log each one's analog distance to a Pollen ball held at 15, 20, 25, 30, 35, 40 and 45 mm from its face, then with nothing in front of it, before drilling the transfer plates ([`transfer-findings.md`](transfer-findings.md#what-to-tell-hardware)). For the lasers at the transfer entrance, at `roiSize` 4, read a Pollen at 39 mm and a Nectar at 20 to 25 mm with a plate 104 to 123 mm behind; for the Color Rangefinder there, a Nectar at 29 mm ([`transfer-findings.md`](transfer-findings.md#the-plan)). |
-| What region of interest and timing the robot's two lasers hold (nothing records it) | Before switching each to analog, run Configure Laser Rangefinder with `roiSize` 4 and `timingBudgetMs` 10, and write down the ROI and timing it reads back. |
+| What region of interest and timing the robot's two lasers hold (nothing records it; one spare's is above) | Before switching each to analog, run Configure Laser Rangefinder with `roiSize` 4 and `timingBudgetMs` 10, and write down the ROI and timing it reads back. |
 | How a Laser Rangefinder reads a ball that fills part of its field | Slide a ball across the beam 39 mm from the face and log the distance against the ball's position. Where it crosses the threshold decides which entrance laser changes first between touching Pollen ([`transfer-findings.md`](transfer-findings.md#the-plan)). |
 | The Color Rangefinder's field of view (unpublished; whether a passing Pollen shows at the colour spot depends on it) | Slide a ball sideways past the window at 20 mm and at 50 mm and note where hue and distance start to change. |
 | Whether a Laser Rangefinder really ranges at a 10 ms budget (ST rates its chip at 20 ms or more) | Configure it with `timingBudgetMs` 10, roll a ball slowly through its beam and log the analog distance at every 10 ms poll; the trace moves in steps as long as the update period. Repeat at 20 ms and compare. |

@@ -114,7 +114,9 @@ How, with Transfer Thread Count Test (usage in `CLAUDE.md`):
 1. With the sensor on I2C and `laser_rangefinder_i2c.xml` active, run Configure Laser Rangefinder with
    `distanceMode` SHORT, `timingBudgetMs` 10, `measurementPeriodMs` 0 and `roiSize` 4 (the 15° field of view). Its
    defaults are SHORT, 20, 0 and 4, so only the budget changes. Note its `analogHighMm` (1300 by default). Brushland
-   lists SHORT at 10 ms as 100 Hz ranging (vendor).
+   lists SHORT at 10 ms as 100 Hz ranging (vendor). At INIT the screen shows what the sensor holds now; after START,
+   what the sensor reads back after the writes, with `Pin0` and `Pin1` at 1 (analog). A spare read on 2026-11-17:
+   [`parts-findings.md`](parts-findings.md#brushland-laser-rangefinder).
 2. When it says it wrote the analog config, power-cycle the sensor and plug it into Control Hub analog port 1,
    `frontRangefinder` in `biobuzz.xml`.
 3. Make `biobuzz.xml` the active config again. The test asks at INIT for `frontRangefinder`, `backRangefinder`,
