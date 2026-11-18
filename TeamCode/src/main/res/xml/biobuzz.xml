@@ -11,7 +11,7 @@
             <Servo name="backPollenTurret" port="1" />
             <Servo name="nectarTurret" port="2" />
             <Servo name="pollenHood" port="3" />
-            <Servo name="blocker" port="4" />
+            <Servo name="rgbRight" port="4" />
             <Servo name="nectarHood" port="5" />
 
             <AnalogInput name="floodgate" port="0" />
@@ -30,8 +30,8 @@
 
             <ContinuousRotationServo name="melonbotics" port="0" />
             <Servo name="ruler" port="1" />
-            <Servo name="rgbRight" port="2" />
-            <Servo name="rgbLeft" port="4" />
+            <Servo name="rgbLeft" port="2" />
+            <Servo name="blocker" port="4" />
         </LynxModule>
     </LynxUsbDevice>
     <Webcam name="aprilTagDetector" serialNumber="UC852" />

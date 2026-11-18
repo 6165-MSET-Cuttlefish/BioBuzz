@@ -6,6 +6,7 @@ import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.CRServoImplEx;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
@@ -50,7 +51,7 @@ public class BioBuzzBasicTele extends OpMode {
     public static class PollenFlywheel extends Flywheel {
         public PollenFlywheel() {
             targetRpm = 0;
-            power = 0.5;
+            power = 1.0;
             kV = 0;
             kP = 0;
             hoodPosition = 0.5;
@@ -62,7 +63,7 @@ public class BioBuzzBasicTele extends OpMode {
     public static class NectarFlywheel extends Flywheel {
         public NectarFlywheel() {
             targetRpm = 0;
-            power = 0.5;
+            power = 1.0;
             kV = 0;
             kP = 0;
             hoodPosition = 0.5;
@@ -74,13 +75,13 @@ public class BioBuzzBasicTele extends OpMode {
     public static class Intake {
         public double power = 1.0;
         public double outtakePower = 1.0;
-        public boolean reverse = false;
+        public boolean reverse = true;
         public double triggerThreshold = 0.1;
     }
 
     public static class Transfer {
         public double feedPower = 1.0;
-        public double intakePower = 0;
+        public double intakePower = 1.0;
         public boolean reverse = false;
         public boolean reverseServo = false;
         public double blockerOpenMs = 150;
@@ -102,6 +103,7 @@ public class BioBuzzBasicTele extends OpMode {
     public static double rpmWindowMs = 50;
     public static double rpmStep = 100;
     public static double powerStep = 0.05;
+    public static boolean motorCurrents = true;
 
     private final ArrayDeque<double[]> pollenHistory = new ArrayDeque<>();
     private final ArrayDeque<double[]> nectarHistory = new ArrayDeque<>();
@@ -112,6 +114,7 @@ public class BioBuzzBasicTele extends OpMode {
     private ServoImplEx pollenHood, nectarHood, blockerServo;
     private CRServoImplEx transferServo;
     private VoltageSensor battery;
+    private AnalogInput floodgate;
     private boolean pollenOn, nectarOn;
     private boolean lastA, lastX, lastY, lastUp, lastDown;
     private long lastLoopNs;
@@ -138,6 +141,7 @@ public class BioBuzzBasicTele extends OpMode {
         blockerServo = hardwareMap.get(ServoImplEx.class, "blocker");
         transferServo = hardwareMap.get(CRServoImplEx.class, "melonbotics");
         battery = hardwareMap.get(VoltageSensor.class, "Control Hub");
+        floodgate = hardwareMap.get(AnalogInput.class, "floodgate");
 
         for (DcMotorEx motor : new DcMotorEx[] {fl, bl, fr, br}) motor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         for (DcMotorEx motor : new DcMotorEx[] {pollenFlywheel, nectarFlywheel, intakeMotor, transferMotor}) {
@@ -189,7 +193,7 @@ public class BioBuzzBasicTele extends OpMode {
         lastUp = gamepad1.dpad_up;
         lastDown = gamepad1.dpad_down;
 
-        double limit = Range.clip(gamepad1.left_bumper ? drive.slowPower : drive.maxPower, 0, 1);
+        double limit = Range.clip(gamepad1.right_bumper ? drive.slowPower : drive.maxPower, 0, 1);
         double[] wheels = mecanum(
                 deadband(-gamepad1.left_stick_y, drive.stickDeadband),
                 deadband(gamepad1.left_stick_x, drive.stickDeadband),
@@ -216,8 +220,8 @@ public class BioBuzzBasicTele extends OpMode {
         nectarHood.setPosition(Range.clip(nectar.hoodPosition, 0, 1));
 
         boolean blockerOpen = flywheelsOn;
-        boolean feeding = gamepad1.right_bumper && flywheelsOn
-                && (loopStartNs - flywheelsOnNs) / 1e6 >= transfer.blockerOpenMs;
+        boolean feeding = gamepad1.left_bumper
+                && (!flywheelsOn || (loopStartNs - flywheelsOnNs) / 1e6 >= transfer.blockerOpenMs);
         double intakeOutput = intakePower(gamepad1.right_trigger, gamepad1.left_trigger);
         double transferOutput = Range.clip(
                 feeding ? transfer.feedPower : Math.signum(intakeOutput) * transfer.intakePower, -1, 1);
@@ -232,11 +236,24 @@ public class BioBuzzBasicTele extends OpMode {
         addGamepadMap();
         telemetry.addData("Pollen flywheel", "%s, %.0f RPM, power %.2f, %s", pollenOn ? "ON" : "off", pollenRpm, pollenOut, setpoint(pollen));
         telemetry.addData("Nectar flywheel", "%s, %.0f RPM, power %.2f, %s", nectarOn ? "ON" : "off", nectarRpm, nectarOut, setpoint(nectar));
-        telemetry.addData("Feed", feeding ? "FEEDING" : gamepad1.right_bumper ? "RB ignored: turn a flywheel on first (A)" : "off");
+        telemetry.addData("Feed", feeding ? "FEEDING" : gamepad1.left_bumper ? "waiting for the blocker to open" : "off");
         telemetry.addData("Blocker", blockerOpen ? "open (a flywheel is on)" : "closed");
-        telemetry.addData("Intake", "%s (%.2f), %.1f A", intakeOutput > 0 ? "intake" : intakeOutput < 0 ? "outtake" : "off",
-                intakeOutput, intakeMotor.getCurrent(CurrentUnit.AMPS));
+        telemetry.addData("Intake", "%s (%.2f)", intakeOutput > 0 ? "intake" : intakeOutput < 0 ? "outtake" : "off", intakeOutput);
         telemetry.addData("Drive limit", "%.2f", limit);
+        if (motorCurrents) {
+            telemetry.addData("FL current (A)", "%.2f", amps(fl));
+            telemetry.addData("BL current (A)", "%.2f", amps(bl));
+            telemetry.addData("FR current (A)", "%.2f", amps(fr));
+            telemetry.addData("BR current (A)", "%.2f", amps(br));
+            telemetry.addData("Pollen flywheel current (A)", "%.2f", amps(pollenFlywheel));
+            telemetry.addData("Nectar flywheel current (A)", "%.2f", amps(nectarFlywheel));
+            telemetry.addData("Intake current (A)", "%.2f", amps(intakeMotor));
+            telemetry.addData("Transfer current (A)", "%.2f", amps(transferMotor));
+        }
+        double hubAmps = 0;
+        for (LynxModule hub : hubs) hubAmps += hub.getCurrent(CurrentUnit.AMPS);
+        telemetry.addData("Robot current, Floodgate (A)", "%.2f", floodgate.getVoltage() / 3.3 * 80.0);
+        telemetry.addData("Hub current, all hubs (A)", "%.2f", hubAmps);
         telemetry.addData("Battery (V)", "%.2f", battery.getVoltage());
         telemetry.addData("Loop (ms)", "%.1f", (loopStartNs - lastLoopNs) / 1e6);
         lastLoopNs = loopStartNs;
@@ -290,10 +307,14 @@ public class BioBuzzBasicTele extends OpMode {
     }
 
     private void addGamepadMap() {
-        telemetry.addLine("Gamepad 1: left stick drive, right stick turn, hold LB slow");
-        telemetry.addLine("RT intake in, LT intake out, hold RB feed (only with a flywheel on)");
+        telemetry.addLine("Gamepad 1: left stick drive, right stick turn, hold RB slow");
+        telemetry.addLine("RT intake and transfer in, LT both out, hold LB transfer only (blocker opens only with a flywheel on)");
         telemetry.addLine("A both flywheels (blocker opens), X pollen, Y nectar, B flywheels off");
         telemetry.addLine("D-pad up/down: flywheel power or target RPM");
+    }
+
+    private static double amps(DcMotorEx motor) {
+        return motor.getCurrent(CurrentUnit.AMPS);
     }
 
     private static DcMotorSimple.Direction direction(boolean reverse) {

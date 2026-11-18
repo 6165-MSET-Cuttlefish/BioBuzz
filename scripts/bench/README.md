@@ -18,9 +18,10 @@ folder.
    mid-session ([`docs/toolchain-findings.md`](../../docs/toolchain-findings.md#laptop-and-adb)).
 2. From the worktree root, on the hub's Wi-Fi: `python3 scripts/bench/session.py`; over a USB data cable to its USB-C
    port, the Mac on its own network: `python3 scripts/bench/session.py --usb` (`--serial S` when adb lists several USB
-   devices). Without more, the hub must already run this checkout's build (the Run button's full install). Add
-   `--install` to back up the hub's app and install the stamped bench build first, as `bare_hub.sh` does (run
-   `scripts/bench/bare_hub.sh --build`, or `--build --usb`, while online first).
+   devices). Without more, the hub must already run this checkout's bench build (a full install with the bench
+   OpModes in it: step 3 of [Run it](#run-it)). Add `--install` to back up the hub's app and install the stamped
+   bench build first, as `bare_hub.sh` does (run `scripts/bench/bare_hub.sh --build`, or `--build --usb`, while
+   online first).
 3. Answer the questions, then leave it: it keeps the Mac awake and logs its whole console. It refuses to start
    without a terminal and reads nothing from it after the last answer.
 
@@ -132,7 +133,11 @@ name devices on the bench ports unless you add `--ports-empty` once they are unp
    anything but adb listens on adb's server port 5037 (an ssh port forward, for one): every adb command would reach
    whatever is behind it, possibly another hub, and the bench would drive that hub's motor ports. It names the process
    and its pid; stop it and rerun.
-3. Full install (Android Studio, **TeamCode** run configuration, **Run**) and wait for the RC app. Do it again after
+3. Full install with the bench OpModes in it, and wait for the RC app. A normal build leaves them out, so the
+   Driver Station lists only robot OpModes; a build has them when Gradle gets the `bench` property. `bare_hub.sh`,
+   `run_bench.py` and `session.py` set it for every Gradle command they run. For the Run button (Android Studio,
+   **TeamCode** run configuration), put `bench=true` in `~/.gradle/gradle.properties` on this laptop first, and take
+   it out again afterwards; from a terminal, add `-Pbench` to the `./gradlew` command. Do it again after
    any change to `architecture/hardware/photon/`: that code is pinned, so deploySloth never changes it on the hub, and
    the Photon block fails its first check when the installed copy doesn't match the sources.
 4. Close every dashboard tab: its status requests read hub voltage on the bus being timed, and its Gamepad view sends
@@ -478,8 +483,8 @@ Only a hub shows: the real slice lengths and plan times, where a STOP lands, the
 a whole plan in one step still overruns STOP on that hub, how long the real webcam takes to close while it opens and
 while it streams, and whether a STOP 50 ms after START lands inside a slice (network timing decides). Offline:
 `python3 -I scripts/bench/offline/benches/planner_stop.py`, and `PlannerWorkloadTest` in
-`./gradlew :TeamCode:testDebugUnitTest` (with no slice limit a plan takes one step; with a 0 ms slice each step does
-one piece of the search; with 20 ms each step ends once its 20 ms are up).
+`./gradlew -Pbench :TeamCode:testDebugUnitTest` (with no slice limit a plan takes one step; with a 0 ms slice each
+step does one piece of the search; with 20 ms each step ends once its 20 ms are up).
 
 ## Bench: Config Check
 
@@ -691,7 +696,7 @@ Only a hub shows: the real gaps between ball frames and whether any passes 0.5 s
 still ball at each distance; how long the switch-only sync and a change during a sync take on a real Limelight; and
 whether a cancelled sync's request lands after the new one. Offline:
 `python3 -I scripts/bench/offline/benches/limelight.py`; `StalenessReplay` and `TrackStats`, the latter with the real
-`BallTracker` on a made-up two-ball stream, are JUnit tests in `./gradlew :TeamCode:testDebugUnitTest`.
+`BallTracker` on a made-up two-ball stream, are JUnit tests in `./gradlew -Pbench :TeamCode:testDebugUnitTest`.
 
 ## Bench: Webcam's clamped and refused settings
 
@@ -790,7 +795,7 @@ Only a hub shows: how long deploySloth and its load take here, so whether either
 sync times; and whether adb lists the worker as `LimelightSync`. Nothing logs a Limelight POST, so a POST after STOP
 shows only as a thread inside `Limelight3A.sendPostRequest`. Offline:
 `python3 -I scripts/bench/offline/benches/limelight_reload.py` (`--gradle` also runs the salt through Gradle); the
-fake across two class loaders: `ReloadFakeTest` in `./gradlew :TeamCode:testDebugUnitTest`.
+fake across two class loaders: `ReloadFakeTest` in `./gradlew -Pbench :TeamCode:testDebugUnitTest`.
 
 ## Bench: Fault Render
 

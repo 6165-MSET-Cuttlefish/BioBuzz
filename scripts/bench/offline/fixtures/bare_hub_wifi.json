@@ -9,7 +9,7 @@
   "-s 192.168.43.1:5555 pull /data/app/com.qualcomm.ftcrobotcontroller-1/base.apk <root>/common/bench-backups/<time>/apk/base.apk",
   "-s 192.168.43.1:5555 shell dumpsys package com.qualcomm.ftcrobotcontroller",
   "-s 192.168.43.1:5555 shell ls -1 /sdcard/FIRST/",
-  "-s 192.168.43.1:5555 pull /sdcard/FIRST/betta_decode.xml <root>/common/bench-backups/<time>/FIRST/betta_decode.xml",
+  "-s 192.168.43.1:5555 pull /sdcard/FIRST/competition.xml <root>/common/bench-backups/<time>/FIRST/competition.xml",
   "-s 192.168.43.1:5555 shell run-as com.qualcomm.ftcrobotcontroller cat shared_prefs/com.qualcomm.ftcrobotcontroller_preferences.xml",
   "-s 192.168.43.1:5555 shell test -d /storage/emulated/0/FIRST/dairy/sloth",
   "-s 192.168.43.1:5555 install -r -t -g TeamCode/build/outputs/apk/debug/TeamCode-debug.apk",

@@ -87,8 +87,10 @@ except where a line says measured.
 
 ### The wall-clock jump
 
-The hub's clock may read about 1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`, then
-jump to the real date (unchecked: [`toolchain-findings.md`](toolchain-findings.md#deploying)). If that happens while
+The hub's clock reads 31 December 1969 after boot until something sets it (one hub, 2026-11-14:
+[`sdk-hub-findings.md`](sdk-hub-findings.md#control-hub-network-adb-and-app-restarts)), and may jump to the real date
+when a DS connects or a browser opens `http://192.168.43.1:8080` (unchecked:
+[`toolchain-findings.md`](toolchain-findings.md#deploying)). If that happens while
 `LimelightBallSource` runs (read from source; neither effect measured, and neither is guarded in code):
 
 - **A false fault for one loop.** Until the next poll lands (about 10 ms), `getTimeSinceLastUpdate()` returns decades.

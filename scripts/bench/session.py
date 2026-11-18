@@ -21,6 +21,8 @@ import threading
 import traceback
 from pathlib import Path
 
+os.environ["ORG_GRADLE_PROJECT_bench"] = "true"
+
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 RUNNER = HERE / "run_bench.py"

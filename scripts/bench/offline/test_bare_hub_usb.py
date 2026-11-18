@@ -95,7 +95,7 @@ elif cmd == "shell":
     elif shell.startswith("pm path"):
         print("package:/data/app/com.qualcomm.ftcrobotcontroller-1/base.apk")
     elif shell.startswith("ls -1 /sdcard/FIRST"):
-        print("betta_decode.xml")
+        print("competition.xml")
     elif "_preferences.xml" in shell and "cat" in shell:
         print("<?xml version='1.0' encoding='utf-8' standalone='yes' ?><map></map>")
     elif shell.startswith("test -d"):

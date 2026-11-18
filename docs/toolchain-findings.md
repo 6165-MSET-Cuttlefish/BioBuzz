@@ -42,6 +42,13 @@ misbehaves.
   classes share a name (string read from the jar's `MyProcessor` class). Without it a duplicate shows only on the
   hub, where Sloth 0.3.2's `SinisterRegisteredOpModes.register` throws `DuplicateNameException` while building the
   OpMode list.
+- **Bench OpModes are left out of normal builds (2026-11-14).** `TeamCode/build.gradle` excludes
+  `opmodes/test/bench/**` from every `JavaCompile` task unless Gradle gets the `bench` property: `-Pbench`,
+  `bench=true` in a `gradle.properties`, or the environment variable `ORG_GRADLE_PROJECT_bench`, which the bench
+  scripts set. Measured on a Mac with 48 bench OpModes out of 77: a normal build compiles no class from that folder
+  against 196 with the property, the hot-load jar (`TeamCode/build/libs/to_load.jar`) is 280 KB against 515 KB, and
+  `testDebugUnitTest` runs 49 tests against 127. Switching either way needed no clean build. Not measured on a hub:
+  whether the smaller load shortens the 9 s hot load.
 
 [sdk-deps]: https://github.com/FIRST-Tech-Challenge/FtcRobotController/blob/v12.0/build.dependencies.gradle
 
@@ -95,6 +102,9 @@ FtcRobotController tags end at v12.0.
     the new file's devices, one on `laser_rangefinder` the SDK's `k9usbbot`, and one on `laser_rangefinder_i2c`
     `laser_rangefinder.xml`'s. The 2026-11-13 rewrite of `biobuzz.xml` added and removed no file, so every ID stayed;
     `biobuzz` itself now holds the BIOBUZZ robot's layout, and the intake test robot whose layout it held is retired.
+  - `betta_decode.xml`, `butterfly.xml` and `cuttle_decode.xml` were deleted on 2026-11-14, which shifts `biobuzz`
+    (now 0x7f110002) and every config after it: after the first full install of that build, re-activate each hub's
+    config on the DS as above.
   - A by-name lookup would fix it (`getResources().getIdentifier(name, "xml", packageName)` in
     `FtcRobotControllerActivity.requestRobotSetup`, then re-save the config), but `robotcontroller/` is SDK template
     code that CLAUDE.md keeps unedited. The bench already re-activates shipped configs by name
@@ -108,10 +118,12 @@ FtcRobotController tags end at v12.0.
 - **After the hub boots, connect the DS before deploySloth**, or the load can be deleted at the next app restart,
   leaving the installed APK's code to run. At app start Sloth 0.3.2 keeps the newest load jar only if its file time is
   later than the package's `lastUpdateTime`, and otherwise logs `removing outdated sloth load` and deletes it
-  (`SlothTeamCodeLoader.kt:191-202`, read from the 0.3.2 sources jar). Unchecked: that the hub's clock reads about
-  1970 after boot until a DS connects or a browser opens `http://192.168.43.1:8080`, and that the hub's clock rather
-  than the laptop's stamps the pushed jar; no dated measurement records either. The hub bench's app-restart check
-  (`sloth_persistence` in `scripts/bench/run_bench.py`) logs which clock stamped the jar.
+  (`SlothTeamCodeLoader.kt:191-202`, read from the 0.3.2 sources jar). After boot the hub's clock does read
+  31 December 1969 until something sets it (one hub, 2026-11-14:
+  [`sdk-hub-findings.md`](sdk-hub-findings.md#control-hub-network-adb-and-app-restarts)). Unchecked: that a DS
+  connecting or a browser opening `http://192.168.43.1:8080` sets it, and that the hub's clock rather than the
+  laptop's stamps the pushed jar. The hub bench's app-restart check (`sloth_persistence` in
+  `scripts/bench/run_bench.py`) logs which clock stamped the jar.
 - **With two adb devices attached, set `ANDROID_SERIAL`.** The Load plugin runs `adb` without `-s` (Sloth 0.3.2,
   `DeploySloth.kt`, `RemoveRemoteSloth.kt`). With two hubs, or one hub on both USB and Wi-Fi, deploySloth fails with
   adb's more-than-one-device error, and `removeSlothRemote` (which Gradle's `installDebug` runs first) ignores adb's
@@ -173,6 +185,25 @@ FtcRobotController tags end at v12.0.
   itself had run Gradle 8 times (a build check, then 7 deploySloths, each 3–15 s), as its Sloth benches must. Before the
   next session on that hub, check which config is active: a session takes whatever it finds as the hub's own config to
   put back.
+- **If an `adb install` to a hub seems stuck, stop it (Ctrl-C), check `adb devices` still lists the hub as
+  `device`, and run it again.** On 2026-11-14, 1 of 8 installs over a USB cable hung, cause unknown. A good install of
+  the 48 MB bench build took 18–23 s.
+  - The hang (Bench: Dashboard Off's reinstall step, 2026-11-14, adb 1.0.41 on a Mac, the 2026-10-24 hub): an
+    `adb install -r -t` of the hub's own APK, just pulled from it, started about 75 s after an `adb reboot`, never
+    returned, and the runner's 600 s timeout killed it. On the hub, installd logged `free_cache(48040673)`, the APK's
+    size in bytes, about 3 s after the runner's `pm path`. Then logcat shows nothing of the install (no package scan,
+    dexopt or replaced package) until, as the timeout killed adb on the Mac, the package manager logged a failed write
+    to a shell command's output (`PackageManagerService.onShellCommand`, `EIO`). So the install reached the hub and
+    stalled there; whether the APK's bytes stopped arriving or the package manager stopped reading them is unknown.
+    Killing adb on the Mac ended the install on the hub too: the kernel's binder log shows the process holding the
+    package manager's call (pid 1254, which logcat doesn't name) going away and, about 40 ms later, the package
+    manager's reply to it failing as `target dead`, and init logged pid 1254 killed by signal 1 (SIGHUP).
+  - Six later installs on the same hub, in four tries to reproduce it, all worked (18–23 s each): started 17 s after
+    an `adb reboot`; with two adb port forwards open and live sockets through them; after an `adb pull` of the same
+    APK; and with sockets held open across the reboot.
+  - An install sent the moment adb answered after a reboot, about 5 s after the command, failed at once with a clear
+    error: Android's package service didn't exist yet. That is a different failure. Boot timings:
+    [`sdk-hub-findings.md`](sdk-hub-findings.md#control-hub-network-adb-and-app-restarts).
 - **Fake hubs stay off ports 5554 to 5585 and never touch the real adb.** The adb server finds emulators by scanning
   the odd localhost ports 5555 to 5585 ([adb docs](https://developer.android.com/tools/adb), fetched 2026-11-10). A
   fake hub on `127.0.0.1:5555` was picked up as `emulator-5554` and churned about every 1.3 s, disturbing a real hub's

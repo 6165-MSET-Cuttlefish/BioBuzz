@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+export ORG_GRADLE_PROJECT_bench=true
+
 HOST=192.168.43.1
 SERIAL="$HOST:5555"
 PACKAGE=com.qualcomm.ftcrobotcontroller

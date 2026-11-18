@@ -145,7 +145,7 @@ def wifi_checks(rb):
     expect("wifi: the run ended and wrote its summary", (runner.out / "summary.md").exists() and "Nothing to send back"
            in console)
     expect("wifi: the original config is active again and no bench config is left",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")])
     expect("wifi: every socket went to the hub's 192.168.43.1:8000",
            hub.tcp and {(h, p) for h, p, _ in hub.tcp} == {(fake_hub.HUB_IP, 8000)})
     expect("wifi: deploySloth ran with ANDROID_SERIAL at the hub's Wi-Fi serial",
@@ -207,7 +207,7 @@ def other_hub(rb):
     checks = [i for i, c in enumerate(hub.calls) if c.endswith("shell getprop ro.serialno")]
     expect("--hub-serialno naming this hub: the run ends with the config put back, reading ro.serialno after every "
            "adb connection check, the restore's first included",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")]
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")]
            and checks and all(hub.calls[i - 1] == "adb devices" for i in checks)
            and seen["restore"] - 1 in checks and "different hub" not in (r.out / "summary.md").read_text())
 
@@ -217,8 +217,8 @@ def wifi_link(rb):
     expect("Wi-Fi link: the dashboard page, the RC page and the restore by hand are all at 192.168.43.1:8080",
            link.dash_page() == ("http://192.168.43.1:8080/dash", None)
            and link.rc_page() == ("http://192.168.43.1:8080", None)
-           and "open http://192.168.43.1:8080/dash, add the Hardware Config view, and activate betta_decode"
-           in link.restore_by_hand(fake_hub.WIFI_SERIAL, "", "betta_decode"))
+           and "open http://192.168.43.1:8080/dash, add the Hardware Config view, and activate competition"
+           in link.restore_by_hand(fake_hub.WIFI_SERIAL, "", "competition"))
 
 
 def connects(hub):
@@ -239,7 +239,7 @@ def usb_default(rb):
     expect("usb: every default bench ran, webcam, Limelight and Expansion Hub ones included, in the runner's order",
            benches_entered(runner) == wanted and {"webcam", "limelight", "expansion"} <= set(wanted))
     expect("usb: the run ended, wrote its summary and put the original config back",
-           "Nothing to send back" in console and hub.active["name"] == "betta_decode"
+           "Nothing to send back" in console and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
     expect("usb: not one adb connect or disconnect", not connects(hub))
     expect("usb: every socket went to a port adb forwarded to this hub's port, never 192.168.43.1",
@@ -424,7 +424,7 @@ def usb_interrupted(rb):
             raised = True
     link = next(line for line in (r.out / "summary.md").read_text().splitlines() if line.startswith("Link: "))
     expect("usb, Ctrl-C in the first bench: the runner put the original config back, left no bench config and "
-           "re-raised", raised and hub.active["name"] == "betta_decode"
+           "re-raised", raised and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
     expect("usb, Ctrl-C in the first bench: only the forwards it made are gone, and summary.md's Link line says which",
            [(f.serial, f.local, f.remote) for f in hub.forwards] == foreign

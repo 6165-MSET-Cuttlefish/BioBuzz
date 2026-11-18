@@ -122,14 +122,14 @@ class ListAdb:
     def run(self, *args, check=True, timeout=60):
         assert args == ("shell", f"ls -l {rb.CONFIG_DIR}/"), args
         return ("-rw-rw---- 1 root sdcard_rw 99 2026-09-23 08:00 cuttledecode.xml\n"
-                "-rw-rw---- 1 root sdcard_rw 1234 2026-10-01 12:34 betta_decode.xml\n")
+                "-rw-rw---- 1 root sdcard_rw 1234 2026-10-01 12:34 competition.xml\n")
 
     def config_names(self):
-        return {"cuttledecode", "betta_decode"}
+        return {"cuttledecode", "competition"}
 
     def read_config(self, name):
         self.calls.append(f"read {name}")
-        return OLD if name == "cuttledecode" else (WORKTREE / "TeamCode/src/main/res/xml/betta_decode.xml").read_text()
+        return OLD if name == "cuttledecode" else (HERE / "fixtures/competition.xml").read_text()
 
 
 fake = Subprocess("p45913\ncadb\nf7\n")
@@ -141,7 +141,7 @@ with stubbed(fake):
         code = runner.run()
 summary = (out / "summary.md").read_text()
 expect("list-configs: reads every config and nothing else",
-       runner.adb.calls == ["ensure_connected", "read betta_decode", "read cuttledecode"])
+       runner.adb.calls == ["ensure_connected", "read competition", "read cuttledecode"])
 expect("list-configs: never opens the dashboard", runner.dash is None)
 expect("list-configs: lists the stale cuttledecode", "WARN cuttledecode: saved on the hub but not a config" in summary)
 expect("list-configs: an active config naming ballDetector fails its check",
@@ -377,15 +377,15 @@ class FakeAdb:
         if args == ("shell", f"logcat -G {rb.LOG_BUFFER}"):
             return ""
         if args == ("shell", f"ls -l {rb.CONFIG_DIR}/"):
-            return "-rw-rw---- 1 root sdcard_rw 1234 2026-10-01 12:34 betta_decode.xml\n"
+            return "-rw-rw---- 1 root sdcard_rw 1234 2026-10-01 12:34 competition.xml\n"
         raise AssertionError(f"unexpected adb {args}")
 
     def config_names(self):
-        return {"betta_decode"}
+        return {"competition"}
 
     def read_config(self, name):
-        assert name == "betta_decode", name
-        return (WORKTREE / "TeamCode/src/main/res/xml/betta_decode.xml").read_text()
+        assert name == "competition", name
+        return (HERE / "fixtures/competition.xml").read_text()
 
     def _raw(self, args, timeout=60):
         self.calls.append(tuple(args))
@@ -420,7 +420,7 @@ class Dry(rb.Runner):
         self.restarts, self.switches, self.restore_notes = [], [], []
         self.watch = None
         self.dashboard_left_off = None
-        self.original_entry = {"name": "betta_decode", "location": "LOCAL_STORAGE", "resourceId": 0}
+        self.original_entry = {"name": "competition", "location": "LOCAL_STORAGE", "resourceId": 0}
         self.original_xml = None
         self.asked = []
 
@@ -578,7 +578,7 @@ for mode, label in (("recovery fails", "a failed recovery"), ("reboot never back
     expect(f"run, {label}: the summary says the dashboard may still be off", "may still be off" in summary)
     expect(f"run, {label}: the default run's saved-configs step ran after the probe and judged the active config",
            0 <= summary.find("## Probe") < summary.find("## Saved hardware configs")
-           and "PASS saved configs: the active config betta_decode" in summary)
+           and "PASS saved configs: the active config competition" in summary)
     caution = "First check that `lsof -nP -iTCP:5037 -sTCP:LISTEN` shows nothing or adb"
     tail = printed.split("Nothing to send back")[-1]
     expect(f"run, {label}: the port check is asked for before the printed command, and in the summary",

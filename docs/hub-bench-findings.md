@@ -427,13 +427,18 @@ that session didn't reach:
   - After the restart, the same hub over USB, with no new install: `run_bench.py --usb --ports-empty --octoquad
     --absent --planner-stop --overlay-nan --config-by-name --freeze-dump`, twice. At 12:07 it stopped at once:
     Bench: OctoQuad Absent was still in INIT, in the app process whose `INIT FINISH` the session's last config switch
-    logged, so the session had INITed it and the OpMode had held there since. By 12:10 the app had restarted, and the
-    second run did all six benches. Bench: OctoQuad skipped its checks (no OctoQuad answered). Results: Bench: Planner
-    Stop under Route planner above; OctoQuad Absent under the OctoQuad; Config by name in
-    [`toolchain-findings.md`](toolchain-findings.md#deploying); Freeze Dump in
-    [`dashboard-findings.md`](dashboard-findings.md); Webcam Stop with no webcam and Overlay NaN passed. That run took
-    `bench_octoquad_absent` as the hub's own config and left the hub on it again. Still not run: the session's Dashboard
-    Off and its put-back.
+    logged, so the session had INITed it and the OpMode had held there since. The runner refuses to start while an
+    OpMode is active; by 12:10 the app had been restarted over adb by hand, and the second run did all six benches.
+    Bench: OctoQuad skipped its checks (no OctoQuad answered). Results: Bench: Planner Stop under Route planner above;
+    OctoQuad Absent under the OctoQuad; Config by name in [`toolchain-findings.md`](toolchain-findings.md#deploying);
+    Freeze Dump in [`dashboard-findings.md`](dashboard-findings.md); Webcam Stop with no webcam and Overlay NaN passed.
+    That run took `bench_octoquad_absent` as the hub's own config and left the hub on it again.
+  - Then Bench: Dashboard Off by itself, `run_bench.py --usb --ports-empty --dashboard-off` at 12:33: its switch, app
+    restart, reboot and recovery checks passed
+    ([`dashboard-findings.md`](dashboard-findings.md#enabledisable-dashboard)); its reinstall step hung in `adb install`
+    for the runner's 600 s timeout, so its three reinstall checks read FAIL as not run
+    ([`toolchain-findings.md`](toolchain-findings.md#laptop-and-adb)). It left `bench_octoquad_absent` active too. None
+    of these runs did the session's put-back.
 
 Not run on either date (they need `--interactive`):
 - Pinpoint, OctoQuad and Limelight unplug/replug;

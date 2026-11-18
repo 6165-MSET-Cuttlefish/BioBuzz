@@ -408,7 +408,7 @@ def on_the_fake_hub():
     expect("--pinpoint without --pinpoint-soak: no soak, no recalibration run, no bench_octoquad",
            "bench_octoquad" not in configs_written(out) and "soak" not in [p.get("mode") for p in hub.inits])
     expect("the run ended with the original config back and no bench config left",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")])
 
     hub = Station()
     code, out, terminal, _ = station_run(["--pinpoint-soak", "--quick"], hub)
@@ -431,7 +431,7 @@ def on_the_fake_hub():
     expect("--pinpoint-soak: the soak and recalibration outcomes are in runner_results.json",
            "pinpoint_soak" in results and "pinpoint_recal" in results)
     expect("--pinpoint-soak: the original config is back afterwards",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")])
 
     hub = Station(present=False)
     code, out, terminal, _ = station_run(["--pinpoint-soak", "--quick", "--interactive"], hub)
@@ -443,7 +443,7 @@ def on_the_fake_hub():
     hub = Station()
     code, out, terminal, interrupted = station_run(["--pinpoint", "--interactive"], hub, [KeyboardInterrupt])
     expect("Ctrl-C at the raw unplug prompt: the runner stops, puts the original config back and leaves no bench "
-           "config", interrupted and len(terminal.reads) == 1 and hub.active["name"] == "betta_decode"
+           "config", interrupted and len(terminal.reads) == 1 and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
 
 

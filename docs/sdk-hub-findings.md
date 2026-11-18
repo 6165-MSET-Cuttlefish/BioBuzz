@@ -87,7 +87,7 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   robot, retired 2026-11-13) had a shot table to 3275 rpm (`decode/modules/ShooterInterpolation.java:169`, deleted
   2026-11-13: `git log --diff-filter=D -- <path>` names the commit, whose parent has it) on an 8192 counts/rev encoder
   (`decode/modules/Shooter.java:21` there) on Expansion Hub encoder port 3
-  (`TeamCode/src/main/res/xml/cuttle_decode.xml`), about 447,000 counts/s; lost counts there were never checked.
+  (`cuttle_decode.xml`, deleted 2026-11-14), about 447,000 counts/s; lost counts there were never checked.
 
 ## Bulk reads
 
@@ -314,6 +314,18 @@ OS 1.1.3 on the hub whose properties were read; source lines are the SDK 12.0.0 
 - **An app restart drops neither Wi-Fi nor adb.** Through every force-stop and relaunch in a run, `hostapd` and `adbd`
   kept one pid each: 2026-10-09 (21 log files with an app start), 2026-10-24 (18), 2026-10-28 (6) and 2026-10-29
   (14). Only the app's own ports (8080, 8081, 8000) should go away until it is back (inferred).
+- **After an `adb reboot`** (single observations on one hub, the 2026-10-24 one, over a USB cable, 2026-11-14):
+  - adb answered again 5–7 s after the command, before Android's package service existed: an `adb install` sent then
+    failed at once. The package service and `sys.boot_completed` were both there by 17 s of uptime.
+  - The Robot Controller app started by itself, with no `am start`. In Bench: Dashboard Off's reboot the runner had the
+    dashboard and a ready robot again 62.3 s after the command.
+  - With nothing to set it, the clock started from Unix time 0: logcat after the reboot began at 16:00 on 31 December
+    1969 (the hub's local time, UTC−8), and still read 31 December 1969 (16:14) at its end, after the runner had
+    fetched `/dash` over HTTP (no browser) and used the dashboard's websocket. No DS connection appears in that
+    logcat. Before that reboot too, at the start of the three runs after the morning session, the hub's `date +%s` was
+    within a second of its uptime (4469 against 4469.03 s, 4663 against 4663.65, 6052 against 6052.89): about 100 min
+    after its last boot, through the morning session and two runs over USB, nothing had set it. What does set it is
+    unchecked ([`toolchain-findings.md`](toolchain-findings.md#deploying)).
 - **No web server checks Origin, Host or a credential.** In the SDK's RobotServer, FtcCommon, OnBotJava, Blocks,
   RobotCore, Inspection and Hardware 12.0.0 sources no handler reads an Origin, Host or Referer header or sends an
   Access-Control header (grep, 2026-11-13; the only `"origin"` is an OnBot Java form field). The RC server passes any

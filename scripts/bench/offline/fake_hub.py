@@ -36,7 +36,7 @@ IDLE = "$Stop$Robot$"
 EPOCH0 = int(datetime.datetime(2026, 11, 12, 10, 0, 0).timestamp())
 HUB_PORTS = (8000, 8080, 8081, 5800, 5801, 5805, 5807)
 ADB_PORTS = {5037} | set(range(5554, 5586))
-WORKTREE = pathlib.Path(__file__).resolve().parents[3]
+FIXTURES = pathlib.Path(__file__).resolve().parent / "fixtures"
 STAMP = re.compile(r"^(?:(\d{4})-)?(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)")
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -313,7 +313,7 @@ class Hub:
     """One Control Hub behind a fake adb server. usb=True: its USB serial is in `adb devices` from the start;
     usb=False: it appears once `adb connect 192.168.43.1:5555` runs."""
 
-    def __init__(self, usb=False, extra_usb=(), config="betta_decode", busy_local_ports=(), foreign_forwards=(),
+    def __init__(self, usb=False, extra_usb=(), config="competition", busy_local_ports=(), foreign_forwards=(),
                  speed=20.0, everything=False, control_hub=True, socket_table=True, http_answers=True):
         self.usb = usb
         self.control_hub, self.socket_table, self.http_answers = control_hub, socket_table, http_answers
@@ -337,14 +337,14 @@ class Hub:
         self.pipeline = 4
         self.status = {"enabled": True, "available": True, "activeOpMode": IDLE, "activeOpModeStatus": "STOPPED",
                        "errorMessage": "", "warningMessage": "", "batteryVoltage": 12.6}
-        self.configs = {config: (WORKTREE / f"TeamCode/src/main/res/xml/{config}.xml").read_text()}
+        self.configs = {config: (FIXTURES / f"{config}.xml").read_text()}
         self.active = {"name": config, "location": "LOCAL_STORAGE", "resourceId": 0, "isDirty": False}
         self.staged_prefs = None
         self.bench = {}
         self.probe = {
             "hubs": [{"parent": True, "imuType": "BHI260", "firmware": "1.8.2", "address": 173, "responding": True}],
             "webcams": [], "limelights": [], "interfaces": ["wlan0", "lo"],
-            "shippedConfigs": {"betta_decode": 2131820545, "cuttle_decode": 2131820546}}
+            "shippedConfigs": {"biobuzz": 2131820545, "camera": 2131820546}}
         if everything:
             self.probe["hubs"].append({"parent": False, "address": 2, "firmware": "1.8.2", "responding": True})
             self.probe["webcams"] = [{"attached": True, "serial": "UC762"}]

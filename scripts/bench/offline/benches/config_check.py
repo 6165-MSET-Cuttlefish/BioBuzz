@@ -283,7 +283,7 @@ class Station(fake_hub.Hub):
             self.probe["hubs"].append({"parent": False, "address": 2, "firmware": "1.8.2", "responding": True})
         self.probe["webcams"] = [{"attached": True, "serial": "UC762"}]
         self.probe["shippedConfigs"] = {n: 2131820545 + i for i, n in enumerate(
-            ("betta_decode", "biobuzz", "camera", "cuttle_decode", "intake_transfer_shooter"))}
+            ("biobuzz", "camera", "intake_transfer_shooter", "laser_rangefinder", "laser_rangefinder_i2c"))}
         self.crashes = crashes or {}
         self.port_probe = GOOD_PROBE if probe is None else probe
         self.messages, self.switched = [], []
@@ -363,7 +363,7 @@ def on_the_fake_hub():
     names = [s["name"] for s in hub.switched]
     expect("the statement was typed once, before the first adb command", stdin.reads == [0])
     expect("the bench ran, and the run ended putting the original config back with no bench config left",
-           "] === config_check ===" in log and hub.active["name"] == "betta_decode"
+           "] === config_check ===" in log and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
     probe = next((p for o, p in inits if o == "Bench: Photon Stock"), {})
     expect("the port probe ran first: Bench: Photon Stock on bench_photon, probe only, with the Expansion Hub on RS485",
@@ -408,7 +408,7 @@ def on_the_fake_hub():
            not [s for s in hub.switched if s["name"] in cc.CONFIGS]
            and not [o for k, o, _ in hub.messages if o in ROBOT_OPMODES]
            and check_line(summary, "port probe").startswith("- FAIL") and "No robot OpMode was INITed" in summary
-           and hub.active["name"] == "betta_decode")
+           and hub.active["name"] == "competition")
 
     hub = Station(expansion=False)
     code, out, stdin = station_run(["--config-check", "--s3-ports"], hub)

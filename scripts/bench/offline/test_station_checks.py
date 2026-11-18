@@ -138,26 +138,32 @@ for fake_lsof, label in ((hung_lsof, "a hung lsof"), (denied_lsof, "an lsof it c
            end.get("port") == 5037 and end.get("error") and "couldn't check" in (rb.adb_server_change(start, end) or ""))
 
 # --- saved configs
-GOOD = (WORKTREE / "TeamCode/src/main/res/xml/betta_decode.xml").read_text()
+FIXTURES = HERE / "fixtures"
+GOOD = (FIXTURES / "competition.xml").read_text()
+SHIPPED_ROBOT = (WORKTREE / "TeamCode/src/main/res/xml/biobuzz.xml").read_text()
 OLD = ('<?xml version="1.0"?><Robot type="FirstInspires-FTC"><Webcam name="ballDetector" serialNumber="UC852" />'
        '<EthernetDevice name="ll" serialNumber="EthernetOverUsb:eth0:172.29.0.22" port="0" ipAddress="172.29.0.1" />'
        '</Robot>')
 BARE = '<?xml version="1.0"?><Robot type="FirstInspires-FTC"></Robot>'
 shipped = rb.shipped_config_names()
-expect("shipped: the hardware configs in res/xml", {"betta_decode", "cuttle_decode", "biobuzz"} <= shipped)
+expect("shipped: the hardware configs in res/xml", {"biobuzz", "camera"} <= shipped)
 expect("shipped: app_settings and device_filter aren't configs", not {"app_settings", "device_filter"} & shipped)
-expect("devices: betta_decode names the webcam and the Limelight as the code does",
-       rb.config_device_names(GOOD) == {"webcams": ["aprilTagDetector"], "ethernet": ["limelight"]})
+expect("devices: biobuzz names the webcam and the Limelight as the code does",
+       rb.config_device_names(SHIPPED_ROBOT) == {"webcams": [rb.CELL_TIP_WEBCAM], "ethernet": [rb.LIMELIGHT_DEVICE]})
+expect("devices: the fixture names the webcam and the Limelight as the code does",
+       rb.config_device_names(GOOD) == {"webcams": [rb.CELL_TIP_WEBCAM], "ethernet": [rb.LIMELIGHT_DEVICE]})
 expect("devices: broken XML is None", rb.config_device_names("<Robot") is None)
-configs = {"betta_decode": GOOD, "cuttledecode": OLD, "bench_main": OLD, "broken": "<Robot", "spare": BARE}
-found = rb.saved_config_findings(configs, shipped, "betta_decode", GOOD)
+fixture_shipped = rb.shipped_config_names(FIXTURES)
+expect("shipped: a folder's <Robot> files", fixture_shipped == {"competition"})
+configs = {"competition": GOOD, "cuttledecode": OLD, "bench_main": OLD, "broken": "<Robot", "spare": BARE}
+found = rb.saved_config_findings(configs, fixture_shipped, "competition", GOOD)
 warned = "\n".join(found["warnings"])
 expect("saved: cuttledecode is listed stale", "cuttledecode: saved on the hub but not a config" in warned)
 expect("saved: a webcam named ballDetector warns", "Webcam 'ballDetector'" in warned)
 expect("saved: an EthernetDevice not named limelight warns", "EthernetDevice 'll'" in warned)
 expect("saved: unparseable XML warns", "broken: its XML doesn't parse" in warned)
 expect("saved: bench_* configs never warn", "bench_main" not in warned)
-expect("saved: the shipped, correct config doesn't warn", "betta_decode" not in warned)
+expect("saved: the shipped, correct config doesn't warn", "competition" not in warned)
 expect("saved: every config gets a row", [r["name"] for r in found["rows"]] == sorted(configs))
 expect("saved: an active config naming aprilTagDetector passes", found["check"][0] is True)
 expect("saved: an active config naming ballDetector fails",
@@ -174,17 +180,19 @@ expect("saved: one wrong webcam beside the right one still fails",
 expect("active: unread settings", rb.active_config_source(None, configs)[0] == "unknown")
 expect("active: no config", rb.active_config_source({"name": rb.NO_CONFIG}, configs)[1] is None)
 expect("active: a res/xml config reads this checkout's copy",
-       rb.active_config_source({"name": "betta_decode", "location": "RESOURCE"}, {})[1] == GOOD)
+       rb.active_config_source({"name": "biobuzz", "location": "RESOURCE"}, {})[1] == SHIPPED_ROBOT
+       and rb.active_config_source({"name": "competition", "location": "RESOURCE"}, {},
+                                   shipped_folder=FIXTURES)[1] == GOOD)
 expect("active: a saved config reads the hub's copy",
        rb.active_config_source({"name": "cuttledecode", "location": "LOCAL_STORAGE"}, configs)[1] == OLD)
 expect("active: the copy from before the run wins over the run's own",
        rb.active_config_source({"name": "bench_main", "location": "LOCAL_STORAGE"}, configs, original_xml=BARE)[1] == BARE)
 expect("active: a name nowhere isn't judged", rb.active_config_source({"name": "gone"}, configs)[1] is None)
-listing = rb.parse_config_listing("total 24\n-rw-rw---- 1 root sdcard_rw 1234 2026-10-01 12:34 betta_decode.xml\n"
+listing = rb.parse_config_listing("total 24\n-rw-rw---- 1 root sdcard_rw 1234 2026-10-01 12:34 competition.xml\n"
                                   "drwxrwx--x 2 root sdcard_rw 4096 2026-10-01 12:34 bench\n"
                                   "-rw-rw---- 1 root sdcard_rw 99 2026-09-23 08:00 cuttledecode.xml\n")
 expect("listing: sizes and dates of the .xml files only",
-       listing == {"betta_decode": {"size": 1234, "modified": "2026-10-01 12:34"},
+       listing == {"competition": {"size": 1234, "modified": "2026-10-01 12:34"},
                    "cuttledecode": {"size": 99, "modified": "2026-09-23 08:00"}})
 expect("names: the runner's webcam is CellTipCamera's",
        rb.CELL_TIP_WEBCAM == java_constant(JAVA / "biobuzz/modules/CellTipCamera.java", "WEBCAM_NAME"))

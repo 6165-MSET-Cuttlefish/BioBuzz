@@ -241,7 +241,7 @@ def rules():
         expect("a default run skips a default bench whose config isn't shipped, saying so, and runs the rest",
                "b_bench" not in chosen and "hub" in chosen
                and "_Bench: Stub b_bench skipped: res/xml doesn't ship no_such_config._\n" in summary)
-    f = folder(("a_bench", stub("a_bench", configs=("bench_a_bench", "betta_decode"),
+    f = folder(("a_bench", stub("a_bench", configs=("bench_a_bench", "biobuzz"),
                                 drives="ch_motors=(0, 1, 2, 3), ch_servos=(0, 1)", powers="0.1 on motor ports 0-3")))
     expect("a bench within --ports-empty's ports, writing a bench_* config and using a shipped one, loads",
            layout_error(f) is None and rb.load_benches(f)[0].statement == "--ports-empty")
@@ -359,7 +359,7 @@ def on_the_fake_hub():
     expect("fake hub: a bench that raises fails as a bench, and its checks don't run on a half record",
            "- FAIL broken bench completed: the stub stopped" in summary and "broken: Bench: Probe ran" not in summary)
     expect("fake hub: the run exits 1 for the failed bench, with the original config back and no bench config left",
-           code == 1 and hub.active["name"] == "betta_decode"
+           code == 1 and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")])
 
 

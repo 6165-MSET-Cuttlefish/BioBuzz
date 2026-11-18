@@ -63,7 +63,7 @@ in, so a crash keeps what finished, and `report.done(summary)` at the end, which
 `BENCH DONE <result>: ...`. The runner waits for that line (`result_files=["<result>"]`), then `r.pull("<result>")`
 gives the JSON. A LinearOpMode holds with `report.holdUntilStart(this)` and `report.holdUntilStop(this)`. Fetch every
 device with `BenchIO.require(...)`, put outputs in a safe state in `stop()` or a `finally`, and catch only what the
-bench measures, recording it. Run `./gradlew :TeamCode:compileDebugJavaWithJavac :TeamCode:testDebugUnitTest`.
+bench measures, recording it. Run `./gradlew -Pbench :TeamCode:compileDebugJavaWithJavac :TeamCode:testDebugUnitTest`.
 
 ## Safety rules
 

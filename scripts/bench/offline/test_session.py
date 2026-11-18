@@ -156,7 +156,7 @@ class Stub:
         if key in self.on:
             return self.on[key](self, argv, folder)
         if key == "restore":
-            self.hub.active = {"name": "betta_decode", "location": "LOCAL_STORAGE", "resourceId": 0, "isDirty": False}
+            self.hub.active = {"name": "competition", "location": "LOCAL_STORAGE", "resourceId": 0, "isDirty": False}
             for name in [n for n in self.hub.configs if n.startswith("bench_")]:
                 del self.hub.configs[name]
         write_stage(folder, "probe" if key == "restore" else key, self.hardware)
@@ -443,15 +443,15 @@ def chain():
     s, stub, hub, code, console, stdin = run_session(["n", "empty"], BARE, on={"default": left_on_bench})
     dash = stub.argv("dashboard_off")
     expect("after a stage that couldn't restore, the next runner is told the session's original config",
-           json.loads(dash[dash.index("--original-entry") + 1])["name"] == "betta_decode"
+           json.loads(dash[dash.index("--original-entry") + 1])["name"] == "competition"
            and "--original-entry" not in stub.argv("default"))
     expect("at the end a probe-only runner puts the config back, in its own session so Ctrl-C can't cut it short",
-           "restore" in stub.keys() and hub.active["name"] == "betta_decode"
+           "restore" in stub.keys() and hub.active["name"] == "competition"
            and not [n for n in hub.configs if n.startswith("bench_")]
            and any(stage_key(a) == "restore" and kw.get("start_new_session") and callable(kw.get("sigint"))
                    for a, kw in stub.spawned)
            and stub.argv("restore")[stub.argv("restore").index("--hub-serialno") + 1] == "FAKEHUB0001"
-           and "betta_decode active again after the restore run" in index(s))
+           and "competition active again after the restore run" in index(s))
 
 
 def unsafe():
@@ -805,7 +805,7 @@ def put_back_cases():
     expect("the app down at the end (the hub right, adb up): the session still checks the config, removes forwards "
            "and puts the hub's own app back, as asked",
            "wasn't back within" in s.stopped and stub.events[-1][0] == "reinstall" and "own app put back" in text
-           and "betta_decode active" in text and "not touched" not in text and "once adb reaches" not in text)
+           and "competition active" in text and "not touched" not in text and "once adb reaches" not in text)
 
     def unreadable(st, argv, folder):
         write_stage(folder, "dashboard_off", None)
@@ -1017,7 +1017,7 @@ def runner_flags():
            code == 0 and hw.get("expansion") == 2 and hw.get("webcam") == "UC762" and hw.get("usbRevHubs") == [USB_EH]
            and not entered)
     expect("run_bench.py --probe-only puts the config back and leaves no bench config or forward",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")]
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")]
            and not hub.forwards)
     module = [c for c in rb.BENCH_CONFIGS if c not in rb.IN_PLACE_BENCH_CONFIGS]
     hub = fake_hub.Hub()
@@ -1030,7 +1030,7 @@ def runner_flags():
     signal.signal(signal.SIGHUP, handlers[1])
     expect("session.py's restore (run_bench.py --probe-only) deletes a module bench's config left on the hub, so the "
            "session's put-back check agrees with it",
-           bool(module) and code == 0 and hub.active["name"] == "betta_decode"
+           bool(module) and code == 0 and hub.active["name"] == "competition"
            and not [n for n in rb.BENCH_CONFIGS if n in hub.configs])
     for argv in (["--probe-only", "--hub"], ["--probe-only", "--all"], ["--photon-soak-hours", "2"],
                  ["--photon-soak", "--photon-soak-hours", "5"], ["--photon-soak", "--photon-soak-hours", "0"]):

@@ -36,6 +36,8 @@ import xml.etree.ElementTree as ElementTree
 import xml.sax.saxutils
 from pathlib import Path
 
+os.environ["ORG_GRADLE_PROJECT_bench"] = "true"
+
 HUB_IP = "192.168.43.1"
 ADB_PORT = 5555
 DASHBOARD_PORT = 8000
@@ -5914,8 +5916,9 @@ class Runner:
         names = {n for n, _ in self.dash.opmodes}
         missing = [n for n in BENCH_OPMODES if n not in names]
         if missing:
-            raise BenchError(f"The hub doesn't have {', '.join(missing)}. Do a full install with the IDE's Run button "
-                             "(TeamCode configuration) so the bench OpModes are on it.")
+            raise BenchError(f"The hub doesn't have {', '.join(missing)}. A normal install leaves the bench OpModes out: "
+                             "install the bench build with bare_hub.sh, or see the README's Setup for a Run button "
+                             "install that has them.")
         self.check_bench_ports(active)
         if active in BENCH_CONFIGS:
             self.log(f"WARNING: {active} is active, left by an earlier bench run; it stays active at the end")
@@ -9504,8 +9507,9 @@ class Runner:
                              "off it ignores every command but status, so its app restarts and its recovery go over "
                              "adb. Nothing was switched off.")
         if DASH_OFF_OPMODE not in {n for n, _ in self.dash.opmodes or []}:
-            raise BenchError(f"The hub doesn't have {DASH_OFF_OPMODE}. Do a full install with the IDE's Run button "
-                             "(TeamCode configuration), or bare_hub.sh, so it is on the hub. Nothing was switched off.")
+            raise BenchError(f"The hub doesn't have {DASH_OFF_OPMODE}. A normal install leaves the bench OpModes "
+                             "out: install the bench build with bare_hub.sh, or see the README's Setup. Nothing was "
+                             "switched off.")
         try:
             self._dash_off_baseline(rec)
             self._dash_off_switch(rec)

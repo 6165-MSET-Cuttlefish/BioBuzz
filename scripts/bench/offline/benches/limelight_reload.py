@@ -628,7 +628,7 @@ def on_the_fake_hub():
     expect("the answer runs run in answer mode, the hang runs in hang mode",
            [p["mode"] for p in hub.inits[29:]] == ["hang", "answer", "hang", "answer"])
     expect("the run ended on the original config with no bench config left",
-           hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")])
+           hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")])
     results = json.loads((out / "runner_results.json").read_text()).get("limelight_reload") or {}
     expect("record: 9 reload trials, 4 mid-sync cases, the stamps, 2 contention trials",
            len(results.get("reload") or []) == 9 and len(results.get("midSync") or []) == 4
@@ -650,7 +650,7 @@ def on_the_fake_hub():
     summary = (out / "summary.md").read_text()
     expect("no Limelight: the run stops after the probe, saying what to plug in, nothing INITed or built",
            code == 1 and "No Limelight answers" in summary and "or drop --limelight-reload" in summary
-           and not hub.inits and not hub.gradle_procs and hub.active["name"] == "betta_decode")
+           and not hub.inits and not hub.gradle_procs and hub.active["name"] == "competition")
 
     hub = Station()
     code, out, _ = station_run(["--ports-empty", "--limelight-reload", "--no-sloth"], hub)
@@ -670,7 +670,7 @@ def on_the_fake_hub():
     log = (out / "run.log").read_text()
     expect("Ctrl-C during the contention phase (on bench_llfault): the original config is put back, no bench config "
            "left, the summary written", interrupted and "putting the hardware config back" in log
-           and hub.active["name"] == "betta_decode" and not [n for n in hub.configs if n.startswith("bench_")]
+           and hub.active["name"] == "competition" and not [n for n in hub.configs if n.startswith("bench_")]
            and (out / "summary.md").exists())
 
 
