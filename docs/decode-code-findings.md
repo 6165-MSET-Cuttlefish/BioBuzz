@@ -242,7 +242,7 @@ Port that gate to TeleOp first, then the ideas below. No survey result reports a
 | Waits for readiness before feeding | 7: 4 also check turret or heading, 3 have a way past it, 2 rumble on a refusal. 7 of the other 16 check readiness only in Auto |
 | Slows or spaces the feed for long shots / returns to intake after a volley | 10 (our hood droop points address the same flywheel sag) / 5 |
 | Intake or transfer acts by itself when full / automatic unjam | 11 / 1 |
-| Field-centric by default / heading lock / automatic position hold / drive to a pose / slower during a volley | 8 (4 more on a toggle) / 9 / 1 / 4 (our rule keeps pathing in Autonomous) / 2 |
+| Field-centric by default / heading lock / automatic position hold / drive to a pose / slower during a volley | 8 (4 more on a toggle) / 9 / 1 / 4 (ours: BioBuzz Tele's shot waypoint, 2026-11-17) / 2 |
 | Carries the Auto pose into TeleOp | 22: 2 through a file, 4 skip a zero pose, 7 carry turret state too, 3 have OpModes that only set the TeleOp start |
 | Pose reset button at a field landmark / camera correction, automatic / on a button | 22 / 3 / 4 |
 | Shot mode that ignores the pose / trims while auto-aim runs | 9 / 15 (2 move the aim point in field coordinates, 4 step every loop while held) |

@@ -101,6 +101,7 @@ public final class RouteOptimizer {
         private Route best;
         private Route route;
         private RoutePathBuilder.Plan plan;
+        private String noRoute;
 
         private Search(Pose start, Ball[] balls, Pose returnPose, Region area, List<Obstacle> obstacles,
                        RobotShape robot, double gapIn, boolean forceSplineOnly) {
@@ -139,26 +140,32 @@ public final class RouteOptimizer {
             size = reachable.length;
         }
 
-        /** Runs this loop's slice; true once {@link #route()} and {@link #plan()} are ready. */
+        /** Runs this loop's slice; true once {@link #route()} and {@link #plan()} are ready, or {@link #noRoute()} says why none is. */
         public boolean step() {
             double sliceMs = VisibilityGraphPlanner.routeSearchSliceMs;
             if (!(sliceMs >= 0)) {
                 throw new IllegalArgumentException(String.format("routeSearchSliceMs %.1f must be >= 0", sliceMs));
             }
             long t0 = System.nanoTime();
-            while (plan == null) {
+            while (!done()) {
                 advance();
                 if (System.nanoTime() - t0 >= sliceMs * 1e6) break;
             }
-            return plan != null;
+            return done();
         }
 
         public boolean done() {
-            return plan != null;
+            return plan != null || noRoute != null;
+        }
+
+        /** Why not even the drive straight to the return pose fits, once done; null when there is a route. */
+        public String noRoute() {
+            return noRoute;
         }
 
         /** The balls in its order and dropped list are the caller's own, not the copies the search planned. */
         public Route route() {
+            if (noRoute != null) throw new IllegalStateException(noRoute);
             if (plan == null) throw new IllegalStateException("the route search hasn't finished: step() it until it returns true");
             return route;
         }
@@ -204,9 +211,10 @@ public final class RouteOptimizer {
                 return;
             }
             if (size == 0) {
-                throw new IllegalArgumentException(String.format(
+                noRoute = String.format(
                         "no drivable path for the robot from the start (%.1f, %.1f) to the return pose (%.1f, %.1f)",
-                        start.x(), start.y(), returnPose.x(), returnPose.y()));
+                        start.x(), start.y(), returnPose.x(), returnPose.y());
+                return;
             }
             // Most balls first: only when no order through all of them is drivable is one left out.
             size--;

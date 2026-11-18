@@ -74,6 +74,12 @@ in a sequence built in `initialize()` it holds the INIT pose, not where the robo
 to hold: `PathCommands.hold(f, pose)`. (Read from source: Ivy `com.pedropathing.ivy:pedro` 1.1.1
 `PedroCommands.java:32-34`, 2026-11-11.)
 
+**Ivy's hold is an instant command, so nothing stops it.** `PedroCommands.hold(f, pose)` is
+`Commands.instant(() -> follower.hold(pose))`: it ends at once and Pedro keeps holding. Interrupting whatever waits
+after it, such as `RouteRun`'s turn in place, leaves Pedro driving the motors, and `Drivetrain.write()` throws once
+its writes are re-enabled. `RouteRun` now stops the follower whenever it ends unfinished. (Read from source: Ivy
+`com.pedropathing.ivy:pedro` 1.1.1 `PedroCommands.java:43-45`, 2026-11-17.)
+
 **A Bezier whose derivative reaches zero can throw mid-drive.** `Curve.tangent(t)` normalises the derivative, and
 `Vector2D.normalized()` throws `IllegalArgumentException("Cannot normalize 0 vector")` below a length of 1e-9.
 `Foresight` and `Follower` call it while following, so the OpMode crashes partway along the path, not when the path

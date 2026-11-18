@@ -52,7 +52,8 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
   `BioBuzzRobot` in INIT. Device names are under [the map](#the-map). Left out: `Intran`'s analog inputs `sensorLeft` and `sensorRight` (no port; nothing builds `Intran`,
   and it only looks them up, so nothing says which rangefinder either would be). The follower reads the OctoQuad
   ([`odometry-tuning.md`](odometry-tuning.md)), so every OpMode built on `BioBuzzRobot` finds its odometry here; the
-  ones that let Pedro drive still stop at INIT until `BioBuzzConstants.measured` is set. BioBuzz Basic Tele
+  ones that let Pedro drive, apart from BioBuzz Tele, still stop at INIT until `BioBuzzConstants.measured` is set
+  (BioBuzz Tele's shot waypoint drive refuses instead). BioBuzz Basic Tele
   (`opmodes/tele/BioBuzzBasicTele.java`) drives, runs the intake, transfer and both flywheels from gamepad 1, with no
   odometry, cameras or turret.
 - **`biobuzz` kept its config ID through the rewrite** ([`toolchain-findings.md`](toolchain-findings.md#deploying)),

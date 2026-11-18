@@ -25,9 +25,9 @@ now: its odometry is the OctoQuad. The hub bench keeps every Pinpoint bench, in 
   counts per millimetre are the goBILDA 4-bar pod's figure, still unmeasured on this robot, `biobuzz/RobotGeometry`'s size and
   intake, `BallFieldTransform.Mount` and the Limelight's `H_ARRAY` ([`limelight-findings.md`](limelight-findings.md)),
   and the Close Flower start pose.
-- The follower reads the OctoQuad. BioBuzz Tele and the hand-driven tests INIT on `biobuzz.xml`; every OpMode that
-  lets Pedro drive stops at INIT until `BioBuzzConstants.measured` is set, after the checklist in
-  [`odometry-tuning.md`](odometry-tuning.md).
+- The follower reads the OctoQuad. BioBuzz Tele and the hand-driven tests INIT on `biobuzz.xml`; every other OpMode
+  that lets Pedro drive stops at INIT, and BioBuzz Tele's heading lock and shot waypoint drive refuse, until
+  `BioBuzzConstants.measured` is set, after the checklist in [`odometry-tuning.md`](odometry-tuning.md).
 - Measurements made on the two retired robots stay in these pages, marked "retired 2026-11-13".
 
 ## The BIOBUZZ robot, from CAD

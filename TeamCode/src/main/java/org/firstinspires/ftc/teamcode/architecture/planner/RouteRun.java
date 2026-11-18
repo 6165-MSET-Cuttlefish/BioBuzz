@@ -68,8 +68,9 @@ public final class RouteRun {
                 .setDone(route::done)
                 .setEnd(end -> {
                     running = false;
-                    // Ending the race interrupts the sequence, and an interrupted follow stops the follower.
                     route.end(end);
+                    // An interrupted follow stops the follower itself, but a turn in place is a bare hold that Pedro keeps driving.
+                    if (!finished) follower.stop();
                     if (end == EndCondition.INTERRUPTED && abortReason == null) {
                         abortReason = "interrupted by another command or a timeout";
                     }

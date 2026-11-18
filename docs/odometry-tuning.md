@@ -12,10 +12,11 @@ Java paths below are relative to `TeamCode/src/main/java/org/firstinspires/ftc/t
    measured on this robot. Every value in `pedro/BioBuzzConstants` starts as the retired Betta bot's, apart from the
    pods' channels (0 and 1, from the team's wiring chart) and their counts per millimetre (the goBILDA 4-bar pod's
    own figure): pod directions, offsets, the heading scale, drive directions and Foresight gains are placeholders. Until `BioBuzzConstants.measured`
-   is `true`, every OpMode that lets Pedro drive stops at INIT with one sentence saying what to measure, AutoTune's
-   Tests refuses every test but Pose Test, and AutoTune doesn't list its Foresight Tuner at all (step 8). BioBuzz
-   Tele and the other hand-driven OpModes run, but BioBuzz Tele's heading lock (LB) doesn't engage: a press does
-   nothing, and the Driver Station says the heading lock waits for the robot's odometry to be measured.
+   is `true`, every OpMode that lets Pedro drive, apart from BioBuzz Tele, stops at INIT with one sentence saying what
+   to measure, AutoTune's Tests refuses every test but Pose Test, and AutoTune doesn't list its Foresight Tuner at all
+   (step 8). BioBuzz Tele and the other hand-driven OpModes run, but BioBuzz Tele's heading lock (LB) doesn't engage: a press does
+   nothing, and the Driver Station says the heading lock waits for the robot's odometry to be measured. Its shot
+   waypoint drive (LT) refuses the same way, with three rumble blips and the reason on its `Waypoint Drive` line.
 2. **Keep the robot still from INIT until the Driver Station's `OctoQuad` line reads `RUNNING`** (about 2 s). Every
    INIT resets the OctoQuad and recalibrates its IMU.
 3. **Do the checklist in order**, and copy each number into `pedro/BioBuzzConstants.java` as you go: dashboard
@@ -52,10 +53,12 @@ Java paths below are relative to `TeamCode/src/main/java/org/firstinspires/ftc/t
   `Drivetrain.lockHeading` does nothing and BioBuzz Tele shows one line saying so instead of the Heading Lock line.
   Field-centric drive only rotates the left stick by the heading, so it stays allowed, but it will feel wrong (the
   robot drifting off the stick's direction as it turns) until steps 2 and 5 are done; no OpMode turns it on yet.
-  Nothing else in the hand-driven OpModes turns the pose or heading into wheel power: the turrets aim from the pose,
-  the chassis doesn't. Anything new that would (an auto-aim that turns the chassis, a hold, a brake to a pose)
-  waits for `measured` the same way.
-  `biobuzz/modules/HeadingLockGateTest` checks that a press leaves the wheels still until then.
+  BioBuzz Tele's shot waypoint drive (`biobuzz/WaypointDrive.java`) lets Pedro drive a planned path, so until
+  `measured` is set it refuses before it builds anything. Nothing else in the hand-driven OpModes turns the pose or
+  heading into wheel power: the turrets aim from the pose, the chassis doesn't. Anything new that would (an auto-aim
+  that turns the chassis, a hold, a brake to a pose) waits for `measured` the same way.
+  `biobuzz/modules/HeadingLockGateTest` checks that a heading lock press leaves the wheels still until then; no test
+  covers the waypoint drive's refusal.
 - **If the OctoQuad stops answering once running**, more than 250 ms without a valid read stops the OpMode with an
   error naming it.
 - **The gate.** `BioBuzzConstants.create` refuses at INIT, before it touches any hardware, unless `measured` is set
@@ -196,7 +199,7 @@ turrets still throughout: the nectar turret's encoder is on the same OctoQuad.
   hand on STOP.
 - **Correct:** at each stop the robot is within about 1 in and 2° of where it started.
 - **Never** set `measured` to get past the INIT message without doing steps 1 to 8: it is the only thing between a
-  path, or BioBuzz Tele's heading lock, and the Betta bot's numbers.
+  path, BioBuzz Tele's heading lock or its shot waypoint drive, and the Betta bot's numbers.
 
 ## Still unknown
 
