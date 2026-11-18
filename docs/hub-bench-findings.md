@@ -280,6 +280,98 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
     - Neither device has been read on an RS485 Expansion Hub.
     - Reads only, with no pods on either device, and no Photon, webcam or Limelight. The bus and hub each device
       reported (its `connectionInfo`) match the cabling.
+- **Keep the Expansion Hub on RS485 until Photon passes. Behind the powered camera hub it has been tried once
+  (2026-11-17), and it left the USB bus for about 0.5 s, after the OpMode had ended.** That run says nothing against
+  the placement, but it doesn't show it safe either: nothing shows the power bank pull took power off the camera hub,
+  and both of its FAILs came from how the bench judges: its USB check ran past STOP and caught a real drop after the
+  app died (the cause inferred, below), and its stall check counted the bench's own saves. Without Photon, USB gains
+  little: a single ADC read to the Expansion Hub costs 1.1 to 1.3 ms more than on the Control Hub over USB, against
+  about 0.9 ms over RS485, and a changed write about 2.6 ms on USB against an estimated 2.5 ms over RS485
+  ([`loop-time-findings.md`](loop-time-findings.md#per-command-costs)); only the bulk read is cheaper on USB, +0.74
+  against +1.5 ms, about 0.7 ms a loop (above). Photon is not yet safe ([`photon-bench.md`](photon-bench.md)). Before
+  the robot moves to USB, fix the bench ([Known problems in the bench code](#known-problems-in-the-bench-code)) and
+  run it again ([Still unknown](#still-unknown)).
+  - The run: Bench: Camera Hub Expansion Hub, a bench on the bench branches, not on main, from 23:56 on 2026-11-17 to
+    00:10 on 2026-11-18. Wiring under [Setup](#setup). Bench: Full Load Soak, in its `ehBehindHub` mode, wrote 0.2 and
+    0.25 in turn to Expansion Hub motor ports 0-3 every loop, read one of them back, read the Control Hub's input
+    voltage and both hubs' not-responding flags, and ran the webcam (`CellTipCamera`) and the Limelight (`Camera`,
+    polled at 100 Hz). At the runner's prompts a person pulled and replugged the power bank's cable, then the
+    webcam's, then the Limelight's. A thread on the Mac checked about every 0.65 s whether the Expansion Hub's USB
+    chip (an FTDI FT230X) was on the Control Hub's USB bus, with one `adb shell` over Wi-Fi per check.
+  - What it reported (measured):
+
+    | check | result |
+    |---|---|
+    | each of the three pulled and replugged, with the Expansion Hub behind the camera hub | PASS: its USB path 1-1.1 and the webcam's 1-1.4 are on the same hub |
+    | the Expansion Hub never left the USB bus | FAIL: absent at one check, 792.72 s after the checks began, present at the next, 0.66 s later, on the same port |
+    | every read-back exact, no failed read, neither hub ever not responding | PASS: 0 wrong of 31086 read-backs, 0 failed reads |
+    | no loop over 300 ms from each unplug prompt to 10 s after its replug | FAIL: 231 ms (bank), 639 ms (webcam), 1136 ms (Limelight) |
+    | no crash | PASS |
+
+    The loop ran 18.2 / 32.1 / 639 ms before the Limelight pull (n=25742) and 22.3 / 44.1 / 1136 after (n=5343). The
+    app restarted at STOP (below).
+  - The pulls, on the Mac's clock: Enter was pressed for the bank's unplug at 23:59:13 and its replug at 23:59:29;
+    when the cable really came out isn't logged, since the bank pull left no trace in logcat or the power log. The
+    webcam detached at 00:00:01 and was re-added at 00:06:21 (6 min 20 s out, not the 5 s the prompts ask for), though
+    Enter for its unplug came only at 00:06:07, so Enter can lag a pull by minutes. The Limelight detached at 00:06:40
+    and was re-added at 00:07:27, with its address at 00:07:32.
+  - The Limelight never came back into use (measured). Its no-data fault came at 00:06:41, about 0.7 s after the
+    detach, and cleared at 00:07:32 without a re-INIT; 1 s later `on pipeline 0, want 4` was raised and held until
+    STOP, so the runner's 90 s wait for the fault to clear ran out. From the code, nothing selects the ball pipeline
+    again after the Limelight restarts mid-run: the sync runs once per requested pipeline and is never retried
+    (`LimelightBallSource.java:199-210`), so one cable blip loses the Limelight until the next INIT or a change of
+    the pipeline setting.
+  - When the Expansion Hub left (measured: the Mac's clock, with the hub's logcat lined up by the bench's own log
+    lines to ±0.15 s): STOP at 00:10:00.7, 0.4 s after the last judged window ended. The SDK restarted the app at
+    00:10:01.7 and the app process died at 00:10:02.9. A USB device was removed at 00:10:04.4, the poll read absent at
+    00:10:04.8, and the FTDI was added again at 00:10:04.9. Its attach broadcast started the new app process. The
+    poll read present again at 00:10:05.5.
+  - So no pull took it off the bus (measured). It left 3.7 s after STOP and 1.5 s after the app died. The bank had been
+    in since 23:59:29, the Limelight answering since 00:07:32, and the webcam attached since 00:06:21. In that window
+    logcat has one USB add, the FTDI's, and no webcam, Limelight or Ethernet event, so the camera hub as a whole did
+    not reset.
+  - The same drop followed other app deaths (measured): in this run, the force-stop at the runner's next config switch
+    (removed 2.4 s later, the FTDI back 3.2 s after the force-stop; this time the new app process had already started
+    1.4 s before the drop). In the two runs earlier that day with a USB Expansion Hub (16:58 and 19:44, below), an FTDI
+    re-add followed 8 of 14 and 2 of 7 app kills: the kills whose outgoing config used the USB Expansion Hub, and none
+    of the others. In the 19:44 run the Expansion Hub was straight in the Control Hub's USB 3.0 port, with no camera
+    hub, by the account of the person who wired it; the runner doesn't record ports. Inferred: the FTDI drops off and
+    comes back when an app that had it open dies, with or without the camera hub in between. Why (the FTDI chip, the
+    hub's firmware or Android) isn't in these logs.
+  - The link held through all three pulls, as far as the SDK saw (measured). While the Expansion Hub was off the bus no
+    app was running, so nothing was sent. Logcat has the removal at 00:10:04.4 and the FTDI back at 00:10:04.9, about
+    0.5 s; the 0.66 s in the table is the gap between two checks. During the OpMode, its app process logged no USB error
+    and no abandoned, retransmitted or refused command, and the read-backs were exact. The whole run's logcat has three
+    USB `Added device` lines: the webcam's re-add, the Limelight's re-add and the FTDI's after STOP. So the Expansion
+    Hub didn't re-enumerate during any pull, even one shorter than a check.
+  - The long loops were the bench saving its report on the OpMode thread (from the code and measured). Bench: Full Load
+    Soak saves its whole JSON report every 2 s and on each fault raised or cleared, and once more when the Limelight
+    fault is raised (bench branches, `FullLoadSoakBench`: `observe()`, `event()`, `raised()`). The bench keeps the
+    longest loop of every 100 ms. Every one over 89 ms in the run lands on that 2.01 s beat (median spacing) or on a
+    fault event; the longest away from them was 88.5 ms. The save grew with the report (844 KB at the end): about 110 ms
+    at 32 s, 231 ms at 161 s, over 300 ms from 302 s on, about 450 ms at 500 s, about 800 ms at 788 s. The 639 ms was an
+    ordinary save. The 1136 ms was the loop that raised the Limelight fault, with two saves in it. So this stall check
+    can't pass after about 5 minutes, on any wiring.
+  - The restart was STOP running over the stop window, not a crash (measured). `stuck in stop()` came 1.009 s after
+    STOP, the 900 + 100 ms window above, and the SDK sent the fail-safe. The window held two saves: one already running
+    when STOP came (inferred: the first `stop()`-time line is 0.76 s after STOP), and the final save in `finish()`,
+    where the SDK's thread dump caught the OpMode thread. The webcam close took 46 ms.
+  - What it can't show:
+    - It is one run, unplugged by hand: Enter for the bank's unplug came 2 min 12 s after its prompt, and the webcam
+      stayed out 6 min.
+    - Whether the bank pull took power off the camera hub. Nothing logged it (inferred: the hub ran on the Control
+      Hub's USB power).
+    - A drop shorter than a check, other than through logcat's `Added device` lines. There is no kernel log, so a
+      sag in USB power that doesn't disconnect the device would show only as SDK errors (there were none).
+    - One power bank, one powered hub (GenesysLogic chipset), and the Expansion Hub powered from the Control Hub's
+      second XT30 port, not the robot's harness. No motors, current, brownout, static discharge, vibration or flat
+      bank. No Photon.
+    - Why USB device numbers 016 and 017 were used around the Limelight's replug with no `Added device` line. They
+      weren't the FTDI: no FTDI add, and the read-backs were exact.
+    - Why the Limelight booted on pipeline 0 instead of 4.
+  - Running over Wi-Fi, not the USB cable, didn't change what the Expansion Hub's link carried, but it made the
+    presence check slow (about 0.65 s apart, one `adb shell` each). The check's absent sample matched logcat, and it
+    logged no errors, so the drop is not a Wi-Fi or polling artifact.
 - **Odometry, measured on the Control Hub:**
 
   | | Pinpoint | OctoQuad MK2 |
@@ -489,11 +581,28 @@ noted. Numbers without a date are from 2026-10-09; the hardware for each run is 
   most 300 ms for it and report it as pending at STOP otherwise; dropping the restore isn't a fix, since the next
   synced INIT selects the ball pipeline, not the one the runner saved.
 
+- **Bench: Camera Hub Expansion Hub (bench branches) can't pass its stall check after about 5 minutes, and its USB
+  check counts what happens after STOP.** Both FAILs of its 2026-11-17 run came from this
+  ([Design around these](#design-around-these)). From the code:
+  - Bench: Full Load Soak saves its whole report on the OpMode thread every 2 s and at each fault event, and the
+    stall check counts those loops. The saves passed 300 ms at 302 s in that run.
+  - The USB check runs from when the cameras are healthy until after STOP and the app-restart wait, and it judges the
+    whole timeline, with no window around the pulls.
+  - It checks the bus with one `adb shell` per sample, about every 0.65 s over Wi-Fi.
+  - The webcam is closed inside the stop window.
+
+  Proposed fix (not written yet): save off the OpMode thread in `ehBehindHub` mode, or leave save loops out of the
+  stall check; stop the USB check, or window it, before STOP; watch the bus on the hub, or logcat's `UsbHostManager`
+  and `UsbAlsaManager` lines, instead of one `adb shell` per sample; close the webcam after `stop()`; and treat any
+  FTDI `Added device` line between an unplug prompt and the end of its window as a FAIL. Delete this entry when it
+  lands.
+
 ## Setup
 
 Runs of `scripts/bench/run_bench.py --ports-empty`, the 2026-10-24 one through `scripts/bench/bare_hub.sh`, the
 2026-11-14 one through `scripts/bench/session.py --usb --install`, then `run_bench.py --usb` by itself for the benches
-that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
+that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself, then `run_bench.py` over Wi-Fi late
+that night:
 
 - **2026-10-09:**
   - REV Control Hub, firmware 1.8.2, Android 7.1.2, FTC SDK 12.0.0, BNO055 IMU.
@@ -540,10 +649,11 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
     for the runner's 600 s timeout, so its three reinstall checks read FAIL as not run
     ([`toolchain-findings.md`](toolchain-findings.md#laptop-and-adb)). It left `bench_octoquad_absent` active too. None
     of these runs did the session's put-back.
-- **2026-11-17:** the 2026-11-14 hub (same firmware, 1.8.2), over a USB cable from a Mac. The first three runs were
-  on one 12 V battery that read 13.11 V at the first run's start and 12.79 V when the second run's benches ended
-  (12.74 V at 18:11, its put-back; the runner logs voltage only, no current); the fourth on a second battery. No new
-  install: the bench build of 2026-11-14 was still on the hub. Its robot code is older than main's; its planner code
+- **2026-11-17:** the 2026-11-14 hub (same firmware, 1.8.2), over a USB cable from a Mac, apart from the late-night
+  camera-hub run over the hub's Wi-Fi. The first three runs were on one 12 V battery that read 13.11 V at the first
+  run's start and 12.79 V when the second run's benches ended (12.74 V at 18:11, its put-back; the runner logs voltage
+  only, no current); the fourth on a second battery; the camera-hub run on a 12 V battery the runner doesn't name. No
+  new install: the bench build of 2026-11-14 was still on the hub. Its robot code is older than main's; its planner code
   matches main's apart from comments, and its Photon sources are main's. The runs:
   - `run_bench.py --usb --planner-stop --ports-empty`, 16:23 to 16:34: an Arducam OV9782 plugged straight into the
     Control Hub's USB 3.0 port, no USB hub and no power bank, nothing else plugged in. Results under Route planner
@@ -570,13 +680,29 @@ that session didn't reach, and on 2026-11-17 `run_bench.py --usb` by itself:
     14.04 V at the first measurement (19:46), 13.27 to 13.24 V at the second (20:25 to 20:26), and 12.70 to 12.69 V
     at the end, after the run had waited at its prompts for over two hours in all. Results under Expansion Hub in
     [Design around these](#design-around-these).
-  - The hub's logcat clock ran about 10 minutes ahead of the Mac's (the runner's log at 17:33 quotes hub lines from
-    17:43): line up the two by events, not by time.
+  - Late that night, `run_bench.py --camera-hub-eh --interactive --s3-ports`, 23:54 on 2026-11-17 to 00:13 on
+    2026-11-18: Bench: Camera Hub Expansion Hub, a bench on the bench branches, not on main. Over the hub's Wi-Fi, not
+    a cable: only one data cable was on hand, and the Limelight needed it. The same hub and the same bench build. A
+    powered USB hub (GenesysLogic chipset) in the Control Hub's USB 3.0 port, fed by a 10,000 mAh 30 W power bank,
+    carrying the Expansion Hub's Mini-B USB cable, the Arducam OV9782 and the Limelight 3A. The Expansion Hub powered
+    from the Control Hub's second XT30 port; no RS485 cable; nothing on any motor or servo port. A 12 V battery at
+    12.49 V at the start, 12.30 V at its lowest (00:08) and 12.40 V at the end. The USB paths confirm the Expansion
+    Hub and the webcam were behind one hub; the rest of the wiring is the account of the person who wired it.
+    Results under Keep the Expansion Hub on RS485 in [Design around these](#design-around-these). The hub's clock
+    wasn't set (logcat dates read 31 December), so line logcat up with the runner's log by events.
+  - Three tries before it, at 22:51, 23:02 and 23:18, stopped at the start with `No Limelight answered`: the
+    Limelight's first cable carried power but no data, so it lit up but never reached the Control Hub. A cable like
+    that stops the camera-hub bench this way. Check that the Control Hub lists the Limelight on USB: Bench: Probe's
+    `Interfaces` line in `summary.md` shows `eth0 172.29.0.22` when it does, and showed only `lo` and `wlan0` in those
+    three tries.
+  - In the 16:58 run the hub's logcat clock ran about 10 minutes ahead of the Mac's (the runner's log at 17:33 quotes
+    hub lines from 17:43): line up the two by events, not by time.
   - Expected noise (inferred): with `laser_rangefinder_i2c` active and no laser on I2C bus 1, the SDK logs I2C errors
     for `Laser` at each app start; and one ANR per app start, as under [Design around these](#design-around-these).
 
 Not run on any of these dates (they need `--interactive`):
-- Pinpoint, OctoQuad and Limelight unplug/replug;
+- Pinpoint and OctoQuad unplug/replug, and Bench: Limelight's unplug/replug (the Limelight's cable was pulled once,
+  in the camera-hub run above, not under that bench);
 - odometry moved to an RS485 Expansion Hub (the OctoQuad moved to a USB one on 2026-11-17, above);
 - driving the Gamepad view by hand.
 
@@ -637,3 +763,33 @@ Not run on any of these dates (they need `--interactive`):
   OpMode:** from the code it can hang the event loop with no watchdog (above). Test: pull the webcam's cable right
   at STOP in Bench: Webcam Stop, then INIT. Also untried: Restart Robot or a config switch while a slow close runs
   (the SDK's `stopEventLoop` waits up to 10 s, [`dashboard-findings.md`](dashboard-findings.md)).
+- **Whether the Expansion Hub stays on USB behind the camera hub when the camera hub really loses its bank power, and
+  when a camera drops:** tried once on 2026-11-17 ([Design around these](#design-around-these)), with no sign that the
+  bank pull took power off the hub, a stall check that counted the bench's own saves and a USB check that ran past
+  STOP. Test: first fix the bench ([Known problems in the bench code](#known-problems-in-the-bench-code)), then on
+  the bench branches rerun `python3 scripts/bench/run_bench.py --camera-hub-eh --interactive --s3-ports`, with
+  `--usb` once a second data cable is on hand, and check that the bank pull really cuts the powered hub's power (its
+  light off, or its current measured). Any FTDI `Added device` line between an unplug prompt and the end of its
+  window is the failure.
+- **How the SDK handles a short USB loss of the Expansion Hub behind the camera hub:** nothing in the 2026-11-17 run
+  took it off the bus while an OpMode ran. Tests on the bench branches, with the Expansion Hub in the powered hub:
+  Bench: USB Unbind, `python3 scripts/bench/run_bench.py --usb --usb-unbind --usb-unbind-eh-cycles 100
+  --usb-unbind-camera-cycles 30 --ports-empty` (takes each device off USB from software and back), and Bench: Silent
+  Expansion Hub, `python3 scripts/bench/run_bench.py --usb --silent-eh --silent-eh-repeat 10 --s3-ports` (silences
+  of 0.25 to 5 s).
+- **Photon with the Expansion Hub behind the camera hub and both cameras streaming:** the step
+  [`wiring-findings.md`](wiring-findings.md#where-the-hubs-sit-and-the-usb-cable-between-them) asks for before the
+  move. Test: the Photon block, `python3 scripts/bench/run_bench.py --usb --photon --usb-expansion --photon-i2c
+  --ports-empty`, with the Expansion Hub's cable in the powered hub and both cameras streaming. Photon is still not
+  safe ([`photon-bench.md`](photon-bench.md)).
+- **A long run with the Expansion Hub behind the camera hub:** Bench: Combined Soak (bench branches), `python3
+  scripts/bench/run_bench.py --usb --combined-soak --s3-ports`, with its cable moved into the powered hub. It already
+  flags any USB device joining or leaving; `--combined-soak-sysfs-s` sets how often it looks.
+- **Why the Expansion Hub's FTDI chip drops off USB and comes back when the app dies:** seen after STOP's app restart
+  and after config-switch force-stops on 2026-11-17, behind the camera hub and, by the wirer's account, straight in
+  the Control Hub's USB 3.0 port. Test: force-stop the app a few times with the Expansion Hub straight in each Control
+  Hub USB port and behind the powered hub, and read logcat's `UsbHostManager` lines after each.
+- **Not built yet:** rebooting the Limelight without touching its cable; wiggling a camera cable; running the bank
+  flat with the Expansion Hub behind the powered hub (Bench: Camera Power Loss, `--camera-power`, only pulls the
+  bank's cable); any of these with motors loaded. Also why the Limelight booted on pipeline 0, not 4, after its
+  cable was pulled and replugged on 2026-11-17.

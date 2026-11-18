@@ -23,14 +23,22 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
   2. Outputs that change every loop go on the Control Hub: both flywheels, the three turret servos, both hoods, and
      the two drive motors that still fit.
   3. Each flywheel's Through Bore goes on Control Hub encoder port 0 or 3, the same number as its motor.
-- **Link the hubs by USB, for Photon.** The team is using Photon (decided 2026-11-11), and Photon speeds up
-  Expansion Hub writes only when that hub has its own USB link: a mini-USB to USB-A cable in place of RS485
-  ([the cable and its route](#where-the-hubs-sit-and-the-usb-cable-between-them)). Photon has not passed its bench's
-  go run on this wiring ([`photon-bench.md`](photon-bench.md)), so route one RS485 cable as well and leave it
-  unplugged at the Expansion Hub: it is the way back. Never connect both: only USB alone has been benched.
+- **Keep the Expansion Hub on RS485 until Photon has passed its runs.** Without Photon, USB gains little: a single
+  ADC read to the Expansion Hub costs 1.1 to 1.3 ms more than on the Control Hub over USB, against about 0.9 ms over
+  RS485, and only the bulk read is cheaper on USB, about 0.7 ms a loop (measured,
+  [`hub-bench-findings.md`](hub-bench-findings.md#design-around-these)); a changed write cost about 2.6 ms on USB,
+  against an estimated 2.5 ms over RS485 ([`loop-time-findings.md`](loop-time-findings.md#per-command-costs)).
+  Photon is not yet safe ([`photon-bench.md`](photon-bench.md)).
+- **Then link the hubs by USB, for Photon, but only after a clean rerun of the camera-hub test.** The team is using
+  Photon (decided 2026-11-11), and Photon speeds up Expansion Hub writes only when that hub has its own USB link: a
+  mini-USB to USB-A cable in place of RS485, through the powered camera hub
+  ([the cable, its route and the port](#where-the-hubs-sit-and-the-usb-cable-between-them)). That placement has been
+  tried once, on 2026-11-17, and the Expansion Hub left the USB bus for about 0.5 s, after the OpMode had ended; the run
+  neither rules the placement out nor shows it safe. Keep the RS485 cable routed and unplugged at the Expansion Hub
+  after the move: it is the way back. Never connect both: only USB alone has been benched.
 - **Expect about 16 ms parked and 22 to 24 ms while driving and aiming** with Photon on both hubs, about 2 ms less
   with the dashboard off (estimated from the Photon bench of 2026-10-29; its writes were faster on 2026-11-17, so
-  these are on the safe side, inferred from the write term only). On the fallback, RS485 without Photon:
+  these are on the safe side, inferred from the write term only). On RS485 without Photon, as the robot runs now:
   19 ms and 28 to 37 ms ([Estimated loop period](#estimated-loop-period)). The wiring cannot fix the rest: 11
   outputs change every loop and each costs a hub command.
 - **Run the bench tests in [Open choices](#open-choices) before the wiring is final.** Two placements rest on an
@@ -87,12 +95,12 @@ Turret Zero has run on a hub ([Zeroing the nectar turret](#zeroing-the-nectar-tu
 | I2C bus 1 | spare | |
 | I2C bus 2 | OctoQuad: odometry pods on channels 0 and 1; channel 4 takes the nectar turret encoder's absolute wire | channel 4 is read once at INIT, to zero the turret's count: [Zeroing the nectar turret](#zeroing-the-nectar-turret) |
 | I2C bus 3 | Prism | written only when the pattern changes; powered from its own XT30 |
-| USB 3.0 | the powered USB hub carrying the Limelight 3A, the Arducam and the Expansion Hub's USB cable | the Expansion Hub behind this hub is untested: [the test](#where-the-hubs-sit-and-the-usb-cable-between-them) |
+| USB 3.0 | the powered USB hub carrying the Limelight 3A and the Arducam; the Expansion Hub's USB cable joins them once Photon passes | the Expansion Hub behind this hub was tried once (2026-11-17) and left the USB bus for about 0.5 s after the OpMode ended; rerun the test before the move: [the test](#where-the-hubs-sit-and-the-usb-cable-between-them) |
 | USB 2.0 | empty | shares a USB bus with the hub's Wi-Fi radio; the second choice for the Expansion Hub's cable |
 | USB-C | laptop only | keeps deploying over a cable possible at events |
-| RS485 | one cable routed to the Expansion Hub, unplugged at that end | the fallback if Photon fails its bench run |
+| RS485 | the link to the Expansion Hub for now | until Photon has passed its runs and the camera-hub test has been rerun clean; then unplugged at the Expansion Hub and kept as the way back |
 
-**Expansion Hub** (on USB, mini-USB to USB-A, with Photon; address 2 on the RS485 fallback)
+**Expansion Hub** (address 2 on RS485 for now; on USB, mini-USB to USB-A, with Photon, once Photon passes)
 
 | port | device | note |
 |---|---|---|
@@ -125,7 +133,7 @@ to injector inputs with the leads the injector ships with, which have the red wi
 
 ## Why each placement
 
-Loop period in ms for the map and for the same map with one thing moved, on the RS485 fallback without Photon
+Loop period in ms for the map and for the same map with one thing moved, on RS485 without Photon, as the robot runs now
 (estimated, p50 costs, every drive motor writing every loop). The same comparison under Photon is under
 [Estimated loop period](#estimated-loop-period): the map stays the shortest or ties. For every device
 swapped between the hubs, see [If the two hubs swapped devices](#if-the-two-hubs-swapped-devices).
@@ -234,9 +242,10 @@ period = (hub commands + CPU) / (1 − share of time spent on the SDK's 500 ms r
   into a few loops. Spreading the re-sends out is a code change nobody has designed.
 - **With Photon, which the team is using** ([`photon-bench.md`](photon-bench.md)): 16.0 / 24.2 ms with the
   Expansion Hub on USB, and 22.2 ms driving with drive writes in half the loops; 16.4 / 28.1 ms if it stayed on
-  RS485 (estimated from the fork's bench on 2026-10-29). The table above is the fallback without Photon. No device
-  moves between the two: only the Expansion Hub's cable changes. Without Photon a USB Expansion Hub write is no
-  faster than RS485, so the fallback is RS485.
+  RS485 (estimated from the fork's bench on 2026-10-29). The table above is RS485 without Photon, the robot today.
+  No device moves between the two: only the Expansion Hub's cable changes. Without Photon a USB Expansion Hub write
+  (about 2.6 ms, measured) is no faster than the RS485 estimate (about 2.5 ms; writes over RS485 are unmeasured), and
+  USB saves only about 0.7 ms a loop on the bulk read, so without Photon the link is RS485.
   The map stays the shortest of the layouts modelled under Photon: with all four drive motors on the Control Hub
   the same two figures are 20.4 / 28.1 on RS485 and 16.5 / 24.2 on USB, and with the turret servos on the
   Expansion Hub 16.5 / 33.7 and 16.0 / 25.1. With Photon on both hubs every layout is within 1 ms of the map.
@@ -592,7 +601,7 @@ Worth doing with it:
   drive motors are gone, so feeding stops with the transfer and the blocker stays where it was last commanded or
   goes limp (unverified which). The first write to the lost hub blocks the loop for about 250 ms
   and later ones fail at once without an error (read from SDK source, without Photon). On USB the one mini-USB plug
-  is the weak point: tie the cable to the frame beside it. On the RS485 fallback, two cables are the main
+  is the weak point: tie the cable to the frame beside it. On RS485, as now, two cables are the main
   protection. How long the lost hub's motors keep their last power is unverified.
 - **Control Hub reset or brownout:** the turret's count is lost until the next INIT reads the absolute output again
   (inferred, not tested), and nothing reports it; hence the cross-check above. The OctoQuad is powered from the hub's
@@ -660,9 +669,23 @@ What follows:
   fetched 2026-11-10), which stops the whole robot; no bench test covers static discharge. Behind the camera hub a
   fault costs two drive motors, the intake, the transfer and the cameras, but not the radio, and that can be tested.
   R707 allows a USB hub and an Expansion Hub on USB, and nothing we found forbids one behind the other.
-- **Before trusting the Expansion Hub behind the camera hub** (untested on our hubs): with an OpMode running, unplug
-  the hub's power bank and then each camera, and check the Expansion Hub stays connected; then run the Photon USB
-  bench on that wiring with both cameras streaming.
+- **Before trusting the Expansion Hub behind the camera hub, rerun the test with the bench fixed.** It was tried
+  once, on 2026-11-17 (Bench: Camera Hub Expansion Hub, on the bench branches;
+  [`hub-bench-findings.md`](hub-bench-findings.md#design-around-these)). With an OpMode writing the Expansion Hub's
+  motor ports every loop, the power bank's cable, the webcam's and the Limelight's were each pulled and replugged:
+  - Every read-back was exact (31086), no hub read failed and neither hub ever went not responding (measured).
+  - The Expansion Hub left the USB bus for about 0.5 s, 3.7 s after STOP and 1.5 s after the app died; nothing was being
+    pulled then (measured). The same drop followed other app kills, including in a run with the Expansion Hub
+    straight in the Control Hub, so it looks like the app dying, not the camera hub (inferred).
+  - Loops of up to 1136 ms around the pulls were the bench saving its own report, not USB (from the code and
+    measured).
+  - Not shown: whether the bank pull took power off the hub (nothing logged it), a flat bank, a loose cable, static
+    discharge, or motors under load.
+
+  So the placement is neither ruled out nor shown safe. Before the move: fix the bench and rerun it, checking that
+  the bank pull really cuts the powered hub's power, then run the Photon USB bench on that wiring with both cameras
+  streaming ([`hub-bench-findings.md`](hub-bench-findings.md#still-unknown) has the commands). Until then the
+  Expansion Hub stays on RS485.
 - **Mini-USB pulls out easily.** REV's USB Retention Mount (REV-41-1214, $13.50 and in stock on 2026-11-11,
   <https://revrobotics.com/rev-41-1214>) is a base that sticks to the Expansion Hub and a cap that screws onto it
   over the plug; the mount is 27.6 x 23.7 mm and 14.1 mm tall
@@ -722,7 +745,16 @@ fetched 2026-11-10:
   `WebcamSession.update()` throws when the bank fails mid-run, how soon the Limelight fault comes, and whether either
   camera comes back without a re-INIT; [What fails](#what-fails-and-how-this-wiring-behaves) has it from source only.
   Test: Bench: Camera Power Loss, `python3 scripts/bench/run_bench.py --camera-power --interactive --s3-ports`
-  ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-camera-power-loss)).
+  ([`scripts/bench/README.md`](../scripts/bench/README.md#bench-camera-power-loss)). A pull of each camera's own
+  cable was tried on 2026-11-17 ([`hub-bench-findings.md`](hub-bench-findings.md#design-around-these)): the
+  Limelight's no-data fault came about 0.7 s after its USB detach and cleared once its data was back, but it booted
+  on pipeline 0, not 4, and stayed faulted (`on pipeline 0, want 4`) until STOP. From the code nothing selects the
+  ball pipeline again after the Limelight restarts mid-run (`LimelightBallSource.java:199-210`), so one cable blip
+  loses the Limelight until the next INIT. Why it booted on 0 the run doesn't show.
+- **Whether the Expansion Hub stays on USB behind the camera hub** when the bank really loses power or a camera drops:
+  one run, 2026-11-17, neither ruled it out nor showed it safe
+  ([Where the hubs sit](#where-the-hubs-sit-and-the-usb-cable-between-them)). Test: the fixed bench's rerun, then the
+  Photon block on that wiring, both under [`hub-bench-findings.md`](hub-bench-findings.md#still-unknown).
 - **The highest count rate hub encoder ports keep up with**, hardware-counted or software-counted. No REV or FIRST
   figure exists. The two encoder tests above settle it for our speeds.
 - **How often a hub samples its digital inputs, the value of their pull-ups, and whether encoder inputs have
