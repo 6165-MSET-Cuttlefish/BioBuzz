@@ -124,9 +124,7 @@ public final class WaypointDrive extends CommandBuilder {
         used = settings.copy();
         used.validate();
         status = Status.PLANNING;
-        // Drivetrain.write() throws while Pedro drives the same motors.
-        restoreWrites = drivetrain.isWriteEnabled();
-        drivetrain.setWriteEnabled(false);
+        restoreWrites = drivetrain.handToFollower();
         Layout layout = new Layout(used);
         Pose start = follower.pose();
         String problem = layout.problem(start);
@@ -192,12 +190,7 @@ public final class WaypointDrive extends CommandBuilder {
             status = Status.ABORTED;
             detail = cancelReason != null ? cancelReason : "interrupted while planning";
         }
-        if (restoreWrites) {
-            // Pedro drove these motors through its own objects, so resync Drivetrain's write cache at zero.
-            drivetrain.setTargets(0, 0, 0, 0);
-            drivetrain.stop();
-            drivetrain.setWriteEnabled(true);
-        }
+        drivetrain.takeBackFromFollower(restoreWrites);
     }
 
     /** Ends the drive at once from OpMode code, with {@code reason} as its detail; nothing if it isn't scheduled. */

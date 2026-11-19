@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.opmodes.tele;
 import com.acmerobotics.dashboard.config.Config;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
+import com.pedropathing.utils.Angle;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
@@ -10,6 +11,7 @@ import org.firstinspires.ftc.teamcode.architecture.auto.FieldPose;
 import org.firstinspires.ftc.teamcode.architecture.input.EdgeBooleanSupplier;
 import org.firstinspires.ftc.teamcode.architecture.input.GamepadPresses;
 import org.firstinspires.ftc.teamcode.biobuzz.BioBuzzOpMode;
+import org.firstinspires.ftc.teamcode.biobuzz.PositionLock;
 import org.firstinspires.ftc.teamcode.biobuzz.ShotTuning;
 import org.firstinspires.ftc.teamcode.biobuzz.WaypointDrive;
 import org.firstinspires.ftc.teamcode.biobuzz.modules.CellTipCamera;
@@ -45,6 +47,9 @@ public class BioBuzzTele extends BioBuzzOpMode {
     private WaypointDrive waypointDrive;
     private boolean driverCancelled;
     private String waypointNote = "A saves one";
+
+    private PositionLock positionLock;
+    private String lockNote = "RB locks";
 
     private EdgeBooleanSupplier d2RsUp, d2RsDown, d2RsRight, d2RsLeft;
     private EdgeBooleanSupplier d2LsUp, d2LsDown, d2LsRight, d2LsLeft;
@@ -113,6 +118,9 @@ public class BioBuzzTele extends BioBuzzOpMode {
             case WAYPOINT_DRIVE:
                 d1WaypointDriveControls();
                 break;
+            case POSITION_LOCK:
+                d1PositionLockControls();
+                break;
             default:
                 throw new IllegalStateException("D1 has no controls for layer " + d1Layer);
         }
@@ -137,8 +145,9 @@ public class BioBuzzTele extends BioBuzzOpMode {
             else robot.drivetrain.lockHeading();
         }
         if (gamepad1.aWasPressed()) saveShotWaypoint();
-        // Last: starting a drive switches layers, which clears the presses still unread.
-        if (gamepad1.leftTriggerWasPressed()) startWaypointDrive();
+        // Last: starting a lock or a drive switches layers, which clears the presses still unread.
+        if (gamepad1.rightBumperWasPressed()) startPositionLock();
+        else if (gamepad1.leftTriggerWasPressed()) startWaypointDrive();
     }
 
     private void d1WaypointDriveControls() {
@@ -147,6 +156,38 @@ public class BioBuzzTele extends BioBuzzOpMode {
             else if (sticksMoved()) cancelWaypointDrive("a stick moved");
         }
         if (!Scheduler.isScheduled(waypointDrive)) endWaypointDrive();
+    }
+
+    private void d1PositionLockControls() {
+        if (Scheduler.isScheduled(positionLock)) {
+            if (gamepad1.rightBumperWasPressed()) releasePositionLock("released with RB");
+            else if (sticksMoved()) releasePositionLock("released: a stick moved");
+        }
+        if (!Scheduler.isScheduled(positionLock)) endPositionLock();
+    }
+
+    private void startPositionLock() {
+        positionLock = robot.actions.lockPosition(robot.follower.pose());
+        Scheduler.schedule(positionLock);
+        if (!Scheduler.isScheduled(positionLock)) {
+            throw new IllegalStateException("the position lock wasn't scheduled: another command holds the follower or drivetrain");
+        }
+        setD1Layer(ActionLayer.POSITION_LOCK);
+    }
+
+    private void releasePositionLock(String note) {
+        lockNote = note;
+        positionLock.release();
+    }
+
+    private void endPositionLock() {
+        // Pushed off and released, the robot may not face the heading lock's old target.
+        if (robot.drivetrain.isHeadingLocked()) robot.drivetrain.lockHeading();
+        setD1Layer(ActionLayer.TELE);
+        if (positionLock.stopReason() != null) {
+            lockNote = "stopped: " + positionLock.stopReason();
+            gamepad1.rumbleBlips(3);
+        }
     }
 
     private void saveShotWaypoint() {
@@ -300,6 +341,15 @@ public class BioBuzzTele extends BioBuzzOpMode {
             telemetry.addData("Waypoint Drive", "%s %s", waypointDrive.status(), waypointDrive.phase());
         } else {
             telemetry.addData("Waypoint Drive", waypointNote);
+        }
+        if (d1Layer == ActionLayer.POSITION_LOCK) {
+            Pose lock = positionLock.pose();
+            Pose now = robot.follower.pose();
+            telemetry.addData("Position Lock", "holding (%.1f, %.1f) facing %.0f deg; off by %.1f in, %.0f deg",
+                    lock.x(), lock.y(), Math.toDegrees(lock.heading()), now.distance(lock),
+                    Math.toDegrees(Angle.normalizeSigned(now.heading() - lock.heading())));
+        } else {
+            telemetry.addData("Position Lock", lockNote);
         }
         telemetry.addData("Pollen Trim", "%+.0f RPM, hood %+.3f",
                 ShotTuning.pollenShooter.rpmTrim, ShotTuning.pollenShooter.hoodTrim);

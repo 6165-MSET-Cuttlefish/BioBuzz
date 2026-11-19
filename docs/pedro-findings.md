@@ -79,6 +79,32 @@ after it, such as `RouteRun`'s turn in place, leaves Pedro driving the motors, a
 its writes are re-enabled. `RouteRun` now stops the follower whenever it ends unfinished. (Read from source: Ivy
 `com.pedropathing.ivy:pedro` 1.1.1 `PedroCommands.java:43-45`, 2026-11-17.)
 
+**Pedro's hold keeps pushing back until something changes the follower's mode.** `follower.hold(pose)` puts the
+follower in HOLD, and every `update()` recomputes `Foresight.calculateHold` from the current pose and drives with it;
+the busy flag that clears 100 ms in only feeds `isBusy()`. `hold(pose)` uses the full translational and heading gains,
+`hold(pose, true)` scales them by `holdPointTranslationalScaling` and `holdPointHeadingScaling`. BioBuzz Tele's
+position lock (`biobuzz/PositionLock.java`) relies on this. (Read from source: `core` `Follower.update`,
+`Follower.hold`, `Foresight.calculateHold`, javap, 2026-11-18.)
+
+With `BioBuzzConstants`' gains (the Betta bot's), a still robot shoved after its hold settled got these powers back
+(`PedroHoldTest`'s fake localizer and drivetrain on a desktop, 2026-11-18; Pedro passes powers over 1 to the
+drivetrain):
+
+| shove | power back |
+|---|---|
+| 1 in forward | 0.19 forward |
+| 2 in forward | 0.38 forward |
+| 3 in forward | 1.53 forward |
+| 1 in sideways | 0.42 strafe |
+| 3 in sideways | 3.38 strafe |
+| 2° | 0.20 turn |
+| 10° | 0.98 turn |
+
+The translational correction is P times the whole error, with P switching from `secondaryForwardP` (0.19 per in) and
+`secondaryLateralP` to `primaryForwardP` (0.51 per in) and `primaryLateralP` past `translationalSwitchInches`
+(2.5 in), and turn is `headingP` (5.6 per radian) times the heading error. So the hold gives gently for the first
+2.5 in of a push, then pushes back at full power.
+
 **A Bezier whose derivative reaches zero can throw mid-drive.** `Curve.tangent(t)` normalises the derivative, and
 `Vector2D.normalized()` throws `IllegalArgumentException("Cannot normalize 0 vector")` below a length of 1e-9.
 `Foresight` and `Follower` call it while following, so the OpMode crashes partway along the path, not when the path
@@ -208,6 +234,11 @@ drawing. This rests on one unrecorded comparison on 2026-10-04, and the live sit
 files as version 2.0.0, so it may have changed.
 
 ## Still unknown
+
+- **How far a push moves the BIOBUZZ robot in BioBuzz Tele's position lock.** Test: once its Foresight gains are
+  measured, lock with D1 RB, push the robot forward, sideways and around by hand, and read the "off by" distance and
+  angle on the DS. The hold uses the same gains as path following, so stiffer holding needs its own gains, not
+  retuned path ones.
 
 - **Does `pathSkip` skip a short piece entirely at speed, cutting the corner?** Test: on the hub, follow a
   `Paths.path(...)` with a 3–6 in middle piece at full speed and log `follower.pathIndex()` and the pose every loop.

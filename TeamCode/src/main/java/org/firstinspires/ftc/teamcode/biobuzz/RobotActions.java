@@ -34,4 +34,9 @@ public class RobotActions {
     public WaypointDrive driveTo(Pose target, WaypointDrive.Settings settings) {
         return new WaypointDrive(robot.follower, robot.drivetrain, target, settings);
     }
+
+    /** Holds {@code pose} against pushes until released; one per lock. */
+    public PositionLock lockPosition(Pose pose) {
+        return new PositionLock(robot.follower, robot.drivetrain, pose);
+    }
 }
