@@ -769,7 +769,22 @@ fetched 2026-11-10:
 - **Current draw** of the RGB lights, and of three Through Bores and two pods against the 500 mA encoder and I2C
   supplies.
 - **The splitter cable's pin mapping** and which wire the Floodgate's sense connector uses; which Floodgate version
-  is fitted (`Drivetrain` assumes the 80 A scale).
+  is fitted (`Drivetrain` assumes the 80 A scale). The cable is REV's Sensor Splitter Cable, REV-31-1386-PK2: two
+  cables for $6.00, in stock ([REV's product page][revsplitter], read 2026-11-19), so one pack covers connectors 0-1
+  and 2-3. REV gives no pin table for it. Its analog page says only that the cable hosts two analog sensors on one
+  port ([REV][revanalog2]), the product page warns that "some sensor pinouts will require modification or splicing
+  of the splitter cable", and its Touch Sensor page says to plug that sensor into "the n+1 (white) wire portion of
+  the splitter cable" ([REV][revtouch]), so each branch carries one signal wire (inferred). Whether the blue branch
+  keeps channel n on its own pin or moves it to the white wire's pin is not stated. Test: with the cable in hand,
+  note which pin position holds the signal wire on each branch; then with one sensor on one branch, see which of
+  the connector's two channels moves. A Brushland sensor's pin 0 is its white-wire pin
+  ([parts](parts-findings.md#brushland-color-rangefinder)). The Floodgate's sense plug is a 3-pin JST PH, so it also
+  needs a 4-pin to 3-pin adaptor (goBILDA's 3801-0454-0300, $2.99, sold only at 300 mm: [goBILDA][gbadaptor], read
+  2026-11-19). REV sells the splitter in one length only and gives no
+  length; its photo shows three socket housings on short leads. To reach further, REV's JST PH 4-pin Joiner Board
+  (REV-31-1388-PK4) joins it to a JST PH 4-pin Sensor Cable of 30, 50 or 100 cm (REV-31-1407, -1408, -1409, packs
+  of 4; [joiner][revjoiner], [cables][revsensorcable], read 2026-11-19). Whether the joiner keeps each wire on its
+  own pin is not stated; REV sells it "to create a longer cable".
 - **Whether the injector cuts its output** when the SDK disables PWM (`Turret.disable()` does).
 - **Whether the OctoQuad's localizer reset zeroes its channel counts.** Its bank mode is volatile like its velocity
   interval (the SDK's Javadoc on `setChannelBankConfig`). Test: Bench: OctoQuad's chain
@@ -795,5 +810,11 @@ fetched 2026-11-10:
 
 [rev5v]: https://docs.revrobotics.com/duo-control/sensors/5v-sensors
 [revdigital]: https://docs.revrobotics.com/duo-control/sensors/digital
+[revsplitter]: https://www.revrobotics.com/rev-31-1386-pk2/
+[revanalog2]: https://docs.revrobotics.com/duo-control/sensors/analog
+[revtouch]: https://docs.revrobotics.com/rev-crossover-products/sensors/touch-sensor/specs
+[gbadaptor]: https://www.gobilda.com/4-pos-jst-ph-to-3-pos-jst-ph-adaptor-300mm-length/
+[revjoiner]: https://www.revrobotics.com/JST-Joiner-Boards/
+[revsensorcable]: https://www.revrobotics.com/JST-PH-4-pin-Sensor-Cables/
 [revch]: https://docs.revrobotics.com/duo-control/control-system-overview/control-hub-basics
 [hubtips]: https://ftc-docs.firstinspires.org/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html
