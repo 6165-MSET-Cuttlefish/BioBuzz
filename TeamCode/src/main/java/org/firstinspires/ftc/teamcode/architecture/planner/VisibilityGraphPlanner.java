@@ -21,18 +21,24 @@ public final class VisibilityGraphPlanner {
     public static double boundaryMarginIn = 1.5;
     /** How long a {@link RouteOptimizer.Search#step()} shapes visit orders before it returns to the OpMode loop. */
     public static double routeSearchSliceMs = 20;
+    // A hop leaving an end exactly at that end's distance would count as touching the obstacle there.
+    private static final double END_SLACK_IN = 1e-6;
 
     private VisibilityGraphPlanner() {}
 
     /**
      * The positions from {@code start} to {@code goal}, both included, with heading 0. Null if either end is
-     * outside {@code keepIn} or no route inside it exists. {@code cornerPoints} and {@code marginIn} stand in for
-     * {@link #pointsPerCorner} and {@link #boundaryMarginIn}, read once per route search.
+     * outside {@code keepIn} or no route inside it exists. Each hop stays more than {@code clearance} from every
+     * obstacle, except that a hop from {@code start} or {@code goal} may pass an obstacle as close as that end already
+     * is. {@code cornerPoints} and {@code marginIn} stand in for {@link #pointsPerCorner} and
+     * {@link #boundaryMarginIn}, read once per route search.
      */
     public static List<Pose> planPath(Pose start, Pose goal, Region keepIn, List<Obstacle> obstacles, double clearance,
                                       int cornerPoints, double marginIn) {
         if (!keepIn.contains(start) || !keepIn.contains(goal)) return null;
-        if (!Obstacle.anyBlocks(obstacles, start.x(), start.y(), goal.x(), goal.y(), clearance)) {
+        double[] startClearance = endClearance(start, obstacles, clearance);
+        double[] goalClearance = endClearance(goal, obstacles, clearance);
+        if (!blocked(obstacles, start.x(), start.y(), goal.x(), goal.y(), clearance, startClearance, goalClearance)) {
             List<Pose> direct = new ArrayList<>();
             direct.add(new Pose(start.x(), start.y(), 0));
             direct.add(new Pose(goal.x(), goal.y(), 0));
@@ -81,7 +87,9 @@ public final class VisibilityGraphPlanner {
             for (int v = 0; v < n; v++) {
                 if (v == u || visited[v]) continue;
                 double[] to = nodes.get(v);
-                if (Obstacle.anyBlocks(obstacles, from[0], from[1], to[0], to[1], clearance)) continue;
+                double[] fromClearance = u == startNode ? startClearance : u == goalNode ? goalClearance : null;
+                double[] toClearance = v == startNode ? startClearance : v == goalNode ? goalClearance : null;
+                if (blocked(obstacles, from[0], from[1], to[0], to[1], clearance, fromClearance, toClearance)) continue;
                 double ex = to[0] - from[0];
                 double ey = to[1] - from[1];
                 double alt = dist[u] + Math.sqrt(ex * ex + ey * ey);
@@ -101,6 +109,26 @@ public final class VisibilityGraphPlanner {
             waypoints.add(0, new Pose(p[0], p[1], 0));
         }
         return waypoints;
+    }
+
+    private static double[] endClearance(Pose end, List<Obstacle> obstacles, double clearance) {
+        double[] out = new double[obstacles.size()];
+        for (int k = 0; k < out.length; k++) {
+            out[k] = Math.min(clearance, obstacles.get(k).distance(end.x(), end.y()) - END_SLACK_IN);
+        }
+        return out;
+    }
+
+    /** {@code endA} and {@code endB} are an end's {@link #endClearance}, or null for a corner point. */
+    private static boolean blocked(List<Obstacle> obstacles, double x1, double y1, double x2, double y2,
+                                   double clearance, double[] endA, double[] endB) {
+        for (int k = 0; k < obstacles.size(); k++) {
+            double c = clearance;
+            if (endA != null) c = Math.min(c, endA[k]);
+            if (endB != null) c = Math.min(c, endB[k]);
+            if (obstacles.get(k).intersectsSegment(x1, y1, x2, y2, c)) return true;
+        }
+        return false;
     }
 
     private static boolean insideAny(double px, double py, List<Obstacle> obstacles, double clearance) {

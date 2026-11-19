@@ -76,6 +76,17 @@ public class WaypointDriveTest {
     }
 
     @Test
+    public void turningAcrossTheRailToBesideTheHiveIsOneSpline() {
+        Pose start = new Pose(20, 20, 0);
+        Pose target = new Pose(58, 110, Math.toRadians(180));
+        RouteOptimizer.Search search = finish(WaypointDrive.search(start, target, settings));
+        assertNull(search.noRoute());
+        RoutePathBuilder.Plan plan = search.plan();
+        assertEquals(RoutePathBuilder.Reroute.SPLINE, plan.returnReroute);
+        assertEquals("turning on the way, never stopping to turn", 1, plan.steps.size());
+    }
+
+    @Test
     public void alreadyThereDrivesNothing() {
         Pose here = new Pose(20, 20, 0);
         RoutePathBuilder.Plan plan = finish(WaypointDrive.search(here, here, settings)).plan();
