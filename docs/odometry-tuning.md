@@ -54,12 +54,12 @@ Java paths below are relative to `TeamCode/src/main/java/org/firstinspires/ftc/t
   `Drivetrain.lockHeading` does nothing and BioBuzz Tele shows one line saying so instead of the Heading Lock line.
   Field-centric drive only rotates the left stick by the heading, so it stays allowed, but it will feel wrong (the
   robot drifting off the stick's direction as it turns) until steps 2 and 5 are done; no OpMode turns it on yet.
-  BioBuzz Tele's shot waypoint drive (`biobuzz/WaypointDrive.java`) lets Pedro drive a planned path, so until
-  `measured` is set it refuses before it builds anything. Nothing else in the hand-driven OpModes turns the pose or
-  heading into wheel power: the turrets aim from the pose, the chassis doesn't. Anything new that would (an auto-aim
-  that turns the chassis, a hold, a brake to a pose) waits for `measured` the same way.
-  `biobuzz/modules/HeadingLockGateTest` checks that a heading lock press leaves the wheels still until then; no test
-  covers the waypoint drive's refusal.
+  BioBuzz Tele's shot waypoint drive (`biobuzz/WaypointDrive.java`) lets Pedro drive a planned path and its position
+  lock (`biobuzz/PositionLock.java`) runs Pedro's hold, so until `measured` is set each refuses before it builds
+  anything. Nothing else in the hand-driven OpModes turns the pose or heading into wheel power: the turrets aim from
+  the pose, the chassis doesn't. Anything new that would (an auto-aim that turns the chassis, a brake to a pose)
+  waits for `measured` the same way. `biobuzz/modules/HeadingLockGateTest` checks that a heading lock press leaves
+  the wheels still until then, and `opmodes/tele/BioBuzzTeleWaypointGateTest` that LT and RB start nothing.
 - **If the OctoQuad stops answering once running**, more than 250 ms without a valid read stops the OpMode with an
   error naming it.
 - **The gate.** `BioBuzzConstants.create` refuses at INIT, before it touches any hardware, unless `measured` is set

@@ -123,7 +123,9 @@ How it plans now (read from source):
   at most 2.3 ms and the whole stop pass at most 26 ms, so the budget is the step, the tail and about 26 ms of stop
   pass. The longest step on a hub was 325 ms (4 balls on both sides of the HIVE rail, Bench: Planner Stop,
   2026-11-17; Bench: Hub's longest on that layout was 273 ms), so a STOP would need about 360–380 ms with the tail
-  (inferred), against about 1138 ms with the close inside `stop()`. Without a webcam the hub logged
+  (inferred), against about 1138 ms with the close inside `stop()`. Both step times were taken before the drive
+  back learned to try a second, closer detour inside the same `shape()` call when the first doesn't fit (from the
+  code, 2026-11-19), so re-run Bench: Planner Stop on the current build before relying on them. Without a webcam the hub logged
   every STOP reaching idle in at most 282 ms (2026-11-14) and 118 ms (2026-11-17); with the webcam closed inside
   `stop()`, in at most 839 ms over 20 trials, none of which met the longest step and the slowest close at once
   (2026-11-17).

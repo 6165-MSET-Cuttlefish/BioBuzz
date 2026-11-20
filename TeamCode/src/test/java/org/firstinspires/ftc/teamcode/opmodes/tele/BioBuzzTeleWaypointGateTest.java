@@ -175,6 +175,14 @@ public class BioBuzzTeleWaypointGateTest {
         tele.gameLoop();
     }
 
+    private void pressRb() {
+        Gamepad state = new Gamepad();
+        state.right_bumper = true;
+        tele.gamepad1.copy(state);
+        tele.gameLoop();
+        tele.telemetry();
+    }
+
     private void saveTheWaypointThenDriveAwayAndPressLt() {
         loopWith(true, false);
         loopWith(false, false);
@@ -215,6 +223,39 @@ public class BioBuzzTeleWaypointGateTest {
         assertEquals("WAYPOINT_DRIVE", shown.get("D1 Layer"));
         assertTrue(shown.get("Waypoint Drive"), shown.get("Waypoint Drive").startsWith("PLANNING"));
         assertFalse("the drive took the drivetrain for Pedro", drivetrain.isWriteEnabled());
+        assertTrue(blips.toString(), blips.isEmpty());
+    }
+
+    @Test
+    public void untilMeasuredRbLocksNothingAndRumblesThreeBlips() throws Exception {
+        measuredField().setBoolean(null, false);
+
+        pressRb();
+        for (int i = 0; i < 5; i++) {
+            Scheduler.execute();
+            loopWith(false, false);
+        }
+        tele.telemetry();
+
+        assertEquals("TELE", shown.get("D1 Layer"));
+        assertTrue(shown.get("Position Lock"), shown.get("Position Lock").contains("odometry to be measured"));
+        assertEquals(1, blips.size());
+        assertEquals(3, (int) blips.get(0));
+        assertTrue("Pedro never got the drivetrain", drivetrain.isWriteEnabled());
+        assertTrue(pedroDrives.toString(), pedroDrives.isEmpty());
+        for (double power : wheelPowers.values()) assertEquals(0, power, EPS);
+        for (double power : drivetrain.getMotorPowers()) assertEquals(0, power, EPS);
+    }
+
+    @Test
+    public void onceMeasuredRbLocksThePosition() throws Exception {
+        measuredField().setBoolean(null, true);
+
+        pressRb();
+
+        assertEquals("POSITION_LOCK", shown.get("D1 Layer"));
+        assertTrue(shown.get("Position Lock"), shown.get("Position Lock").startsWith("holding"));
+        assertFalse("the lock took the drivetrain for Pedro", drivetrain.isWriteEnabled());
         assertTrue(blips.toString(), blips.isEmpty());
     }
 }
