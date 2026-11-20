@@ -16,7 +16,8 @@ import java.util.Map;
  * start with the robot's centre passing through each essential ball ({@link IntakeCurvePlanner}), facing along it;
  * the return is a straight line back, turning evenly to the return heading. A leg whose footprint would leave the
  * area or touch an obstacle is rebuilt as Pedro's spline through the {@link VisibilityGraphPlanner} detour waypoints, and
- * failing that as straight hops through them.
+ * failing that as straight hops through them. The return's detour first keeps the robot's turning circle clear of the
+ * obstacles, then, if no leg through it fits, only its width.
  */
 public final class RoutePathBuilder {
     /** Points closer than this are one point: Pedro rejects a zero-length line, and a tiny hop has no usable heading. */
@@ -171,10 +172,13 @@ public final class RoutePathBuilder {
         private final RobotShape robot;
         private final double gap;
         private final boolean forceSplineOnly;
-        private final double graphClearance;
+        // Enough for the robot driving facing along a hop, and for it at any heading.
+        private final double alongClearance;
+        private final double turningClearance;
         private final int cornerPoints = VisibilityGraphPlanner.pointsPerCorner;
         private final double cornerMarginIn = VisibilityGraphPlanner.boundaryMarginIn;
         private final Map<Long, List<Pose>> detours = new HashMap<>();
+        private final Map<Long, List<Pose>> turningDetours = new HashMap<>();
 
         Planner(Pose start, Ball[] balls, Pose returnPose, Region area, List<Obstacle> obstacles, RobotShape robot,
                 double gap, boolean forceSplineOnly) {
@@ -186,7 +190,8 @@ public final class RoutePathBuilder {
             this.robot = robot;
             this.gap = gap;
             this.forceSplineOnly = forceSplineOnly;
-            graphClearance = Math.max(robot.widthIn, robot.intakeWidthIn) / 2 + gap;
+            alongClearance = Math.max(robot.widthIn, robot.intakeWidthIn) / 2 + gap;
+            turningClearance = robot.turnRadius() + gap;
         }
 
         Ball[] ordered(int[] order) {
@@ -233,12 +238,10 @@ public final class RoutePathBuilder {
                 Segment last = intake.segments.get(intake.segments.size() - 1);
                 intakeEnd = new Pose(last.end().x(), last.end().y(), last.endHeading());
             }
-            Leg back = returnLeg(intakeEnd, order.length == 0 ? START : order[order.length - 1]);
-            if (back == null) return null;
-
-            List<Move> moves = moves(intake.segments, back.segments);
-            if (moves == null) return null;
-            return new Shape(intake, back, intakeEnd, essential, moves, robot);
+            List<Move> moves = new ArrayList<>();
+            if (Double.isNaN(drive(moves, intake.segments, start.heading(), true))) return null;
+            Leg back = returnLeg(intakeEnd, order.length == 0 ? START : order[order.length - 1], moves);
+            return back == null ? null : new Shape(intake, back, intakeEnd, essential, moves, robot);
         }
 
         // The spline bends away from the chords essentialStops tested, so each ball it no longer sweeps up becomes a stop.
@@ -281,7 +284,7 @@ public final class RoutePathBuilder {
             waypoints.add(start);
             int from = START;
             for (int to : order) {
-                List<Pose> detour = detour(from, to);
+                List<Pose> detour = detour(from, to, false);
                 if (detour == null) return null;
                 for (int j = 1; j < detour.size(); j++) addDistinct(waypoints, detour.get(j));
                 from = to;
@@ -295,12 +298,32 @@ public final class RoutePathBuilder {
             return allFit(hops) ? new Leg(hops, Reroute.POLYLINE) : null;
         }
 
-        private Leg returnLeg(Pose from, int fromBall) {
-            if (from.distance(returnPose) < COINCIDENT_IN) return new Leg(Collections.<Segment>emptyList(), Reroute.NONE);
+        // On success the leg's moves are appended to moves.
+        private Leg returnLeg(Pose from, int fromBall, List<Move> moves) {
+            if (from.distance(returnPose) < COINCIDENT_IN) {
+                return finishReturn(moves, from, new Leg(Collections.<Segment>emptyList(), Reroute.NONE));
+            }
             Segment line = Segment.turning(from.heading(), returnPose.heading(), from, returnPose);
-            if (line.fits(robot, area, obstacles, gap)) return new Leg(Collections.singletonList(line), Reroute.NONE);
+            if (line.fits(robot, area, obstacles, gap)) {
+                return finishReturn(moves, from, new Leg(Collections.singletonList(line), Reroute.NONE));
+            }
+            // It turns as it drives back, so first clear at any heading; the closer detour reaches spots it enters facing one way.
+            Leg wide = finishReturn(moves, from, detourLeg(from, detour(fromBall, RETURN, true)));
+            return wide != null ? wide : finishReturn(moves, from, detourLeg(from, detour(fromBall, RETURN, false)));
+        }
 
-            List<Pose> detour = detour(fromBall, RETURN);
+        // Null, with moves left as they were, if leg is null or a turn in place on it doesn't fit.
+        private Leg finishReturn(List<Move> moves, Pose from, Leg leg) {
+            if (leg == null) return null;
+            int before = moves.size();
+            double heading = drive(moves, leg.segments, from.heading(), false);
+            Pose end = leg.segments.isEmpty() ? from : leg.segments.get(leg.segments.size() - 1).end();
+            if (!Double.isNaN(heading) && turn(moves, end, heading, returnPose.heading(), false)) return leg;
+            moves.subList(before, moves.size()).clear();
+            return null;
+        }
+
+        private Leg detourLeg(Pose from, List<Pose> detour) {
             if (detour == null) return null;
             List<Pose> waypoints = new ArrayList<>();
             waypoints.add(from);
@@ -321,31 +344,26 @@ public final class RoutePathBuilder {
         }
 
         // Keyed by ball indices (or START and RETURN), as they don't depend on the order.
-        private List<Pose> detour(int from, int to) {
+        private List<Pose> detour(int from, int to, boolean turning) {
+            Map<Long, List<Pose>> cache = turning ? turningDetours : detours;
             long key = ((long) from << 32) ^ (to & 0xffffffffL);
-            if (detours.containsKey(key)) return detours.get(key);
+            if (cache.containsKey(key)) return cache.get(key);
             Pose a = from == START ? start : balls[from].toPose();
             Pose b = to == RETURN ? returnPose : balls[to].toPose();
-            List<Pose> detour = VisibilityGraphPlanner.planPath(a, b, area, obstacles, graphClearance, cornerPoints,
-                    cornerMarginIn);
-            detours.put(key, detour);
+            List<Pose> detour = VisibilityGraphPlanner.planPath(a, b, area, obstacles,
+                    turning ? turningClearance : alongClearance, cornerPoints, cornerMarginIn);
+            cache.put(key, detour);
             return detour;
         }
 
-        // Null if a turn in place between drives doesn't fit.
-        private List<Move> moves(List<Segment> intake, List<Segment> back) {
-            List<Move> moves = new ArrayList<>();
-            double heading = start.heading();
-            for (int i = 0; i < intake.size() + back.size(); i++) {
-                boolean inIntake = i < intake.size();
-                Segment s = inIntake ? intake.get(i) : back.get(i - intake.size());
-                if (!turn(moves, s.start(), heading, s.startHeading(), inIntake)) return null;
-                moves.add(new Move(s, null, inIntake));
+        // Each segment's drive, after a turn in place to face its start: the heading at the end, or NaN if a turn doesn't fit.
+        private double drive(List<Move> moves, List<Segment> segments, double heading, boolean intake) {
+            for (Segment s : segments) {
+                if (!turn(moves, s.start(), heading, s.startHeading(), intake)) return Double.NaN;
+                moves.add(new Move(s, null, intake));
                 heading = s.endHeading();
             }
-            Pose end = back.isEmpty() ? (intake.isEmpty() ? start : intake.get(intake.size() - 1).end())
-                    : back.get(back.size() - 1).end();
-            return turn(moves, end, heading, returnPose.heading(), false) ? moves : null;
+            return heading;
         }
 
         private boolean turn(List<Move> moves, Pose at, double from, double to, boolean intake) {

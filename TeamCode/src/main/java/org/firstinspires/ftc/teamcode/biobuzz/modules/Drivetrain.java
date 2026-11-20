@@ -145,6 +145,22 @@ public class Drivetrain extends Module {
         frTarget = fr;
     }
 
+    /** Stops this module's writes, which throw while Pedro drives the same motors; pass the result to {@link #takeBackFromFollower}. */
+    public boolean handToFollower() {
+        boolean writesWereEnabled = isWriteEnabled();
+        setWriteEnabled(false);
+        return writesWereEnabled;
+    }
+
+    /** After {@code follower.stop()}: re-enables writes if they were on, starting from zero. */
+    public void takeBackFromFollower(boolean writesWereEnabled) {
+        if (!writesWereEnabled) return;
+        // Pedro drove these motors through its own objects, so resync the write cache at zero.
+        setTargets(0, 0, 0, 0);
+        stop();
+        setWriteEnabled(true);
+    }
+
     @Override
     public void stop() {
         fl.stop();

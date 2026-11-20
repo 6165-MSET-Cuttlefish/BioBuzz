@@ -16,7 +16,8 @@ Java paths below are relative to `TeamCode/src/main/java/org/firstinspires/ftc/t
    to measure, AutoTune's Tests refuses every test but Pose Test, and AutoTune doesn't list its Foresight Tuner at all
    (step 8). BioBuzz Tele and the other hand-driven OpModes run, but BioBuzz Tele's heading lock (LB) doesn't engage: a press does
    nothing, and the Driver Station says the heading lock waits for the robot's odometry to be measured. Its shot
-   waypoint drive (LT) refuses the same way, with three rumble blips and the reason on its `Waypoint Drive` line.
+   waypoint drive (LT) and position lock (RB) refuse the same way, with three rumble blips and the reason on their
+   `Waypoint Drive` and `Position Lock` lines.
 2. **Keep the robot still from INIT until the Driver Station's `OctoQuad` line reads `RUNNING`** (about 2 s). Every
    INIT resets the OctoQuad and recalibrates its IMU.
 3. **Do the checklist in order**, and copy each number into `pedro/BioBuzzConstants.java` as you go: dashboard
@@ -199,7 +200,7 @@ turrets still throughout: the nectar turret's encoder is on the same OctoQuad.
   hand on STOP.
 - **Correct:** at each stop the robot is within about 1 in and 2° of where it started.
 - **Never** set `measured` to get past the INIT message without doing steps 1 to 8: it is the only thing between a
-  path, BioBuzz Tele's heading lock or its shot waypoint drive, and the Betta bot's numbers.
+  path, BioBuzz Tele's heading lock, shot waypoint drive or position lock, and the Betta bot's numbers.
 
 ## Still unknown
 

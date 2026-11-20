@@ -1,7 +1,5 @@
 package org.firstinspires.ftc.teamcode.architecture.planner;
 
-import java.util.List;
-
 /** A rectangular obstacle with its sides along the field axes, in Pedro field inches. */
 public final class Obstacle {
     public final Region bounds;
@@ -16,6 +14,10 @@ public final class Obstacle {
 
     public double centreY() {
         return (bounds.minY + bounds.maxY) / 2;
+    }
+
+    public double distance(double x, double y) {
+        return Math.sqrt(gapSquared(x, x, y, y));
     }
 
     public boolean blocks(double x, double y, double clearance) {
@@ -35,14 +37,6 @@ public final class Obstacle {
                 || squaredToSegment(bounds.minX, bounds.maxY, x1, y1, x2, y2) <= limit
                 || squaredToSegment(bounds.maxX, bounds.minY, x1, y1, x2, y2) <= limit
                 || squaredToSegment(bounds.maxX, bounds.maxY, x1, y1, x2, y2) <= limit;
-    }
-
-    public static boolean anyBlocks(List<Obstacle> obstacles,
-                                    double x1, double y1, double x2, double y2, double clearance) {
-        for (Obstacle o : obstacles) {
-            if (o.intersectsSegment(x1, y1, x2, y2, clearance)) return true;
-        }
-        return false;
     }
 
     private boolean crosses(double x1, double y1, double x2, double y2) {

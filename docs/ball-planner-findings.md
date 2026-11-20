@@ -26,8 +26,8 @@ root. Everything is read from source on 2026-11-10 unless marked otherwise.
    planner yet: until Bench: Planner Stop's webcam trials pass on main's build, don't trust a STOP during Ball
    Collection Auto's 4-ball plan.
 4. **Keep planning on the hub, never on the Limelight.**
-5. **Add an independent geometry check as a unit test before changing the planner**, and sample compound paths just
-   before each join, not on it.
+5. **Run `PlannerGeometryTest` after changing the planner** (an independent geometry check, below), and sample
+   compound paths just before each join, not on it.
 
 ## Balls it never collects
 
@@ -78,8 +78,8 @@ centre driving through it. Two checks decide it:
   that chord (`IntakeCurvePlanner.sweptUp`, `architecture/planner/IntakeCurvePlanner.java:62-71`).
 - `RoutePathBuilder` builds Pedro's spline through those stops, traces the intake's middle (the robot's centre plus
   `intakeOffsetIn` along the heading, at `Segment`'s samples at most 1 in apart), and turns any ball farther than
-  `intakeWidthIn / 2` from that track into a stop (`architecture/planner/RoutePathBuilder.java:244-274`). A leg
-  rebuilt around an obstacle drives the robot's centre through every ball instead (`RoutePathBuilder.java:279`).
+  `intakeWidthIn / 2` from that track into a stop (`architecture/planner/RoutePathBuilder.java:247-277`). A leg
+  rebuilt around an obstacle drives the robot's centre through every ball instead (`RoutePathBuilder.java:282`).
 
 Both compare the ball's centre with half the intake width. `Ball.radius` is set but only used for drawing. With the
 15 in intake, a ball whose centre is 7.5 in off the intake's middle counts as collected though half of it is outside:
@@ -149,41 +149,75 @@ How it plans now (read from source):
 ## Driving to a waypoint (no balls)
 
 BioBuzz Tele's shot waypoint (`biobuzz/WaypointDrive.java`) runs `RouteOptimizer.search` with no balls, so its plan
-is only the return leg: a straight line turning evenly to the waypoint's heading, else a spline through
-`VisibilityGraphPlanner`'s detour points, else straight hops with turns in place at the joins. Probed on 2026-11-17
-in a desktop unit test on RED's half, with the Betta bot's 16 × 15 in footprint (`RobotGeometry`, not yet the
-BIOBUZZ robot's) and 1 in wall and rail gaps:
+is only the return leg: a straight line turning evenly to the waypoint's heading, else a detour, driven as one spline
+through its points or, failing that, straight hops with turns in place at the joins. Ball collections end with the
+same return leg. Since 2026-11-17 the return leg's detour comes from two `VisibilityGraphPlanner` graphs, tried in
+order (`RoutePathBuilder.Planner.returnLeg`), and a candidate counts only if its footprint and its turns in place fit:
 
-| start → waypoint (RED inches, heading °) | `boundaryMarginIn` 1.5 (default) | 3.5 | 5 |
+1. **Turning clearance:** hops and corner points keep the robot's turn radius plus `railGapIn` (11.96 in) from each
+   rail, since the return leg turns as it drives and the robot can face any way along it.
+2. **Width clearance**, the only graph before: half the robot's width plus `railGapIn` (8.5 in). It still reaches
+   places the robot can drive into only facing along the way.
+
+In both, a hop from the start or the waypoint may pass a rail as close as that end already is. The intake leg still
+uses only the width graph.
+
+Probed on 2026-11-17 in a desktop unit test on RED's half, with the Betta bot's 16 × 15 in footprint (`RobotGeometry`,
+not yet the BIOBUZZ robot's), 1 in wall and rail gaps and the default `boundaryMarginIn` 1.5:
+
+| start → waypoint (RED inches, heading °) | width graph only (before) | both graphs (now) |
+|---|---|---|
+| (30, 30, 90) → (30, 115, 90), west of our rail | straight | straight |
+| (60, 30, 90) → (60, 115, 90), under the HIVE | straight | straight |
+| (30, 71, 0) → (60, 105, 0), round the rail's rear end | hops: 6 steps, 3 turns in place | one spline |
+| (20, 20, 0) → (58, 110, 180), across the rail, ending back to the HIVE | no route | one spline |
+| (20, 20, 0) → (55, 100, 90), ending 12 in from the rail's corner | no route | hops: 10 steps, 5 turns in place |
+| (30, 71, 0 or 90) → (60, 71, same), into the slot between our rail and the centre line | no route | no route |
+| (60, 71, 90) → (30, 110, 90), out of that slot facing along it | no route | one spline |
+| (60, 71, 0) → (30, 110, 0), out of that slot facing across it | no route | no route |
+
+Over seeded random pairs on RED's half (same pairs before and after, an independent footprint checker on every plan):
+
+| pairs | need a detour | planned before | planned now |
 |---|---|---|---|
-| (30, 30, 90) → (30, 115, 90), west of our rail | straight | straight | straight |
-| (60, 30, 90) → (60, 115, 90), under the HIVE | straight | straight | straight |
-| (30, 71, 0) → (60, 105, 0), round the rail's rear end | hops, 6 steps | hops, 4 steps | hops, 6 steps |
-| (20, 20, 0) → (58, 110, 180), across the rail, ending back to the HIVE | no route | spline | spline |
-| (30, 71, 0 or 90) → (60, 71, same), into the slot between our rail and the centre line | no route | no route | no route |
-| (60, 71, 0) → (30, 110, 0), out of that slot | no route | no route | no route |
+| 2,000, start and waypoint anywhere | 617 | 231 (37%) | 508 (82%) |
+| 2,000, waypoint north or south of the HIVE, x 35 to 69, back toward it ± 20° | 1,025 | 392 (38%) | 868 (85%) |
 
-- **Why the corners fail:** the detour graph keeps the robot's centre `width / 2 + railGapIn` (8.5 in) plus
-  `boundaryMarginIn` from each rail corner, 10 in at the default, but a 16 × 15 in rectangle's corner reaches
-  10.96 in from its centre, so the footprint check fails at the corner points whatever the heading.
-- **Why the slot fails:** a turn in place needs 11.96 in of room all round, and the slot between our rail and the
-  centre line is 21.75 in wide.
+- No pair that planned before is refused now. Where both planned a detour, the new drive is 4 to 5% longer on
+  average but has about half the steps (2.2 against 4.6, and 3.0 against 4.5): fewer stops to turn in place.
+- Ball collection, 120 seeded random layouts per ball count (`PlannerWorkload.random`, same layouts before and
+  after): balls reached rose from 67 to 82 of 120 (1 ball), 179 to 190 of 240, 266 to 284 of 360 and 386 to 396 of
+  480 (4 balls). No layout reached fewer, and routes through the same balls kept their length.
+- Desktop planning time didn't change beyond run-to-run noise; not timed on a hub.
+- **Why corners failed before:** the width graph puts its corner points 8.5 in plus `boundaryMarginIn` from each rail
+  corner, 10 in at the default, but a 16 × 15 in rectangle's corner reaches 10.96 in from its centre, so a turning
+  footprint fails at those points.
+- **Why the slot still fails:** driving into it needs the robot facing along it the whole way in, which the spline
+  through the detour points doesn't hold, and a hop needs a turn in place, 11.96 in of room all round, in a slot
+  21.75 in wide.
 - **What the driver sees:** `refused: no drivable path ...` on the DS and three rumble blips; drive it by hand.
-- **Not changed:** raising `boundaryMarginIn` reaches more drives round a rail, but it widens every ball-collection
-  detour too, untested there, so the default stays 1.5. Rerun the table once `RobotGeometry` holds the BIOBUZZ
-  robot's size.
+- **Between samples:** the planner checks the footprint every 1 in of travel and 2° of turn (`Segment`), so between
+  checks a corner can come up to (1 + 10.96 × 2° in radians) / 2 = 0.69 in closer to a rail than any check showed.
+  The independent checker, sampling 8 times per inch, found plans as close as 0.65 in to a rail on a straight
+  turning drive, before the change and after it; 2 of 4,000 random waypoint drives came more than 0.05 in inside the
+  1 in `railGapIn`. Count `railGapIn` as up to 0.69 in smaller there.
+- **Not changed:** `boundaryMarginIn` stays 1.5. Rerun the table once `RobotGeometry` holds the BIOBUZZ robot's size.
 
 ## Testing the planner
 
-- No automated test checks a plan's geometry. `PlannerWorkloadTest` (`TeamCode/src/test`) checks only how a search
-  slices its work and that slicing doesn't change the route; `WaypointDriveTest` only which kind of leg a no-ball
-  drive gets and that an unreachable one is reported rather than thrown. Bench: Hub and Bench: Planner Stop time plans and STOP on
-  a hub but don't check a plan's geometry either.
-- Before changing the planner, add a unit test (`./gradlew :TeamCode:testDebugUnitTest`) that walks every
-  `Plan.steps` drive and turn over many layouts and checks, with its own footprint and distance maths rather than
-  `RobotShape`'s: the footprint stays inside the area, more than `railGapIn` from each rail, and every ball in
-  `route.order` passes under the intake. An independent check like this, over about 10,000 random layouts on a
-  desktop, caught real bugs in an earlier version of the planner (2026-10-02 and 2026-10-03).
+- `PlannerGeometryTest` (`TeamCode/src/test`, in `testDebugUnitTest`) drives every `Plan.steps` drive and turn of
+  600 seeded random waypoint drives and 100 random 1 to 4 ball collections through Pedro's paths and checks them with
+  its own footprint and distance maths, not `RobotShape`'s: the footprint inside the area and clear of each rail
+  (less the 0.69 in between samples above), each step starting where the last ended, and every ball in
+  `route.order` under the intake. It also fails if fewer than 75% of random waypoint drives that need a detour plan
+  (84% on its pairs on 2026-11-17, 39% with the width graph alone). Its robot is a fixed 16 × 15 in, not
+  `RobotGeometry`. Checked on 2026-11-17 that it fails with the planner's gap set to 0 and without the
+  turning-clearance graph. An independent check like it, over about 10,000 random layouts on a desktop, caught real
+  bugs in an earlier version of the planner (2026-10-02 and 2026-10-03): run one that size by hand for a bigger
+  change.
+- `PlannerWorkloadTest` checks only how a search slices its work and that slicing doesn't change the route;
+  `WaypointDriveTest` which kind of leg some no-ball drives get and that an unreachable one is reported rather than
+  thrown. Bench: Hub and Bench: Planner Stop time plans and STOP on a hub but don't check a plan's geometry.
 - The planner classes except `RouteRun` need no hardware. `PlannerWorkload`
   (`opmodes/test/bench/PlannerWorkload.java`) has seeded random layouts and hand-built worst cases to reuse; it is
   package-private, so put the test in its package. Build the area as a `Region` as it does, or call
@@ -192,7 +226,7 @@ BIOBUZZ robot's) and 1 in wall and rail gaps:
 - **Trap when sampling headings:** a compound path's `heading(t)` at a join returns the next piece's heading, because
   Pedro's `Piecewise.getSegment` finds the piece with `NavigableMap.floorEntry` (javap on Pedro `core` 3.0.2).
   `Plan.intake` and `Plan.back` are compound when a leg is built from straight hops (`Reroute.POLYLINE`,
-  `RoutePathBuilder.java:153-159`); each `Plan.steps` path is one piece. Sample each piece on its own, or a piece's
+  `RoutePathBuilder.java:154-160`); each `Plan.steps` path is one piece. Sample each piece on its own, or a piece's
   end at the join's t minus 1e-9.
 - Give the checker's "under the intake" test a few hundredths of an inch of slack (an earlier checker used 0.02 in):
   the planner measures to chords between track samples, which cut inside a curve, so a checker that samples more

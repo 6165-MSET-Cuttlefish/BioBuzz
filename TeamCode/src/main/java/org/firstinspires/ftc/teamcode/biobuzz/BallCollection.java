@@ -169,9 +169,7 @@ public final class BallCollection extends CommandBuilder {
         plan = null;
         run = null;
         runCommand = null;
-        // Drivetrain.write() throws while Pedro drives the same motors.
-        restoreWrites = drivetrain.isWriteEnabled();
-        drivetrain.setWriteEnabled(false);
+        restoreWrites = drivetrain.handToFollower();
         String limelight = camera.limelightProblem();
         if (limelight != null) {
             status = Status.SKIPPED;
@@ -288,12 +286,7 @@ public final class BallCollection extends CommandBuilder {
             status = Status.ABORTED;
             detail = "interrupted while planning";
         }
-        if (restoreWrites) {
-            // Pedro drove these motors through its own objects, so resync Drivetrain's write cache at zero.
-            drivetrain.setTargets(0, 0, 0, 0);
-            drivetrain.stop();
-            drivetrain.setWriteEnabled(true);
-        }
+        drivetrain.takeBackFromFollower(restoreWrites);
     }
 
     public Status status() {
