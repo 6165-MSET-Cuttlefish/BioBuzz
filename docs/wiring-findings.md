@@ -199,7 +199,8 @@ swapped between the hubs, see [If the two hubs swapped devices](#if-the-two-hubs
 - **Cameras on USB 3.0.** The USB 2.0 port shares a bus with the hub's radio
   ([ftc-docs hub tips](https://ftc-docs.firstinspires.org/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html),
   fetched 2026-11-10).
-- **Lights on separate servo port pairs.** Ports 0-1, 2-3 and 4-5 each share one 2 A supply (ftc-docs hub tips).
+- **Lights on separate servo port pairs.** Ports 0-1, 2-3 and 4-5 each share one supply (ftc-docs hub tips), 2 A a pair and 5 A
+  across all servo and 5 V ports ([REV][revch], read 2026-11-19).
   The lights take hub 5 V because the injectors' 6 V may power only servos (R613(C)). Their current draw is not
   published.
 - **Injectors split by where they sit, back and front.** They carry no hub commands, so the split costs no loop
@@ -276,6 +277,52 @@ waits for its ACK. The runner reads it at 8 parallel (0.99 hub by hub, 1.00 alte
 alternating at 2 parallel, still hides only a little. Timed until the calls return instead, the ratios were 1.01 to
 1.22, never under 1. So the figures in this section that add the hubs' write times apply, as the script models them;
 the "overlap fully" ones did not hold in this run.
+
+### If the servos are re-planned
+
+Asked on 2026-11-19 for a planned layout that is **not applied**: [the map](#the-map) and `biobuzz.xml` still hold
+the ports above. The plan: on the Control Hub the transfer servo on servo 0 (today on the Expansion Hub), the pollen
+turret pair on 1 and 2, the pollen hood on 3, the nectar turret on 4, the nectar hood on 5, all six on one injector;
+on the Expansion Hub both lights on servo 0 and 1 (the right light is on the Control Hub today), the flower intake
+on 3 and the blocker on 5, on the second injector; the nectar turret Through Bore's count on Control Hub encoder 1
+instead of 2.
+
+- **Port numbers within a hub cost nothing.** A servo write is one hub command addressed to one channel, sent only
+  when the value changed, and PWM enable is per channel too (SDK 12.0.0 source, `LynxServoController.java:262-272`
+  and `:214-235`); the port is one byte in a fixed-size payload. A servo write was timed on ports 0 and 1 only
+  ([`hub-bench-findings.md`](hub-bench-findings.md)); that ports 2 to 5 cost the same follows from the command
+  format, not from a measurement.
+- **Loop time: the same parked and driving, about 1 ms less on the loop that starts a shot.** Modelled by
+  `scripts/looptimes/wiring_budget.py` with the transfer servo on the Control Hub and both lights on the Expansion
+  Hub: 18.7 / 36.6 ms parked / driving either way on RS485 without Photon; the loop that starts a shot 44.7 to
+  43.7 ms. With Photon on both hubs over USB, 16.0 / 24.2 either way and 27.4 to 27.2 ms. The RS485 figures rest on
+  the 0.9 ms hop, measured on reads only. BioBuzz Tele writes none of the moved devices, so it gains nothing; BioBuzz
+  Basic Tele writes the transfer servo whenever the intake or feed power changes, so it saves about 0.9 ms on each
+  of those writes (estimated). No code writes the lights.
+- **Code: only `biobuzz.xml` changes**, with a full install. Every servo is looked up by its config name; no robot
+  code reads a servo's port or hub, calls a whole-hub PWM method or walks servos in port order. STOP treats both hubs
+  alike. The XML has no encoder entries, so the encoder move changes nothing in it.
+- **The turret's count would sit under `fr` instead of `br`.** Encoder 1 and 2 are both counted in software, so
+  neither is better; FIRST says a Through Bore belongs on 0 or 3 ([hub tips][hubtips], read 2026-11-19), which the
+  flywheels hold. No robot code reads the count, and nothing sets a mode on or resets `fr` or `br` except Butterfly
+  Test (`RUN_WITHOUT_ENCODER` on both). The rules in [Zeroing the nectar turret](#zeroing-the-nectar-turret) would
+  move from `br` to `fr`, Bench: Turret Zero is fixed to `br` on port 2 (`TurretZeroBench.java:18-24`,
+  `run_bench.py:2389-2391`), and the spare encoder port becomes 2.
+- **One injector failing would stop all aiming and the transfer servo together**, where today some aiming survives
+  either injector failing. Six servos fill its 6 channels; its limit is 24 A in total (goBILDA's page, read
+  2026-11-19) and the Axon servos' stall currents were not found, so the sum at stall is unknown.
+- **The transfer would be split across the hubs**: the transfer motor, the intake and the blocker stay on the
+  Expansion Hub. If that hub drops, the transfer servo still turns while the rest has stopped (inferred).
+- **Both lights would share one port pair's 2 A and go dark with the Expansion Hub.** Their current draw is not
+  published (goBILDA's RGB Indicator Light page lists none, read 2026-11-19; that the lights are that model is
+  assumed). The Prism stays on the Control Hub.
+- **Rewire and install in one step, with no OpMode run in between, in either order.** With the old config on the
+  new wiring, the front pollen servo's commands go to the transfer's continuous-rotation servo, which would spin,
+  and the other two turret commands go to the two pollen servos, which share one gear and would fight. With the new
+  config on the old wiring, BioBuzz Basic Tele's transfer power moves one pollen servo alone (inferred from the two
+  port lists).
+- Unknown: whether the hub's firmware shares a PWM timer between the two ports of a pair, and the count rate a
+  software-counted encoder port can follow.
 
 ### If the two hubs swapped devices
 
