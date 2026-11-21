@@ -27,6 +27,10 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   Expansion Hub on RS485 are one link, so a second thread can't overlap their traffic; it only adds waiting.
 - **The SDK skips an identical write for 500 ms, even when the earlier send failed**, so a lost write reaches the hub
   again only after 500 ms, whatever a wrapper's re-send period.
+- **STOP can switch a motor back on.** If STOP lands while a motor's `setPower` is between its power write and the
+  motor enable the SDK sends after it, STOP's fail-safe goes out first and the enable re-energizes the motor at that
+  power, until something writes 0 to it. Zero every motor in `stop()` with `EnhancedMotor.stop()` (CLAUDE.md, Module
+  pattern; [OpMode lifecycle](#opmode-lifecycle)).
 - **A hub digital input is only a level at the moment it is read.** The SDK has no command that latches a digital
   input or counts its edges, so a pulse shorter than the gap between reads can be missed; whether the hub's firmware
   holds a short pulse is unmeasured. With bulk caching off two pins are two commands at two moments
@@ -249,12 +253,48 @@ every other device (source: `OpModeManagerImpl.resetHardwareForOpMode`):
 - **No time limit while running:** `init()`, `init_loop()`, `start()` and `loop()` can block as long as they like; the
   `msStuckDetect*` fields are deprecated: "OpModes no longer have a time limit". Only STOP has one
   ([`hub-bench-findings.md`](hub-bench-findings.md)).
-- **STOP:** before calling `stop()`, the SDK sends a fail-safe command to every hub, then refuses dangerous commands:
+- **STOP:** before calling `stop()`, the SDK raises STOP's gate, then sends a fail-safe command to every hub, on the
+  same thread with nothing in between. From the gate on it refuses dangerous commands:
   non-zero motor power or velocity, a target position, a servo or PWM-output pulse width, and enabling a servo or PWM
   output. Each is NACKed inside the SDK (CANCELLED_FOR_SAFETY) without being sent or raising an error; the only trace
   is a verbose `nack rec'd` logcat line (source: `OpModeManagerImpl.callActiveOpModeStop`, `LynxModule.sendCommand`,
   each command's `isDangerous()`, `LynxRespondable.onNackReceived`). Zero power, mode and zero-power-behaviour
   changes, motor enable, reads and I2C still go out. The rule this gives: CLAUDE.md, Module pattern.
+- **STOP can switch a motor back on (the enable race).** Seen once under a real STOP and reproduced on demand on a
+  bench; serious enough to guard in every OpMode.
+  - How (read from source): `setPower` sends the power command, waits for its ACK while holding the link's lock, then
+    sends a motor enable if the cached enable is stale (`LynxDcMotorController.internalSetMotorPower`). The cached
+    enable goes stale 500 ms after it was last set (`LastKnown`), and is forgotten at each INIT, after any fail-safe
+    and when a hub reports it needs attention (`LynxModule.forgetLastKnown`). A motor enable isn't a dangerous command
+    (`LynxSetMotorChannelEnableCommand.isDangerous()` is false), so the gate lets it through. STOP's fail-safe waits
+    for the lock the power write holds, so it can go out between the power write and the enable.
+  - What the hub does (measured 2026-11-20): the fail-safe disables the motor but keeps its power register, and the
+    enable after it re-energizes the motor at that power.
+  - How often: any motor held at a non-zero power sends an enable with its power about every 500 ms; `WriteCache`'s
+    250 ms re-sends are skipped by the SDK's own cache until then (read from source). The window is about 3 ms per
+    such write on the Control Hub and about 4 ms on a USB Expansion Hub (measured 2026-11-20). Under real STOPs it
+    happened in 1 of 40 iterative trials on 2026-11-17 (a bench OpMode with a 50 ms loop and Photon off), the only
+    real-STOP data: low per STOP, not zero.
+  - What is exposed: DC motor ports on either hub, at whatever power was in flight. Servos aren't: enabling a servo
+    is a dangerous command (`LynxSetServoEnableCommand.isDangerous()`).
+  - How long it stays on (read from source unless marked): until that port gets a zero write. In `EnhancedOpMode` that
+    is the stop pass after the current loop ends (`architecture/core/EnhancedOpMode.java:242-261`); on 2026-11-17 a
+    bench OpMode's `stop()` zeroed it 151 to 166 ms after the gate (measured). A motor no `stop()` zeroes runs until
+    the SDK's stop OpMode zeroes every motor whose power reads non-zero, once `stop()` has returned
+    (`OpModeManagerImpl.DefaultOpMode.startSafe`), then fail-safes every 100 ms (`staySafe`). A stuck `stop()` delays
+    that by up to 900 ms (`MS_BEFORE_FORCE_STOP_AFTER_STOP_REQUESTED`) plus 100 ms.
+  - What guards it now (read from source): `EnhancedMotor.stop()` writes 0 past our cache
+    (`architecture/hardware/EnhancedMotor.java:44-49`), and the fail-safe made the SDK forget its cached power, so the
+    0 goes out. Pedro's `Mecanum.stop()` writes 0 to each drive motor whose cached power isn't already 0 (Pedro 3.0.2
+    `revhub` source, `Mecanum.stop`, `CachedMotor.setPower`), and the stop pass calls it first. This holds only while
+    every motor is zeroed in some `stop()`.
+  - Cheap extra guards, not in the code: `setMotorDisable()` after the zero write (not dangerous, so it goes out), or
+    `LynxModule.failSafe()` on each hub at the end of the stop pass, which also covers motors no Module owns.
+  - How it was measured: Bench: Photon Stop Race on 2026-11-20, Control Hub and a USB Expansion Hub, SDK 12.0.0, on
+    Photon's hub objects with Photon off, which call the SDK's own methods. The bench raised the gate and called the
+    fail-safe itself rather than pressing STOP. With the fail-safe on the wire before the enable, the motor was on at
+    0.25 in 14 of 14 trials ([`photon-bench.md`](photon-bench.md#the-2026-11-20-stop-race)). Photon covers only part
+    of it (same page).
 
 ## Driver Station version warning
 
@@ -454,7 +494,12 @@ not run on a hub.
   pulls (`python3 scripts/bench/run_bench.py --pinpoint --interactive --ports-empty`) reads the SDK's driver alone, with
   no follower.
 - **What the hub's fail-safe leaves motors and servos in** (brake or float, servo PWM off or held): press STOP with a
-  servo under load and a motor spinning, and watch both.
+  servo under load and a motor spinning, and watch both. Known so far: a motor is disabled and keeps its power
+  register (measured 2026-11-20, empty ports).
+- **How long the enable race keeps a motor on under a real STOP in `EnhancedOpMode`, and how often it happens**
+  ([OpMode lifecycle](#opmode-lifecycle)). Test, after a bench change: Driver Station STOPs on an `EnhancedOpMode`
+  holding a motor at non-zero power with its enable due, timing the motor's state until the stop pass zeroes it; and
+  the bench race on the SDK's own hub objects, never swapped for Photon's.
 - **How long outputs really hold after the app dies:** with a motor spinning, force-stop the app
   (`adb shell am force-stop com.qualcomm.ftcrobotcontroller`) and time from the kill line in logcat to the motor
   stopping on video. 2.5 s means the keep-alive timeout above.

@@ -49,14 +49,17 @@ SDK 12 source (`LynxRespondable.awaitAndRetransmit`); no Control Hub command tim
 | 2026-10-28 | stock SolversLib Photon 0.3.6 | USB | speed only, earlier bench | none | write block 25.9 to 6.0 ms p50 at 8 parallel, loop 31.8 to 11.5 ms; showed the misrouted replies |
 | 2026-10-29 | `c825493` | USB | short, no I2C | NOT SAFE YET | 3 problems, all fixed since (below); write block 24.96 to 10.84 ms p50, loop 30.7 to 16.0 ms; other timings [below](#how-the-fork-behaved-on-a-hub-2026-10-29) |
 | 2026-11-11 | `709f1cf` | USB | short, with I2C | NOT SAFE YET | 3 failed checks: 2 bench bugs, fixed since, and 1 unexplained read-back (below); write block 22.62 to 7.75 ms p50; soak 26,070 writes per hub in 60 s |
-| 2026-11-17 | the 2026-11-14 bench build, not on main (Photon sources the same as `709f1cf`'s and main's) | USB | short, with I2C | NOT SAFE YET | 2 blockers, one failed trial each, neither explained yet (below); write block 24.19 to 7.82 ms p50, loop 31.38 to 13.76 ms; soak 24,138 writes per hub in 60 s |
+| 2026-11-17 | the 2026-11-14 bench build, not on main (Photon sources the same as `709f1cf`'s and main's) | USB | short, with I2C | NOT SAFE YET | 2 blockers, one failed trial each (below); write block 24.19 to 7.82 ms p50, loop 31.38 to 13.76 ms; soak 24,138 writes per hub in 60 s |
+| 2026-11-20 | the bench build `92016c1`, not on main (Photon sources `6aea840d`, the same as main's) | Control Hub alone, then USB | STOP race only, twice | none: this run gives no verdict | Photon on, enable cache stale: 0 violations in 6 and 12 trials; Photon off (the SDK's path): FAIL, violations in 4 of 6 and 10 of 12; the 20 ms controls clean ([below](#the-2026-11-20-stop-race)) |
 
 ### The 2026-11-17 blockers
 
 The run and its hardware: [`hub-bench-findings.md`, Setup](hub-bench-findings.md#setup). Results are from the 16:58
-run, on the laptop that ran it. Neither blocker is explained yet. The bench changes that can explain them were made
-the same evening, on the bench build only, not on main ([Next runs, step
-0](#0-two-bench-changes-made-on-the-bench-build)); the runs that use them are next.
+run, on the laptop that ran it. Blocker 1 isn't explained yet. Blocker 2's cause was reproduced on 2026-11-20: it is
+the SDK's own path, not Photon's, but as coded it still counts as a blocker in the verdict
+([The 2026-11-20 STOP race](#the-2026-11-20-stop-race)). The bench changes behind both were made the same evening, on
+the bench build only, not on main ([Next runs, step 0](#0-two-bench-changes-made-on-the-bench-build)); the USB block
+that uses them for blocker 1 is next.
 
 **1. Lost writes at depth, Control Hub: 1 of 104 trials failed on time, not on handling.**
 
@@ -119,16 +122,19 @@ the same evening, on the bench build only, not on main ([Next runs, step
   ([`sdk-hub-findings.md`](sdk-hub-findings.md#opmode-lifecycle)). STOP raises the gate, then fail-safes each hub
   (`OpModeManagerImpl.callActiveOpModeStop`), and the fail-safe waits for the hub's link lock, which `efl`'s power write
   held until its ACK.
-- Inferred, likeliest (about 70 to 80%): the fail-safe went out between `efl`'s power write and its enable, and the
-  enable switched `efl` back on at the power still in its register. The sampler's reads on the same link widen that
-  window. Two other readings aren't ruled out: the fail-safe made the SDK forget the cached enable (that needs the
-  OpMode thread to stall for a whole fail-safe round trip, so unlikely), or the hub's firmware left `efl` enabled
-  (unlikely, since the same fail-safe disabled the other three; nothing logs the enable).
-- Nothing in that path is Photon's: with Photon off, its hub objects call the SDK's own methods. So stock SDK 12 is
-  probably exposed the same way (inferred; the stock baseline runs no STOP trials). Photon on had 0 of 40, but 0
-  against 1 in 40 shows nothing (one-sided Fisher p 0.5): don't count Photon as protection.
-- The USB Expansion Hub is probably the more exposed hub (inferred): the sampler's sweeps of the same 6 channels took
-  14 to 24 ms there against 8 to 12 ms on the Control Hub, so each command holds its link about twice as long.
+- Inferred, by far the likeliest now: the fail-safe went out between `efl`'s power write and its enable, and the
+  enable switched `efl` back on at the power still in its register. The 2026-11-20 race reproduced exactly that on
+  demand, 14 times in 14 ([below](#the-2026-11-20-stop-race)). The sampler's reads on the same link widen the window.
+  The two other readings (the fail-safe made the SDK forget the cached enable; the firmware left `efl` enabled) weren't
+  tested and are no longer needed to explain it.
+- Nothing in that path is Photon's: with Photon off, its hub objects call the SDK's own methods. So robot code without
+  Photon is exposed the same way (read from the SDK 12 source; measured only on Photon's hub objects with Photon off,
+  not with the hubs never swapped). What that means for robot code:
+  [`sdk-hub-findings.md`](sdk-hub-findings.md#opmode-lifecycle). Photon on had 0 of 40 here, which shows nothing
+  against 1 in 40 (one-sided Fisher p 0.5); on 2026-11-20 it refused the write in 18 of 18, but only in the one case
+  the bench sets up, so don't count Photon as protection yet.
+- The Expansion Hub is a little more exposed (measured 2026-11-20): from the power frame to the enable is about 4 ms
+  there against about 3 ms on the Control Hub.
 - On the robot (inferred): a motor whose last write is in flight when STOP comes, with its enable due, keeps its last
   power until something sets it to 0: our modules' `stop()` in `EnhancedOpMode`'s stop pass, or else the SDK's
   `$Stop$Robot$` after `stop()` returns, up to 0.9 s later. So keep zeroing every motor in `stop()` with
@@ -138,6 +144,104 @@ the same evening, on the bench build only, not on main ([Next runs, step
   can't see this case. The sampler counts only sweeps after its first all-safe one, so it can't see a motor switched
   back on before then; only `stop()`'s read caught this one. The summary's "fail-safe seen 1-166 ms" is this trial's
   zeroing, not a late fail-safe: without it the fail-safe was seen 1 to 28 ms after the gate on the Expansion Hub.
+  The bench build's stale-cache trials cover this case now (below).
+
+### The 2026-11-20 STOP race
+
+Two runs of Bench: Photon Stop Race on the bench build, made to settle blocker 2.
+
+- **What it proves.** On the SDK's path, a motor whose enable is due is switched back on whenever STOP's fail-safe
+  reaches the wire between its power write and that enable: 14 of 14 such trials over both runs, both hubs (measured).
+  That is the SDK's behaviour, not Photon's. With Photon on, Photon refused its own power write and the SDK never sent
+  the enable: 0 violations in 18 of 18 stale trials (measured), but only for the one moment the bench raises the gate.
+- **What it doesn't prove.** That Photon closes the race under a real STOP. The gate can rise at two other moments
+  that weren't tested, and Photon doesn't cover velocity writes or writes that fall back to the SDK's path (below).
+  Nor that stock SDK 12 with the hubs never swapped does the same: that rests on the SDK source.
+- **What it changes.** Blocker 2's cause is known and isn't Photon's. As coded it still counts as a blocker, because
+  the Photon-off stale line fails whenever a trial hits the window; whether it should is still undecided
+  ([Still unknown](#still-unknown)). Photon stays off the robot: blocker 1, steps 1 to 3 and that decision are open.
+
+**The runs** (measured 2026-11-20, SDK 12.0.0, Control Hub firmware 1.8.2 by the probe, over the USB cable, every
+motor, servo and sensor port empty; folders on the laptop that ran them):
+
+- `bench-results/2026-11-20_162756`: `python3 scripts/bench/run_bench.py --usb --photon-stop-race-only --ports-empty`,
+  the Control Hub alone, 18 trials.
+- `bench-results/2026-11-20_164830`: the same with `--usb-expansion`, the Expansion Hub on its own USB link at address
+  2, 36 trials. The summary's probe line "Expansion Hub at address 2: not in the hardware map, so not answering" is an
+  artifact of the probe config, which puts that hub on the Control Hub's RS485 link; the race's own config put it on
+  its USB link, and its traces carry its own ACKs (measured).
+
+| run | check | trials | judged | violations |
+|---|---|---|---|---|
+| 1 | enable 20 ms before, Photon off | 3 | 3 | 0, PASS |
+| 1 | enable 20 ms before, Photon on | 3 | 3 | 0, PASS |
+| 1 | enable cache stale, Photon off | 6 | 4 (2 had the enable on the wire first) | 4, FAIL |
+| 1 | enable cache stale, Photon on | 6 | 6 | 0, PASS |
+| 1 | installed Photon, port guard (4 ports), logs (18) | | | PASS |
+| 2 | enable 20 ms before, Photon off | 6 | 6 | 0, PASS |
+| 2 | enable 20 ms before, Photon on | 6 | 6 | 0, PASS |
+| 2 | enable cache stale, Photon off | 12 | 10 (2 had the enable on the wire first) | 10 (Control Hub 5 of 6, Expansion Hub 5 of 6), FAIL |
+| 2 | enable cache stale, Photon on | 12 | 12 | 0, PASS |
+| 2 | installed Photon, port guard (8 ports), logs (36) | | | PASS |
+
+**How a trial works** (from `opmodes/test/bench/PhotonStopRaceBench.java` and the runner, on the bench build): one
+OpMode run on motor port 0 of the raced hub, RUN_WITHOUT_ENCODER. It sets 0.2, disables and re-enables the motor,
+waits 20 ms (control) or 600 ms (stale: the SDK's cached enable expires after 500 ms), then calls `setPower(0.25)`. A
+tap on the hub's USB device raises STOP's gate by reflection the moment that power frame goes out, then a bench thread
+calls the hub's fail-safe, the raced hub first. There is no Driver Station STOP. The bench reads the hub's own enable
+and power registers at about 30, 80, 150 and 300 ms; a violation is a read with the motor enabled and the register
+over 1% (327). The register holds −8191 (0.25 on a reversed goBILDA 5202) through the fail-safe in every trial, passing
+ones included (measured), so the enable decides.
+
+**Photon off, one stale Control Hub trial** (run 1, measured, ms after the write call): mode query 0.7, power frame
+3.6, gate 3.9, fail-safe called 4.9, power ACK 5.4, fail-safe frame 6.7 (it waited for the link lock the power write
+held), fail-safe ACK 8.8, then the enable at 10.8 from the OpMode thread, ACKed at 12.4. The Expansion Hub has the same
+shape, slower: power ACK 6.7 to 10.2, fail-safe 7.5 to 11.5, enable 12.2 to 16.3 ms.
+
+- The window (measured): a power round trip took 1.55 to 1.94 ms on the Control Hub and 2.64 to 4.90 ms on the
+  Expansion Hub. With nothing in its way, the enable left 0.95 to 1.35 ms after the power ACK, so from power frame to
+  enable is 2.9 to 3.2 ms on the Control Hub and about 3.9 ms on the Expansion Hub. A fail-safe that reaches the wire
+  in that gap goes out before the enable.
+- Every trial whose fail-safe reached the wire before the enable violated (14 of 14); every trial whose enable went
+  first stayed off (4 of 4). That split is close to the check's own definition. What it adds is that the hub really
+  re-energized: the bench reads the hub's registers, not the SDK's cache. Each violator read enabled at −8191 at about
+  35, 85, 155 and 305 ms, and went off only when the bench zeroed its motors after the last read. That the fail-safe
+  switched it off first is inferred: no read falls between the fail-safe and the enable.
+- Judge by wire order, not by the runner's "queued first" figure (the stopper's call before the power ACK). That
+  figure undercounts: 3 of the 6 trials not queued first violated too, and one queued first had its enable on the wire
+  first (measured).
+
+**Photon on** (measured): all 36 Photon-on trials, controls included, made one parallel write and one Photon
+fail-safe after STOP. Every stale trial's logcat has one `CANCELLED_FOR_SAFETY`, and no enable followed the gate. The
+fail-safe was queued first in 5 of 6 trials in run 1 and 3 of 12 in run 2 (Control Hub 0 of 6, Expansion Hub 3 of 6),
+which doesn't matter on this branch. Why (read from `PhotonLynxModule.sendParallel`): after sending, Photon checks the
+gate; if it is up, Photon refuses its own write with `CANCELLED_FOR_SAFETY`, so `setPower` throws before the SDK
+sends the enable, and Photon then sends its own fail-safe.
+
+What the Photon-on pass doesn't cover:
+
+- The tap raises the gate after the USB write and before Photon's check, so every trial took the one branch that
+  refuses. On a real STOP the gate can also rise before the send (Photon then falls back to the SDK's path;
+  `gateFallbacks` was 0 in every trial, so untested) or after the check (Photon then acknowledges the write itself, the
+  SDK sends the enable and STOP's fail-safe can get ahead of it: read from the code, a window probably well under 1 ms,
+  not measured, untested). The tested case is probably the rarest of the three (inferred).
+- No broken Photon was run as a negative control. The trace rule that fails on any enable after the gate does fire (it
+  flagged every Photon-off enable), but judged by motor state alone a broken refusal would probably pass: its enable
+  would go out before the bench's fail-safe, which runs 0.8 to 3 ms after the gate (inferred).
+- Photon sends in parallel only RUN_WITHOUT_ENCODER `setPower` and servo pulse writes (`wantsParallel`). Velocity
+  writes (RUN_USING_ENCODER, `setVelocity`) and any write that falls back to the SDK's path (slot timeout, a hub
+  marked not responding) send the same power-then-enable pair with the stock window (read from code). None was raced.
+
+What weakens both runs:
+
+- The gate is raised by reflection and the fail-safe comes from a bench thread. A real STOP raises the gate and
+  fail-safes each hub on one thread with nothing in between (read from SDK 12 `OpModeManagerImpl.callActiveOpModeStop`),
+  so the bench's 0.8 to 3 ms between gate and fail-safe gives the enable more time to go first than a real STOP does
+  (inferred).
+- Only motor port 0, RUN_WITHOUT_ENCODER, nothing plugged in. 6 and 12 stale trials per Photon mode. RS485 wiring
+  wasn't run.
+- Otherwise clean (measured): no retransmits, no log problems, no trace overflow or incomplete trace. The dashboard's
+  socket dropped at each config switch, the expected app restart.
 
 ### What else the 2026-11-17 run measured
 
@@ -343,8 +447,8 @@ New lines in `summary.md`:
 - Judged, per Photon mode: **enable cache stale: the motor stays off when STOP lands inside its write**. On the SDK's
   path (Photon off) the SDK sends that enable today, so this line reads FAIL whenever a trial hits the window, and NOT
   JUDGED when none does; it can pass only once nothing sends an enable after STOP's gate. A FAIL there is the answer
-  to blocker 2, not a bench fault. But it counts as a blocker in the verdict, so the go run's gate would refuse to
-  start ([Still unknown](#still-unknown)).
+  to blocker 2, not a bench fault, and it failed in both 2026-11-20 runs. But it counts as a blocker in the verdict,
+  so the go run's gate would refuse to start ([Still unknown](#still-unknown)).
 
 What the answers mean:
 
@@ -355,13 +459,14 @@ What the answers mean:
   the 20 ms limit or pick a new one, never just to make the run pass;
 - a wrong velocity target after a give-up: a blocker for the robot, whatever the timing shows.
 
-In the timing reading these are (a), (b) and (c); the last is the velocity reading's (d). For the STOP race: if the
-reading in blocker 2 is right, Photon off shows an enable after the gate and the motor on at 0.25 whenever the
-fail-safe was queued first, and the 20 ms trials stay clean. If not, look next at the forgotten-cache and firmware
-readings. `--photon-stop-trials 200` measures the rate, not the cause.
+In the timing reading these are (a), (b) and (c); the last is the velocity reading's (d). For the STOP race, run on
+2026-11-20: Photon off showed an enable after the gate and the motor on at 0.25 whenever the fail-safe reached the
+wire before the enable, and the 20 ms trials stayed clean, as blocker 2's reading predicted
+([The 2026-11-20 STOP race](#the-2026-11-20-stop-race)). `--photon-stop-trials 200` measures the rate, not the cause.
 
 ### Before step 1: put the new build on the hub and run the STOP race alone (about 5 min plus the install)
 
+Done on 2026-11-20 ([results](#the-2026-11-20-stop-race)). Rerun it after any change to how Photon handles STOP.
 From the bench build's checkout, over the cable:
 
 ```bash
@@ -540,14 +645,18 @@ before relying on any of these.
   judged twin in step 1 (it needs `--ports-empty`).
 - **Whether Photon should forget the SDK's cached motor and servo values when it gives up on a write**, as it does
   now, or only mark the hub not responding, as the SDK's own timeout does. Decide after the lost-writes test.
-- **What switched the motor back on after STOP, and whether stock SDK 12 does the same.** Test: the STOP race alone
-  ([before step 1](#before-step-1-put-the-new-build-on-the-hub-and-run-the-stop-race-alone-about-5-min-plus-the-install)), its
-  **enable cache stale** line with Photon off; that runs the SDK's path, so it answers for stock too.
 - **Whether a FAIL on the SDK path's stale-race line should block Photon.** As coded it does: the line feeds the
-  verdict's blockers, and the go run starts only after a USB and an RS485 block that PASSED. If the reading in blocker 2
-  is right, the Photon-off line fails whenever a trial hits the window, however Photon behaves, so the go run would
-  probably never start.
-  Decide before step 3.
+  verdict's blockers, and the go run starts only after a USB and an RS485 block that PASSED. The Photon-off line failed
+  in both 2026-11-20 runs and fails whenever a trial hits the window, however Photon behaves, so as coded the go run
+  would never start. Decide before step 3.
+- **Whether Photon refuses the write when STOP's gate rises at the other two moments**, before the send and after its
+  check, and whether the race catches a broken refusal ([The 2026-11-20 STOP race](#the-2026-11-20-stop-race)). Test,
+  after a bench change: Photon-on trials with the gate raised after the check, and one set with the refusal disabled
+  (both must FAIL), and trials with the gate raised before the send (they must drive `gateFallbacks`).
+- **The stale race on a RUN_USING_ENCODER motor with Photon on.** Velocity writes take the SDK's path, so it should
+  fail like Photon off (read from code). Test: the race on a velocity write, after a bench change.
+- **The stale race with the hubs never swapped** (stock SDK 12 with no Photon hub objects): expected to fail the same
+  way (read from source). Test: the race on the SDK's own hub objects, after a bench change.
 - **What the lost-write tracing costs.** Its added work is a few array writes per frame, against the 20 ms limit
   (from the code); not measured on a hub.
 - **Whether a crash with writes in flight without Photon reaches the fail-safe as fast.** On 2026-10-29 a crash took
