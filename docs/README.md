@@ -28,10 +28,10 @@ working on it. `CLAUDE.md` holds only one-line rules and points here.
 
 | page | read it before |
 |---|---|
-| [`sdk-hub-findings.md`](sdk-hub-findings.md) | writing a hardware wrapper, a Module's `stop()`, a sensor thread or voltage compensation, trusting a hub's encoder velocity, reading a hub digital input, reading gamepad presses in a TeleOp, bumping the SDK, quoting a hub's logcat, or reaching a hub over Wi-Fi or adb |
+| [`sdk-hub-findings.md`](sdk-hub-findings.md) | writing a hardware wrapper, a Module's `stop()`, a sensor thread or voltage compensation, trusting a hub's encoder velocity, reading a hub digital input, reading gamepad presses in a TeleOp, bumping the SDK, quoting a hub's logcat, trusting the dashboard's battery voltage or an I2C device check while a hub isn't answering, or reaching a hub over Wi-Fi or adb |
 | [`hub-bench-findings.md`](hub-bench-findings.md) | changing the planner, hub or I2C traffic, odometry, the Limelight, background threads or stop paths |
 | [`loop-time-findings.md`](loop-time-findings.md) | trying to shorten the loop, or adding per-loop hub commands |
-| [`photon-bench.md`](photon-bench.md) | using Photon in a robot OpMode, or running its hub bench |
+| [`photon-bench.md`](photon-bench.md) | using Photon in a robot OpMode, or running its hub bench or reading a run's results |
 | [`photon-offline-results.txt`](photon-offline-results.txt) | trusting the offline Photon suites: their last recorded run |
 
 **Framework, pathing and vision**

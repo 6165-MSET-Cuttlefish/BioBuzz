@@ -51,6 +51,7 @@ SDK 12 source (`LynxRespondable.awaitAndRetransmit`); no Control Hub command tim
 | 2026-11-11 | `709f1cf` | USB | short, with I2C | NOT SAFE YET | 3 failed checks: 2 bench bugs, fixed since, and 1 unexplained read-back (below); write block 22.62 to 7.75 ms p50; soak 26,070 writes per hub in 60 s |
 | 2026-11-17 | the 2026-11-14 bench build, not on main (Photon sources the same as `709f1cf`'s and main's) | USB | short, with I2C | NOT SAFE YET | 2 blockers, one failed trial each (below); write block 24.19 to 7.82 ms p50, loop 31.38 to 13.76 ms; soak 24,138 writes per hub in 60 s |
 | 2026-11-20 | the bench build `92016c1`, not on main (Photon sources `6aea840d`, the same as main's) | Control Hub alone, then USB | STOP race only, twice | none: this run gives no verdict | Photon on, enable cache stale: 0 violations in 6 and 12 trials; Photon off (the SDK's path): FAIL, violations in 4 of 6 and 10 of 12; the 20 ms controls clean ([below](#the-2026-11-20-stop-race)) |
+| 2026-11-20 | the bench build `92016c1`, not on main (Photon sources `6aea840d`) | USB | short, with I2C, 25 lost writes per depth (`2026-11-20_235008`) | NOT SAFE YET | 240 PASS and 36 FAIL lines (18 failed checks, each listed twice); the Control Hub stopped answering for about 1.5 to 2 min mid-run and 15 of the 18 ran inside that, so they prove nothing either way; blocker 1 recurred at 22.44 ms ([below](#the-2026-11-20-usb-block)) |
 
 ### The 2026-11-17 blockers
 
@@ -58,8 +59,9 @@ The run and its hardware: [`hub-bench-findings.md`, Setup](hub-bench-findings.md
 run, on the laptop that ran it. Blocker 1 isn't explained yet. Blocker 2's cause was reproduced on 2026-11-20: it is
 the SDK's own path, not Photon's, but as coded it still counts as a blocker in the verdict
 ([The 2026-11-20 STOP race](#the-2026-11-20-stop-race)). The bench changes behind both were made the same evening, on
-the bench build only, not on main ([Next runs, step 0](#0-two-bench-changes-made-on-the-bench-build)); the USB block
-that uses them for blocker 1 is next.
+the bench build only, not on main ([Next runs, step 0](#0-two-bench-changes-made-on-the-bench-build)). The USB block
+that uses them ran on 2026-11-20 and settled neither: blocker 1 recurred, and the Control Hub went silent mid-run
+([The 2026-11-20 USB block](#the-2026-11-20-usb-block)).
 
 **1. Lost writes at depth, Control Hub: 1 of 104 trials failed on time, not on handling.**
 
@@ -101,9 +103,10 @@ that uses them for blocker 1 is next.
   RUN_USING_ENCODER, such as a flywheel, would get a constant power instead of a velocity target, and the SDK's cache
   can then skip an unchanged `setPower` after it. What the hub does with a constant power in velocity mode isn't known.
   Main's bench can't see it: its motors run without encoders (`opmodes/test/bench/PhotonRig.java`). The bench build's
-  RUN_USING_ENCODER trials look for it (step 0).
+  RUN_USING_ENCODER trials look for it (step 0); on 2026-11-20 they didn't see it in 25 of 25 trials per hub, with
+  empty ports, so registers only ([below](#the-2026-11-20-usb-block)).
 - Coverage gap (measured): depths 0 to 7 were asked for, but at most 5 writes on the Control Hub and 4 on the Expansion
-  Hub were really in flight before a lost write.
+  Hub were really in flight before a lost write (4 and 3 on 2026-11-20, `summary.md:89-90`).
 
 **2. STOP, iterative, Photon off: 1 of 40 trials switched a motor back on after STOP's fail-safe.**
 
@@ -124,15 +127,15 @@ that uses them for blocker 1 is next.
   held until its ACK.
 - Inferred, by far the likeliest now: the fail-safe went out between `efl`'s power write and its enable, and the
   enable switched `efl` back on at the power still in its register. The 2026-11-20 race reproduced exactly that on
-  demand, 14 times in 14 ([below](#the-2026-11-20-stop-race)). The sampler's reads on the same link widen the window.
-  The two other readings (the fail-safe made the SDK forget the cached enable; the firmware left `efl` enabled) weren't
-  tested and are no longer needed to explain it.
+  demand, 14 times in 14 ([below](#the-2026-11-20-stop-race)), and 11 times in 11 more in that night's USB block.
+  The sampler's reads on the same link widen the window. The two other readings (the fail-safe made the SDK forget
+  the cached enable; the firmware left `efl` enabled) weren't tested and are no longer needed to explain it.
 - Nothing in that path is Photon's: with Photon off, its hub objects call the SDK's own methods. So robot code without
   Photon is exposed the same way (read from the SDK 12 source; measured only on Photon's hub objects with Photon off,
   not with the hubs never swapped). What that means for robot code:
   [`sdk-hub-findings.md`](sdk-hub-findings.md#opmode-lifecycle). Photon on had 0 of 40 here, which shows nothing
-  against 1 in 40 (one-sided Fisher p 0.5); on 2026-11-20 it refused the write in 18 of 18, but only in the one case
-  the bench sets up, so don't count Photon as protection yet.
+  against 1 in 40 (one-sided Fisher p 0.5); on 2026-11-20 it refused the write in 30 of 30 stale trials over three
+  runs, but only in the one case the bench sets up, so don't count Photon as protection yet.
 - The Expansion Hub is a little more exposed (measured 2026-11-20): from the power frame to the enable is about 4 ms
   there against about 3 ms on the Control Hub.
 - On the robot (inferred): a motor whose last write is in flight when STOP comes, with its enable due, keeps its last
@@ -243,6 +246,144 @@ What weakens both runs:
 - Otherwise clean (measured): no retransmits, no log problems, no trace overflow or incomplete trace. The dashboard's
   socket dropped at each config switch, the expected app restart.
 
+### The 2026-11-20 USB block
+
+Step 1 on the bench build `92016c1` (Photon sources `6aea840d`), results in `bench-results/2026-11-20_235008` on the
+laptop that ran it: `python3 scripts/bench/run_bench.py --usb --photon --usb-expansion --photon-i2c --ports-empty
+--photon-depth-reps 25`. Control Hub plus the Expansion Hub on its own USB link at address 2, both firmware 1.8.2;
+motor and servo ports empty; OctoQuad in Control Hub I2C port 2, Pinpoint in Expansion Hub I2C port 1. About 54 min
+of bench work. Times below are the laptop's clock unless they say hub time (hub time = laptop time + about 18:03:16,
+the hub's clock not being set).
+
+- **Verdict NOT SAFE YET.** `summary.md` has 240 PASS and 36 FAIL lines: 18 failed checks, each listed twice.
+- **The Control Hub stopped answering for about 1.5 to 2 min**, in the middle of ordinary Photon writing, then
+  answered again. 15 of the 18 failed checks ran inside that time, so this run neither passes nor fails them. What
+  caused it and what ended it aren't known.
+- **The STOP checks prove nothing this run**, by the runner's own rule: "a STOP negative control didn't register
+  every time, so the STOP checks prove nothing" (`summary.md:557`). The once and linear-once controls broke only
+  because the Control Hub was silent.
+- **Blocker 1 recurred** (one call took 22.44 ms), and the summary missed it. **Blocker 2's race** failed on the SDK's
+  path again and passed with Photon on.
+- **Next:** three bench changes, then this block again ([Next runs](#before-step-1-again-three-bench-changes)).
+
+**What failed, by cause** (most important first; line numbers are the checks list in `summary.md`):
+
+| cause | failed checks | lines |
+|---|---|---|
+| the Control Hub silent (below) | 15: the once and linear-once negative controls and the once logs; Bench: Photon Routing h1, h3, h5 and s1 and Bench: Photon Stock h2 not running to the end; routing consecutive 1, 3 and 5 and before deploySloth; the crash's outputs-off and leftovers checks; consecutive OpModes | 120-122, 126-131, 133-134, 144-147 |
+| late Control Hub replies in one STOP trial (below) | 1: the logs of STOP, iterative, Photon on8 (`photon_stop_iter_on_005`) | 110 |
+| the Faults step's logcat cut short (below) | 1: the logs of Bench: Photon Faults | 102 |
+| the SDK's enable race, blocker 2 (known) | 1: Photon off, enable cache stale | 105 |
+
+**1. The Control Hub went silent** (measured unless marked):
+
+- **Start.** About 380 ms into "phase writing" of the first once-control trial (`photon_stop_iter_once_000`), with
+  Photon on at 8 parallel. The sampler's last good Control Hub sweep ended at 379.857 ms and its first failed
+  one began at 379.863 ms (`raw/photon_stop_iter_once_000.json`): about 00:31:54 (hub time 18:35:10.42). The first
+  retransmit is at hub time 18:35:10.518 (`logs/photon_stop_iter_once_000.log:14`), and the hub was marked
+  unresponsive at 18:35:10.669 to 10.685 (lines 33-61).
+- **The negative controls didn't start it.** The once control's late write goes out only after STOP, which came at
+  18:35:13.178 (line 64), 2.76 s after the hub went quiet. The hub still answered after the last held control:
+  `raw/photon_stop_iter_held_004.json` has no failed Control Hub sweep through 5322 ms, and once_000's sweeps up to
+  379 ms read back right. The STOP bench has no I2C code, so no OctoQuad traffic is shown when it started.
+- **During it** the Control Hub sent nothing back at any probe. The routing bench marks each hub not responding,
+  sends a voltage read and waits 1 s for any reply (`PhotonRoutingBench.java:103-121`). In h1, h3, h5 and s1 the
+  Control Hub never answered (no clear time, 0.0 V); the Expansion Hub cleared in 1.8 to 4.0 ms each time. No
+  captured log has a reply from it. The logs don't cover all of it: each step change leaves a 1 to 3 s gap, and
+  nothing was captured for 28 s around deploySloth.
+- **End.** Between hub time 18:36:43.96, when s1 crashed (`logs/photon_routing_s1.log`), and 18:37:13.49, when s2 got
+  its reply (`REV Hub #173 has reconnected`, `logs/photon_routing_s2.log:18`): 00:33:28 to 00:33:58. So it lasted
+  about 93 to 123 s. The app wasn't restarted: pid 1321 and the same Control Hub object in h1, s1 and s2. The config
+  switch and app restart came after s2 (`run.log:597`), and from 00:33:59 on everything passed again.
+- **What ended it isn't known.** deploySloth ran inside that window (staged at hub time 18:36:56.04, processed at
+  18:37:06.66), but no logcat was captured from 18:36:43.96 to 18:37:12.30. So neither deploySloth, a new INIT nor
+  time alone is shown, and six INITs before it didn't bring the hub back.
+- **Not the battery.** It didn't dip: the run's "lowest 12.86 V" is the Expansion Hub's own reading. The dashboard
+  shows the highest of the hubs' voltages (slothboard's `FtcDashboard.java`, a `Math.max` over every hub's
+  `getInputVoltage`), and the Control Hub reads about 0.13 V above the Expansion Hub every time (12.992 against
+  12.865 V in s2, 13.302 against 13.171 V in r01). When the Control Hub's read returned 0, the Expansion Hub's
+  normal value showed through: `power.jsonl` reads 12.987 V at 00:31:50, 12.86, 12.856 and 12.869 V while the
+  Control Hub read 0, and 12.996 V at 00:33:56.
+- **Not the adb drop.** Forwards were found gone only at 23:58:22 and 07:51:15 (`run.log`), and the app's pid was
+  1321 from hub time 18:02 to 18:37.
+- **The OctoQuad's chip ID 0x00 is a symptom.** Bench: Photon Stock h2's read went to the silent Control Hub and came
+  back at once as the SDK's placeholder (`LynxI2cDeviceSynch: placeholder: readTimestamped`,
+  `logs/photon_stock_h2.log:51-53, 73, 79`): it never reached the bus. Whether the OctoQuad was fine isn't shown: no
+  OctoQuad read ran after the outage.
+- **Not every run does it.** The same Photon sources ran the same block with the same OctoQuad and Pinpoint wiring
+  on 2026-11-17, on the older bench build, and every held, once and linear-once trial passed with no problems there.
+- **A possible early sign** (the link isn't shown): at hub time 18:18:34 to 18:18:36, in `photon_stop_iter_on_005`
+  with no fault injected, the Control Hub answered more than 100 ms late twice (cause 2). Outside the Faults step, the
+  only Control Hub retransmits in this run are in that trial (3) and once_000 (16). Outside their Faults steps, the
+  2026-11-17 run and both 2026-11-20 STOP race runs have none.
+- **Not known:** whether the silence was on the hub's side (its Lynx chip, or the Control Hub's internal serial path
+  to it) or the app's (the reader thread or the Android serial port stalled): no thread dump or link trace was
+  taken. Whether the OctoQuad or its wiring plays any electrical part: no evidence either way. How often it happens:
+  1 of 2 runs with this sequence, so no rate.
+
+**2. Late Control Hub replies in one STOP trial** (`photon_stop_iter_on_005`, `logs/photon_stop_iter_on_005.log:4-5,
+15-18`). Each `unable to find originating` line refers to a message number retransmitted about 50 ms earlier.
+Inferred: the hub's first reply finished the command, and the reply to the copy found nothing waiting. The trial
+still had 0 violations, and its counters at STOP read 1 retransmit, 0 orphan datagrams and 0 number clashes. No other
+STOP or race trial log in any results folder has that line. The runner fails on it on purpose, because an unmatched
+reply can also mean misrouted replies ([Why a fork](#why-a-fork)). The same trial gives the iterative on8 "fail-safe
+seen 1-78 ms": one slow Control Hub sampler sweep ran from 3.3 ms before the gate to 78.2 ms after
+(`raw/photon_stop_iter_on_005.json`). Without it the range is 1-29 ms.
+
+**3. The Faults step's logcat was cut short.** logd replaced 2,124 of the app's lines with 39 `chatty ... expire`
+lines, and the first phase marker left is the 320th of 490, "lost write at depth 2 controlHub 18"
+(`logs/photon_faults.log:111`). Logcat for the phases before it is missing, so a real warning there would not have
+been seen. The `'init'` warning in that FAIL is a late reply inside a lost-write phase whose marker was dropped (line
+110). The bench build's runner sets `logcat -G 8M` only when it connects and when it waits for the hub to come back
+(`scripts/bench/run_bench.py:7422, 11750`), not when it finds a forward gone (`:1758-1768`). Inferred: the hub
+rebooted between 23:54 and 23:58, while the runner waited for the I2C devices to be plugged in, and the reboot reset
+the buffer. The hub clock went back from 18:03:50 at the end of `logs/config_02_*` to 18:01:39 at the start of
+`logs/config_03_*`, the app's pid changed from 1697 to 1321, and `chatty` lines appear from config_03 on, none
+before. Why the hub rebooted isn't known: a power cycle, a brownout while plugging in, or something else.
+
+**4. The SDK's enable race, again** (`summary.md:432-435`, `raw/photon_race_stale_*.json`):
+
+| check | trials | result |
+|---|---|---|
+| enable 20 ms before, Photon off / on | 6 / 6 | 0 violations each, PASS |
+| enable cache stale, Photon off | 12, 11 judged | 11 violations (Control Hub 5 of 6, Expansion Hub 6 of 6), FAIL |
+| enable cache stale, Photon on | 12 | 0 violations, every read disabled, PASS |
+
+- In the 11 Photon-off violators the enable followed the fail-safe frame by 3.1 to 4.9 ms, 5.68 to 8.12 ms after the
+  gate, and every read showed the motor enabled. The bench's fail-safe was called 0.64 to 2.99 ms after the gate in
+  all 24 stale trials.
+- `stale_off_controlHub_5` was rightly left unjudged: its enable went out at 4.70 ms, before the fail-safe at 14.30
+  ms, and the motor read disabled at every read.
+- Over the three 2026-11-20 runs, a fail-safe on the wire before the enable left the motor on in 25 of 25 trials, and
+  an enable first left it off in 5 of 5.
+- Each of the 18 Photon-on race logs has exactly one `CANCELLED_FOR_SAFETY`. None of the 36 race logs has a
+  retransmit or an unmatched reply.
+
+**Where each earlier blocker stands:**
+
+| blocker or open question | after this run |
+|---|---|
+| 1. a write over 20 ms after a give-up | Recurred, still open. One Control Hub call to `fr` took 22.44 ms in "lost write velocity controlHub 16"; its power ACK came 11.58 ms after its frame (265.73 to 277.31 ms in `raw/photon_faults_trace_1_*.json`). The next slowest were 9.72 ms (Control Hub) and 11.11 ms (Expansion Hub), both in trials that weren't velocity trials. The summary's "0 over 20 ms" and "no slow call: no reading" (`summary.md:393-399`) are only because its slow-call reading skips the velocity trials (the bench build's `run_bench.py:4086-4093`), and the 20 ms limit is applied only to the depth trials (`:4260-4262`). Which reading, (a), (b) or (c), isn't settled. |
+| depth coverage | Still short: at most 4 writes in flight on the Control Hub and 3 on the Expansion Hub. |
+| RUN_USING_ENCODER after a give-up | Not seen: 25 of 25 trials per hub kept their target, with 1 Control Hub and 10 Expansion Hub velocity writes sent while the hub was marked not responding (`summary.md:93-94`). Empty ports, so only registers were judged. |
+| forget the caches on a give-up or not | Still open: it waits on row 1. |
+| 2. STOP, SDK path | The race failed on the SDK's path again (11 of 11 judged) and passed with Photon on (0 of 12). Ordinary STOP had 0 violations in 40 trials for each of iterative on8, iterative off, linear on8 and linear off (`summary.md:418-423`), but the STOP checks prove nothing this run (above). |
+| should the stale-race FAIL block Photon | Still open; it failed again. |
+| routing, crash, consecutive OpModes, negative controls | Not judged in effect: they failed only inside the outage. They need the rerun. |
+| soak rate | Still short: 26,418 writes per hub in 60.04 s, 0 lost and 0 retransmitted (`summary.md:63`), under the 28,400 the go run needs. |
+
+**Measured numbers.** The ones that compare with earlier runs are in the 2026-11-20 column of the table under
+[What else the 2026-11-17 run measured](#what-else-the-2026-11-17-run-measured). Besides those:
+
+- The 533 ms top of linear off's "fail-safe seen 2-533 ms" is the SDK's known LinearOpMode STOP-interrupt lock leak:
+  5 leaks in 40 trials with Photon off, 0 in 40 with on8 (`summary.md:531`).
+- I2C with Photon on: 58,024 byte-exact reads, p95 0.63 to 0.76 times Photon off's (`summary.md:227-228`).
+- Two hubs at once at 8 parallel: adds up, 1.00 (hub by hub) and 1.01 (alternating) drained, 1.11 and 1.12 until the
+  calls return (`summary.md:273`).
+- Framework Loop with Photon ran to the end, but with `driverStationConnected` false, against true on 2026-11-17
+  (`raw/framework_loop_photon0.json` and `photon8.json`). That plausibly explains its faster `dsEveryLoop` p50, 7.39
+  and 7.12 ms (Photon 0 and 8) against 9.55 and 10.90 ms then.
+
 ### What else the 2026-11-17 run measured
 
 Passed (measured, `summary.md`):
@@ -263,25 +404,29 @@ Passed (measured, `summary.md`):
 
 Changed since 2026-10-29 (measured; the 2026-10-29 figures are [below](#how-the-fork-behaved-on-a-hub-2026-10-29)):
 
-| | 2026-10-29 | 2026-11-17 |
-|---|---|---|
-| write block, both hubs, p50: stock / 8 parallel | 24.96 / 10.84 ms | 24.19 / 7.82 ms |
-| loop period, p50: stock / 8 parallel | 30.7 / 16.0 ms | 31.38 / 13.76 ms |
-| write block at 2 / 4 / 8 parallel | 10.96 / 10.66 / 10.84 ms: all equal | 9.71 / 7.65 / 7.82 ms: 2 is slower |
-| single lost write: resent, resent, given up, call | 101-106, 203-210, 253-296, 0.58-1.13 ms | 101.4-106.3, 202.4-209.3, 258.1-301.5, 0.41-1.50 ms |
-| full limit of lost writes: next writes, given up | up to 6.7 ms CH, 8.1 ms EH; about 264 ms | up to 6.86 ms CH, 8.45 ms EH; 263 and 259 ms |
-| write storm, longest stall | 6.8 ms | 7.36 ms |
-| hub reset, slowest output, off / on8 | CH 194.7 / 198.8, EH 197.2 / 189.7 ms | CH 195.0 / 195.2, EH 200.1 / 199.8 ms |
-| crash with 4 writes in flight, fail-safe seen | 539-542 ms | 26.5 ms CH, 38.8 ms EH |
-| iterative STOP, fail-safe seen | 0-37 ms (on and off) | 0-33 ms on8, 1-29 ms off (without the failed trial) |
-| `WriteCache` after `failSafe()` with Photon | servo 1.9 ms, motor 232.8 ms (1 trial) | both 271.9 ms at worst, together every time (7) |
-| soak, writes per hub in 60 s | 30,510 (no I2C) | 24,138 (with I2C; 26,070 on 2026-11-11) |
+| | 2026-10-29 | 2026-11-17 | 2026-11-20 |
+|---|---|---|---|
+| write block, both hubs, p50: stock / 8 parallel | 24.96 / 10.84 ms | 24.19 / 7.82 ms | 23.52 / 7.17 ms |
+| loop period, p50: stock / 8 parallel | 30.7 / 16.0 ms | 31.38 / 13.76 ms | 30.30 / 13.04 ms |
+| write block at 2 / 4 / 8 parallel | 10.96 / 10.66 / 10.84 ms: all equal | 9.71 / 7.65 / 7.82 ms: 2 is slower | 8.86 / 7.19 / 7.17 ms: 2 is slower |
+| single lost write: resent, resent, given up, call | 101-106, 203-210, 253-296, 0.58-1.13 ms | 101.4-106.3, 202.4-209.3, 258.1-301.5, 0.41-1.50 ms | 101.26-104.58, 202.52-209.66, 258.02-297.84, 0.39-1.11 ms |
+| full limit of lost writes: next writes, given up | up to 6.7 ms CH, 8.1 ms EH; about 264 ms | up to 6.86 ms CH, 8.45 ms EH; 263 and 259 ms | up to 6.75 ms CH, 7.96 ms EH; 260.23 and 261.17 ms |
+| write storm, longest stall | 6.8 ms | 7.36 ms | 5.27 ms, 0 slot timeouts |
+| hub reset, slowest output, off / on8 | CH 194.7 / 198.8, EH 197.2 / 189.7 ms | CH 195.0 / 195.2, EH 200.1 / 199.8 ms | CH 191.5 / 197.9, EH 198.7 / 202.8 ms |
+| crash with 4 writes in flight, fail-safe seen | 539-542 ms | 26.5 ms CH, 38.8 ms EH | 3 in flight; EH 530.8 ms, CH none (its sampler failed): ran while the Control Hub was silent, not comparable |
+| iterative STOP, fail-safe seen | 0-37 ms (on and off) | 0-33 ms on8, 1-29 ms off (without the failed trial) | 1-78 ms on8 (1-29 without one slow sampler sweep), 0-30 ms off |
+| `WriteCache` after `failSafe()` with Photon | servo 1.9 ms, motor 232.8 ms (1 trial) | both 271.9 ms at worst, together every time (7) | both 258.29 ms at worst (7); raw channels 38.70 ms |
+| soak, writes per hub in 60 s | 30,510 (no I2C) | 24,138 (with I2C; 26,070 on 2026-11-11) | 26,418 (with I2C) |
+
+The 2026-11-20 column is the USB block ([The 2026-11-20 USB block](#the-2026-11-20-usb-block)); every row but the
+crash ran before or after the Control Hub's silent spell.
 
 - The write path's own steps are now measured on a hub (`timing on8 profiled`, p50): the USB write 112.5 µs on the
   Control Hub and 507.5 µs on the Expansion Hub, the whole parallel send 332.5 and 692.5 µs.
 - Writes to the two hubs add up, not overlap (the **Two hubs at once** line, one run, 300 loops per set): drained, 12
   together took 0.99 (hub by hub) and 1.00 (alternating) times 6 + 6 alone at 8 parallel; the lowest ratio in the
-  table was 0.94, alternating at 2 parallel. The table and what it means for the wiring:
+  table was 0.94, alternating at 2 parallel. On 2026-11-20 it read 1.00 and 1.01. The table and what it means for the
+  wiring:
   [`wiring-findings.md`](wiring-findings.md#estimated-loop-period).
 
 ### Earlier runs
@@ -352,15 +497,20 @@ installs, starts the app, waits for `INIT FINISH` and prints the command that pu
 install: deploySloth never reloads Photon's `@Pinned` classes, and the block's first check compares the hub's Photon
 with your sources and fails on a mismatch. Run from a committed tree: the summary records the git hash.
 
-**Wiring.** Unplug everything not in this table.
+**Wiring.** Unplug everything not in this table. Only the motor and servo ports are empty: the two I2C devices
+stay plugged in.
 
 | | Control Hub | Expansion Hub |
 |---|---|---|
 | power | 12 V battery | from the Control Hub's second XT30 port |
 | motor ports 0-3, servo ports 0-1 | **empty** | **empty** |
-| I2C | OctoQuad in port 2 | goBILDA Pinpoint in port 1 |
+| I2C (needed for `--photon-i2c`) | **OctoQuad in port 2** | **goBILDA Pinpoint in port 1** |
 | link | | runs 1 and 3: USB cable from the Control Hub to its mini-USB, no RS485 cable; run 2: RS485 cable only, address 2 |
 
+- `--ports-empty` is about the motor and servo ports only. With `--photon-i2c` the bench reads both I2C devices, and a
+  missing one makes the bench OpMode throw: on 2026-11-20 a read that failed for another reason threw "the OctoQuad
+  on controlHub I2C bus 2 read chip ID 0x00, not 0x51: it isn't answering. Plug it in there, or rerun without
+  --photon-i2c". The runner asks for both at the start.
 - With no Expansion Hub, the Pinpoint goes in Control Hub I2C port 1.
 - No Brushland laser rangefinders: ours are stored in analog mode, and I2C traffic in their first second after
   power-up switches them out of it.
@@ -447,8 +597,8 @@ New lines in `summary.md`:
 - Judged, per Photon mode: **enable cache stale: the motor stays off when STOP lands inside its write**. On the SDK's
   path (Photon off) the SDK sends that enable today, so this line reads FAIL whenever a trial hits the window, and NOT
   JUDGED when none does; it can pass only once nothing sends an enable after STOP's gate. A FAIL there is the answer
-  to blocker 2, not a bench fault, and it failed in both 2026-11-20 runs. But it counts as a blocker in the verdict,
-  so the go run's gate would refuse to start ([Still unknown](#still-unknown)).
+  to blocker 2, not a bench fault, and it failed in all three 2026-11-20 runs. But it counts as a blocker in the
+  verdict, so the go run's gate would refuse to start ([Still unknown](#still-unknown)).
 
 What the answers mean:
 
@@ -485,7 +635,31 @@ python3 scripts/bench/run_bench.py --usb --photon-stop-race-only --usb-expansion
 Motor ports 0-3 and servo ports 0-1 empty on both hubs, as for the block. Read the **enable cache stale** line for
 each Photon mode.
 
+### Before step 1 again: three bench changes
+
+Not done yet. Step 1 ran on 2026-11-20 ([results](#the-2026-11-20-usb-block)) and has to run again: by the runner's
+own rule its STOP checks prove nothing, and its routing, crash and consecutive-OpMode checks were never judged
+against a working Control Hub. Don't run step 2 first: it runs the same STOP, routing and crash steps on the same
+Control Hub, so if the outage comes back it voids that run's 52 minutes too. Make these changes on the bench build
+first:
+
+1. Set `logcat -G 8M` again whenever the runner finds a forward gone or the hub back (the bench build's
+   `run_bench.py:1758-1768`), so the Faults log isn't cut again.
+2. Keep one logcat capture running across step boundaries and through deploySloth, so a recovery can't land in a gap
+   with no log.
+3. Count the velocity trials in the slow-call reading (**Lost writes, timing reading**), or give them their own line.
+
+If it's cheap, also take a thread dump (as `opmodes/test/bench/FreezeDumpBench.java` does) the first time the
+Control Hub (module 173) is marked unresponsive outside the Faults step: that would tell the hub's side from the
+app's.
+
+Then rerun step 1 with the same command. If it is clean, go on to step 2. If the outage comes back, chase the Control
+Hub or its link before step 2 or 3: the thread dump, the OctoQuad's cable or port swapped, the hub's firmware checked.
+
 ### 1. USB block (about 60 min)
+
+Ran on 2026-11-20 (about 54 min of bench work, [results](#the-2026-11-20-usb-block)). Rerun it after the changes
+above.
 
 ```bash
 python3 scripts/bench/run_bench.py --usb --photon --usb-expansion --photon-i2c --ports-empty --photon-depth-reps 25
@@ -497,8 +671,9 @@ terminal it asks twice at the start (ports empty; plug in the Pinpoint and OctoQ
 Pinpoint to Control Hub I2C port 1). A short run says **PASSED THIS RUN, NOT YET SAFE** at best. Read the **Lost
 writes, timing reading** and **velocity reading** lines first.
 
-On USB wiring Bench: Photon ends with the two-hubs-at-once phase (about 3 min, no prompts). On 2026-11-17 (one run) it
-measured that Photon's writes to the two hubs add up ([`wiring-findings.md`](wiring-findings.md#estimated-loop-period)).
+On USB wiring Bench: Photon ends with the two-hubs-at-once phase (about 3 min, no prompts). On 2026-11-17 and
+2026-11-20 it measured that Photon's writes to the two hubs add up
+([`wiring-findings.md`](wiring-findings.md#estimated-loop-period)).
 It runs Photon off and at 8, 4 and 2 parallel, 6 changed writes on each hub alone, all 12 hub by hub and alternating
 hubs, and 3 + 3, 5 + 1 and 1 + 5, 300 loops each, each timed until the calls return and until every write is acknowledged. The
 **Two hubs at once** line in `summary.md` reads it at 8 parallel: adds up, in between or overlaps. It is a record,
@@ -507,8 +682,9 @@ other phase's.
 
 ### 2. RS485 block (about 52 min)
 
-Recable the Expansion Hub to RS485 only (no USB cable), address 2, or add `--expansion-address N`. The runner asks for
-the Pinpoint back in Expansion Hub I2C port 1.
+Only after a clean rerun of step 1 ([above](#before-step-1-again-three-bench-changes)). Recable the Expansion Hub
+to RS485 only (no USB cable), address 2, or add `--expansion-address N`. The runner asks for the Pinpoint back in
+Expansion Hub I2C port 1.
 
 ```bash
 python3 scripts/bench/run_bench.py --usb --photon --photon-rs485 --photon-i2c --ports-empty
@@ -533,8 +709,9 @@ the cable pulls are USB only).
 needs 6,818,182 writes per hub: about 474 a second for 4 hours. The short run for the same wiring soaks for 60 s with
 the same I2C readers: in its `summary.md`, **Write soak** gives `writes per hub`. Under about 28,400 there, that rate
 can't reach the bound in 4 hours, so the go run would end NOT SAFE however well Photon behaves: record it and don't
-start the go run. With the I2C readers it already falls short on USB: 26,070 on 2026-11-11 and 24,138 in 60.03 s on
-2026-11-17, about 402 a second per hub, so the bound would take about 4.7 h. Only the 2026-10-29 soak, with no I2C
+start the go run. With the I2C readers it already falls short on USB: 26,070 on 2026-11-11, 24,138 in 60.03 s on
+2026-11-17 (about 402 a second per hub, so the bound would take about 4.7 h) and 26,418 in 60.04 s on 2026-11-20
+(about 440 a second, about 4.3 h). Only the 2026-10-29 soak, with no I2C
 (30,510 in 60.01 s, about 508 a second), was fast enough. On RS485 the Expansion Hub's writes go the SDK's way at
 about 2.5 ms each, so expect that go run to fall short too.
 
@@ -586,7 +763,7 @@ Record every run:
   section of [`docs/loop-time-findings.md`](loop-time-findings.md#photon);
 - on USB wiring, the **Two hubs at once** line, dated, in
   [`wiring-findings.md`](wiring-findings.md#estimated-loop-period), and the wiring map's split rechecked if it ever
-  reads anything but "adds up" (2026-11-17 read adds up).
+  reads anything but "adds up" (2026-11-17 and 2026-11-20 read adds up).
 
 ## After SAFE
 
@@ -638,17 +815,33 @@ before relying on any of these.
 
 ## Still unknown
 
-- **What made one Control Hub write take 22.36 ms after a give-up, and whether that is Photon's.** Test: the
-  **Lost writes, timing reading** line of [step 1](#1-usb-block-about-60-min), with the new build installed.
-- **Whether a give-up can leave a RUN_USING_ENCODER motor on a constant power** (from the code, not seen on a hub;
-  [The 2026-11-17 blockers](#the-2026-11-17-blockers)). Test: the **Lost writes, velocity reading** line and its
-  judged twin in step 1 (it needs `--ports-empty`).
+- **What silenced the Control Hub for about 1.5 to 2 min on 2026-11-20** ([The 2026-11-20 USB
+  block](#the-2026-11-20-usb-block)): the hub's side (its Lynx chip or its internal serial path) or the app's (the
+  reader thread or the Android serial port); what ended it, and exactly when (the 28 s around deploySloth have no
+  logcat); whether the Control Hub's late replies about 17 minutes earlier and the 11.58 ms power ACK in the Faults step
+  were early signs of it; whether the OctoQuad or its wiring plays any electrical part; and how often it happens (1
+  of 2 runs with this sequence). Test: the step 1 rerun with the bench changes
+  [before it](#before-step-1-again-three-bench-changes), ideally with the thread dump.
+- **Why the hub rebooted at about 23:54 to 23:58 on 2026-11-20**, while the runner waited for the I2C devices to be
+  plugged in (inferred from its clock and the app's pid): a power cycle, a brownout while plugging in, or something
+  else.
+- **What made one Control Hub write take 22.36 ms (2026-11-17) and 22.44 ms (2026-11-20) after a give-up, and
+  whether that is Photon's.** On 2026-11-20 it fell in a velocity trial, which the **Lost writes, timing reading**
+  line skips, so the reading said "no slow call"; which of (a), (b) or (c) it is wasn't worked out. Test: the step 1
+  rerun with velocity trials counted (bench change 3).
+- **Whether a give-up can leave a RUN_USING_ENCODER motor on a constant power** (from the code;
+  [The 2026-11-17 blockers](#the-2026-11-17-blockers)). Not seen on 2026-11-20: 25 of 25 trials per hub kept their
+  target, 11 of them with a velocity write sent while the hub was marked not responding. Empty ports, so what a
+  loaded motor does isn't known. Test: the same lines in the step 1 rerun.
+- **Routing, a crash with writes in flight, consecutive OpModes and the once and linear-once negative controls on
+  the bench build:** on 2026-11-20 they failed only while the Control Hub was silent, so that run neither passes nor
+  fails them. Test: the step 1 rerun.
 - **Whether Photon should forget the SDK's cached motor and servo values when it gives up on a write**, as it does
   now, or only mark the hub not responding, as the SDK's own timeout does. Decide after the lost-writes test.
 - **Whether a FAIL on the SDK path's stale-race line should block Photon.** As coded it does: the line feeds the
   verdict's blockers, and the go run starts only after a USB and an RS485 block that PASSED. The Photon-off line failed
-  in both 2026-11-20 runs and fails whenever a trial hits the window, however Photon behaves, so as coded the go run
-  would never start. Decide before step 3.
+  in all three 2026-11-20 runs and fails whenever a trial hits the window, however Photon behaves, so as coded the go
+  run would never start. Decide before step 3.
 - **Whether Photon refuses the write when STOP's gate rises at the other two moments**, before the send and after its
   check, and whether the race catches a broken refusal ([The 2026-11-20 STOP race](#the-2026-11-20-stop-race)). Test,
   after a bench change: Photon-on trials with the gate raised after the check, and one set with the refusal disabled
@@ -660,8 +853,11 @@ before relying on any of these.
 - **What the lost-write tracing costs.** Its added work is a few array writes per frame, against the 20 ms limit
   (from the code); not measured on a hub.
 - **Whether a crash with writes in flight without Photon reaches the fail-safe as fast.** On 2026-10-29 a crash took
-  539-542 ms to reach it with Photon on, on 2026-11-17 27-39 ms. Test: Bench: Photon Crash with Photon left off, same
-  sampler; it always enables Photon at 8 parallel today, so it needs a Photon-off option first.
+  539-542 ms to reach it with Photon on, on 2026-11-17 27-39 ms. On 2026-11-20 the Expansion Hub took 530.8 ms, but
+  that trial ran while the Control Hub was silent, so it isn't comparable, and why it took that long isn't known.
+  Test: Bench: Photon Crash with Photon left off, same sampler; it always enables Photon at 8 parallel today, so it
+  needs a Photon-off option first.
 - **How the go run's soak can reach the loss bound** with `--photon-i2c`: at 2026-11-17's rate it needs about 4.7 h
-  on USB, past the 4 h cap ([Check the soak rate first](#3-go-run-6-7-h-only-after-1-and-2-pass)). The RS485 rate isn't
-  measured yet: the RS485 short run's **Write soak** gives it.
+  on USB and at 2026-11-20's about 4.3 h, both past the 4 h cap
+  ([Check the soak rate first](#3-go-run-6-7-h-only-after-1-and-2-pass)). The RS485 rate isn't measured yet: the
+  RS485 short run's **Write soak** gives it.

@@ -133,6 +133,11 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   (both hubs' bulk reads 5.72 ms p50 against 2.10 ms for the Control Hub alone) and 2.9 to 3.2 ms with the hub on its
   own USB link (4.98 against 2.08 ms, 2026-11-17, Photon off; [`hub-bench-findings.md`](hub-bench-findings.md)).
   `EnhancedOpMode` clears (`architecture/core/EnhancedOpMode.java:404`) and never checks.
+- An I2C read to a hub marked unresponsive came back at once filled with zeros without reaching the bus, so the
+  device check read "not plugged in" when it was the hub that wasn't answering. Seen once on a hub, 2026-11-20: an
+  OctoQuad's chip-ID check read 0x00 while the Control Hub was silent, logging `LynxI2cDeviceSynch: placeholder:
+  readTimestamped` and "OctoQuad does not report correct CHIP_ID value; (got 0x0; expected 0x51)" (inferred: on
+  Photon's hub objects with Photon off; [`photon-bench.md`](photon-bench.md#the-2026-11-20-usb-block)).
 
 ## Digital inputs
 
@@ -181,6 +186,11 @@ and `FtcCommon` jars, by file and 12.0.0 line number. Recheck these after an SDK
   temperature (source: `LynxVoltageSensor`, `LynxModule`). A failed one returns 0. Costs:
   [`hub-bench-findings.md`](hub-bench-findings.md), Hub costs.
 - `EnhancedOpMode` reads the battery every 50 loops (`architecture/core/EnhancedOpMode.java:39`, `:408-411`).
+- **The dashboard's battery voltage is the highest hub's reading** (slothboard's `FtcDashboard.java`, a `Math.max`
+  over every hub's `getInputVoltage`). Measured 2026-11-20, with the Expansion Hub powered from the Control Hub's
+  second XT30 port, both firmware 1.8.2: the Control Hub read about 0.13 V above the Expansion Hub every time (12.992
+  against 12.865 V, 13.302 against 13.171 V). So when the Control Hub's read fails and returns 0, the dashboard shows
+  the Expansion Hub's normal value, about 0.13 V lower, which looks like a sag but isn't one.
 
 ## Timestamps
 
@@ -437,6 +447,10 @@ OS 1.1.3 on the hub whose properties were read; source lines are the SDK 12.0.0 
   from that order; no bench log shows a Studio Run). The hub is API 25 (`ro.build.version.sdk`). A shell force-stop
   on the hub killed the app's process in the same millisecond (2026-10-24 log), so no `stop()` runs. Teammates'
   Studio versions were not checked.
+- **Logcat can lose the app's lines under heavy logging.** Measured 2026-11-20: in one hub bench step, logd replaced
+  2,124 of the Robot Controller app's lines with 39 `chatty ... expire N lines` entries, so the start of that step's
+  log was gone. The hub bench raises the log buffer with `logcat -G 8M`; inferred from that run, a hub reboot resets
+  it (no `chatty` lines before the reboot, `chatty` lines after it). A log with `chatty` lines is incomplete.
 - **Lynx keep-alive timeout: 2500 ms**, `msKeepAliveTimeout = 2500;   // per the Lynx spec`
   (`LynxModule.java:154`, Hardware), with the SDK pinging every 2500 − 550 = 1950 ms (`:1365`). REV: a Control Hub
   blinking blue means "Keep alive has timed out"
